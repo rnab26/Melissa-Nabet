@@ -769,10 +769,14 @@ async function downloadPDF(){
 function printDevis(){render();window.print();}
 function openDevisWindowHTML(devisHTML,num){
   const styles=Array.from(document.querySelectorAll('style,link[rel=stylesheet]')).map(n=>n.outerHTML).join('');
+  const fileName='Devis_'+String(num||'MN').replace(/\s+/g,'_');
   const doc=`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Devis ${esc(num||'')} — Melissa Nabet</title>${styles}
-    <style>body{background:#e8e2d7;margin:0;padding:16px 0;} .devis{box-shadow:0 8px 30px rgba(60,50,35,.18);margin:0 auto;transform:none!important;}
-    .exportbar{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99;display:flex;gap:8px;}
-    .exportbar button{font-family:'Inter',sans-serif;font-size:13px;border:none;background:#3d3934;color:#f4efe6;padding:10px 18px;border-radius:3px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+    <style>body{background:#e8e2d7;margin:0;padding:64px 0 20px;} .devis{box-shadow:0 8px 30px rgba(60,50,35,.18);margin:0 auto;transform:none!important;}
+    .exportbar{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;gap:8px;justify-content:center;padding:10px;background:rgba(35,32,28,.96);}
+    .exportbar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:500;border:none;background:#9a8574;color:#fff;padding:11px 16px;border-radius:4px;cursor:pointer;}
+    .exportbar button.alt{background:#3d3934;}
+    .exportbar button:disabled{opacity:.6;cursor:wait;}
     @media print{
       .exportbar{display:none!important;}
       @page{size:A4;margin:0;}
@@ -785,7 +789,28 @@ function openDevisWindowHTML(devisHTML,num){
       .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
       *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
     }</style></head>
-    <body><div class="exportbar"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>${devisHTML}</body></html>`;
+    <body>
+      <div class="exportbar">
+        <button onclick="genPDF(this)">⬇ Télécharger le PDF</button>
+        <button class="alt" onclick="window.print()">Imprimer</button>
+      </div>
+      ${devisHTML}
+      <script>
+      async function genPDF(btn){
+        var el=document.querySelector('.devis');var old=btn.textContent;
+        try{
+          btn.disabled=true;btn.textContent='Génération…';
+          if(document.fonts&&document.fonts.ready){try{await document.fonts.ready;}catch(e){}}
+          var opt={margin:0,filename:'${fileName}.pdf',image:{type:'jpeg',quality:0.98},
+            html2canvas:{scale:2,useCORS:true,backgroundColor:'#f4efe6'},
+            jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},
+            pagebreak:{mode:['css','legacy'],avoid:['.dv-head','.dv-brand','.dv-bsd','.dv-pricesign','.tl-row'],before:'.cond'}};
+          await html2pdf().set(opt).from(el).save();
+          btn.textContent=old;btn.disabled=false;
+        }catch(e){btn.disabled=false;btn.textContent=old;alert('Erreur PDF : '+(e&&e.message?e.message:e));}
+      }
+      <\/script>
+    </body></html>`;
   const w=window.open('','_blank');
   if(w){w.document.open();w.document.write(doc);w.document.close();return true;}
   return false;
