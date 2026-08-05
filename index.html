@@ -316,21 +316,19 @@
     .cl-scroll{-webkit-overflow-scrolling:touch;}
   }
   @media print{
-    /* MARGE PORTÉE PAR @page : 16 mm en haut ET en bas de CHAQUE feuille (pages 2,3,4 comprises).
-       C'est ce qui garantit un espace identique en haut et en bas avant que le texte commence,
-       même quand une section continue sur la page suivante. */
-    @page{size:A4;margin:16mm;}
+    /* AUCUNE marge blanche : la feuille est colorée bord à bord (@page margin:0 + fond papier
+       sur html/body/feuille). L'espacement du texte (16 mm) est géré À L'INTÉRIEUR, et
+       box-decoration-break:clone le répète en haut ET en bas de CHAQUE page. */
+    @page{size:A4;margin:0;}
     html,body{background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-    .toolbar,.editor,.tabs,.overlay,.toast{display:none !important;}
+    .toolbar,.editor,.tabs,.overlay,.toast,#login-overlay{display:none !important;}
     .preview-wrap{padding:0;margin:0;background:#f4efe6;display:block;}
     .devis{width:auto;min-height:0;box-shadow:none;transform:none !important;margin:0;background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-    /* Padding 0 (la marge vient de @page) ; min-height = hauteur utile d'une feuille (297-2×16)
-       pour que le fond papier remplisse chaque page comme dans la v4. */
-    .devis-page{page-break-after:always;box-sizing:border-box;min-height:265mm;padding:0;background:#f4efe6;position:relative;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+    .devis-page{page-break-after:always;box-sizing:border-box;min-height:297mm;padding:16mm 16mm;background:#f4efe6;position:relative;-webkit-box-decoration-break:clone;box-decoration-break:clone;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
     .devis-page:last-child{page-break-after:avoid;}
     .devis-page.cond{page-break-before:always;}
     .devis-page + .devis-page{border-top:none;}
-    .dv-item,.dv-totals,.dv-head,.dv-brand,.dv-sign,.dv-bsd,.tl-row,.dv-pricesign{page-break-inside:avoid;break-inside:avoid;}
+    .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
     *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
   }
 </style>
@@ -777,15 +775,14 @@ function openDevisWindowHTML(devisHTML,num){
     .exportbar button{font-family:'Inter',sans-serif;font-size:13px;border:none;background:#3d3934;color:#f4efe6;padding:10px 18px;border-radius:3px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25);}
     @media print{
       .exportbar{display:none!important;}
-      @page{size:A4;margin:16mm;}
+      @page{size:A4;margin:0;}
       html,body{background:#f4efe6;padding:0;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
       .devis{box-shadow:none;width:auto;margin:0;background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-      .devis-page{page-break-after:always;box-sizing:border-box;min-height:265mm;padding:0;background:#f4efe6;position:relative;}
+      .devis-page{page-break-after:always;box-sizing:border-box;min-height:297mm;padding:16mm 16mm;background:#f4efe6;position:relative;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
       .devis-page:last-child{page-break-after:avoid;}
       .devis-page.cond{page-break-before:always;}
       .devis-page + .devis-page{border-top:none;}
-      .dv-item,.dv-totals,.dv-head,.dv-brand,.dv-sign,.dv-bsd,.tl-row,.dv-pricesign{page-break-inside:avoid;break-inside:avoid;}
-      .dv-pagenum{position:absolute;bottom:9mm;}
+      .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
       *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
     }</style></head>
     <body><div class="exportbar"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button></div>${devisHTML}</body></html>`;
