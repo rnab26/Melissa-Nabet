@@ -827,14 +827,19 @@ async function exportDevis(){
 
 /* ============ IA — embellissement ============ */
 async function embellish(sv,btn,textarea){
+  if(!sv.title||!sv.title.trim()){toast('Ajoutez un intitulé avant d\'embellir');return;}
   btn.disabled=true;const old=btn.textContent;btn.textContent='…';
   try{
-    const prompt=`Tu écris pour les devis d'une architecte d'intérieur (Melissa Nabet). Rédige UNE à DEUX phrases élégantes, concrètes et chaleureuses (français, sans superlatifs creux, sans guillemets) décrivant la prestation ci-dessous, pour valoriser le travail auprès du client. Contexte projet : ${current.proj||'projet'} (${current.surf||''} m²). Prestation : "${sv.title}". ${sv.desc?'Texte existant à améliorer : "'+sv.desc+'".':''} Réponds uniquement par le texte, sans préambule.`;
-    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
+    const res=await fetch(SB_URL+'/functions/v1/embellish',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY},
+      body:JSON.stringify({title:sv.title,desc:sv.desc,proj:current.proj,surf:current.surf})
+    });
     const data=await res.json();
-    const txt=(data.content||[]).map(b=>b.type==='text'?b.text:'').join('').trim();
+    if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+    const txt=(data.text||'').trim();
     if(txt){sv.desc=txt;textarea.value=txt;render();toast('Texte généré');}else{toast('Réponse vide');}
-  }catch(e){console.error(e);toast("IA indisponible ici (fonctionne dans l'app Claude)");}
+  }catch(e){console.error(e);toast('IA indisponible : '+(e&&e.message?e.message:e));}
   btn.disabled=false;btn.textContent=old;
 }
 
