@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Générateur de devis — Melissa Nabet</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -117,6 +118,21 @@
   .vnav.active{background:#f4f0e8;color:var(--ink);border-color:#f4f0e8;}
   #clients-view{display:none;padding:26px 28px 120px;background:#e9e3d8;min-height:100vh;}
   .cl-wrap{max-width:1040px;margin:0 auto;}
+  #dashboard-view{display:none;padding:26px 28px 120px;background:#e9e3d8;min-height:100vh;}
+  .dash-wrap{max-width:820px;margin:0 auto;}
+  .dash-wrap h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0 0 18px;color:var(--ink);font-weight:600;letter-spacing:.02em;}
+  .dash-kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+  .dash-kpi-item{background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:14px 16px;}
+  .dash-kpi-val{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:var(--ink);}
+  .dash-kpi-val.due{color:#b6543f;}
+  .dash-kpi-val.ok{color:#6a9a5a;}
+  .dash-kpi-lbl{font-size:11px;color:var(--stone);text-transform:uppercase;letter-spacing:.08em;margin-top:3px;}
+  .dash-sec-title{font-size:12.5px;font-weight:600;color:var(--stone-deep);margin:16px 0 6px;}
+  .dash-todo{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:11px 14px;margin-bottom:7px;cursor:pointer;transition:.15s;}
+  .dash-todo:hover{border-color:var(--stone-light);}
+  .dash-todo-main{font-size:13.5px;color:var(--ink);}
+  .dash-todo-amt{font-size:13px;font-weight:600;white-space:nowrap;}
+  .dash-todo-amt.due{color:#b6543f;}
   .cl-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
   .cl-top h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0;color:var(--ink);font-weight:600;letter-spacing:.02em;}
   .cl-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;}
@@ -359,6 +375,7 @@
   <div class="viewnav">
     <button class="vnav active" id="vn-devis" onclick="showView('devis')">Devis</button>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
+    <button class="vnav" id="vn-dash" onclick="showView('dashboard')">Tableau de bord</button>
   </div>
   <button class="btn" id="desktop-toggle" style="flex-shrink:0" onclick="toggleDesktopView()">🖥️ Bureau</button>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
@@ -459,6 +476,15 @@
     </div>
   </div>
   <div class="preview-wrap"><div class="devis" id="devis"></div></div>
+</div>
+
+<div id="dashboard-view">
+  <div class="dash-wrap">
+    <h2>Tableau de bord</h2>
+    <div class="dash-kpi-row" id="dash-kpi"></div>
+    <div class="ed-eyebrow" style="margin-top:22px">Assistant · à faire</div>
+    <div id="dash-todos"></div>
+  </div>
 </div>
 
 <div id="clients-view">
@@ -1409,13 +1435,52 @@ function wireClientFilters(){
   });
 }
 function showView(v){
-  const dev=v!=='clients';
+  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard';
   document.querySelector('.stage').style.display=dev?'flex':'none';
-  $('clients-view').style.display=dev?'none':'block';
+  $('clients-view').style.display=cli?'block':'none';
+  $('dashboard-view').style.display=dash?'block':'none';
   $('devis-actions').style.display=dev?'contents':'none';
   $('vn-devis').classList.toggle('active',dev);
-  $('vn-clients').classList.toggle('active',!dev);
-  if(!dev)renderClients();
+  $('vn-clients').classList.toggle('active',cli);
+  $('vn-dash').classList.toggle('active',dash);
+  if(cli)renderClients();
+  if(dash)renderDashboard();
+}
+function gotoClient(id){
+  clientOpen[id]=true;
+  showView('clients');
+  const el=document.querySelector('.cl-group[data-cid="'+id+'"]');
+  if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function computeTodos(){
+  const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
+  const brouillons=devisList.filter(d=>d.status==='brouillon').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
+  return {relances,brouillons};
+}
+function renderDashboard(){
+  const kpiRoot=$('dash-kpi'),todoRoot=$('dash-todos');
+  if(!kpiRoot||!todoRoot)return;
+  const {relances,brouillons}=computeTodos();
+  const gt=globalTotals(clients);
+  kpiRoot.innerHTML=`
+    <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.montant)} ₪</div><div class="dash-kpi-lbl">Facturé (total)</div></div>
+    <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.recu)} ₪</div><div class="dash-kpi-lbl">Reçu</div></div>
+    <div class="dash-kpi-item"><div class="dash-kpi-val ${gt.reste>0?'due':'ok'}">${fmt(gt.reste)} ₪</div><div class="dash-kpi-lbl">Reste dû</div></div>
+    <div class="dash-kpi-item"><div class="dash-kpi-val">${brouillons.length}</div><div class="dash-kpi-lbl">Devis en brouillon</div></div>`;
+  if(!relances.length&&!brouillons.length){
+    todoRoot.innerHTML=`<div class="empty">Rien à signaler pour l'instant — tout est à jour.</div>`;
+    return;
+  }
+  let html='';
+  if(relances.length){
+    html+=`<div class="dash-sec-title">💰 À relancer (${relances.length})</div>`;
+    html+=relances.map(({c,t})=>`<div class="dash-todo" onclick="gotoClient('${c.id}')"><span class="dash-todo-main">${esc(c.name)}</span><span class="dash-todo-amt due">${fmt(t.reste)} ₪</span></div>`).join('');
+  }
+  if(brouillons.length){
+    html+=`<div class="dash-sec-title">📝 Devis à finaliser (${brouillons.length})</div>`;
+    html+=brouillons.map(d=>`<div class="dash-todo" onclick="editDevis('${d.id}')"><span class="dash-todo-main">${esc(d.title||'Devis')} · N°${esc(d.num)}</span><span class="dash-todo-amt">${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</span></div>`).join('');
+  }
+  todoRoot.innerHTML=html;
 }
 
 /* ============ SAUVEGARDE (export / import) ============ */
