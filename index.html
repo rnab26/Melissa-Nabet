@@ -596,7 +596,7 @@ function defaultLibrary(){
       mk("Gestion du projet de A à Z",""),
       mk("Travail express",""),
     ]},
-  ]};
+  ],exclus:DEFAULT_EXCLUS.slice()};
 }
 const DEFAULT_EXCLUS=[
   "Honoraires des prestataires et corps de métier (facturés séparément)",
@@ -640,7 +640,7 @@ function seedComposerFromLibrary(){
     current.open[sec.name]=i<2;
     sec.items.forEach(it=>current.services.push({id:uid(),cat:sec.name,on:!!it.defaultOn,title:it.title,desc:it.desc||'',mode:it.mode||'none',price:it.price||0,qty:it.qty||1,pu:it.pu||0,custom:false}));
   });
-  current.exclus=DEFAULT_EXCLUS.map(t=>({id:uid(),on:true,title:t,custom:false}));
+  current.exclus=(library.exclus||DEFAULT_EXCLUS).map(t=>({id:uid(),on:true,title:t,custom:false}));
 }
 
 /* ============ DOM: helpers ============ */
@@ -1023,6 +1023,7 @@ function newDevis(){currentDevisId=null;seedComposerFromLibrary();
 
 /* --- Bibliothèque --- */
 function openLibraryPanel(){
+  if(!library.exclus)library.exclus=DEFAULT_EXCLUS.slice();
   const secs=library.sections.map((sec,si)=>{
     const items=sec.items.map((it,ii)=>`<div class="lib-item">
       <input type="text" value="${esc(it.title)}" oninput="libEdit(${si},${ii},'title',this.value)">
@@ -1032,10 +1033,17 @@ function openLibraryPanel(){
       <button class="mini" onclick="libAddItem(${si})">+ ligne</button>
       <button class="mini danger" onclick="libDelSection(${si})">Suppr.</button></div>${items}</div>`;
   }).join('');
+  const exclItems=library.exclus.map((t,ii)=>`<div class="lib-item">
+    <input type="text" value="${esc(t)}" oninput="libExclEdit(${ii},this.value)">
+    <button class="mini danger" onclick="libExclDel(${ii})">×</button></div>`).join('');
+  const exclSec=`<div class="lib-sec"><div class="lib-sec-h">
+    <span style="flex:1;font-weight:600;font-size:13.5px;">Hors prestation · non compris</span>
+    <button class="mini" onclick="libExclAdd()">+ ligne</button></div>${exclItems}</div>`;
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Bibliothèque</h3>
     <p class="msub">Modifiez les sections et prestations. Enregistré et réutilisé pour les prochains devis.</p>
     ${secs}
     <button class="add-btn" onclick="libAddSection()">+ Ajouter une section</button>
+    ${exclSec}
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
       <button class="mini" onclick="resetLibrary()">↺ Services fournis</button>
       <div style="display:flex;gap:8px;">
@@ -1047,6 +1055,9 @@ function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvell
 function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();}
 function libAddSection(){library.sections.push({id:uid(),name:'Nouvelle section',items:[]});openLibraryPanel();}
 function libDelSection(si){askConfirm('Supprimer cette section ?',()=>{library.sections.splice(si,1);openLibraryPanel();});}
+function libExclEdit(ii,val){library.exclus[ii]=val;}
+function libExclAdd(){library.exclus.push('Nouvel élément non compris');openLibraryPanel();}
+function libExclDel(ii){library.exclus.splice(ii,1);openLibraryPanel();}
 async function libSave(){await store.set(K_LIB,library);closeModal();toast('Bibliothèque enregistrée');}
 function resetLibrary(){askConfirm('Réinitialiser la bibliothèque sur les services fournis ? Vos modifications de la bibliothèque seront perdues.',async()=>{library=defaultLibrary();await store.set(K_LIB,library);openLibraryPanel();toast('Bibliothèque réinitialisée');});}
 function libApplyToCurrent(){askConfirm('Recharger la bibliothèque effacera les lignes du devis en cours. Continuer ?',async()=>{await store.set(K_LIB,library);seedComposerFromLibrary();buildPrest();buildExclu();render();toast('Bibliothèque rechargée');});}
