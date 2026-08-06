@@ -309,6 +309,13 @@
     .devis{transform:scale(.62);transform-origin:top center;margin-top:-30mm;}
     body.show-preview .editor{display:none;}
     body.show-editor .preview-wrap{display:none;}
+    body.force-desktop .tabs{display:none;}
+    body.force-desktop .stage{flex-direction:row;}
+    body.force-desktop.show-preview .editor{display:block;}
+    body.force-desktop.show-editor .preview-wrap{display:flex;}
+    body.force-desktop .editor{width:44%;max-width:600px;min-width:360px;border-right:1px solid var(--panel-edge);min-height:100vh;}
+    body.force-desktop .preview-wrap{width:auto;}
+    body.force-desktop .devis{transform:none;margin-top:0;}
     /* iOS/Safari zoome automatiquement sur un champ dont la police est < 16px, ce qui décale la
        mise en page et rend la frappe pénible : on force 16px sur mobile pour l'empêcher. */
     input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],textarea,select{font-size:16px;}
@@ -368,6 +375,7 @@
     
   </span>
   <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
+  <button class="btn" id="desktop-toggle" onclick="toggleDesktopView()">🖥️ Vue bureau</button>
 </div>
 
 <div class="stage">
@@ -1453,6 +1461,13 @@ async function importData(file){
 
 /* ============ TABS ============ */
 function showTab(w){document.body.classList.toggle('show-preview',w==='preview');document.body.classList.toggle('show-editor',w==='editor');$('tab-ed').classList.toggle('active',w==='editor');$('tab-pv').classList.toggle('active',w==='preview');}
+function applyDesktopView(on){
+  document.body.classList.toggle('force-desktop',on);
+  const btn=$('desktop-toggle');if(btn)btn.textContent=on?'📱 Vue mobile':'🖥️ Vue bureau';
+  try{localStorage.setItem('mn_desktop_view',on?'1':'0');}catch(e){}
+}
+function toggleDesktopView(){applyDesktopView(!document.body.classList.contains('force-desktop'));}
+try{if(localStorage.getItem('mn_desktop_view')==='1')applyDesktopView(true);}catch(e){}
 
 /* ============ INIT ============ */
 /* ============ SYNCHRONISATION SUPABASE (granulaire) ============ */
