@@ -1346,10 +1346,53 @@ function buildCommissionList(c){
 }
 
 /* ---- Documents ---- */
+const DOC_BUCKET='client-docs';
+function dataUriToBlob(dataUri){
+  const meta=dataUri.slice(0,dataUri.indexOf(','));
+  const mime=(meta.match(/data:(.*?);base64/)||[])[1]||'application/octet-stream';
+  const bin=atob(dataUri.slice(dataUri.indexOf(',')+1));
+  const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+function blobToDataUri(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(reader.error);
+    reader.onload=()=>resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
 const docStore={
-  async save(id,obj){await store.set('mn_doc_'+id,obj);},
-  async get(id){return await store.get('mn_doc_'+id);},
-  async del(id){await store.del('mn_doc_'+id);},
+  async save(id,obj){
+    await store.set('mn_doc_'+id,obj);
+    if(sb&&sbUser&&ownerId){
+      try{
+        const blob=dataUriToBlob(obj.dataUri);
+        const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+id,blob,{contentType:obj.type||'application/octet-stream',upsert:true});
+        if(error)throw error;
+      }catch(e){console.error('doc cloud upload',e);toast('⚠️ Document gardé sur cet appareil seulement (échec envoi cloud)');}
+    }
+  },
+  async get(id){
+    const local=await store.get('mn_doc_'+id);
+    if(local)return local;
+    if(sb&&sbUser&&ownerId){
+      try{
+        const {data,error}=await sb.storage.from(DOC_BUCKET).download(ownerId+'/'+id);
+        if(error||!data)return null;
+        const dataUri=await blobToDataUri(data);
+        const obj={type:data.type||'application/octet-stream',dataUri};
+        await store.set('mn_doc_'+id,obj);
+        return obj;
+      }catch(e){return null;}
+    }
+    return null;
+  },
+  async del(id){
+    await store.del('mn_doc_'+id);
+    if(sb&&sbUser&&ownerId){try{await sb.storage.from(DOC_BUCKET).remove([ownerId+'/'+id]);}catch(e){}}
+  },
 };
 function pickFiles(c,ligneId){
   const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf';
@@ -1407,8 +1450,9 @@ function buildDocGallery(c){
 }
 async function openDoc(d){
   const doc=await docStore.get(d.id);if(!doc){toast('Document introuvable');return;}
-  if((doc.type||'').indexOf('image/')===0){openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3 style="font-size:16px;margin-bottom:10px">${esc(doc.name)}</h3><img src="${doc.dataUri}" style="max-width:100%;border-radius:5px">`);}
-  else{const w=window.open();if(w){w.document.write('<title>'+esc(doc.name)+'</title><iframe src="'+doc.dataUri+'" style="position:fixed;inset:0;width:100%;height:100%;border:none"></iframe>');w.document.close();}else{toast('Autorisez les pop-ups pour ouvrir le document');}}
+  const type=doc.type||d.type||'';
+  if(type.indexOf('image/')===0){openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3 style="font-size:16px;margin-bottom:10px">${esc(d.name)}</h3><img src="${doc.dataUri}" style="max-width:100%;border-radius:5px">`);}
+  else{const w=window.open();if(w){w.document.write('<title>'+esc(d.name)+'</title><iframe src="'+doc.dataUri+'" style="position:fixed;inset:0;width:100%;height:100%;border:none"></iframe>');w.document.close();}else{toast('Autorisez les pop-ups pour ouvrir le document');}}
 }
 function addClient(){
   try{
