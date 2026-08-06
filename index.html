@@ -360,6 +360,7 @@
     <button class="vnav active" id="vn-devis" onclick="showView('devis')">Devis</button>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
   </div>
+  <button class="btn" id="desktop-toggle" style="flex-shrink:0" onclick="toggleDesktopView()">🖥️ Bureau</button>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
   <div class="spacer"></div>
   <div class="tabs">
@@ -375,7 +376,6 @@
     
   </span>
   <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
-  <button class="btn" id="desktop-toggle" onclick="toggleDesktopView()">🖥️ Vue bureau</button>
 </div>
 
 <div class="stage">
@@ -1463,7 +1463,7 @@ async function importData(file){
 function showTab(w){document.body.classList.toggle('show-preview',w==='preview');document.body.classList.toggle('show-editor',w==='editor');$('tab-ed').classList.toggle('active',w==='editor');$('tab-pv').classList.toggle('active',w==='preview');}
 function applyDesktopView(on){
   document.body.classList.toggle('force-desktop',on);
-  const btn=$('desktop-toggle');if(btn)btn.textContent=on?'📱 Vue mobile':'🖥️ Vue bureau';
+  const btn=$('desktop-toggle');if(btn)btn.textContent=on?'📱 Mobile':'🖥️ Bureau';
   try{localStorage.setItem('mn_desktop_view',on?'1':'0');}catch(e){}
 }
 function toggleDesktopView(){applyDesktopView(!document.body.classList.contains('force-desktop'));}
