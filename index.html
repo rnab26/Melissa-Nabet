@@ -134,6 +134,33 @@
   .dash-todo-main{font-size:13.5px;color:var(--ink);}
   .dash-todo-amt{font-size:13px;font-weight:600;white-space:nowrap;}
   .dash-todo-amt.due{color:#b6543f;}
+  #chantier-view{display:none;padding:26px 28px 120px;background:#e9e3d8;min-height:100vh;}
+  .ch-wrap{max-width:900px;margin:0 auto;}
+  .ch-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+  .ch-top h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0;color:var(--ink);font-weight:600;}
+  .ch-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+  .ch-resume{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:14px 16px;margin-bottom:20px;}
+  .ch-resume-title{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);margin-bottom:8px;font-weight:600;}
+  .ch-resume-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;padding:6px 0;border-bottom:1px solid #f1ece2;font-size:13px;}
+  .ch-resume-row.head{font-size:10.5px;text-transform:uppercase;color:var(--stone);letter-spacing:.06em;font-weight:600;border-bottom:1px solid var(--panel-edge);}
+  .ch-resume-row .num{text-align:right;}
+  .ch-grand{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:2px solid var(--ink);font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;}
+  .ch-room{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;margin-bottom:14px;overflow:hidden;}
+  .ch-room-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--panel-edge);background:#f4efe6;}
+  .ch-room-h input{font-weight:600;font-size:14.5px;flex:1;}
+  .ch-room-total{font-size:13px;font-weight:600;color:var(--oxblood);white-space:nowrap;}
+  .ch-cat{border-bottom:1px solid #f1ece2;padding:10px 12px;}
+  .ch-cat:last-child{border-bottom:none;}
+  .ch-cat-h{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .ch-cat-h .ch-cat-name{font-weight:600;font-size:13px;flex:1;}
+  .ch-cat-total{font-size:12.5px;color:var(--stone-deep);white-space:nowrap;}
+  .ch-item{display:flex;gap:6px;align-items:center;margin:4px 0 4px 10px;}
+  .ch-item input[type=text]{flex:2;min-width:80px;}
+  .ch-item input[type=number]{flex:0 0 60px;}
+  .ch-item select{flex:0 0 72px;width:auto;}
+  .ch-item-total{flex:0 0 78px;text-align:right;font-size:12.5px;color:var(--ink);white-space:nowrap;}
+  .ch-addcat{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+  .ch-addcat select{width:auto;flex:1;min-width:140px;}
   .cl-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
   .cl-top h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0;color:var(--ink);font-weight:600;letter-spacing:.02em;}
   .cl-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;}
@@ -377,6 +404,7 @@
     <button class="vnav active" id="vn-devis" onclick="showView('devis')">Devis</button>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
     <button class="vnav" id="vn-dash" onclick="showView('dashboard')">Tableau de bord</button>
+    <button class="vnav" id="vn-chantier" onclick="showView('chantier')">Estimation</button>
   </div>
   <button class="btn" id="desktop-toggle" style="flex-shrink:0" onclick="toggleDesktopView()">🖥️ Bureau</button>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
@@ -484,6 +512,32 @@
     <div class="dash-kpi-row" id="dash-kpi"></div>
     <div class="ed-eyebrow" style="margin-top:22px">Assistant · à faire</div>
     <div id="dash-todos"></div>
+  </div>
+</div>
+
+<div id="chantier-view">
+  <div class="ch-wrap">
+    <div class="ch-top">
+      <h2>Estimation chantier</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn" onclick="openChantierCatsPanel()">Catégories</button>
+        <button class="btn" onclick="openChantierListPanel()">Mes estimations</button>
+        <button class="btn" onclick="newChantier()">Nouvelle estimation</button>
+        <button class="btn btn-primary" onclick="saveChantier()">Enregistrer</button>
+      </div>
+    </div>
+    <div class="ch-meta">
+      <label class="fld" style="flex:2;min-width:220px"><span class="lbl">Projet</span><input type="text" id="ch-title" oninput="chMetaEdit('title',this.value)"></label>
+      <label class="fld" style="flex:1;min-width:160px"><span class="lbl">Client</span><input type="text" id="ch-client" oninput="chMetaEdit('client',this.value)"></label>
+      <label class="fld" style="flex:0 0 130px"><span class="lbl">Date</span><input type="text" id="ch-date" oninput="chMetaEdit('date',this.value)"></label>
+    </div>
+    <div class="ch-resume">
+      <div class="ch-resume-title">Résumé par catégorie</div>
+      <div id="ch-resume"></div>
+      <div class="ch-grand"><span>Total général</span><span id="ch-grand-total">0 ₪</span></div>
+    </div>
+    <div id="ch-rooms"></div>
+    <button class="add-btn" onclick="chRoomAdd()">+ Ajouter une pièce</button>
   </div>
 </div>
 
@@ -643,7 +697,7 @@ function defaultLibrary(){
       mk("Gestion du projet de A à Z",""),
       mk("Travail express",""),
     ]},
-  ],exclus:DEFAULT_EXCLUS.slice(),cgv:DEFAULT_CGV.map(c=>({...c}))};
+  ],exclus:DEFAULT_EXCLUS.slice(),cgv:DEFAULT_CGV.map(c=>({...c})),chantierCats:DEFAULT_CHANTIER_CATS.map(c=>({...c}))};
 }
 const DEFAULT_EXCLUS=[
   "Honoraires des prestataires et corps de métier (facturés séparément)",
@@ -662,6 +716,20 @@ const DEFAULT_CGV=[
   {title:"9. Frais administratifs et prestataires externes.",body:"Les frais administratifs et les coûts des prestataires externes (ingénieurs, consultants, etc.) ne sont pas inclus dans les honoraires et sont facturés séparément."},
   {title:"10. Litiges et juridiction.",body:"En cas de litige, les parties recherchent une solution amiable. À défaut, le tribunal compétent sera celui du lieu de résidence de l'architecte."},
 ];
+const DEFAULT_CHANTIER_CATS=[
+  {id:uid(),name:'Démolition',unit:'m²',price:60},
+  {id:uid(),name:'Maçonnerie / Cloisons',unit:'m²',price:120},
+  {id:uid(),name:'Plomberie',unit:'point',price:350},
+  {id:uid(),name:'Électricité',unit:'point',price:200},
+  {id:uid(),name:'Chape / Sol',unit:'m²',price:90},
+  {id:uid(),name:'Carrelage',unit:'m²',price:150},
+  {id:uid(),name:'Peinture',unit:'m²',price:80},
+  {id:uid(),name:'Plâtrerie / Faux plafond',unit:'m²',price:110},
+  {id:uid(),name:'Menuiserie',unit:'ml',price:300},
+  {id:uid(),name:'Climatisation',unit:'point',price:1200},
+  {id:uid(),name:'Meubles',unit:'unité',price:0},
+  {id:uid(),name:'Luminaires',unit:'unité',price:0},
+];
 
 /* ============ STOCKAGE PERSISTANT (avec repli mémoire) ============ */
 const store={
@@ -678,10 +746,13 @@ const store={
     try{if(typeof window!=='undefined'&&window.storage){await window.storage.delete(k,false);return;}}catch(e){}
     try{if(typeof window!=='undefined'&&window.localStorage){localStorage.removeItem(k);return;}}catch(e){}},
 };
-const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft';
+const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier';
 
 /* ============ ÉTAT APPLI ============ */
 let library=defaultLibrary(), clients=[], devisList=[], currentDevisId=null;
+let chantierList=[], currentChantierId=null;
+function blankChantier(){return {id:uid(),num:'',title:'',client:'',date:new Date().toLocaleDateString('fr-FR'),updatedAt:Date.now(),rooms:[]};}
+let chantier=blankChantier();
 let pendingClientId=null; /* client cible quand on crée un devis depuis une fiche client */
 const current={
   num:'0077',date:new Date().toLocaleDateString('fr-FR'),
@@ -818,6 +889,198 @@ function buildExclu(){
   add.addEventListener('click',()=>{current.exclus.push({id:uid(),on:true,title:'',custom:true});current.open[key]=true;buildExclu();render();});
   body.appendChild(add);root.appendChild(acc);
 }
+
+/* ============ ESTIMATION CHANTIER ============ */
+function ensureChantierCats(){if(!library.chantierCats||!library.chantierCats.length)library.chantierCats=DEFAULT_CHANTIER_CATS.map(c=>({...c}));}
+function chLineTotal(it){return (+it.qty||0)*(+it.price||0);}
+function chCatTotal(cat){return cat.items.reduce((a,it)=>a+chLineTotal(it),0);}
+function chRoomTotal(room){return room.cats.reduce((a,c)=>a+chCatTotal(c),0);}
+function chGrandTotal(){return chantier.rooms.reduce((a,r)=>a+chRoomTotal(r),0);}
+function chRollup(){
+  const map={};
+  chantier.rooms.forEach(room=>room.cats.forEach(cat=>{
+    const key=cat.name+'||'+cat.unit;
+    if(!map[key])map[key]={name:cat.name,unit:cat.unit,qty:0,total:0};
+    cat.items.forEach(it=>{map[key].qty+=(+it.qty||0);map[key].total+=chLineTotal(it);});
+  }));
+  return Object.values(map).sort((a,b)=>b.total-a.total);
+}
+function chResumeHtml(){
+  const rows=chRollup();
+  if(!rows.length)return '<p class="empty">Ajoutez des pièces et des catégories pour voir le résumé.</p>';
+  return `<div class="ch-resume-row head"><div>Catégorie</div><div class="num">Quantité</div><div class="num">Total</div></div>`+
+    rows.map(r=>`<div class="ch-resume-row"><div>${esc(r.name)}</div><div class="num">${fmt(r.qty)} ${esc(r.unit)}</div><div class="num">${fmt(r.total)} ₪</div></div>`).join('');
+}
+function updateChantierTotals(){
+  chantier.rooms.forEach(room=>{
+    room.cats.forEach(cat=>{
+      cat.items.forEach(it=>{const el=document.getElementById('itt-'+it.id);if(el)el.textContent=fmt(chLineTotal(it))+' ₪';});
+      const ce=document.getElementById('ctt-'+cat.id);if(ce)ce.textContent=fmt(chCatTotal(cat))+' ₪';
+    });
+    const re=document.getElementById('rtt-'+room.id);if(re)re.textContent=fmt(chRoomTotal(room))+' ₪';
+  });
+  const resumeEl=$('ch-resume');if(resumeEl)resumeEl.innerHTML=chResumeHtml();
+  const gt=$('ch-grand-total');if(gt)gt.textContent=fmt(chGrandTotal())+' ₪';
+  saveChantierDraftDebounced();
+}
+function chMetaEdit(key,val){chantier[key]=val;saveChantierDraftDebounced();}
+const CH_UNITS=['m²','ml','point','unité','forfait'];
+function chUnitOptions(sel){return CH_UNITS.map(u=>`<option value="${u}" ${u===sel?'selected':''}>${u}</option>`).join('');}
+function chItemRowHtml(rid,cid,it){
+  return `<div class="ch-item" data-iid="${it.id}">
+    <input type="text" value="${esc(it.desc)}" placeholder="Description" oninput="chItemEdit('${rid}','${cid}','${it.id}','desc',this.value)">
+    <input type="number" value="${it.qty||''}" placeholder="Qté" oninput="chItemEdit('${rid}','${cid}','${it.id}','qty',this.value)">
+    <select onchange="chItemEdit('${rid}','${cid}','${it.id}','unit',this.value)">${chUnitOptions(it.unit)}</select>
+    <input type="number" value="${it.price||''}" placeholder="P.U." oninput="chItemEdit('${rid}','${cid}','${it.id}','price',this.value)">
+    <span class="ch-item-total" id="itt-${it.id}">${fmt(chLineTotal(it))} ₪</span>
+    <button class="it-rm" onclick="chItemDel('${rid}','${cid}','${it.id}')" title="Supprimer">×</button>
+  </div>`;
+}
+function chCatHtml(rid,cat){
+  return `<div class="ch-cat" data-cid="${cat.id}">
+    <div class="ch-cat-h">
+      <input class="ch-cat-name" type="text" value="${esc(cat.name)}" oninput="chCatEdit('${rid}','${cat.id}','name',this.value)" style="font-weight:600;font-size:13px;flex:1;">
+      <span class="ch-cat-total" id="ctt-${cat.id}">${fmt(chCatTotal(cat))} ₪</span>
+      <button class="mini danger" onclick="chCatDel('${rid}','${cat.id}')">×</button>
+    </div>
+    ${cat.items.map(it=>chItemRowHtml(rid,cat.id,it)).join('')}
+    <button class="mini" onclick="chItemAdd('${rid}','${cat.id}')" style="margin:4px 0 0 10px">+ ligne</button>
+  </div>`;
+}
+function chRoomHtml(room){
+  ensureChantierCats();
+  const catOpts=library.chantierCats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  return `<div class="ch-room" data-rid="${room.id}">
+    <div class="ch-room-h">
+      <input type="text" value="${esc(room.name)}" oninput="chRoomEdit('${room.id}',this.value)">
+      <span class="ch-room-total" id="rtt-${room.id}">${fmt(chRoomTotal(room))} ₪</span>
+      <button class="mini danger" onclick="chRoomDel('${room.id}')">×</button>
+    </div>
+    <div style="padding:10px 12px 12px">
+      ${room.cats.map(cat=>chCatHtml(room.id,cat)).join('')}
+      <div class="ch-addcat">
+        <select id="chcatsel-${room.id}">${catOpts}<option value="__custom__">+ Catégorie personnalisée…</option></select>
+        <button class="mini" onclick="chCatAdd('${room.id}')">+ Ajouter la catégorie</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderChantierRooms(){
+  ensureChantierCats();
+  const root=$('ch-rooms');if(!root)return;
+  root.innerHTML=chantier.rooms.map(chRoomHtml).join('')||'<p class="empty">Aucune pièce. Cliquez sur « + Ajouter une pièce » pour commencer.</p>';
+}
+function renderChantierMeta(){
+  const t=$('ch-title'),c=$('ch-client'),d=$('ch-date');
+  if(t)t.value=chantier.title||'';if(c)c.value=chantier.client||'';if(d)d.value=chantier.date||'';
+}
+function renderChantier(){
+  renderChantierMeta();
+  renderChantierRooms();
+  updateChantierTotals();
+}
+function chRoomAdd(){chantier.rooms.push({id:uid(),name:'Nouvelle pièce',cats:[]});renderChantierRooms();updateChantierTotals();}
+function chRoomDel(rid){askConfirm('Supprimer cette pièce et tout son contenu ?',()=>{chantier.rooms=chantier.rooms.filter(r=>r.id!==rid);renderChantierRooms();updateChantierTotals();});}
+function chRoomEdit(rid,val){const r=chantier.rooms.find(x=>x.id===rid);if(r)r.name=val;saveChantierDraftDebounced();}
+function chCatAdd(rid){
+  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
+  const sel=document.getElementById('chcatsel-'+rid);if(!sel)return;
+  const val=sel.value;
+  let name='Nouvelle catégorie',unit='unité',price=0;
+  if(val==='__custom__'){name='Nouvelle catégorie';}
+  else{const libCat=library.chantierCats.find(c=>c.id===val);if(libCat){name=libCat.name;unit=libCat.unit;price=libCat.price;}}
+  room.cats.push({id:uid(),name,unit,items:[{id:uid(),desc:'',qty:0,unit,price}]});
+  renderChantierRooms();updateChantierTotals();
+}
+function chCatDel(rid,cid){
+  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
+  room.cats=room.cats.filter(c=>c.id!==cid);renderChantierRooms();updateChantierTotals();
+}
+function chCatEdit(rid,cid,key,val){
+  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
+  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+  cat[key]=val;saveChantierDraftDebounced();
+}
+function chItemAdd(rid,cid){
+  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
+  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+  cat.items.push({id:uid(),desc:'',qty:0,unit:cat.unit,price:0});
+  renderChantierRooms();updateChantierTotals();
+}
+function chItemDel(rid,cid,iid){
+  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
+  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+  cat.items=cat.items.filter(i=>i.id!==iid);
+  renderChantierRooms();updateChantierTotals();
+}
+function chItemEdit(rid,cid,iid,key,val){
+  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
+  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+  const it=cat.items.find(i=>i.id===iid);if(!it)return;
+  it[key]=(key==='qty'||key==='price')?(parseFloat(val)||0):val;
+  updateChantierTotals();
+}
+let _chDraftT;
+function saveChantierDraftDebounced(){clearTimeout(_chDraftT);_chDraftT=setTimeout(()=>store.set('mn_chantier_draft',chantier),500);}
+function newChantier(){
+  askConfirm('Créer une nouvelle estimation ? Les modifications non enregistrées de celle-ci seront perdues.',()=>{
+    currentChantierId=null;chantier=blankChantier();renderChantier();toast('Nouvelle estimation');
+  });
+}
+async function saveChantier(){
+  if(!chantier.title||!chantier.title.trim()){toast('Donnez un nom de projet avant d\'enregistrer');return;}
+  chantier.updatedAt=Date.now();
+  if(!chantier.num)chantier.num=String(Math.max(0,...chantierList.map(c=>parseInt(c.num)||0))+1).padStart(4,'0');
+  const i=chantierList.findIndex(c=>c.id===chantier.id);
+  if(i>=0)chantierList[i]=JSON.parse(JSON.stringify(chantier));else chantierList.push(JSON.parse(JSON.stringify(chantier)));
+  currentChantierId=chantier.id;
+  await store.set(K_CHANTIER,chantierList);
+  toast('Estimation enregistrée');
+}
+function loadChantier(id){
+  const c=chantierList.find(x=>x.id===id);if(!c)return;
+  chantier=JSON.parse(JSON.stringify(c));currentChantierId=id;
+  closeModal();renderChantier();toast('Estimation chargée');
+}
+function deleteChantierRecord(id){
+  askConfirm('Supprimer cette estimation ?',async()=>{
+    chantierList=chantierList.filter(x=>x.id!==id);await store.set(K_CHANTIER,chantierList);
+    if(currentChantierId===id){currentChantierId=null;chantier=blankChantier();renderChantier();}
+    openChantierListPanel();toast('Estimation supprimée');
+  });
+}
+function openChantierListPanel(){
+  const rows=chantierList.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(c=>`
+    <div class="list-row">
+      <div class="lr-main" onclick="loadChantier('${c.id}')" style="cursor:pointer">
+        <div class="lr-t">${esc(c.title||'Sans titre')}</div>
+        <div class="lr-s">N°${esc(c.num||'')} · ${esc(c.client||'')} · ${c.updatedAt?new Date(c.updatedAt).toLocaleDateString('fr-FR'):''}</div>
+      </div>
+      <button class="mini danger" onclick="deleteChantierRecord('${c.id}')">🗑</button>
+    </div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Mes estimations</h3>
+    ${rows||'<p class="empty">Aucune estimation enregistrée.</p>'}`);
+}
+function openChantierCatsPanel(){
+  ensureChantierCats();
+  const rows=library.chantierCats.map((c,i)=>`<div class="lib-item">
+    <input type="text" value="${esc(c.name)}" oninput="chCatLibEdit(${i},'name',this.value)" placeholder="Nom" style="flex:2">
+    <select onchange="chCatLibEdit(${i},'unit',this.value)" style="flex:0 0 74px">${chUnitOptions(c.unit)}</select>
+    <input type="number" value="${c.price||''}" oninput="chCatLibEdit(${i},'price',this.value)" placeholder="Prix par défaut" style="flex:0 0 90px">
+    <button class="mini danger" onclick="chCatLibDel(${i})">×</button></div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Catégories de chantier</h3>
+    <p class="msub">Corps de métier réutilisables (nom, unité, prix par défaut). Modifiables ligne par ligne dans chaque estimation.</p>
+    ${rows}
+    <button class="add-btn" onclick="chCatLibAdd()">+ Ajouter une catégorie</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="chCatLibReset()">↺ Catégories par défaut</button>
+      <button class="btn btn-primary" onclick="chCatLibSave()">Enregistrer</button></div>`);
+}
+function chCatLibEdit(i,key,val){library.chantierCats[i][key]=(key==='price')?(parseFloat(val)||0):val;}
+function chCatLibAdd(){library.chantierCats.push({id:uid(),name:'Nouvelle catégorie',unit:'unité',price:0});openChantierCatsPanel();}
+function chCatLibDel(i){askConfirm('Supprimer cette catégorie ?',()=>{library.chantierCats.splice(i,1);openChantierCatsPanel();});}
+function chCatLibReset(){askConfirm('Réinitialiser les catégories de chantier sur la liste par défaut ?',()=>{library.chantierCats=DEFAULT_CHANTIER_CATS.map(c=>({...c}));openChantierCatsPanel();});}
+async function chCatLibSave(){await store.set(K_LIB,library);closeModal();toast('Catégories enregistrées');}
 
 /* ============ EXPORT PDF ============ */
 async function ensureFonts(){try{if(document.fonts&&document.fonts.ready)await document.fonts.ready;}catch(e){}}
@@ -1545,16 +1808,19 @@ function wireClientFilters(){
   });
 }
 function showView(v){
-  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard';
+  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier';
   document.querySelector('.stage').style.display=dev?'flex':'none';
   $('clients-view').style.display=cli?'block':'none';
   $('dashboard-view').style.display=dash?'block':'none';
+  $('chantier-view').style.display=ch?'block':'none';
   $('devis-actions').style.display=dev?'contents':'none';
   $('vn-devis').classList.toggle('active',dev);
   $('vn-clients').classList.toggle('active',cli);
   $('vn-dash').classList.toggle('active',dash);
+  $('vn-chantier').classList.toggle('active',ch);
   if(cli)renderClients();
   if(dash)renderDashboard();
+  if(ch)renderChantier();
 }
 function gotoClient(id){
   clientOpen[id]=true;
@@ -1806,6 +2072,9 @@ async function init(){
   const cs=await store.get(K_CLIENTS);
   clients=Array.isArray(cs)?cs.map(normalizeClient):[];
   devisList=(await store.get(K_DEVIS))||[];
+  chantierList=(await store.get(K_CHANTIER))||[];
+  const chDraft=await store.get('mn_chantier_draft');
+  if(chDraft&&Array.isArray(chDraft.rooms))chantier=chDraft;
   const draft=await store.get(K_DRAFT);
   if(draft&&draft.services){
     Object.assign(current,draft);
