@@ -145,22 +145,18 @@
   .ch-resume-row.head{font-size:10.5px;text-transform:uppercase;color:var(--stone);letter-spacing:.06em;font-weight:600;border-bottom:1px solid var(--panel-edge);}
   .ch-resume-row .num{text-align:right;}
   .ch-grand{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:2px solid var(--ink);font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;}
-  .ch-room{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;margin-bottom:14px;overflow:hidden;}
-  .ch-room-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--panel-edge);background:#f4efe6;}
-  .ch-room-h input{font-weight:600;font-size:14.5px;flex:1;}
-  .ch-room-total{font-size:13px;font-weight:600;color:var(--oxblood);white-space:nowrap;}
-  .ch-cat{border-bottom:1px solid #f1ece2;padding:10px 12px;}
-  .ch-cat:last-child{border-bottom:none;}
-  .ch-cat-h{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-  .ch-cat-h .ch-cat-name{font-weight:600;font-size:13px;flex:1;}
-  .ch-cat-total{font-size:12.5px;color:var(--stone-deep);white-space:nowrap;}
-  .ch-item{display:flex;gap:6px;align-items:center;margin:4px 0 4px 10px;}
+  .ch-cat-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;margin-bottom:14px;overflow:hidden;}
+  .ch-cat-card-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--panel-edge);background:#f4efe6;}
+  .ch-cat-card-h .ch-cat-name{font-weight:600;font-size:14.5px;flex:1;}
+  .ch-cat-card-h .ch-cat-unit{font-size:11px;color:var(--stone);white-space:nowrap;}
+  .ch-cat-card-total{font-size:13px;font-weight:600;color:var(--oxblood);white-space:nowrap;}
+  .ch-item{display:flex;gap:6px;align-items:center;margin:8px 12px;}
   .ch-item input[type=text]{flex:2;min-width:80px;}
   .ch-item input[type=number]{flex:0 0 60px;}
   .ch-item select{flex:0 0 72px;width:auto;}
   .ch-item-total{flex:0 0 78px;text-align:right;font-size:12.5px;color:var(--ink);white-space:nowrap;}
-  .ch-addcat{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;}
-  .ch-addcat select{width:auto;flex:1;min-width:140px;}
+  .ch-addcat{display:flex;gap:6px;align-items:center;margin-top:14px;flex-wrap:wrap;}
+  .ch-addcat select{width:auto;flex:1;min-width:180px;}
   .cl-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
   .cl-top h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0;color:var(--ink);font-weight:600;letter-spacing:.02em;}
   .cl-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;}
@@ -536,8 +532,11 @@
       <div id="ch-resume"></div>
       <div class="ch-grand"><span>Total général</span><span id="ch-grand-total">0 ₪</span></div>
     </div>
-    <div id="ch-rooms"></div>
-    <button class="add-btn" onclick="chRoomAdd()">+ Ajouter une pièce</button>
+    <div id="ch-cats"></div>
+    <div class="ch-addcat">
+      <select id="ch-cat-select"></select>
+      <button class="add-btn" style="flex:0 0 auto" onclick="chCatAdd()">+ Ajouter une catégorie</button>
+    </div>
   </div>
 </div>
 
@@ -751,7 +750,7 @@ const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_d
 /* ============ ÉTAT APPLI ============ */
 let library=defaultLibrary(), clients=[], devisList=[], currentDevisId=null;
 let chantierList=[], currentChantierId=null;
-function blankChantier(){return {id:uid(),num:'',title:'',client:'',date:new Date().toLocaleDateString('fr-FR'),updatedAt:Date.now(),rooms:[]};}
+function blankChantier(){return {id:uid(),num:'',title:'',client:'',date:new Date().toLocaleDateString('fr-FR'),updatedAt:Date.now(),cats:[]};}
 let chantier=blankChantier();
 let pendingClientId=null; /* client cible quand on crée un devis depuis une fiche client */
 const current={
@@ -894,30 +893,26 @@ function buildExclu(){
 function ensureChantierCats(){if(!library.chantierCats||!library.chantierCats.length)library.chantierCats=DEFAULT_CHANTIER_CATS.map(c=>({...c}));}
 function chLineTotal(it){return (+it.qty||0)*(+it.price||0);}
 function chCatTotal(cat){return cat.items.reduce((a,it)=>a+chLineTotal(it),0);}
-function chRoomTotal(room){return room.cats.reduce((a,c)=>a+chCatTotal(c),0);}
-function chGrandTotal(){return chantier.rooms.reduce((a,r)=>a+chRoomTotal(r),0);}
+function chGrandTotal(){return chantier.cats.reduce((a,c)=>a+chCatTotal(c),0);}
 function chRollup(){
   const map={};
-  chantier.rooms.forEach(room=>room.cats.forEach(cat=>{
+  chantier.cats.forEach(cat=>{
     const key=cat.name+'||'+cat.unit;
     if(!map[key])map[key]={name:cat.name,unit:cat.unit,qty:0,total:0};
     cat.items.forEach(it=>{map[key].qty+=(+it.qty||0);map[key].total+=chLineTotal(it);});
-  }));
+  });
   return Object.values(map).sort((a,b)=>b.total-a.total);
 }
 function chResumeHtml(){
   const rows=chRollup();
-  if(!rows.length)return '<p class="empty">Ajoutez des pièces et des catégories pour voir le résumé.</p>';
+  if(!rows.length)return '<p class="empty">Ajoutez des catégories pour voir le résumé.</p>';
   return `<div class="ch-resume-row head"><div>Catégorie</div><div class="num">Quantité</div><div class="num">Total</div></div>`+
     rows.map(r=>`<div class="ch-resume-row"><div>${esc(r.name)}</div><div class="num">${fmt(r.qty)} ${esc(r.unit)}</div><div class="num">${fmt(r.total)} ₪</div></div>`).join('');
 }
 function updateChantierTotals(){
-  chantier.rooms.forEach(room=>{
-    room.cats.forEach(cat=>{
-      cat.items.forEach(it=>{const el=document.getElementById('itt-'+it.id);if(el)el.textContent=fmt(chLineTotal(it))+' ₪';});
-      const ce=document.getElementById('ctt-'+cat.id);if(ce)ce.textContent=fmt(chCatTotal(cat))+' ₪';
-    });
-    const re=document.getElementById('rtt-'+room.id);if(re)re.textContent=fmt(chRoomTotal(room))+' ₪';
+  chantier.cats.forEach(cat=>{
+    cat.items.forEach(it=>{const el=document.getElementById('itt-'+it.id);if(el)el.textContent=fmt(chLineTotal(it))+' ₪';});
+    const ce=document.getElementById('ctt-'+cat.id);if(ce)ce.textContent=fmt(chCatTotal(cat))+' ₪';
   });
   const resumeEl=$('ch-resume');if(resumeEl)resumeEl.innerHTML=chResumeHtml();
   const gt=$('ch-grand-total');if(gt)gt.textContent=fmt(chGrandTotal())+' ₪';
@@ -926,49 +921,40 @@ function updateChantierTotals(){
 function chMetaEdit(key,val){chantier[key]=val;saveChantierDraftDebounced();}
 const CH_UNITS=['m²','ml','point','unité','forfait'];
 function chUnitOptions(sel){return CH_UNITS.map(u=>`<option value="${u}" ${u===sel?'selected':''}>${u}</option>`).join('');}
-function chItemRowHtml(rid,cid,it){
+function chItemRowHtml(cid,it){
   return `<div class="ch-item" data-iid="${it.id}">
-    <input type="text" value="${esc(it.desc)}" placeholder="Description" oninput="chItemEdit('${rid}','${cid}','${it.id}','desc',this.value)">
-    <input type="number" value="${it.qty||''}" placeholder="Qté" oninput="chItemEdit('${rid}','${cid}','${it.id}','qty',this.value)">
-    <select onchange="chItemEdit('${rid}','${cid}','${it.id}','unit',this.value)">${chUnitOptions(it.unit)}</select>
-    <input type="number" value="${it.price||''}" placeholder="P.U." oninput="chItemEdit('${rid}','${cid}','${it.id}','price',this.value)">
+    <input type="text" value="${esc(it.desc)}" placeholder="Pièce (ex. Salon, Couloir…)" oninput="chItemEdit('${cid}','${it.id}','desc',this.value)">
+    <input type="number" value="${it.qty||''}" placeholder="Qté" oninput="chItemEdit('${cid}','${it.id}','qty',this.value)">
+    <select onchange="chItemEdit('${cid}','${it.id}','unit',this.value)">${chUnitOptions(it.unit)}</select>
+    <input type="number" value="${it.price||''}" placeholder="P.U." oninput="chItemEdit('${cid}','${it.id}','price',this.value)">
     <span class="ch-item-total" id="itt-${it.id}">${fmt(chLineTotal(it))} ₪</span>
-    <button class="it-rm" onclick="chItemDel('${rid}','${cid}','${it.id}')" title="Supprimer">×</button>
+    <button class="it-rm" onclick="chItemDel('${cid}','${it.id}')" title="Supprimer">×</button>
   </div>`;
 }
-function chCatHtml(rid,cat){
-  return `<div class="ch-cat" data-cid="${cat.id}">
-    <div class="ch-cat-h">
-      <input class="ch-cat-name" type="text" value="${esc(cat.name)}" oninput="chCatEdit('${rid}','${cat.id}','name',this.value)" style="font-weight:600;font-size:13px;flex:1;">
-      <span class="ch-cat-total" id="ctt-${cat.id}">${fmt(chCatTotal(cat))} ₪</span>
-      <button class="mini danger" onclick="chCatDel('${rid}','${cat.id}')">×</button>
+function chCatCardHtml(cat){
+  return `<div class="ch-cat-card" data-cid="${cat.id}">
+    <div class="ch-cat-card-h">
+      <input class="ch-cat-name" type="text" value="${esc(cat.name)}" oninput="chCatEdit('${cat.id}','name',this.value)">
+      <span class="ch-cat-unit">${esc(cat.unit)}</span>
+      <span class="ch-cat-card-total" id="ctt-${cat.id}">${fmt(chCatTotal(cat))} ₪</span>
+      <button class="mini danger" onclick="chCatDel('${cat.id}')">×</button>
     </div>
-    ${cat.items.map(it=>chItemRowHtml(rid,cat.id,it)).join('')}
-    <button class="mini" onclick="chItemAdd('${rid}','${cat.id}')" style="margin:4px 0 0 10px">+ ligne</button>
+    <div>
+      ${cat.items.map(it=>chItemRowHtml(cat.id,it)).join('')}
+      <button class="mini" onclick="chItemAdd('${cat.id}')" style="margin:4px 0 10px 12px">+ ligne</button>
+    </div>
   </div>`;
 }
-function chRoomHtml(room){
+function renderChantierCatSelect(){
   ensureChantierCats();
-  const catOpts=library.chantierCats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  return `<div class="ch-room" data-rid="${room.id}">
-    <div class="ch-room-h">
-      <input type="text" value="${esc(room.name)}" oninput="chRoomEdit('${room.id}',this.value)">
-      <span class="ch-room-total" id="rtt-${room.id}">${fmt(chRoomTotal(room))} ₪</span>
-      <button class="mini danger" onclick="chRoomDel('${room.id}')">×</button>
-    </div>
-    <div style="padding:10px 12px 12px">
-      ${room.cats.map(cat=>chCatHtml(room.id,cat)).join('')}
-      <div class="ch-addcat">
-        <select id="chcatsel-${room.id}">${catOpts}<option value="__custom__">+ Catégorie personnalisée…</option></select>
-        <button class="mini" onclick="chCatAdd('${room.id}')">+ Ajouter la catégorie</button>
-      </div>
-    </div>
-  </div>`;
+  const sel=$('ch-cat-select');if(!sel)return;
+  sel.innerHTML=library.chantierCats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')+`<option value="__custom__">+ Catégorie personnalisée…</option>`;
 }
-function renderChantierRooms(){
+function renderChantierCats(){
   ensureChantierCats();
-  const root=$('ch-rooms');if(!root)return;
-  root.innerHTML=chantier.rooms.map(chRoomHtml).join('')||'<p class="empty">Aucune pièce. Cliquez sur « + Ajouter une pièce » pour commencer.</p>';
+  renderChantierCatSelect();
+  const root=$('ch-cats');if(!root)return;
+  root.innerHTML=chantier.cats.map(chCatCardHtml).join('')||'<p class="empty">Aucune catégorie. Choisissez un matériau/une prestation ci-dessous pour commencer.</p>';
 }
 function renderChantierMeta(){
   const t=$('ch-title'),c=$('ch-client'),d=$('ch-date');
@@ -976,46 +962,38 @@ function renderChantierMeta(){
 }
 function renderChantier(){
   renderChantierMeta();
-  renderChantierRooms();
+  renderChantierCats();
   updateChantierTotals();
 }
-function chRoomAdd(){chantier.rooms.push({id:uid(),name:'Nouvelle pièce',cats:[]});renderChantierRooms();updateChantierTotals();}
-function chRoomDel(rid){askConfirm('Supprimer cette pièce et tout son contenu ?',()=>{chantier.rooms=chantier.rooms.filter(r=>r.id!==rid);renderChantierRooms();updateChantierTotals();});}
-function chRoomEdit(rid,val){const r=chantier.rooms.find(x=>x.id===rid);if(r)r.name=val;saveChantierDraftDebounced();}
-function chCatAdd(rid){
-  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
-  const sel=document.getElementById('chcatsel-'+rid);if(!sel)return;
+function chCatAdd(){
+  const sel=$('ch-cat-select');if(!sel)return;
   const val=sel.value;
   let name='Nouvelle catégorie',unit='unité',price=0;
-  if(val==='__custom__'){name='Nouvelle catégorie';}
-  else{const libCat=library.chantierCats.find(c=>c.id===val);if(libCat){name=libCat.name;unit=libCat.unit;price=libCat.price;}}
-  room.cats.push({id:uid(),name,unit,items:[{id:uid(),desc:'',qty:0,unit,price}]});
-  renderChantierRooms();updateChantierTotals();
+  if(val!=='__custom__'){const libCat=library.chantierCats.find(c=>c.id===val);if(libCat){name=libCat.name;unit=libCat.unit;price=libCat.price;}}
+  chantier.cats.push({id:uid(),name,unit,items:[{id:uid(),desc:'',qty:0,unit,price}]});
+  renderChantierCats();updateChantierTotals();
 }
-function chCatDel(rid,cid){
-  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
-  room.cats=room.cats.filter(c=>c.id!==cid);renderChantierRooms();updateChantierTotals();
+function chCatDel(cid){
+  askConfirm('Supprimer cette catégorie et toutes ses lignes ?',()=>{
+    chantier.cats=chantier.cats.filter(c=>c.id!==cid);renderChantierCats();updateChantierTotals();
+  });
 }
-function chCatEdit(rid,cid,key,val){
-  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
-  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+function chCatEdit(cid,key,val){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
   cat[key]=val;saveChantierDraftDebounced();
 }
-function chItemAdd(rid,cid){
-  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
-  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+function chItemAdd(cid){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
   cat.items.push({id:uid(),desc:'',qty:0,unit:cat.unit,price:0});
-  renderChantierRooms();updateChantierTotals();
+  renderChantierCats();updateChantierTotals();
 }
-function chItemDel(rid,cid,iid){
-  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
-  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+function chItemDel(cid,iid){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
   cat.items=cat.items.filter(i=>i.id!==iid);
-  renderChantierRooms();updateChantierTotals();
+  renderChantierCats();updateChantierTotals();
 }
-function chItemEdit(rid,cid,iid,key,val){
-  const room=chantier.rooms.find(r=>r.id===rid);if(!room)return;
-  const cat=room.cats.find(c=>c.id===cid);if(!cat)return;
+function chItemEdit(cid,iid,key,val){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
   const it=cat.items.find(i=>i.id===iid);if(!it)return;
   it[key]=(key==='qty'||key==='price')?(parseFloat(val)||0):val;
   updateChantierTotals();
@@ -2074,7 +2052,7 @@ async function init(){
   devisList=(await store.get(K_DEVIS))||[];
   chantierList=(await store.get(K_CHANTIER))||[];
   const chDraft=await store.get('mn_chantier_draft');
-  if(chDraft&&Array.isArray(chDraft.rooms))chantier=chDraft;
+  if(chDraft&&Array.isArray(chDraft.cats))chantier=chDraft;
   const draft=await store.get(K_DRAFT);
   if(draft&&draft.services){
     Object.assign(current,draft);
