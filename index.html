@@ -458,7 +458,6 @@
       <div id="prest" class="mode-global"></div>
     </div>
     <div class="ed-section">
-      <p class="ed-eyebrow">Hors prestation · non compris</p>
       <div id="excl"></div>
     </div>
     <div class="ed-section">
@@ -801,18 +800,22 @@ function bindPriceRow(pr,sv){
 }
 function buildExclu(){
   const root=$('excl');root.innerHTML='';
-  const acc=document.createElement('div');acc.className='acc open';acc.innerHTML='<div class="acc-body"></div>';
+  const key='__hors__';
+  const cnt=current.exclus.filter(e=>e.on).length;
+  const acc=document.createElement('div');acc.className='acc'+(current.open[key]?' open':'');
+  acc.innerHTML=`<button class="acc-head"><span class="acc-name">Hors prestation · non compris</span><span class="acc-count ${cnt?'':'zero'}">${cnt}</span><span class="acc-chev">▶</span></button><div class="acc-body"></div>`;
+  acc.querySelector('.acc-head').addEventListener('click',()=>{current.open[key]=!current.open[key];acc.classList.toggle('open',current.open[key]);});
   const body=acc.querySelector('.acc-body');
   current.exclus.forEach(ex=>{
-    const row=document.createElement('div');row.className='it on';
+    const row=document.createElement('div');row.className='it'+(ex.on?' on':'');
     row.innerHTML=`<div class="it-head"><input type="checkbox" ${ex.on?'checked':''}><input class="it-title" type="text" value="${esc(ex.title)}" placeholder="Élément non compris">${ex.custom?'<button class="it-rm">×</button>':''}</div>`;
-    row.querySelector('input[type=checkbox]').addEventListener('change',e=>{ex.on=e.target.checked;render();});
+    row.querySelector('input[type=checkbox]').addEventListener('change',e=>{ex.on=e.target.checked;row.classList.toggle('on',ex.on);const c=current.exclus.filter(x=>x.on).length;const b=acc.querySelector('.acc-count');b.textContent=c;b.classList.toggle('zero',!c);render();});
     row.querySelector('.it-title').addEventListener('input',e=>{ex.title=e.target.value;renderDebounced();});
     const rm=row.querySelector('.it-rm');if(rm)rm.addEventListener('click',()=>{current.exclus=current.exclus.filter(x=>x.id!==ex.id);buildExclu();render();});
     body.appendChild(row);
   });
   const add=document.createElement('button');add.className='add-btn';add.textContent='+ Ajouter un élément';
-  add.addEventListener('click',()=>{current.exclus.push({id:uid(),on:true,title:'',custom:true});buildExclu();render();});
+  add.addEventListener('click',()=>{current.exclus.push({id:uid(),on:true,title:'',custom:true});current.open[key]=true;buildExclu();render();});
   body.appendChild(add);root.appendChild(acc);
 }
 
