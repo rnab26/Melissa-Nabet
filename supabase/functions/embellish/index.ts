@@ -6,13 +6,19 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const LENGTH_CONFIG: Record<string, { instruction: string; maxTokens: number }> = {
+  court: { instruction: "UNE phrase brève", maxTokens: 70 },
+  moyen: { instruction: "UNE à DEUX phrases", maxTokens: 150 },
+  long: { instruction: "DEUX à TROIS phrases", maxTokens: 260 },
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
   }
 
   try {
-    const { title, desc, proj, surf } = await req.json();
+    const { title, desc, proj, surf, length } = await req.json();
     if (!title) {
       return new Response(JSON.stringify({ error: "title manquant" }), {
         status: 400,
@@ -28,7 +34,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const prompt = `Tu écris pour les devis d'une architecte d'intérieur (Melissa Nabet). Rédige UNE à DEUX phrases élégantes, concrètes et chaleureuses (français, sans superlatifs creux, sans guillemets) décrivant la prestation ci-dessous, pour valoriser le travail auprès du client. Contexte projet : ${proj || "projet"} (${surf || ""} m²). Prestation : "${title}". ${desc ? `Texte existant à améliorer : "${desc}".` : ""} Réponds uniquement par le texte, sans préambule.`;
+    const len = LENGTH_CONFIG[length] || LENGTH_CONFIG.moyen;
+    const prompt = `Tu écris, à la troisième personne, pour les devis de l'architecte d'intérieur Melissa Nabet — en la nommant (par exemple : "Melissa Nabet vous accompagne dans...", "Melissa Nabet propose..."). Rédige ${len.instruction} élégante(s), concrète(s) et chaleureuse(s) (français, sans superlatifs creux, sans guillemets) décrivant la prestation ci-dessous, pour valoriser le travail auprès du client. Contexte projet : ${proj || "projet"} (${surf || ""} m²). Prestation : "${title}". ${desc ? `Texte existant à améliorer : "${desc}".` : ""} Réponds uniquement par le texte, sans préambule.`;
 
     const anthRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -39,7 +46,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 150,
+        max_tokens: len.maxTokens,
         messages: [{ role: "user", content: prompt }],
       }),
     });
