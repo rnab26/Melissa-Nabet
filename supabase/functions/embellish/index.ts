@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     }
 
     const len = LENGTH_CONFIG[length] || LENGTH_CONFIG.moyen;
-    const prompt = `Tu écris, à la troisième personne, pour les devis de l'architecte d'intérieur Melissa Nabet — en la nommant (par exemple : "Melissa Nabet vous accompagne dans...", "Melissa Nabet propose..."). Rédige ${len.instruction} élégante(s), concrète(s) et chaleureuse(s) (français, sans superlatifs creux, sans guillemets) décrivant la prestation ci-dessous, pour valoriser le travail auprès du client. Contexte projet : ${proj || "projet"} (${surf || ""} m²). Prestation : "${title}". ${desc ? `Texte existant à améliorer : "${desc}".` : ""} Réponds uniquement par le texte, sans préambule.`;
+    const prompt = `Tu écris pour les devis d'une architecte d'intérieur (Melissa Nabet). Rédige ${len.instruction} élégante(s), concrète(s) et chaleureuse(s) (français, sans superlatifs creux, sans guillemets) décrivant la prestation ci-dessous, pour valoriser le travail auprès du client. Contexte projet : ${proj || "projet"} (${surf || ""} m²). Prestation : "${title}". ${desc ? `Texte existant à améliorer : "${desc}".` : ""} Réponds uniquement par le texte, sans préambule.`;
 
     const anthRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
