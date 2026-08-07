@@ -1700,6 +1700,7 @@ function openSyncPanel(){
       Clients sur cet appareil : <b>${clients.length}</b><br>
       Clients dans le cloud : <b id="cloud-count">…</b><br>
       Devis enregistrés : <b>${devisList.length}</b><br>
+      Stockage documents : <b id="doc-storage">…</b><br>
       Version de l'appli : <b>${APP_VERSION}</b><br>
       État : <b>${lastSyncError?('⚠ '+esc(lastSyncError)):'✓ ok'}</b>
     </div>
@@ -1710,6 +1711,19 @@ function openSyncPanel(){
     </div>`);
   if(sb&&sbUser){sb.from('app_data').select('id',{count:'exact',head:true}).eq('kind','client').then(({count,error})=>{const el=document.getElementById('cloud-count');if(el)el.textContent=error?('erreur ('+((error.message)||'?')+')'):count;});}
   else{const el=document.getElementById('cloud-count');if(el)el.textContent='hors ligne';}
+  loadDocStorageUsage();
+}
+async function loadDocStorageUsage(){
+  const el=document.getElementById('doc-storage');if(!el)return;
+  if(!sb||!sbUser||!ownerId){el.textContent='hors ligne';return;}
+  try{
+    const {data,error}=await sb.storage.from(DOC_BUCKET).list(ownerId,{limit:1000});
+    if(error)throw error;
+    const bytes=(data||[]).reduce((a,f)=>a+((f.metadata&&f.metadata.size)||0),0);
+    const mo=bytes/1024/1024;
+    const moTxt=(mo<0.1&&bytes>0?'< 0,1':mo.toFixed(1).replace('.',',')) ;
+    el.textContent=moTxt+' Mo utilisés sur 1 Go (plan gratuit Supabase) · '+(data||[]).length+' fichier(s)';
+  }catch(e){el.textContent='indisponible ('+((e&&e.message)||'erreur')+')';}
 }
 function forceSync(){
   if(!sb||!sbUser){toast('Non connecté');return;}
