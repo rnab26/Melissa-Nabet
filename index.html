@@ -11,7 +11,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  :root{--ink:#3d3934;--stone:#8a8074;--stone-light:#b4aa9b;--stone-deep:#6f665b;--travertine:#e8e2d7;--paper:#f4efe6;--hair:#d3cabb;--oxblood:#9a8574;--panel:#fbf9f5;--panel-edge:#e5ded2;}
+  :root{--ink:#3d3934;--stone:#8a8074;--stone-light:#b4aa9b;--stone-deep:#6f665b;--travertine:#e8e2d7;--paper:#f4efe6;--hair:#d3cabb;--oxblood:#9a8574;--panel:#fbf9f5;--panel-edge:#e5ded2;--devis-heading-font:'Cormorant Garamond',serif;--devis-body-font:'EB Garamond',serif;}
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{font-family:'Inter',sans-serif;color:var(--ink);background:var(--travertine);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
@@ -303,54 +303,54 @@
   .devis-page{padding:20mm 18mm;position:relative;overflow:hidden;min-height:297mm;}
   .devis-page + .devis-page{border-top:1px dashed #ded5c4;}
   .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
-  .wm span{font-family:'Cormorant Garamond',serif;font-size:340px;font-weight:500;color:var(--oxblood);opacity:.055;letter-spacing:-.04em;}
+  .wm span{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:340px;font-weight:500;color:var(--oxblood);opacity:.055;letter-spacing:-.04em;}
   .dv-inner{position:relative;z-index:1;}
   .dv-bsd{text-align:right;font-size:13px;color:#3a352d;margin:0 0 2mm;letter-spacing:.02em;}
   .dv-head{display:flex;justify-content:space-between;gap:20px;padding-top:1mm;}
-  .dv-head .col{font-family:'EB Garamond',serif;font-size:12.5px;line-height:1.75;color:#3a352d;}
+  .dv-head .col{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.5px;line-height:1.75;color:#3a352d;}
   .dv-head .col.right{text-align:right;}
   .dv-head .col .nm{color:var(--oxblood);font-weight:500;}
   .dv-brand{text-align:center;margin:4mm 0 5mm;}
   .dv-logo{width:62mm;max-width:70%;height:auto;}
   .dv-emblem{width:34px;height:34px;color:var(--stone-deep);}
-  .dv-word{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:500;letter-spacing:.16em;color:var(--ink);margin-top:1mm;padding-left:.16em;}
+  .dv-word{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:30px;font-weight:500;letter-spacing:.16em;color:var(--ink);margin-top:1mm;padding-left:.16em;}
   .dv-tag{font-size:8.5px;letter-spacing:.4em;text-transform:uppercase;color:var(--stone-light);margin-top:3mm;padding-left:.4em;display:inline-block;}
   .dv-tag::before{content:"";display:block;width:44px;height:1px;background:var(--hair);margin:0 auto 3mm;}
-  .dv-title{text-align:center;font-family:'Cormorant Garamond',serif;font-weight:600;font-size:27px;margin:6mm 0 2mm;}
+  .dv-title{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-weight:600;font-size:27px;margin:6mm 0 2mm;}
   .dv-rule{width:64px;height:1px;background:var(--stone-light);margin:0 auto 7mm;}
-  .dv-intro{font-family:'EB Garamond',serif;font-size:14px;line-height:1.72;text-align:center;color:#3a352d;max-width:150mm;margin:0 auto 8mm;white-space:pre-wrap;}
+  .dv-intro{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:14px;line-height:1.72;text-align:center;color:#3a352d;max-width:150mm;margin:0 auto 8mm;white-space:pre-wrap;}
   .dv-group{margin-bottom:7mm;}
-  .dv-group-h{text-align:center;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;margin:0 0 4mm;}
+  .dv-group-h{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:18px;font-weight:600;margin:0 0 4mm;}
   .dv-item{margin:0 0 4mm;}
-  .dv-item .it-t{font-family:'EB Garamond',serif;font-weight:700;font-size:14px;display:flex;justify-content:space-between;gap:14px;align-items:baseline;}
-  .dv-item .it-t .price{font-family:'Cormorant Garamond',serif;font-size:16px;color:var(--oxblood);white-space:nowrap;}
-  .dv-item .it-meta{font-family:'EB Garamond',serif;font-size:11.5px;color:var(--stone);font-style:italic;}
-  .dv-item .it-d{font-family:'EB Garamond',serif;font-size:12.8px;line-height:1.66;color:#544d43;margin-top:2px;white-space:pre-wrap;}
+  .dv-item .it-t{font-family:var(--devis-body-font,'EB Garamond',serif);font-weight:700;font-size:14px;display:flex;justify-content:space-between;gap:14px;align-items:baseline;}
+  .dv-item .it-t .price{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:16px;color:var(--oxblood);white-space:nowrap;}
+  .dv-item .it-meta{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:var(--stone);font-style:italic;}
+  .dv-item .it-d{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.8px;line-height:1.66;color:#544d43;margin-top:2px;white-space:pre-wrap;}
   .dv-excl{margin:6mm 0;}
   .dv-excl ul{margin:2mm 0 0;padding-left:5mm;}
-  .dv-excl li{font-family:'EB Garamond',serif;font-size:12.6px;color:#6a6255;line-height:1.6;margin-bottom:1.5mm;}
+  .dv-excl li{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.6px;color:#6a6255;line-height:1.6;margin-bottom:1.5mm;}
   .dv-totals{margin:8mm 0 0;border-top:1px solid var(--hair);padding-top:4mm;}
-  .dv-totals .tr{display:flex;justify-content:flex-end;gap:24px;font-family:'EB Garamond',serif;font-size:13.5px;padding:1.5mm 0;color:#3a352d;}
+  .dv-totals .tr{display:flex;justify-content:flex-end;gap:24px;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13.5px;padding:1.5mm 0;color:#3a352d;}
   .dv-totals .tr .k{color:var(--stone);}
   .dv-totals .tr .v{min-width:34mm;text-align:right;}
   .dv-totals .tr.grand{font-size:17px;font-weight:600;color:var(--ink);border-top:1px solid var(--hair);margin-top:2mm;padding-top:3mm;}
-  .dv-totals .tr.grand .v{color:var(--oxblood);font-family:'Cormorant Garamond',serif;font-size:20px;}
-  .dv-tva-note{font-family:'EB Garamond',serif;font-size:11px;color:var(--stone);text-align:right;margin-top:2mm;font-style:italic;}
+  .dv-totals .tr.grand .v{color:var(--oxblood);font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:20px;}
+  .dv-tva-note{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11px;color:var(--stone);text-align:right;margin-top:2mm;font-style:italic;}
   .dv-timeline{margin:7mm 0;}
-  .dv-timeline .tl-h{text-align:center;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;margin-bottom:3mm;}
-  .dv-timeline .tl-row{font-family:'EB Garamond',serif;font-size:13px;text-align:center;color:#3a352d;line-height:1.7;}
-  .dv-cond h2{text-align:center;font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:600;margin:0 0 6mm;text-decoration:underline;text-underline-offset:4px;}
-  .dv-cond p{font-family:'EB Garamond',serif;font-size:12px;line-height:1.62;color:#3a352d;margin:0 0 3mm;}
+  .dv-timeline .tl-h{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:18px;font-weight:600;margin-bottom:3mm;}
+  .dv-timeline .tl-row{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13px;text-align:center;color:#3a352d;line-height:1.7;}
+  .dv-cond h2{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:22px;font-weight:600;margin:0 0 6mm;text-decoration:underline;text-underline-offset:4px;}
+  .dv-cond p{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12px;line-height:1.62;color:#3a352d;margin:0 0 3mm;}
   .dv-cond p b{color:var(--ink);}
   .dv-cond ul{margin:1mm 0 3mm;padding-left:6mm;}
-  .dv-cond li{font-family:'EB Garamond',serif;font-size:12px;color:#3a352d;line-height:1.55;margin-bottom:1mm;}
+  .dv-cond li{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12px;color:#3a352d;line-height:1.55;margin-bottom:1mm;}
   .dv-sign{display:flex;justify-content:space-between;margin-top:14mm;padding-top:4mm;}
-  .dv-sign .s{font-family:'EB Garamond',serif;font-size:13px;color:#3a352d;}
+  .dv-sign .s{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13px;color:#3a352d;}
   .dv-sign .s .line{display:inline-block;width:52mm;border-bottom:1px solid var(--stone-light);margin-top:12mm;}
   .dv-license{text-align:center;font-size:10.5px;color:var(--stone);margin-top:5mm;}
-  .dv-foot{text-align:center;font-family:'EB Garamond',serif;font-size:11px;color:var(--stone);margin-top:6mm;border-top:1px solid var(--hair);padding-top:3mm;}
+  .dv-foot{text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11px;color:var(--stone);margin-top:6mm;border-top:1px solid var(--hair);padding-top:3mm;}
   .dv-pricesign{break-inside:avoid;page-break-inside:avoid;}
-  .dv-pagenum{position:absolute;bottom:9mm;left:0;right:0;text-align:center;font-family:'EB Garamond',serif;font-size:10.5px;color:var(--stone);letter-spacing:.1em;z-index:2;}
+  .dv-pagenum{position:absolute;bottom:9mm;left:0;right:0;text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:10.5px;color:var(--stone);letter-spacing:.1em;z-index:2;}
 
   @media (max-width:1100px){.devis{transform:scale(.82);transform-origin:top center;}}
   @media (max-width:900px){
@@ -641,7 +641,9 @@ function computeTotals(S,inc){
 function buildDevisHTML(S){
   const B=(S.branding&&S.branding.companyName)?S.branding:DEFAULT_BRANDING;
   const pal=B.palette==='custom'?buildCustomPalette(B.customAccent):(DEFAULT_PALETTES[B.palette]||DEFAULT_PALETTES.actuel);
-  const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};}</style>`;
+  const fonts=FONT_THEMES[B.fontTheme]||FONT_THEMES.actuel;
+  ensureFontThemeLoaded(B.fontTheme);
+  const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};}</style>`;
   const detail=S.pricingMode==='detail';
   const inc=(S.services||[]).filter(v=>v.on);
   const exc=(S.exclus||[]).filter(v=>v.on&&(v.title||'').trim());
@@ -653,7 +655,7 @@ function buildDevisHTML(S){
     }).join('');
     return `<div class="dv-group"><div class="dv-group-h">${esc(cat)}</div>${items}</div>`;
   }).join('');
-  const exclHtml=exc.length?`<div class="dv-excl"><div class="dv-group-h">Hors prestation</div><ul>${exc.map(v=>`<li>${esc(v.title)}</li>`).join('')}</ul><p style="font-family:'EB Garamond',serif;font-size:11.5px;color:#8c7b63;text-align:center;font-style:italic;margin-top:2mm;">Des partenaires spécialisés peuvent être recommandés selon les besoins du projet.</p></div>`:'';
+  const exclHtml=exc.length?`<div class="dv-excl"><div class="dv-group-h">Hors prestation</div><ul>${exc.map(v=>`<li>${esc(v.title)}</li>`).join('')}</ul><p style="font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:#8c7b63;text-align:center;font-style:italic;margin-top:2mm;">Des partenaires spécialisés peuvent être recommandés selon les besoins du projet.</p></div>`:'';
   const T=computeTotals(S,inc);
   let totalsHtml='';
   if(T.show){
@@ -755,15 +757,67 @@ const DEFAULT_PALETTES={
   actuel:{name:'Actuel',paper:'#f4efe6',ink:'#3d3934',oxblood:'#9a8574',stone:'#8a8074',stoneDeep:'#6f665b',stoneLight:'#b4aa9b',hair:'#d3cabb'},
   ardoise:{name:'Ardoise',paper:'#f1f1ee',ink:'#2c2f33',oxblood:'#48586e',stone:'#7c8794',stoneDeep:'#59636f',stoneLight:'#a9b2ba',hair:'#cdd2d6'},
   sauge:{name:'Sauge',paper:'#f3f1e8',ink:'#3a3d33',oxblood:'#6b7d5e',stone:'#8b9179',stoneDeep:'#5f6a51',stoneLight:'#b3b6a2',hair:'#d3d6c2'},
+  terracotta:{name:'Terracotta',paper:'#f6efe4',ink:'#3a2f28',oxblood:'#b1603f',stone:'#9c8570',stoneDeep:'#7a6552',stoneLight:'#c7ac95',hair:'#e2cdb8'},
+  laiton:{name:'Laiton',paper:'#f3f1ea',ink:'#242019',oxblood:'#a8843f',stone:'#8f8570',stoneDeep:'#6b6252',stoneLight:'#c2b89f',hair:'#ddd4bd'},
 };
 function hexToRgb(hex){const h=(hex||'#9a8574').replace('#','');const n=h.length===3?h.split('').map(c=>c+c).join(''):h;const i=parseInt(n,16);return {r:(i>>16)&255,g:(i>>8)&255,b:i&255};}
 function rgbToHex(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}
 function mixHex(hexA,hexB,t){const a=hexToRgb(hexA),b=hexToRgb(hexB);return rgbToHex(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t);}
+function hexToHsl(hex){
+  const {r,g,b}=hexToRgb(hex);
+  const rn=r/255,gn=g/255,bn=b/255;
+  const max=Math.max(rn,gn,bn),min=Math.min(rn,gn,bn);
+  let h=0,s=0;const l=(max+min)/2;
+  const d=max-min;
+  if(d!==0){
+    s=l>0.5?d/(2-max-min):d/(max+min);
+    if(max===rn)h=(gn-bn)/d+(gn<bn?6:0);
+    else if(max===gn)h=(bn-rn)/d+2;
+    else h=(rn-gn)/d+4;
+    h/=6;
+  }
+  return {h:h*360,s:s*100,l:l*100};
+}
+function hslToHex(h,s,l){
+  h=((h%360)+360)%360;s=Math.max(0,Math.min(100,s))/100;l=Math.max(0,Math.min(100,l))/100;
+  const c=(1-Math.abs(2*l-1))*s;
+  const x=c*(1-Math.abs((h/60)%2-1));
+  const m=l-c/2;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;b=0;}else if(h<120){r=x;g=c;b=0;}else if(h<180){r=0;g=c;b=x;}
+  else if(h<240){r=0;g=x;b=c;}else if(h<300){r=x;g=0;b=c;}else{r=c;g=0;b=x;}
+  return rgbToHex((r+m)*255,(g+m)*255,(b+m)*255);
+}
 function buildCustomPalette(accent){
   const a=accent||'#9a8574';
-  return {name:'Personnalisé',paper:'#f4efe6',ink:'#3d3934',oxblood:a,
-    stone:mixHex(a,'#8a8074',.5),stoneDeep:mixHex(a,'#6f665b',.5),
-    stoneLight:mixHex(a,'#b4aa9b',.5),hair:mixHex(a,'#d3cabb',.5)};
+  const hsl=hexToHsl(a);
+  const h=hsl.h;
+  const accentClamped=hslToHex(h,Math.min(hsl.s,55),Math.max(30,Math.min(hsl.l,55)));
+  return {name:'Photo',
+    paper:hslToHex(h,10,95),ink:hslToHex(h,14,22),oxblood:accentClamped,
+    stone:hslToHex(h,22,54),stoneDeep:hslToHex(h,26,40),
+    stoneLight:hslToHex(h,16,68),hair:hslToHex(h,14,80)};
+}
+const FONT_THEMES={
+  actuel:{name:'Actuel',sample:'Cormorant × EB Garamond',heading:"'Cormorant Garamond',serif",body:"'EB Garamond',serif"},
+  editorial:{name:'Éditorial',sample:'Playfair × Lora',heading:"'Playfair Display',serif",body:"'Lora',serif",
+    gfam:'family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Lora:ital,wght@0,400;0,500;1,400'},
+  contemporain:{name:'Contemporain',sample:'DM Serif × DM Sans',heading:"'DM Serif Display',serif",body:"'DM Sans',sans-serif",
+    gfam:'family=DM+Serif+Display:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500;700'},
+  minimal:{name:'Minimal',sample:'Poppins × Inter',heading:"'Poppins',sans-serif",body:"'Inter',sans-serif",
+    gfam:'family=Poppins:wght@500;600;700'},
+  classique:{name:'Classique',sample:'Libre Baskerville × Source Serif',heading:"'Libre Baskerville',serif",body:"'Source Serif 4',serif",
+    gfam:'family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;1,400'},
+};
+const _loadedFontThemes=new Set(['actuel']);
+function ensureFontThemeLoaded(key){
+  const t=FONT_THEMES[key];
+  if(!t||!t.gfam||_loadedFontThemes.has(key))return;
+  _loadedFontThemes.add(key);
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='https://fonts.googleapis.com/css2?'+t.gfam+'&display=swap';
+  document.head.appendChild(link);
 }
 const DEFAULT_BRANDING={
   companyName:'Melissa Nabet',
@@ -780,6 +834,7 @@ const DEFAULT_BRANDING={
   signatureImage:null,
   palette:'actuel',
   customAccent:'#9a8574',
+  fontTheme:'actuel',
   defaultCurrency:'₪',
   defaultTva:18,
   numPrefix:'',
@@ -1256,15 +1311,64 @@ function clearSignatureImage(){library.branding.signatureImage=null;openSettings
 function settingsEdit(key,val){library.branding[key]=val;}
 function settingsEditNum(key,val){library.branding[key]=parseFloat(val)||0;}
 function settingsSetPalette(key){library.branding.palette=key;openSettingsPanel();}
+function settingsSetFontTheme(key){library.branding.fontTheme=key;ensureFontThemeLoaded(key);openSettingsPanel();}
 function settingsToggle(key,val){library.branding[key]=val;}
-function settingsSetCustomAccent(val){library.branding.customAccent=val;library.branding.palette='custom';openSettingsPanel();}
+function extractDominantColor(img){
+  const w=80,h=Math.max(1,Math.round(80*img.height/img.width));
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const ctx=cv.getContext('2d');ctx.drawImage(img,0,0,w,h);
+  const data=ctx.getImageData(0,0,w,h).data;
+  const bins=new Array(24).fill(0).map(()=>({wsum:0,r:0,g:0,b:0}));
+  for(let i=0;i<data.length;i+=4){
+    const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+    if(a<128)continue;
+    const hsl=hexToHsl(rgbToHex(r,g,b));
+    if(hsl.s<12||hsl.l<8||hsl.l>92)continue;
+    const bin=Math.floor(((hsl.h%360)/360)*24)%24;
+    const weight=hsl.s/100;
+    bins[bin].wsum+=weight;bins[bin].r+=r*weight;bins[bin].g+=g*weight;bins[bin].b+=b*weight;
+  }
+  let best=null;
+  bins.forEach(b=>{if(b.wsum>0&&(!best||b.wsum>best.wsum))best=b;});
+  if(!best||best.wsum===0)return '#9a8574';
+  return rgbToHex(best.r/best.wsum,best.g/best.wsum,best.b/best.wsum);
+}
+function pickThemeFromPhoto(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{
+    if(!inp.files||!inp.files[0])return;
+    const reader=new FileReader();
+    reader.onerror=()=>toast('Échec de lecture du fichier');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>toast('Image illisible');
+      img.onload=()=>{
+        try{
+          library.branding.customAccent=extractDominantColor(img);
+          library.branding.palette='custom';
+          openSettingsPanel();
+          toast('Thème extrait de la photo');
+        }catch(e){toast('Échec extraction : '+e.message);}
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(inp.files[0]);
+  };
+  inp.click();
+}
 function openSettingsPanel(){
   ensureBranding();
   const b=library.branding;
+  Object.keys(FONT_THEMES).forEach(k=>ensureFontThemeLoaded(k));
   const paletteRow=Object.entries(DEFAULT_PALETTES).map(([key,p])=>`
     <button type="button" class="mini ${b.palette===key?'':''}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.palette===key?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.palette===key?'var(--panel)':'transparent'};" onclick="settingsSetPalette('${key}')">
       <span style="display:flex;"><span style="width:13px;height:13px;border-radius:50%;background:${p.paper};border:1px solid #0002;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.oxblood};border:1px solid #0002;margin-left:-4px;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.ink};border:1px solid #0002;margin-left:-4px;"></span></span>
       ${esc(p.name)}
+    </button>`).join('');
+  const fontRow=Object.entries(FONT_THEMES).map(([key,t])=>`
+    <button type="button" class="mini" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:9px 13px;min-width:118px;border:1.5px solid ${b.fontTheme===key?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.fontTheme===key?'var(--panel)':'transparent'};" onclick="settingsSetFontTheme('${key}')">
+      <span style="font-family:${t.heading};font-size:18px;color:var(--ink);">Aa</span>
+      <span style="font-size:10px;color:var(--stone);">${esc(t.name)}</span>
     </button>`).join('');
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Réglages</h3>
     <p class="msub">Tout ce qui apparaît sur tes devis — modifiable ici, sans toucher au code.</p>
@@ -1323,14 +1427,17 @@ function openSettingsPanel(){
       <label class="fld"><span class="lbl">Préfixe des n° de devis</span><input type="text" value="${esc(b.numPrefix)}" oninput="settingsEdit('numPrefix',this.value)" placeholder="ex. MN-"></label>
     </div>
 
-    <div class="ed-eyebrow">Apparence du devis</div>
+    <div class="ed-eyebrow">Couleurs du devis</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">${paletteRow}
-      <button type="button" class="mini" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.palette==='custom'?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.palette==='custom'?'var(--panel)':'transparent'};" onclick="settingsSetPalette('custom')">
-        <span style="width:13px;height:13px;border-radius:50%;background:${b.customAccent||'#9a8574'};border:1px solid #0002;"></span>
-        Personnalisé
+      <button type="button" class="mini" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.palette==='custom'?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.palette==='custom'?'var(--panel)':'transparent'};" onclick="pickThemeFromPhoto()">
+        ${b.palette==='custom'?`<span style="width:13px;height:13px;border-radius:50%;background:${b.customAccent||'#9a8574'};border:1px solid #0002;"></span>`:'📷'}
+        Depuis une photo…
       </button>
-      <input type="color" title="Choisir une couleur d'accent" value="${b.customAccent||'#9a8574'}" onchange="settingsSetCustomAccent(this.value)" style="width:36px;height:36px;padding:0;border:1px solid var(--panel-edge);border-radius:5px;cursor:pointer;background:none;">
     </div>
+    <p class="brand-media-hint" style="margin:0 0 16px;">S'applique uniquement au devis imprimé, jamais à l'application elle-même.</p>
+
+    <div class="ed-eyebrow">Typographie du devis</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">${fontRow}</div>
 
     <div class="ed-eyebrow">Raccourcis</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
@@ -1719,33 +1826,50 @@ function attachDragReorder(container,itemSelector,handleSelector,onReorder){
     handle.addEventListener('pointerdown',e=>{
       e.preventDefault();
       const dragging=row;
+      /* Rects captured once and never re-measured mid-drag — re-measuring after we
+         nudge siblings would fold the nudge back into the next reading and the
+         drag runs away to one end of the list. */
       const siblings=Array.from(container.children).filter(el=>el.matches(itemSelector));
+      const startIndex=siblings.indexOf(dragging);
+      const rects=siblings.map(el=>el.getBoundingClientRect());
+      const dragH=rects[startIndex].height;
       const startY=e.clientY;
+      let targetIndex=startIndex;
       dragging.style.position='relative';dragging.style.zIndex='50';
       dragging.classList.add('dragging-row');
       try{handle.setPointerCapture(e.pointerId);}catch(err){}
+      function applyOffsets(newTarget){
+        siblings.forEach((el,i)=>{
+          if(i===startIndex)return;
+          let shift=0;
+          if(newTarget<startIndex&&i>=newTarget&&i<startIndex)shift=dragH;
+          else if(newTarget>startIndex&&i>startIndex&&i<=newTarget)shift=-dragH;
+          el.style.transition='transform .12s';
+          el.style.transform=shift?('translateY('+shift+'px)'):'';
+        });
+      }
       function onMove(ev){
         const dy=ev.clientY-startY;
         dragging.style.transform='translateY('+dy+'px)';
-        const dragRect=dragging.getBoundingClientRect();
-        const dragMid=dragRect.top+dragRect.height/2;
-        let after=null;
-        siblings.forEach(sib=>{
-          if(sib===dragging)return;
-          const sr=sib.getBoundingClientRect();
-          if(dragMid>sr.top+sr.height/2)after=sib;
+        const dragMid=rects[startIndex].top+rects[startIndex].height/2+dy;
+        let count=0;
+        siblings.forEach((el,i)=>{
+          if(i===startIndex)return;
+          const mid=rects[i].top+rects[i].height/2;
+          if(mid<dragMid)count++;
         });
-        if(after){if(after.nextElementSibling!==dragging)container.insertBefore(dragging,after.nextElementSibling);}
-        else{if(container.firstElementChild!==dragging)container.insertBefore(dragging,container.firstElementChild);}
+        if(count!==targetIndex){targetIndex=count;applyOffsets(targetIndex);}
       }
-      function onUp(ev){
+      function onUp(){
         document.removeEventListener('pointermove',onMove);
         document.removeEventListener('pointerup',onUp);
         try{handle.releasePointerCapture(e.pointerId);}catch(err){}
         dragging.style.transform='';dragging.style.position='';dragging.style.zIndex='';
         dragging.classList.remove('dragging-row');
-        const newOrder=Array.from(container.children).filter(el=>el.matches(itemSelector)).map(el=>parseInt(el.dataset.idx,10));
-        onReorder(newOrder);
+        siblings.forEach((el,i)=>{if(i!==startIndex){el.style.transform='';el.style.transition='';}});
+        const others=siblings.map((el,i)=>i).filter(i=>i!==startIndex);
+        others.splice(targetIndex,0,startIndex);
+        onReorder(others.map(i=>parseInt(siblings[i].dataset.idx,10)));
       }
       document.addEventListener('pointermove',onMove);
       document.addEventListener('pointerup',onUp);
