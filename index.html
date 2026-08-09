@@ -34,6 +34,15 @@
   .ed-section{margin-bottom:22px;}
   .ed-eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone);margin:0 0 12px;font-weight:600;display:flex;align-items:center;gap:10px;}
   .ed-eyebrow::after{content:"";flex:1;height:1px;background:var(--hair);}
+  .brand-media-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+  .brand-media-card{flex:1 1 220px;padding:12px;border:1px solid var(--panel-edge);border-radius:6px;background:var(--panel);}
+  .brand-media-lbl{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);font-weight:600;margin-bottom:9px;}
+  .brand-media-body{display:flex;align-items:center;gap:12px;}
+  .brand-media-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-start;}
+  .brand-media-hint{font-size:11px;color:var(--stone);margin:8px 0 0;}
+  .logo-thumb{flex:0 0 auto;width:56px;height:56px;border:1px solid var(--panel-edge);border-radius:5px;display:flex;align-items:center;justify-content:center;background:var(--paper);overflow:hidden;}
+  .logo-thumb img{max-width:100%;max-height:100%;}
+  .logo-thumb-empty{font-size:9.5px;color:var(--stone);text-align:center;line-height:1.3;}
   label.fld{display:block;margin-bottom:11px;}
   label.fld .lbl{display:block;font-size:11px;color:var(--stone);margin-bottom:4px;}
   input[type=text],input[type=number],textarea,select{width:100%;font-family:'Inter';font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--panel-edge);border-radius:2px;padding:9px 10px;outline:none;transition:border-color .15s;}
@@ -98,7 +107,10 @@
   .lib-sec{border:1px solid var(--panel-edge);border-radius:4px;margin-bottom:10px;background:var(--panel);}
   .lib-sec-h{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--panel-edge);}
   .lib-sec-h input{font-weight:600;font-size:13.5px;}
-  .lib-item{display:flex;gap:6px;align-items:center;padding:7px 11px;border-bottom:1px solid #f1ece2;}
+  .lib-item{display:flex;gap:6px;align-items:center;padding:7px 11px;border-bottom:1px solid #f1ece2;background:var(--panel);}
+  .drag-handle{flex:0 0 auto;cursor:grab;touch-action:none;color:var(--stone);font-size:15px;padding:2px 4px;user-select:none;-webkit-user-select:none;}
+  .drag-handle:active{cursor:grabbing;}
+  .dragging-row{box-shadow:0 6px 16px rgba(0,0,0,.18);border-radius:4px;}
   .cgv-body{display:block;width:calc(100% - 22px);margin:0 11px 11px;min-height:60px;font-size:12.5px;padding:7px 9px;border:1px solid var(--panel-edge);border-radius:3px;font-family:'Inter';resize:vertical;}
   .lib-item input{font-size:12.5px;padding:6px 8px;}
   .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
@@ -1263,17 +1275,29 @@ function openSettingsPanel(){
       <label class="fld"><span class="lbl">Initiales en filigrane du devis</span><input type="text" value="${esc(b.watermarkText)}" oninput="settingsEdit('watermarkText',this.value)" maxlength="4"></label>
       <label class="fld"><span class="lbl">Nom affiché pour la signature</span><input type="text" value="${esc(b.signatureName)}" oninput="settingsEdit('signatureName',this.value)"></label>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-      <span class="logo-thumb" style="width:52px;height:52px;border:1px solid var(--panel-edge);border-radius:5px;display:flex;align-items:center;justify-content:center;background:var(--panel);overflow:hidden;"><img src="${b.logoDataUri}" style="max-width:100%;max-height:100%;"></span>
-      <button class="mini" onclick="pickLogo()">Changer le logo…</button>
-      <button class="mini" onclick="resetLogo()">↺ Logo par défaut</button>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-      <span class="logo-thumb" style="width:52px;height:52px;border:1px solid var(--panel-edge);border-radius:5px;display:flex;align-items:center;justify-content:center;background:var(--panel);overflow:hidden;">${b.signatureImage?`<img src="${b.signatureImage}" style="max-width:100%;max-height:100%;">`:`<span style="font-size:10px;color:var(--stone);text-align:center;">Aucune<br>signature</span>`}</span>
-      <button class="mini" onclick="openOwnerSignaturePad()">✎ Dessiner ma signature</button>
-      <button class="mini" onclick="pickSignatureImage()">Importer une photo…</button>
-      ${b.signatureImage?`<button class="mini" onclick="clearSignatureImage()">✕ Retirer</button>`:''}
-      <span style="font-size:11.5px;color:var(--stone);max-width:200px;">Photo/scan de ta signature — elle sera pré-remplie sur chaque devis</span>
+    <div class="brand-media-row">
+      <div class="brand-media-card">
+        <span class="brand-media-lbl">Logo</span>
+        <div class="brand-media-body">
+          <span class="logo-thumb"><img src="${b.logoDataUri}"></span>
+          <div class="brand-media-actions">
+            <button class="mini" onclick="pickLogo()">Changer le logo…</button>
+            <button class="mini" onclick="resetLogo()">↺ Par défaut</button>
+          </div>
+        </div>
+      </div>
+      <div class="brand-media-card">
+        <span class="brand-media-lbl">Signature</span>
+        <div class="brand-media-body">
+          <span class="logo-thumb">${b.signatureImage?`<img src="${b.signatureImage}">`:`<span class="logo-thumb-empty">Aucune<br>signature</span>`}</span>
+          <div class="brand-media-actions">
+            <button class="mini" onclick="openOwnerSignaturePad()">✎ Dessiner</button>
+            <button class="mini" onclick="pickSignatureImage()">Importer une photo…</button>
+            ${b.signatureImage?`<button class="mini" onclick="clearSignatureImage()">✕ Retirer</button>`:''}
+          </div>
+        </div>
+        <p class="brand-media-hint">Pré-remplie automatiquement sur chaque devis.</p>
+      </div>
     </div>
 
     <div class="ed-eyebrow">Coordonnées</div>
@@ -1284,8 +1308,9 @@ function openSettingsPanel(){
     <label class="fld"><span class="lbl">Adresse</span><input type="text" value="${esc(b.address)}" oninput="settingsEdit('address',this.value)"></label>
     <div class="row2">
       <label class="fld"><span class="lbl">Réseau social</span><input type="text" value="${esc(b.social)}" oninput="settingsEdit('social',this.value)"></label>
-      <label class="fld"><span class="lbl">Numéro de société / licence</span><input type="text" value="${esc(b.licenseNumber)}" oninput="settingsEdit('licenseNumber',this.value)"></label>
+      <label class="fld"><span class="lbl">Intitulé de la licence</span><input type="text" value="${esc(b.licenseLabel)}" oninput="settingsEdit('licenseLabel',this.value)"></label>
     </div>
+    <label class="fld"><span class="lbl">Numéro de société / licence</span><input type="text" value="${esc(b.licenseNumber)}" oninput="settingsEdit('licenseNumber',this.value)"></label>
 
     <div class="ed-eyebrow">Mentions régionales</div>
     <label class="toggle-line"><input type="checkbox" ${b.showBsd?'checked':''} onchange="settingsToggle('showBsd',this.checked)"> Afficher l'en-tête « בס״ד » sur le devis</label>
@@ -1295,6 +1320,7 @@ function openSettingsPanel(){
       <label class="fld"><span class="lbl">Devise par défaut</span><select onchange="settingsEdit('defaultCurrency',this.value)"><option value="₪" ${b.defaultCurrency==='₪'?'selected':''}>₪ (Shekel)</option><option value="€" ${b.defaultCurrency==='€'?'selected':''}>€ (Euro)</option><option value="$" ${b.defaultCurrency==='$'?'selected':''}>$ (Dollar)</option></select></label>
       <label class="fld"><span class="lbl">TVA par défaut (%)</span><input type="number" value="${b.defaultTva}" oninput="settingsEditNum('defaultTva',this.value)"></label>
       <label class="fld"><span class="lbl">1er n° de devis</span><input type="number" value="${b.numStart}" oninput="settingsEditNum('numStart',this.value)"></label>
+      <label class="fld"><span class="lbl">Préfixe des n° de devis</span><input type="text" value="${esc(b.numPrefix)}" oninput="settingsEdit('numPrefix',this.value)" placeholder="ex. MN-"></label>
     </div>
 
     <div class="ed-eyebrow">Apparence du devis</div>
@@ -1646,13 +1672,16 @@ function newDevis(){currentDevisId=null;seedComposerFromLibrary();
 function openLibraryPanel(){
   if(!library.exclus)library.exclus=DEFAULT_EXCLUS.slice();
   const secs=library.sections.map((sec,si)=>{
-    const items=sec.items.map((it,ii)=>`<div class="lib-item">
+    const items=sec.items.map((it,ii)=>`<div class="lib-item" data-idx="${ii}">
+      <span class="drag-handle item-drag-handle" title="Glisser pour réordonner">⠿</span>
       <input type="text" value="${esc(it.title)}" oninput="libEdit(${si},${ii},'title',this.value)">
       <button class="mini danger" onclick="libDelItem(${si},${ii})">×</button></div>`).join('');
-    return `<div class="lib-sec"><div class="lib-sec-h">
+    return `<div class="lib-sec" data-idx="${si}"><div class="lib-sec-h">
+      <span class="drag-handle sec-drag-handle" title="Glisser pour réordonner">⠿</span>
       <input type="text" value="${esc(sec.name)}" oninput="libEdit(${si},null,'name',this.value)">
       <button class="mini" onclick="libAddItem(${si})">+ ligne</button>
-      <button class="mini danger" onclick="libDelSection(${si})">Suppr.</button></div>${items}</div>`;
+      <button class="mini danger" onclick="libDelSection(${si})">Suppr.</button></div>
+      <div class="lib-items" data-sec="${si}">${items}</div></div>`;
   }).join('');
   const exclItems=library.exclus.map((t,ii)=>`<div class="lib-item">
     <input type="text" value="${esc(t)}" oninput="libExclEdit(${ii},this.value)">
@@ -1669,9 +1698,9 @@ function openLibraryPanel(){
       <option value="long" ${curLen==='long'?'selected':''}>Long</option>
     </select></div>`;
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Bibliothèque</h3>
-    <p class="msub">Modifiez les sections et prestations. Enregistré et réutilisé pour les prochains devis.</p>
+    <p class="msub">Modifiez les sections et prestations. Glissez « ⠿ » pour réordonner. Enregistré et réutilisé pour les prochains devis.</p>
     ${lenSel}
-    ${secs}
+    <div id="lib-sections">${secs}</div>
     <button class="add-btn" onclick="libAddSection()">+ Ajouter une section</button>
     ${exclSec}
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
@@ -1679,6 +1708,62 @@ function openLibraryPanel(){
       <div style="display:flex;gap:8px;">
         <button class="mini" onclick="libApplyToCurrent()">Recharger dans ce devis</button>
         <button class="btn btn-primary" onclick="libSave()">Enregistrer la bibliothèque</button></div></div>`);
+  wireLibraryDrag();
+}
+/* Réorganisation par glisser-déposer (souris + tactile via Pointer Events) */
+function attachDragReorder(container,itemSelector,handleSelector,onReorder){
+  if(!container)return;
+  container.querySelectorAll(handleSelector).forEach(handle=>{
+    const row=handle.closest(itemSelector);
+    if(!row||row.parentNode!==container)return;
+    handle.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      const dragging=row;
+      const siblings=Array.from(container.children).filter(el=>el.matches(itemSelector));
+      const startY=e.clientY;
+      dragging.style.position='relative';dragging.style.zIndex='50';
+      dragging.classList.add('dragging-row');
+      try{handle.setPointerCapture(e.pointerId);}catch(err){}
+      function onMove(ev){
+        const dy=ev.clientY-startY;
+        dragging.style.transform='translateY('+dy+'px)';
+        const dragRect=dragging.getBoundingClientRect();
+        const dragMid=dragRect.top+dragRect.height/2;
+        let after=null;
+        siblings.forEach(sib=>{
+          if(sib===dragging)return;
+          const sr=sib.getBoundingClientRect();
+          if(dragMid>sr.top+sr.height/2)after=sib;
+        });
+        if(after){if(after.nextElementSibling!==dragging)container.insertBefore(dragging,after.nextElementSibling);}
+        else{if(container.firstElementChild!==dragging)container.insertBefore(dragging,container.firstElementChild);}
+      }
+      function onUp(ev){
+        document.removeEventListener('pointermove',onMove);
+        document.removeEventListener('pointerup',onUp);
+        try{handle.releasePointerCapture(e.pointerId);}catch(err){}
+        dragging.style.transform='';dragging.style.position='';dragging.style.zIndex='';
+        dragging.classList.remove('dragging-row');
+        const newOrder=Array.from(container.children).filter(el=>el.matches(itemSelector)).map(el=>parseInt(el.dataset.idx,10));
+        onReorder(newOrder);
+      }
+      document.addEventListener('pointermove',onMove);
+      document.addEventListener('pointerup',onUp);
+    });
+  });
+}
+function wireLibraryDrag(){
+  attachDragReorder($('lib-sections'),'.lib-sec','.sec-drag-handle',newOrder=>{
+    library.sections=newOrder.map(i=>library.sections[i]);
+    openLibraryPanel();
+  });
+  document.querySelectorAll('.lib-items').forEach(container=>{
+    const si=parseInt(container.dataset.sec,10);
+    attachDragReorder(container,'.lib-item','.item-drag-handle',newOrder=>{
+      library.sections[si].items=newOrder.map(i=>library.sections[si].items[i]);
+      openLibraryPanel();
+    });
+  });
 }
 function libEdit(si,ii,key,val){if(ii===null)library.sections[si].name=val;else library.sections[si].items[ii][key]=val;}
 function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvelle prestation',desc:'',mode:'none',price:0,qty:1,pu:0,defaultOn:false});openLibraryPanel();}
