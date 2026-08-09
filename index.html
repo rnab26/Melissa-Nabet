@@ -968,7 +968,7 @@ function clearSignature(){
 }
 function openOwnerSignaturePad(){
   openSignaturePad('Ma signature','Dessinez votre signature avec le doigt ou la souris.',uri=>{
-    library.branding.signatureImage=uri;openSettingsPanel();toast('Signature enregistrée');
+    library.branding.signatureImage=uri;applyBrandingLive();openSettingsPanel();toast('Signature enregistrée');
   });
 }
 let _renderT;
@@ -1282,6 +1282,9 @@ function readLogoAsDataUri(file){
     reader.readAsDataURL(file);
   });
 }
+/* Applique immédiatement library.branding au devis affiché, sans attendre "Enregistrer"
+   (qui ne fait que persister sur disque/cloud) — sinon un choix de thème semble "ne rien faire". */
+function applyBrandingLive(){current.branding={...library.branding};applyBrandingToUI();renderDebounced();}
 function pickLogo(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
   inp.onchange=async()=>{
@@ -1289,12 +1292,12 @@ function pickLogo(){
     try{
       const dataUri=await readLogoAsDataUri(inp.files[0]);
       library.branding.logoDataUri=dataUri;
-      openSettingsPanel();
+      applyBrandingLive();openSettingsPanel();
     }catch(e){toast('Échec import du logo : '+e.message);}
   };
   inp.click();
 }
-function resetLogo(){library.branding.logoDataUri=DEFAULT_LOGO_DATAURI;openSettingsPanel();}
+function resetLogo(){library.branding.logoDataUri=DEFAULT_LOGO_DATAURI;applyBrandingLive();openSettingsPanel();}
 function pickSignatureImage(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
   inp.onchange=async()=>{
@@ -1302,17 +1305,17 @@ function pickSignatureImage(){
     try{
       const dataUri=await readLogoAsDataUri(inp.files[0]);
       library.branding.signatureImage=dataUri;
-      openSettingsPanel();
+      applyBrandingLive();openSettingsPanel();
     }catch(e){toast('Échec import de la signature : '+e.message);}
   };
   inp.click();
 }
-function clearSignatureImage(){library.branding.signatureImage=null;openSettingsPanel();}
-function settingsEdit(key,val){library.branding[key]=val;}
-function settingsEditNum(key,val){library.branding[key]=parseFloat(val)||0;}
-function settingsSetPalette(key){library.branding.palette=key;openSettingsPanel();}
-function settingsSetFontTheme(key){library.branding.fontTheme=key;ensureFontThemeLoaded(key);openSettingsPanel();}
-function settingsToggle(key,val){library.branding[key]=val;}
+function clearSignatureImage(){library.branding.signatureImage=null;applyBrandingLive();openSettingsPanel();}
+function settingsEdit(key,val){library.branding[key]=val;applyBrandingLive();}
+function settingsEditNum(key,val){library.branding[key]=parseFloat(val)||0;applyBrandingLive();}
+function settingsSetPalette(key){library.branding.palette=key;applyBrandingLive();openSettingsPanel();}
+function settingsSetFontTheme(key){library.branding.fontTheme=key;ensureFontThemeLoaded(key);applyBrandingLive();openSettingsPanel();}
+function settingsToggle(key,val){library.branding[key]=val;applyBrandingLive();}
 function extractDominantColor(img){
   const w=80,h=Math.max(1,Math.round(80*img.height/img.width));
   const cv=document.createElement('canvas');cv.width=w;cv.height=h;
@@ -1346,6 +1349,7 @@ function pickThemeFromPhoto(){
         try{
           library.branding.customAccent=extractDominantColor(img);
           library.branding.palette='custom';
+          applyBrandingLive();
           openSettingsPanel();
           toast('Thème extrait de la photo');
         }catch(e){toast('Échec extraction : '+e.message);}
@@ -1452,7 +1456,7 @@ function openSettingsPanel(){
 }
 function settingsReset(){
   askConfirm('Réinitialiser tous les réglages (identité, coordonnées, apparence) sur les valeurs par défaut ?',()=>{
-    library.branding={...DEFAULT_BRANDING};openSettingsPanel();
+    library.branding={...DEFAULT_BRANDING};applyBrandingLive();openSettingsPanel();
   });
 }
 async function settingsSave(){
