@@ -15,21 +15,23 @@
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{font-family:'Inter',sans-serif;color:var(--ink);background:var(--travertine);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
-  .toolbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 18px;background:rgba(35,32,28,.97);color:#f4f0e8;}
+  .toolbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 18px;background:var(--ink);color:var(--paper);}
   .toolbar .brand{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:600;display:flex;align-items:center;gap:8px;}
-  .toolbar .sub{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#b8a98f;}
+  .toolbar .sub{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone-light);}
   .toolbar .spacer{flex:1;}
-  .btn{font-family:'Inter';font-size:12.5px;font-weight:500;border:1px solid var(--stone-light);background:transparent;color:#f4f0e8;padding:8px 13px;border-radius:2px;cursor:pointer;transition:.15s;white-space:nowrap;}
-  .btn:hover{background:#f4f0e8;color:var(--ink);}
+  .btn{font-family:'Inter';font-size:12.5px;font-weight:500;border:1px solid var(--stone-light);background:transparent;color:var(--paper);padding:8px 13px;border-radius:2px;cursor:pointer;transition:.15s;white-space:nowrap;}
+  .btn:hover{background:var(--paper);color:var(--ink);}
+  .btn-onlight{color:var(--ink);border-color:var(--stone);}
+  .btn-onlight:hover{background:var(--ink);color:var(--paper);}
   .btn-primary{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
-  .btn-primary:hover{background:#8f4335;}
+  .btn-primary:hover{filter:brightness(.88);}
   .tabs{display:none;gap:6px;}
-  .tab{font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:7px 12px;border:1px solid var(--stone);color:#b8a98f;background:transparent;cursor:pointer;border-radius:2px;}
-  .tab.active{background:#f4f0e8;color:var(--ink);border-color:#f4f0e8;}
+  .tab{font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:7px 12px;border:1px solid var(--stone);color:var(--stone-light);background:transparent;cursor:pointer;border-radius:2px;}
+  .tab.active{background:var(--paper);color:var(--ink);border-color:var(--paper);}
 
   .stage{display:flex;align-items:flex-start;}
   .editor{width:44%;max-width:600px;min-width:360px;padding:24px 24px 120px;background:var(--travertine);border-right:1px solid var(--panel-edge);min-height:100vh;}
-  .preview-wrap{flex:1;padding:32px 32px 120px;display:flex;justify-content:center;background:#ece7dc;min-height:100vh;}
+  .preview-wrap{flex:1;padding:32px 32px 120px;display:flex;justify-content:center;background:var(--travertine);min-height:100vh;}
 
   .ed-section{margin-bottom:22px;}
   .ed-eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone);margin:0 0 12px;font-weight:600;display:flex;align-items:center;gap:10px;}
@@ -49,7 +51,7 @@
   input:focus,textarea:focus,select:focus{border-color:var(--stone-light);}
   textarea{resize:vertical;line-height:1.5;}
   .row2{display:flex;gap:10px;}.row2>*{flex:1;}
-  .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;flex-direction:column;gap:6px;}.devis-action-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-start;}.devis-action-row .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;}.devis-action-row .btn:hover{background:#8f4335;border-color:#8f4335;color:#fff;}@media (max-width:900px){.devis-action-row{flex-direction:column;align-items:stretch;}.devis-action-row .btn{width:100%;}}
+  .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;flex-direction:column;gap:6px;}.devis-action-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-start;}.devis-action-row .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;}.devis-action-row .btn:hover{filter:brightness(.88);}@media (max-width:900px){.devis-action-row{flex-direction:column;align-items:stretch;}.devis-action-row .btn{width:100%;}}
   .seg{display:flex;border:1px solid var(--panel-edge);border-radius:3px;overflow:hidden;width:fit-content;margin-bottom:12px;}
   .seg-btn{border:none;background:var(--panel);color:var(--stone);padding:9px 18px;font-size:12.5px;cursor:pointer;font-family:'Inter';}
   .seg-btn.active{background:var(--oxblood);color:#fff;}
@@ -114,9 +116,9 @@
   .cgv-body{display:block;width:calc(100% - 22px);margin:0 11px 11px;min-height:60px;font-size:12.5px;padding:7px 9px;border:1px solid var(--panel-edge);border-radius:3px;font-family:'Inter';resize:vertical;}
   .lib-item input{font-size:12.5px;padding:6px 8px;}
   .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#f4f0e8;padding:11px 20px;border-radius:4px;font-size:13px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none;}
   .toast.show{opacity:1;}
-  .sync-badge{font-size:10.5px;color:#b8a98f;letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
+  .sync-badge{font-size:10.5px;color:var(--stone-light);letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
   #login-overlay{display:none;position:fixed;inset:0;z-index:60;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
   .login-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:10px;padding:30px 26px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(60,50,35,.2);text-align:center;}
   .login-title{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;letter-spacing:.14em;color:var(--ink);padding-left:.14em;}
@@ -127,11 +129,11 @@
   #login-offline{display:inline-block;margin-top:16px;font-size:12px;color:var(--stone);text-decoration:underline;cursor:pointer;}
 
   .viewnav{display:flex;gap:4px;margin-left:6px;}
-  .vnav{font-size:12px;letter-spacing:.06em;padding:8px 14px;border:1px solid var(--stone);color:#b8a98f;background:transparent;cursor:pointer;border-radius:2px;}
-  .vnav.active{background:#f4f0e8;color:var(--ink);border-color:#f4f0e8;}
-  #clients-view{display:none;padding:26px 28px 120px;background:#e9e3d8;min-height:100vh;}
+  .vnav{font-size:12px;letter-spacing:.06em;padding:8px 14px;border:1px solid var(--stone);color:var(--stone-light);background:transparent;cursor:pointer;border-radius:2px;}
+  .vnav.active{background:var(--paper);color:var(--ink);border-color:var(--paper);}
+  #clients-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
   .cl-wrap{max-width:1040px;margin:0 auto;}
-  #dashboard-view{display:none;padding:26px 28px 120px;background:#e9e3d8;min-height:100vh;}
+  #dashboard-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
   .dash-wrap{max-width:820px;margin:0 auto;}
   .dash-wrap h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0 0 18px;color:var(--ink);font-weight:600;letter-spacing:.02em;}
   .dash-kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
@@ -146,7 +148,7 @@
   .dash-todo-main{font-size:13.5px;color:var(--ink);}
   .dash-todo-amt{font-size:13px;font-weight:600;white-space:nowrap;}
   .dash-todo-amt.due{color:#b6543f;}
-  #chantier-view{display:none;padding:26px 28px 120px;background:#e9e3d8;min-height:100vh;}
+  #chantier-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
   .ch-wrap{max-width:900px;margin:0 auto;}
   .ch-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
   .ch-top h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0;color:var(--ink);font-weight:600;}
@@ -518,7 +520,7 @@
       <p class="ed-eyebrow">Signature client</p>
       <div id="sig-status" style="font-size:12.5px;color:var(--stone);margin-bottom:8px;"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn" onclick="openClientSignaturePad()">✎ Faire signer le client</button>
+        <button class="btn btn-onlight" onclick="openClientSignaturePad()">✎ Faire signer le client</button>
         <button class="mini" onclick="clearSignature()">Effacer la signature</button>
       </div>
     </div>
@@ -540,9 +542,9 @@
     <div class="ch-top">
       <h2>Estimation chantier</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn" onclick="openChantierCatsPanel()">Catégories</button>
-        <button class="btn" onclick="openChantierListPanel()">Mes estimations</button>
-        <button class="btn" onclick="newChantier()">Nouvelle estimation</button>
+        <button class="btn btn-onlight" onclick="openChantierCatsPanel()">Catégories</button>
+        <button class="btn btn-onlight" onclick="openChantierListPanel()">Mes estimations</button>
+        <button class="btn btn-onlight" onclick="newChantier()">Nouvelle estimation</button>
         <button class="btn btn-primary" onclick="saveChantier()">Enregistrer</button>
       </div>
     </div>
@@ -569,8 +571,8 @@
     <div class="cl-top">
       <h2>Clients &amp; comptes</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="btn" onclick="exportClientsCSV()">⬇ Export CSV</button>
-        <button class="btn" onclick="document.getElementById('import-clients-csv').click()">⬆ Import CSV</button>
+        <button class="btn btn-onlight" onclick="exportClientsCSV()">⬇ Export CSV</button>
+        <button class="btn btn-onlight" onclick="document.getElementById('import-clients-csv').click()">⬆ Import CSV</button>
         <input type="file" id="import-clients-csv" accept=".csv,text/csv" style="display:none">
         <button class="btn btn-primary" style="color:#fff" onclick="addClient()">+ Nouveau client</button>
       </div>
@@ -853,6 +855,8 @@ const DEFAULT_BRANDING={
   fontTheme:'actuel',
   sitePalette:'actuel',
   siteCustomAccent:'#9a8574',
+  toolbarBrandType:'text',
+  toolbarBrandImage:null,
   defaultCurrency:'₪',
   defaultTva:18,
   numPrefix:'',
@@ -1277,8 +1281,12 @@ async function chCatLibSave(){await store.set(K_LIB,library);closeModal();toast(
 function applyBrandingToUI(){
   ensureBranding();
   const b=library.branding;
-  const tb=$('toolbar-brand');if(tb)tb.textContent=(b.companyName||'Melissa Nabet').toUpperCase();
-  const lb=$('login-brand');if(lb)lb.textContent=(b.companyName||'Melissa Nabet').toUpperCase();
+  const name=(b.companyName||'Melissa Nabet').toUpperCase();
+  const useImg=b.toolbarBrandType==='image'&&b.toolbarBrandImage;
+  const tb=$('toolbar-brand');
+  if(tb)tb.innerHTML=useImg?`<img src="${b.toolbarBrandImage}" alt="${esc(name)}" style="height:28px;display:block;">`:esc(name);
+  const lb=$('login-brand');
+  if(lb)lb.innerHTML=useImg?`<img src="${b.toolbarBrandImage}" alt="${esc(name)}" style="height:44px;display:block;margin:0 auto;">`:esc(name);
   try{document.title='Générateur de devis — '+(b.companyName||'Melissa Nabet');}catch(e){}
   applySiteTheme();
 }
@@ -1304,19 +1312,109 @@ function readLogoAsDataUri(file){
 /* Applique immédiatement library.branding au devis affiché, sans attendre "Enregistrer"
    (qui ne fait que persister sur disque/cloud) — sinon un choix de thème semble "ne rien faire". */
 function applyBrandingLive(){current.branding={...library.branding};applyBrandingToUI();renderDebounced();}
+/* Détourage : recadrage/zoom d'une image importée avant de l'utiliser (logo, marque…). */
+let _cropState=null;
+function openImageCropper(file,onSave){
+  const VP=280;
+  const reader=new FileReader();
+  reader.onerror=()=>toast('Échec de lecture du fichier');
+  reader.onload=()=>{
+    const img=new Image();
+    img.onerror=()=>toast('Image illisible');
+    img.onload=()=>{
+      const nw=img.naturalWidth,nh=img.naturalHeight;
+      const baseScale=Math.max(VP/nw,VP/nh);
+      _cropState={img,nw,nh,baseScale,scale:1,offX:0,offY:0,onSave};
+      openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Ajuster l'image</h3>
+        <p class="msub">Glissez pour déplacer, utilisez le curseur pour zoomer, puis validez.</p>
+        <div id="crop-viewport" style="width:${VP}px;height:${VP}px;overflow:hidden;position:relative;margin:0 auto 14px;border-radius:8px;border:1px solid var(--panel-edge);background:#00000010;touch-action:none;cursor:grab;">
+          <img id="crop-img" src="${reader.result}" style="position:absolute;left:50%;top:50%;user-select:none;-webkit-user-drag:none;" draggable="false">
+        </div>
+        <label class="fld"><span class="lbl">Zoom</span><input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1"></label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+          <button class="mini" onclick="closeModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="applyImageCrop()">Valider</button>
+        </div>`);
+      wireImageCropper(VP);
+    };
+    img.src=reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function wireImageCropper(VP){
+  const st=_cropState;if(!st)return;
+  const vp=$('crop-viewport'),imEl=$('crop-img'),zoomInp=$('crop-zoom');
+  function clamp(){
+    const w=st.nw*st.baseScale*st.scale,h=st.nh*st.baseScale*st.scale;
+    const maxX=Math.max(0,(w-VP)/2),maxY=Math.max(0,(h-VP)/2);
+    st.offX=Math.max(-maxX,Math.min(maxX,st.offX));
+    st.offY=Math.max(-maxY,Math.min(maxY,st.offY));
+  }
+  function render(){
+    const w=st.nw*st.baseScale*st.scale,h=st.nh*st.baseScale*st.scale;
+    imEl.style.width=w+'px';imEl.style.height=h+'px';
+    imEl.style.marginLeft=(-w/2)+'px';imEl.style.marginTop=(-h/2)+'px';
+    imEl.style.transform=`translate(${st.offX}px,${st.offY}px)`;
+  }
+  render();
+  let dragging=false,lastX=0,lastY=0;
+  vp.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;try{vp.setPointerCapture(e.pointerId);}catch(err){}vp.style.cursor='grabbing';});
+  vp.addEventListener('pointermove',e=>{
+    if(!dragging)return;
+    st.offX+=e.clientX-lastX;st.offY+=e.clientY-lastY;
+    lastX=e.clientX;lastY=e.clientY;
+    clamp();render();
+  });
+  function endDrag(){dragging=false;vp.style.cursor='grab';}
+  vp.addEventListener('pointerup',endDrag);
+  vp.addEventListener('pointercancel',endDrag);
+  zoomInp.addEventListener('input',()=>{st.scale=parseFloat(zoomInp.value)||1;clamp();render();});
+}
+function applyImageCrop(){
+  const st=_cropState;if(!st)return;
+  const VP=280;
+  const totalScale=st.baseScale*st.scale;
+  const rw=st.nw*totalScale,rh=st.nh*totalScale;
+  const imgLeft=VP/2-rw/2+st.offX,imgTop=VP/2-rh/2+st.offY;
+  let srcSize=VP/totalScale;
+  let srcX=-imgLeft/totalScale,srcY=-imgTop/totalScale;
+  srcX=Math.max(0,Math.min(st.nw-srcSize,srcX));
+  srcY=Math.max(0,Math.min(st.nh-srcSize,srcY));
+  const OUT=600;
+  const cv=document.createElement('canvas');cv.width=OUT;cv.height=OUT;
+  cv.getContext('2d').drawImage(st.img,srcX,srcY,srcSize,srcSize,0,0,OUT,OUT);
+  const dataUri=cv.toDataURL('image/png');
+  const onSave=st.onSave;
+  _cropState=null;
+  closeModal();
+  onSave(dataUri);
+}
 function pickLogo(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=async()=>{
+  inp.onchange=()=>{
     if(!inp.files||!inp.files[0])return;
-    try{
-      const dataUri=await readLogoAsDataUri(inp.files[0]);
+    openImageCropper(inp.files[0],dataUri=>{
       library.branding.logoDataUri=dataUri;
       applyBrandingLive();openSettingsPanel();
-    }catch(e){toast('Échec import du logo : '+e.message);}
+    });
   };
   inp.click();
 }
 function resetLogo(){library.branding.logoDataUri=DEFAULT_LOGO_DATAURI;applyBrandingLive();openSettingsPanel();}
+function setToolbarBrandType(t){library.branding.toolbarBrandType=t;applyBrandingLive();openSettingsPanel();}
+function pickToolbarBrandImage(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{
+    if(!inp.files||!inp.files[0])return;
+    openImageCropper(inp.files[0],dataUri=>{
+      library.branding.toolbarBrandImage=dataUri;
+      library.branding.toolbarBrandType='image';
+      applyBrandingLive();openSettingsPanel();
+    });
+  };
+  inp.click();
+}
+function clearToolbarBrandImage(){library.branding.toolbarBrandImage=null;library.branding.toolbarBrandType='text';applyBrandingLive();openSettingsPanel();}
 function pickSignatureImage(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
   inp.onchange=async()=>{
@@ -1454,6 +1552,17 @@ function openSettingsPanel(){
           </div>
         </div>
         <p class="brand-media-hint">Pré-remplie automatiquement sur chaque devis.</p>
+      </div>
+      <div class="brand-media-card">
+        <span class="brand-media-lbl">Marque · barre du haut</span>
+        <div class="brand-media-body">
+          <span class="logo-thumb">${(b.toolbarBrandType==='image'&&b.toolbarBrandImage)?`<img src="${b.toolbarBrandImage}">`:`<span class="logo-thumb-empty">Texte<br>actuel</span>`}</span>
+          <div class="brand-media-actions">
+            <button class="mini" onclick="pickToolbarBrandImage()">Importer une image…</button>
+            ${(b.toolbarBrandType==='image'&&b.toolbarBrandImage)?`<button class="mini" onclick="clearToolbarBrandImage()">✕ Revenir au texte</button>`:''}
+          </div>
+        </div>
+        <p class="brand-media-hint">${(b.toolbarBrandType==='image'&&b.toolbarBrandImage)?'Remplace le nom affiché en haut de l\'app.':'Par défaut, le nom de l\'entreprise s\'affiche en texte en haut de l\'app.'}</p>
       </div>
     </div>
 
@@ -2437,7 +2546,7 @@ function openBackupPanel(){
     <p class="msub">Vos clients, devis, bibliothèque et documents sont enregistrés sur cet appareil. Exportez un fichier de secours — et réimportez-le sur un autre appareil (ou un nouveau téléphone) pour y retrouver toutes vos données.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
       <button class="btn btn-primary" onclick="exportData()">⬇ Exporter mes données</button>
-      <button class="btn" style="border-color:var(--stone)" onclick="document.getElementById('import-file').click()">⬆ Importer une sauvegarde</button>
+      <button class="btn btn-onlight" onclick="document.getElementById('import-file').click()">⬆ Importer une sauvegarde</button>
       <input type="file" id="import-file" accept="application/json,.json" style="display:none">
     </div>
     <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>`);
@@ -2730,7 +2839,9 @@ async function init(){
     current.services.forEach(sv=>sv.on=false);
     current.exclus.forEach(ex=>ex.on=false);
   }
-  if(!current.branding||!current.branding.companyName)current.branding={...library.branding};
+  /* Un brouillon est un document en cours, pas figé : il doit toujours refléter les derniers
+     réglages de la bibliothèque, sinon un changement de thème "ne prend pas" au rechargement. */
+  current.branding={...library.branding};
   fillFields();wireBindings();buildPrest();buildExclu();render();
   wireClientFilters();
   $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
