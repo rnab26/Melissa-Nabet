@@ -798,6 +798,22 @@ function buildCustomPalette(accent){
     stone:hslToHex(h,22,54),stoneDeep:hslToHex(h,26,40),
     stoneLight:hslToHex(h,16,68),hair:hslToHex(h,14,80)};
 }
+function deriveSiteVars(pal){
+  return {
+    travertine:mixHex(pal.paper,pal.ink,.06),
+    panel:mixHex(pal.paper,'#ffffff',.55),
+    panelEdge:mixHex(pal.paper,pal.ink,.12),
+  };
+}
+function applySiteTheme(){
+  const b=(library&&library.branding)?library.branding:DEFAULT_BRANDING;
+  const key=b.sitePalette||'actuel';
+  const pal=key==='custom'?buildCustomPalette(b.siteCustomAccent):(DEFAULT_PALETTES[key]||DEFAULT_PALETTES.actuel);
+  const extra=deriveSiteVars(pal);
+  let style=document.getElementById('site-theme-style');
+  if(!style){style=document.createElement('style');style.id='site-theme-style';document.head.appendChild(style);}
+  style.textContent=`:root{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--travertine:${extra.travertine};--panel:${extra.panel};--panel-edge:${extra.panelEdge};}`;
+}
 const FONT_THEMES={
   actuel:{name:'Actuel',sample:'Cormorant × EB Garamond',heading:"'Cormorant Garamond',serif",body:"'EB Garamond',serif"},
   editorial:{name:'Éditorial',sample:'Playfair × Lora',heading:"'Playfair Display',serif",body:"'Lora',serif",
@@ -835,6 +851,8 @@ const DEFAULT_BRANDING={
   palette:'actuel',
   customAccent:'#9a8574',
   fontTheme:'actuel',
+  sitePalette:'actuel',
+  siteCustomAccent:'#9a8574',
   defaultCurrency:'₪',
   defaultTva:18,
   numPrefix:'',
@@ -1262,6 +1280,7 @@ function applyBrandingToUI(){
   const tb=$('toolbar-brand');if(tb)tb.textContent=(b.companyName||'Melissa Nabet').toUpperCase();
   const lb=$('login-brand');if(lb)lb.textContent=(b.companyName||'Melissa Nabet').toUpperCase();
   try{document.title='Générateur de devis — '+(b.companyName||'Melissa Nabet');}catch(e){}
+  applySiteTheme();
 }
 function readLogoAsDataUri(file){
   return new Promise((res,rej)=>{
@@ -1360,12 +1379,42 @@ function pickThemeFromPhoto(){
   };
   inp.click();
 }
+function settingsSetSitePalette(key){library.branding.sitePalette=key;applyBrandingLive();openSettingsPanel();}
+function pickSiteThemeFromPhoto(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{
+    if(!inp.files||!inp.files[0])return;
+    const reader=new FileReader();
+    reader.onerror=()=>toast('Échec de lecture du fichier');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>toast('Image illisible');
+      img.onload=()=>{
+        try{
+          library.branding.siteCustomAccent=extractDominantColor(img);
+          library.branding.sitePalette='custom';
+          applyBrandingLive();
+          openSettingsPanel();
+          toast('Thème de l\'application extrait de la photo');
+        }catch(e){toast('Échec extraction : '+e.message);}
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(inp.files[0]);
+  };
+  inp.click();
+}
 function openSettingsPanel(){
   ensureBranding();
   const b=library.branding;
   Object.keys(FONT_THEMES).forEach(k=>ensureFontThemeLoaded(k));
   const paletteRow=Object.entries(DEFAULT_PALETTES).map(([key,p])=>`
     <button type="button" class="mini ${b.palette===key?'':''}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.palette===key?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.palette===key?'var(--panel)':'transparent'};" onclick="settingsSetPalette('${key}')">
+      <span style="display:flex;"><span style="width:13px;height:13px;border-radius:50%;background:${p.paper};border:1px solid #0002;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.oxblood};border:1px solid #0002;margin-left:-4px;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.ink};border:1px solid #0002;margin-left:-4px;"></span></span>
+      ${esc(p.name)}
+    </button>`).join('');
+  const sitePaletteRow=Object.entries(DEFAULT_PALETTES).map(([key,p])=>`
+    <button type="button" class="mini ${b.sitePalette===key?'':''}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.sitePalette===key?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.sitePalette===key?'var(--panel)':'transparent'};" onclick="settingsSetSitePalette('${key}')">
       <span style="display:flex;"><span style="width:13px;height:13px;border-radius:50%;background:${p.paper};border:1px solid #0002;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.oxblood};border:1px solid #0002;margin-left:-4px;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.ink};border:1px solid #0002;margin-left:-4px;"></span></span>
       ${esc(p.name)}
     </button>`).join('');
@@ -1438,7 +1487,16 @@ function openSettingsPanel(){
         Depuis une photo…
       </button>
     </div>
-    <p class="brand-media-hint" style="margin:0 0 16px;">S'applique uniquement au devis imprimé, jamais à l'application elle-même.</p>
+    <p class="brand-media-hint" style="margin:0 0 16px;">S'applique uniquement au devis imprimé.</p>
+
+    <div class="ed-eyebrow">Couleurs de l'application</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">${sitePaletteRow}
+      <button type="button" class="mini" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.sitePalette==='custom'?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.sitePalette==='custom'?'var(--panel)':'transparent'};" onclick="pickSiteThemeFromPhoto()">
+        ${b.sitePalette==='custom'?`<span style="width:13px;height:13px;border-radius:50%;background:${b.siteCustomAccent||'#9a8574'};border:1px solid #0002;"></span>`:'📷'}
+        Depuis une photo…
+      </button>
+    </div>
+    <p class="brand-media-hint" style="margin:0 0 16px;">S'applique à l'interface de l'application (barre du haut, boutons, tableau de bord…), indépendamment du devis.</p>
 
     <div class="ed-eyebrow">Typographie du devis</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">${fontRow}</div>
