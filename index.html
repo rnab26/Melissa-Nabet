@@ -304,6 +304,10 @@
   .devis{width:210mm;min-height:297mm;background:var(--paper);box-shadow:0 12px 44px rgba(60,50,35,.22);color:var(--ink);position:relative;background-image:radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,.5), rgba(0,0,0,0) 55%),linear-gradient(180deg,#f4efe6 0%,#e9e3d8 100%);}
   .devis-page{padding:20mm 18mm;position:relative;overflow:hidden;min-height:297mm;}
   .devis-page + .devis-page{border-top:1px dashed #ded5c4;}
+  .devis-page::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
+    background-image:var(--devis-bg-img,none);background-size:210mm 297mm;background-repeat:repeat-y;background-position:top center;
+    opacity:var(--devis-bg-opacity,0);transform:var(--devis-bg-transform,none);}
+  .devis-page::after{content:'';position:absolute;top:0;left:0;right:0;height:3mm;z-index:2;background:var(--oxblood);}
   .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
   .wm span{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:340px;font-weight:500;color:var(--oxblood);opacity:.055;letter-spacing:-.04em;}
   .dv-inner{position:relative;z-index:1;}
@@ -640,12 +644,19 @@ function computeTotals(S,inc){
   const ht=inc.reduce((a,v)=>a+lineTotal(S,v),0);const tva=ht*rate/100;
   return {ht,tva,ttc:ht+tva,rate,show:inc.some(v=>lineTotal(S,v)>0)};
 }
+function devisBgTransformCss(B){
+  const sx=B.devisBgFlipX?-1:1,sy=B.devisBgFlipY?-1:1;
+  return (sx===1&&sy===1)?'none':`scale(${sx},${sy})`;
+}
 function buildDevisHTML(S){
   const B=(S.branding&&S.branding.companyName)?S.branding:DEFAULT_BRANDING;
   const pal=B.palette==='custom'?buildCustomPalette(B.customAccent):(DEFAULT_PALETTES[B.palette]||DEFAULT_PALETTES.actuel);
   const fonts=FONT_THEMES[B.fontTheme]||FONT_THEMES.actuel;
   ensureFontThemeLoaded(B.fontTheme);
-  const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};}</style>`;
+  const bgImg=B.devisBgImage?`url("${B.devisBgImage}")`:'none';
+  const bgOpacity=B.devisBgImage?((B.devisBgOpacity!=null?B.devisBgOpacity:25)/100):0;
+  const bgTransform=devisBgTransformCss(B);
+  const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};--devis-bg-img:${bgImg};--devis-bg-opacity:${bgOpacity};--devis-bg-transform:${bgTransform};}</style>`;
   const detail=S.pricingMode==='detail';
   const inc=(S.services||[]).filter(v=>v.on);
   const exc=(S.exclus||[]).filter(v=>v.on&&(v.title||'').trim());
@@ -761,6 +772,7 @@ const DEFAULT_PALETTES={
   sauge:{name:'Sauge',paper:'#f3f1e8',ink:'#3a3d33',oxblood:'#6b7d5e',stone:'#8b9179',stoneDeep:'#5f6a51',stoneLight:'#b3b6a2',hair:'#d3d6c2'},
   terracotta:{name:'Terracotta',paper:'#f6efe4',ink:'#3a2f28',oxblood:'#b1603f',stone:'#9c8570',stoneDeep:'#7a6552',stoneLight:'#c7ac95',hair:'#e2cdb8'},
   laiton:{name:'Laiton',paper:'#f3f1ea',ink:'#242019',oxblood:'#a8843f',stone:'#8f8570',stoneDeep:'#6b6252',stoneLight:'#c2b89f',hair:'#ddd4bd'},
+  noirblanc:{name:'Noir & blanc',paper:'#ffffff',ink:'#111111',oxblood:'#000000',stone:'#6b6b6b',stoneDeep:'#333333',stoneLight:'#999999',hair:'#cccccc'},
 };
 function hexToRgb(hex){const h=(hex||'#9a8574').replace('#','');const n=h.length===3?h.split('').map(c=>c+c).join(''):h;const i=parseInt(n,16);return {r:(i>>16)&255,g:(i>>8)&255,b:i&255};}
 function rgbToHex(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}
@@ -857,6 +869,10 @@ const DEFAULT_BRANDING={
   siteCustomAccent:'#9a8574',
   toolbarBrandType:'text',
   toolbarBrandImage:null,
+  devisBgImage:null,
+  devisBgFlipX:false,
+  devisBgFlipY:false,
+  devisBgOpacity:25,
   defaultCurrency:'₪',
   defaultTva:18,
   numPrefix:'',
@@ -1314,8 +1330,9 @@ function readLogoAsDataUri(file){
 function applyBrandingLive(){current.branding={...library.branding};applyBrandingToUI();renderDebounced();}
 /* Détourage : recadrage/zoom d'une image importée avant de l'utiliser (logo, marque…). */
 let _cropState=null;
-function openImageCropper(file,onSave){
-  const VP=280;
+function openImageCropper(file,onSave,opts){
+  const VPW=(opts&&opts.vpW)||280,VPH=(opts&&opts.vpH)||280;
+  const title=(opts&&opts.title)||'Ajuster l\'image';
   const reader=new FileReader();
   reader.onerror=()=>toast('Échec de lecture du fichier');
   reader.onload=()=>{
@@ -1323,11 +1340,11 @@ function openImageCropper(file,onSave){
     img.onerror=()=>toast('Image illisible');
     img.onload=()=>{
       const nw=img.naturalWidth,nh=img.naturalHeight;
-      const baseScale=Math.max(VP/nw,VP/nh);
-      _cropState={img,nw,nh,baseScale,scale:1,offX:0,offY:0,onSave};
-      openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Ajuster l'image</h3>
+      const baseScale=Math.max(VPW/nw,VPH/nh);
+      _cropState={img,nw,nh,baseScale,scale:1,offX:0,offY:0,onSave,VPW,VPH};
+      openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>${esc(title)}</h3>
         <p class="msub">Glissez pour déplacer, utilisez le curseur pour zoomer, puis validez.</p>
-        <div id="crop-viewport" style="width:${VP}px;height:${VP}px;overflow:hidden;position:relative;margin:0 auto 14px;border-radius:8px;border:1px solid var(--panel-edge);background:#00000010;touch-action:none;cursor:grab;">
+        <div id="crop-viewport" style="width:${VPW}px;height:${VPH}px;overflow:hidden;position:relative;margin:0 auto 14px;border-radius:8px;border:1px solid var(--panel-edge);background:#00000010;touch-action:none;cursor:grab;">
           <img id="crop-img" src="${reader.result}" style="position:absolute;left:50%;top:50%;user-select:none;-webkit-user-drag:none;" draggable="false">
         </div>
         <label class="fld"><span class="lbl">Zoom</span><input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1"></label>
@@ -1335,18 +1352,19 @@ function openImageCropper(file,onSave){
           <button class="mini" onclick="closeModal()">Annuler</button>
           <button class="btn btn-primary" onclick="applyImageCrop()">Valider</button>
         </div>`);
-      wireImageCropper(VP);
+      wireImageCropper();
     };
     img.src=reader.result;
   };
   reader.readAsDataURL(file);
 }
-function wireImageCropper(VP){
+function wireImageCropper(){
   const st=_cropState;if(!st)return;
+  const {VPW,VPH}=st;
   const vp=$('crop-viewport'),imEl=$('crop-img'),zoomInp=$('crop-zoom');
   function clamp(){
     const w=st.nw*st.baseScale*st.scale,h=st.nh*st.baseScale*st.scale;
-    const maxX=Math.max(0,(w-VP)/2),maxY=Math.max(0,(h-VP)/2);
+    const maxX=Math.max(0,(w-VPW)/2),maxY=Math.max(0,(h-VPH)/2);
     st.offX=Math.max(-maxX,Math.min(maxX,st.offX));
     st.offY=Math.max(-maxY,Math.min(maxY,st.offY));
   }
@@ -1372,17 +1390,18 @@ function wireImageCropper(VP){
 }
 function applyImageCrop(){
   const st=_cropState;if(!st)return;
-  const VP=280;
+  const {VPW,VPH}=st;
   const totalScale=st.baseScale*st.scale;
   const rw=st.nw*totalScale,rh=st.nh*totalScale;
-  const imgLeft=VP/2-rw/2+st.offX,imgTop=VP/2-rh/2+st.offY;
-  let srcSize=VP/totalScale;
+  const imgLeft=VPW/2-rw/2+st.offX,imgTop=VPH/2-rh/2+st.offY;
+  let srcW=VPW/totalScale,srcH=VPH/totalScale;
   let srcX=-imgLeft/totalScale,srcY=-imgTop/totalScale;
-  srcX=Math.max(0,Math.min(st.nw-srcSize,srcX));
-  srcY=Math.max(0,Math.min(st.nh-srcSize,srcY));
-  const OUT=600;
-  const cv=document.createElement('canvas');cv.width=OUT;cv.height=OUT;
-  cv.getContext('2d').drawImage(st.img,srcX,srcY,srcSize,srcSize,0,0,OUT,OUT);
+  srcX=Math.max(0,Math.min(st.nw-srcW,srcX));
+  srcY=Math.max(0,Math.min(st.nh-srcH,srcY));
+  const mult=3;
+  const OUTW=Math.round(VPW*mult),OUTH=Math.round(VPH*mult);
+  const cv=document.createElement('canvas');cv.width=OUTW;cv.height=OUTH;
+  cv.getContext('2d').drawImage(st.img,srcX,srcY,srcW,srcH,0,0,OUTW,OUTH);
   const dataUri=cv.toDataURL('image/png');
   const onSave=st.onSave;
   _cropState=null;
@@ -1415,6 +1434,21 @@ function pickToolbarBrandImage(){
   inp.click();
 }
 function clearToolbarBrandImage(){library.branding.toolbarBrandImage=null;library.branding.toolbarBrandType='text';applyBrandingLive();openSettingsPanel();}
+function pickDevisBgImage(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{
+    if(!inp.files||!inp.files[0])return;
+    openImageCropper(inp.files[0],dataUri=>{
+      library.branding.devisBgImage=dataUri;
+      applyBrandingLive();openSettingsPanel();
+    },{vpW:220,vpH:311,title:'Cadrer la texture de fond'});
+  };
+  inp.click();
+}
+function clearDevisBgImage(){library.branding.devisBgImage=null;applyBrandingLive();openSettingsPanel();}
+function toggleDevisBgFlipX(){library.branding.devisBgFlipX=!library.branding.devisBgFlipX;applyBrandingLive();openSettingsPanel();}
+function toggleDevisBgFlipY(){library.branding.devisBgFlipY=!library.branding.devisBgFlipY;applyBrandingLive();openSettingsPanel();}
+function setDevisBgOpacity(val){library.branding.devisBgOpacity=parseFloat(val)||0;applyBrandingLive();}
 function pickSignatureImage(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
   inp.onchange=async()=>{
@@ -1597,6 +1631,25 @@ function openSettingsPanel(){
       </button>
     </div>
     <p class="brand-media-hint" style="margin:0 0 16px;">S'applique uniquement au devis imprimé.</p>
+
+    <div class="ed-eyebrow">Fond du devis — texture (marbre, bois, papier…)</div>
+    <div class="brand-media-row">
+      <div class="brand-media-card" style="flex:1 1 100%;">
+        <div class="brand-media-body" style="align-items:flex-start;">
+          <span class="logo-thumb" style="width:70px;height:99px;">${b.devisBgImage?`<img src="${b.devisBgImage}" style="width:100%;height:100%;object-fit:cover;transform:${devisBgTransformCss(b)};">`:`<span class="logo-thumb-empty">Aucune<br>texture</span>`}</span>
+          <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:220px;">
+            <div class="brand-media-actions" style="flex-direction:row;flex-wrap:wrap;">
+              <button class="mini" onclick="pickDevisBgImage()">${b.devisBgImage?'Changer…':'Choisir une texture…'}</button>
+              ${b.devisBgImage?`<button class="mini" onclick="toggleDevisBgFlipX()">${b.devisBgFlipX?'✓ ':''}⇋ Inverser</button>
+              <button class="mini" onclick="toggleDevisBgFlipY()">${b.devisBgFlipY?'✓ ':''}⇅ Retourner</button>
+              <button class="mini" onclick="clearDevisBgImage()">✕ Retirer</button>`:''}
+            </div>
+            ${b.devisBgImage?`<label class="fld" style="margin-bottom:0;"><span class="lbl">Intensité</span><input type="range" min="5" max="70" value="${b.devisBgOpacity!=null?b.devisBgOpacity:25}" oninput="setDevisBgOpacity(this.value)"></label>`:''}
+          </div>
+        </div>
+        <p class="brand-media-hint">S'adapte automatiquement à chaque page A4, quelle que soit la longueur du devis.</p>
+      </div>
+    </div>
 
     <div class="ed-eyebrow">Couleurs de l'application</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">${sitePaletteRow}
