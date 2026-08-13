@@ -1949,11 +1949,15 @@ function loadDevis(id){
   const d=devisList.find(x=>x.id===id);if(!d)return;
   Object.assign(current,JSON.parse(JSON.stringify(d.snapshot)));
   current.docType=d.snapshot.docType||'devis';current.clientSignature=d.snapshot.clientSignature||null;
+  /* Un brouillon n'est pas figé : il doit suivre les derniers réglages de la bibliothèque.
+     Seul un devis validé garde son branding gelé, pour l'exactitude historique. */
+  if(d.status!=='valide')current.branding={...library.branding};
   currentDevisId=id;pendingClientId=d.clientId||null;closeModal();fillFields();buildPrest();buildExclu();render();toast('Devis chargé');
 }
 async function duplicateDevis(id){
   const d=devisList.find(x=>x.id===id);if(!d)return;
   const snap=JSON.parse(JSON.stringify(d.snapshot));
+  snap.branding={...library.branding};
   const rec={id:uid(),num:(d.num||'')+' v2',title:(d.title||'Devis')+' (copie)',clientId:d.clientId,status:'brouillon',updatedAt:Date.now(),snapshot:snap};
   rec.snapshot.num=rec.num;devisList.push(rec);await store.set(K_DEVIS,devisList);openDevisPanel();toast('Copie créée (brouillon)');
 }
@@ -1982,8 +1986,9 @@ function createDevisForClient(cid){
 }
 function viewDevisSnapshot(id){
   const d=devisList.find(x=>x.id===id);if(!d)return;
-  const html=`<div class="devis">${buildDevisHTML(d.snapshot)}</div>`;
-  if(!openDevisWindowHTML(html,d.snapshot.num||d.num,d.snapshot.branding&&d.snapshot.branding.companyName,d.snapshot.docType)){toast('Autorisez les pop-ups pour voir le devis');}
+  const snap=d.status!=='valide'?{...d.snapshot,branding:{...library.branding}}:d.snapshot;
+  const html=`<div class="devis">${buildDevisHTML(snap)}</div>`;
+  if(!openDevisWindowHTML(html,snap.num||d.num,snap.branding&&snap.branding.companyName,snap.docType)){toast('Autorisez les pop-ups pour voir le devis');}
 }
 function newDevis(){currentDevisId=null;seedComposerFromLibrary();
   ensureBranding();
