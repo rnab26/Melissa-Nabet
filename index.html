@@ -304,9 +304,6 @@
   .devis{width:210mm;min-height:297mm;background:var(--paper);box-shadow:0 12px 44px rgba(60,50,35,.22);color:var(--ink);position:relative;background-image:radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,.5), rgba(0,0,0,0) 55%),linear-gradient(180deg,#f4efe6 0%,#e9e3d8 100%);}
   .devis-page{padding:20mm 18mm;position:relative;overflow:hidden;min-height:297mm;}
   .devis-page + .devis-page{border-top:1px dashed #ded5c4;}
-  .devis-page::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
-    background-image:var(--devis-bg-img,none);background-size:210mm 297mm;background-repeat:repeat-y;background-position:top center;
-    opacity:var(--devis-bg-opacity,0);transform:var(--devis-bg-transform,none);}
   .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
   .wm span{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:340px;font-weight:500;color:var(--oxblood);opacity:.055;letter-spacing:-.04em;}
   .dv-inner{position:relative;z-index:1;}
@@ -643,19 +640,23 @@ function computeTotals(S,inc){
   const ht=inc.reduce((a,v)=>a+lineTotal(S,v),0);const tva=ht*rate/100;
   return {ht,tva,ttc:ht+tva,rate,show:inc.some(v=>lineTotal(S,v)>0)};
 }
-function devisBgTransformCss(B){
-  const sx=B.devisBgFlipX?-1:1,sy=B.devisBgFlipY?-1:1;
-  return (sx===1&&sy===1)?'none':`scale(${sx},${sy})`;
-}
 function buildDevisHTML(S){
   const B=(S.branding&&S.branding.companyName)?S.branding:DEFAULT_BRANDING;
   const pal=B.palette==='custom'?buildCustomPalette(B.customAccent):(DEFAULT_PALETTES[B.palette]||DEFAULT_PALETTES.actuel);
   const fonts=FONT_THEMES[B.fontTheme]||FONT_THEMES.actuel;
   ensureFontThemeLoaded(B.fontTheme);
-  const bgImg=B.devisBgImage?`url("${B.devisBgImage}")`:'none';
-  const bgOpacity=B.devisBgImage?((B.devisBgOpacity!=null?B.devisBgOpacity:25)/100):0;
-  const bgTransform=devisBgTransformCss(B);
-  const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};--devis-bg-img:${bgImg};--devis-bg-opacity:${bgOpacity};--devis-bg-transform:${bgTransform};}</style>`;
+  /* Le fond photo est peint directement en background réel de .devis-page (pas un pseudo-élément
+     absolute superposé) : plus fiable pour html2canvas/html2pdf, qui a déjà mal calculé la pagination
+     avec une couche séparée (page blanche en trop à l'export PDF). Le flip est cuit dans l'image elle-même
+     (voir renderDevisBgFromBase) au lieu d'un transform CSS, pour la même raison. */
+  let bgPageCss='';
+  if(B.devisBgImage){
+    const opacityFrac=(B.devisBgOpacity!=null?B.devisBgOpacity:25)/100;
+    const pr=hexToRgb(pal.paper);
+    const tint=`rgba(${pr.r},${pr.g},${pr.b},${(1-opacityFrac).toFixed(3)})`;
+    bgPageCss=`.devis-page{background-image:linear-gradient(${tint},${tint}),url("${B.devisBgImage}");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}`;
+  }
+  const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};}${bgPageCss}</style>`;
   const detail=S.pricingMode==='detail';
   const inc=(S.services||[]).filter(v=>v.on);
   const exc=(S.exclus||[]).filter(v=>v.on&&(v.title||'').trim());
@@ -868,6 +869,7 @@ const DEFAULT_BRANDING={
   siteCustomAccent:'#9a8574',
   toolbarBrandType:'text',
   toolbarBrandImage:null,
+  devisBgImageBase:null,
   devisBgImage:null,
   devisBgFlipX:false,
   devisBgFlipY:false,
@@ -1438,15 +1440,40 @@ function pickDevisBgImage(){
   inp.onchange=()=>{
     if(!inp.files||!inp.files[0])return;
     openImageCropper(inp.files[0],dataUri=>{
-      library.branding.devisBgImage=dataUri;
-      applyBrandingLive();openSettingsPanel();
+      library.branding.devisBgImageBase=dataUri;
+      library.branding.devisBgFlipX=false;
+      library.branding.devisBgFlipY=false;
+      renderDevisBgFromBase();
     },{vpW:220,vpH:311,title:'Cadrer la texture de fond'});
   };
   inp.click();
 }
-function clearDevisBgImage(){library.branding.devisBgImage=null;applyBrandingLive();openSettingsPanel();}
-function toggleDevisBgFlipX(){library.branding.devisBgFlipX=!library.branding.devisBgFlipX;applyBrandingLive();openSettingsPanel();}
-function toggleDevisBgFlipY(){library.branding.devisBgFlipY=!library.branding.devisBgFlipY;applyBrandingLive();openSettingsPanel();}
+/* Cuit le flip horizontal/vertical dans l'image (au lieu d'un transform CSS sur le fond),
+   pour que l'aperçu, l'impression et l'export PDF montrent toujours exactement la même chose. */
+function renderDevisBgFromBase(){
+  const base=library.branding.devisBgImageBase;
+  if(!base){library.branding.devisBgImage=null;applyBrandingLive();openSettingsPanel();return;}
+  const img=new Image();
+  img.onerror=()=>toast('Image illisible');
+  img.onload=()=>{
+    const w=img.naturalWidth,h=img.naturalHeight;
+    const flipX=library.branding.devisBgFlipX,flipY=library.branding.devisBgFlipY;
+    if(!flipX&&!flipY){library.branding.devisBgImage=base;}
+    else{
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      const ctx=cv.getContext('2d');
+      ctx.translate(flipX?w:0,flipY?h:0);
+      ctx.scale(flipX?-1:1,flipY?-1:1);
+      ctx.drawImage(img,0,0,w,h);
+      library.branding.devisBgImage=cv.toDataURL('image/png');
+    }
+    applyBrandingLive();openSettingsPanel();
+  };
+  img.src=base;
+}
+function clearDevisBgImage(){library.branding.devisBgImageBase=null;library.branding.devisBgImage=null;library.branding.devisBgFlipX=false;library.branding.devisBgFlipY=false;applyBrandingLive();openSettingsPanel();}
+function toggleDevisBgFlipX(){library.branding.devisBgFlipX=!library.branding.devisBgFlipX;renderDevisBgFromBase();}
+function toggleDevisBgFlipY(){library.branding.devisBgFlipY=!library.branding.devisBgFlipY;renderDevisBgFromBase();}
 function setDevisBgOpacity(val){library.branding.devisBgOpacity=parseFloat(val)||0;applyBrandingLive();}
 function pickSignatureImage(){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
@@ -1635,7 +1662,7 @@ function openSettingsPanel(){
     <div class="brand-media-row">
       <div class="brand-media-card" style="flex:1 1 100%;">
         <div class="brand-media-body" style="align-items:flex-start;">
-          <span class="logo-thumb" style="width:70px;height:99px;">${b.devisBgImage?`<img src="${b.devisBgImage}" style="width:100%;height:100%;object-fit:cover;transform:${devisBgTransformCss(b)};">`:`<span class="logo-thumb-empty">Aucune<br>texture</span>`}</span>
+          <span class="logo-thumb" style="width:70px;height:99px;">${b.devisBgImage?`<img src="${b.devisBgImage}" style="width:100%;height:100%;object-fit:cover;">`:`<span class="logo-thumb-empty">Aucune<br>texture</span>`}</span>
           <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:220px;">
             <div class="brand-media-actions" style="flex-direction:row;flex-wrap:wrap;">
               <button class="mini" onclick="pickDevisBgImage()">${b.devisBgImage?'Changer…':'Choisir une texture…'}</button>
