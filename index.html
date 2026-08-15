@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+/* Posé le plus tôt possible pour éviter un flash : détecte un vrai petit écran via screen.width,
+   insensible au viewport que "Version ordinateur" (Chrome Android) force sur la page. */
+try{
+  var isTouch=(navigator.maxTouchPoints>0)||('ontouchstart' in window);
+  if(isTouch&&screen.width<=1024)document.documentElement.classList.add('is-mobile-device');
+}catch(e){}
+</script>
 <title>Générateur de devis — Melissa Nabet</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -355,7 +363,7 @@
   .dv-pagenum{position:absolute;bottom:9mm;left:0;right:0;text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:10.5px;color:var(--stone);letter-spacing:.1em;z-index:2;}
 
   @media (max-width:1100px){.devis{transform:scale(.82);transform-origin:top center;}}
-  @media (max-width:900px){
+  @media (max-width:900px), (pointer:coarse) and (max-width:1024px){
     .tabs{display:flex;}
     .stage{flex-direction:column;}
     .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
@@ -370,6 +378,19 @@
     .btn,.vnav,.tab,.mini{padding-top:10px;padding-bottom:10px;}
     .cl-scroll{-webkit-overflow-scrolling:touch;}
   }
+  /* Chrome Android "Version ordinateur" force un viewport large sans changer le pointeur (toujours
+     tactile) ni l'écran réel : (pointer:coarse) au-dessus détecte ce cas même quand max-width:900px
+     ne matche plus. is-mobile-device (posé en JS depuis screen.width, insensible au viewport spoofé)
+     couvre les cas restants où pointer:coarse ne suffit pas. */
+  html.is-mobile-device .tabs{display:flex;}
+  html.is-mobile-device .stage{flex-direction:column;}
+  html.is-mobile-device .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
+  html.is-mobile-device .preview-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  html.is-mobile-device .devis{transform:scale(.62);transform-origin:top center;margin-top:-30mm;}
+  html.is-mobile-device body.show-preview .editor{display:none;}
+  html.is-mobile-device body.show-editor .preview-wrap{display:none;}
+  html.is-mobile-device body.force-desktop .devis{transform:none;margin-top:0;}
+  html.is-mobile-device .btn,html.is-mobile-device .vnav,html.is-mobile-device .tab,html.is-mobile-device .mini{padding-top:10px;padding-bottom:10px;}
   @media print{
     /* AUCUNE marge blanche : la feuille est colorée bord à bord (@page margin:0 + fond papier
        sur html/body/feuille). L'espacement du texte (16 mm) est géré À L'INTÉRIEUR, et
