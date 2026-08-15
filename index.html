@@ -405,17 +405,17 @@
 <div class="toolbar">
   <div class="brand" style="letter-spacing:.14em;font-size:18px;" id="toolbar-brand">MELISSA NABET</div>
   <div class="viewnav">
+    <button class="vnav" id="vn-dash" onclick="showView('dashboard')">Tableau de bord</button>
     <button class="vnav active" id="vn-devis" onclick="showView('devis')">Devis</button>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
-    <button class="vnav" id="vn-dash" onclick="showView('dashboard')">Tableau de bord</button>
     <button class="vnav" id="vn-chantier" onclick="showView('chantier')">Estimation</button>
   </div>
-  <button class="btn" id="desktop-toggle" style="flex-shrink:0" onclick="toggleDesktopView()">🔍 Taille réelle</button>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
   <div class="spacer"></div>
   <div class="tabs">
     <button class="tab active" id="tab-ed" onclick="showTab('editor')">Composer</button>
     <button class="tab" id="tab-pv" onclick="showTab('preview')">Aperçu</button>
+    <button class="btn" id="desktop-toggle" style="flex-shrink:0;display:none" onclick="toggleDesktopView()">🔍 Taille réelle</button>
   </div>
   <span id="devis-actions" style="display:contents">
     
@@ -2732,7 +2732,7 @@ async function importClientsCSV(file){
 }
 
 /* ============ TABS ============ */
-function showTab(w){document.body.classList.toggle('show-preview',w==='preview');document.body.classList.toggle('show-editor',w==='editor');$('tab-ed').classList.toggle('active',w==='editor');$('tab-pv').classList.toggle('active',w==='preview');}
+function showTab(w){document.body.classList.toggle('show-preview',w==='preview');document.body.classList.toggle('show-editor',w==='editor');$('tab-ed').classList.toggle('active',w==='editor');$('tab-pv').classList.toggle('active',w==='preview');const dt=$('desktop-toggle');if(dt)dt.style.display=w==='preview'?'':'none';}
 function applyDesktopView(on){
   document.body.classList.toggle('force-desktop',on);
   const btn=$('desktop-toggle');if(btn)btn.textContent=on?'↕ Ajusté à l\'écran':'🔍 Taille réelle';
