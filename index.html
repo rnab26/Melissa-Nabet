@@ -417,16 +417,13 @@
     <button class="tab" id="tab-pv" onclick="showTab('preview')">Aperçu</button>
     <button class="btn" id="desktop-toggle" style="flex-shrink:0;display:none" onclick="toggleDesktopView()">🔍 Taille réelle</button>
   </div>
-  <span id="devis-actions" style="display:contents">
-    
-    <button class="btn" onclick="openDevisPanel()">Mes devis</button>
-    
-    
-    
-    
-  </span>
-  <button class="btn" onclick="openSettingsPanel()">⚙ Réglages</button>
-  <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <span id="devis-actions" style="display:contents">
+      <button class="btn" onclick="openDevisPanel()">Mes devis</button>
+    </span>
+    <button class="btn" onclick="openSettingsPanel()">⚙ Réglages</button>
+    <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
+  </div>
 </div>
 
 <div class="stage">
