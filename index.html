@@ -155,9 +155,8 @@
   .dash-todo-amt{font-size:13px;font-weight:600;white-space:nowrap;}
   .dash-todo-amt.due{color:#b6543f;}
   .task-row{background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:11px 14px;margin-bottom:7px;}
-  .task-head{cursor:pointer;}
   .task-row.done{opacity:.55;}
-  .task-head{display:flex;align-items:flex-start;gap:10px;}
+  .task-head{display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
   .task-icon{flex:0 0 auto;font-size:16px;line-height:1.5;cursor:pointer;}
   .task-main{flex:1;min-width:0;cursor:pointer;}
   .task-title{font-size:13.5px;color:var(--ink);font-weight:500;}
@@ -169,7 +168,6 @@
   .task-tag.urgent{background:#f7e2df;color:#b6543f;}
   .task-tag.critique{background:#b6543f;color:#fff;}
   .task-chevron{flex:0 0 auto;font-size:11px;color:var(--stone);cursor:pointer;padding:3px 4px;}
-  .task-actions{flex:0 0 auto;display:flex;gap:6px;}
   .task-empty{font-size:13px;color:var(--stone);padding:6px 2px 16px;}
   .task-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--panel-edge);}
   .task-docs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px;}
@@ -303,33 +301,13 @@
   .cl-group.open .cl-chev{transform:rotate(90deg);}
   .cl-detail{display:none;padding:8px 14px 16px;background:#faf7f1;border-bottom:1px solid #f1ece2;}
   .cl-group.open .cl-detail{display:block;}
-  .cl-lines-h,.cl-line{display:grid;grid-template-columns:1.4fr .9fr .9fr .9fr 1.5fr 32px 22px;gap:8px;align-items:center;}
-  .cl-lines-h{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone-light);padding:4px 0;}
-  .cl-line{padding:4px 0;}
-  .cl-line input{padding:6px 8px;font-size:12.5px;}
-  .cl-line .rm{border:none;background:none;color:var(--stone-light);cursor:pointer;font-size:15px;}
-  .cl-line .rm:hover{color:#b23;}
   .cl-meta{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px;padding:11px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;}
   .cl-meta input,.cl-meta select{padding:6px 8px;font-size:12.5px;}
-  .cl-meta label span{font-size:10px;letter-spacing:.03em;}
-  .cl-lines-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone);font-weight:600;margin:4px 0 6px;}
   .cl-meta label{font-size:11px;color:var(--stone);display:block;}
-  .cl-meta label span{display:block;margin-bottom:3px;}
+  .cl-meta label span{font-size:10px;letter-spacing:.03em;display:block;margin-bottom:3px;}
   .cl-meta input{background:var(--panel);}
   .cl-detail-actions{display:flex;justify-content:space-between;margin-top:10px;gap:8px;flex-wrap:wrap;}
   .cl-totals{display:flex;flex-direction:column;gap:8px;padding:14px 16px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);margin-top:14px;border-top:2px solid var(--hair);}
-  .synth-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1ece2;}
-  .synth-row:last-child{border-bottom:none;}
-  .synth-label{font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--stone);font-weight:600;}
-  .synth-vals{display:flex;gap:24px;}
-  .synth-item{display:flex;flex-direction:column;align-items:flex-end;gap:1px;}
-  .synth-item span{font-size:9.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--stone);}
-  .synth-item b{font-size:14.5px;font-weight:600;color:var(--ink);}
-  .synth-item b.due{color:#b6543f;}
-  .synth-item b.ok{color:#6a9a5a;}
-  .synth-total{margin-top:2px;padding-top:8px;border-top:1px solid var(--hair);}
-  .synth-total .synth-label{font-size:12.5px;color:var(--ink);}
-  .synth-total .synth-item b{font-size:16.5px;}
 
   /* devis */
   .devis{width:210mm;min-height:297mm;background:var(--paper);box-shadow:0 12px 44px rgba(60,50,35,.22);color:var(--ink);position:relative;background-image:radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,.5), rgba(0,0,0,0) 55%),linear-gradient(180deg,#f4efe6 0%,#e9e3d8 100%);}
@@ -345,10 +323,6 @@
   .dv-head .col .nm{color:var(--oxblood);font-weight:500;}
   .dv-brand{text-align:center;margin:4mm 0 5mm;}
   .dv-logo{width:62mm;max-width:70%;height:auto;}
-  .dv-emblem{width:34px;height:34px;color:var(--stone-deep);}
-  .dv-word{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:30px;font-weight:500;letter-spacing:.16em;color:var(--ink);margin-top:1mm;padding-left:.16em;}
-  .dv-tag{font-size:8.5px;letter-spacing:.4em;text-transform:uppercase;color:var(--stone-light);margin-top:3mm;padding-left:.4em;display:inline-block;}
-  .dv-tag::before{content:"";display:block;width:44px;height:1px;background:var(--hair);margin:0 auto 3mm;}
   .dv-title{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-weight:600;font-size:27px;margin:6mm 0 2mm;color:var(--oxblood);}
   .dv-rule{width:64px;height:1px;background:var(--stone-light);margin:0 auto 7mm;}
   .dv-intro{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:14px;line-height:1.72;text-align:center;color:#3a352d;max-width:150mm;margin:0 auto 8mm;white-space:pre-wrap;}
@@ -383,7 +357,6 @@
   .dv-license{text-align:center;font-size:10.5px;color:var(--stone);margin-top:5mm;}
   .dv-foot{text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11px;color:var(--stone);margin-top:6mm;border-top:1px solid var(--hair);padding-top:3mm;}
   .dv-pricesign{break-inside:avoid;page-break-inside:avoid;}
-  .dv-pagenum{position:absolute;bottom:9mm;left:0;right:0;text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:10.5px;color:var(--stone);letter-spacing:.1em;z-index:2;}
 
   @media (max-width:1100px){.devis{transform:scale(.82);transform-origin:top center;}}
   @media (max-width:900px){
@@ -1488,44 +1461,34 @@ function applyImageCrop(){
   closeModal();
   onSave(dataUri);
 }
-function pickLogo(){
+/* Boilerplate commun à tous les imports d'image (input file caché + garde fichier vide + click). */
+function pickImageFile(onFile){
   const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    if(!inp.files||!inp.files[0])return;
-    openImageCropper(inp.files[0],dataUri=>{
-      library.branding.logoDataUri=dataUri;
-      applyBrandingLive();openSettingsPanel();
-    });
-  };
+  inp.onchange=()=>{if(inp.files&&inp.files[0])onFile(inp.files[0]);};
   inp.click();
 }
+function pickLogo(){
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    library.branding.logoDataUri=dataUri;
+    applyBrandingLive();openSettingsPanel();
+  }));
+}
 function resetLogo(){library.branding.logoDataUri=DEFAULT_LOGO_DATAURI;applyBrandingLive();openSettingsPanel();}
-function setToolbarBrandType(t){library.branding.toolbarBrandType=t;applyBrandingLive();openSettingsPanel();}
 function pickToolbarBrandImage(){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    if(!inp.files||!inp.files[0])return;
-    openImageCropper(inp.files[0],dataUri=>{
-      library.branding.toolbarBrandImage=dataUri;
-      library.branding.toolbarBrandType='image';
-      applyBrandingLive();openSettingsPanel();
-    });
-  };
-  inp.click();
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    library.branding.toolbarBrandImage=dataUri;
+    library.branding.toolbarBrandType='image';
+    applyBrandingLive();openSettingsPanel();
+  }));
 }
 function clearToolbarBrandImage(){library.branding.toolbarBrandImage=null;library.branding.toolbarBrandType='text';applyBrandingLive();openSettingsPanel();}
 function pickDevisBgImage(){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    if(!inp.files||!inp.files[0])return;
-    openImageCropper(inp.files[0],dataUri=>{
-      library.branding.devisBgImageBase=dataUri;
-      library.branding.devisBgFlipX=false;
-      library.branding.devisBgFlipY=false;
-      renderDevisBgFromBase();
-    },{vpW:220,vpH:311,title:'Cadrer la texture de fond'});
-  };
-  inp.click();
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    library.branding.devisBgImageBase=dataUri;
+    library.branding.devisBgFlipX=false;
+    library.branding.devisBgFlipY=false;
+    renderDevisBgFromBase();
+  },{vpW:220,vpH:311,title:'Cadrer la texture de fond'}));
 }
 /* Cuit le flip horizontal/vertical dans l'image (au lieu d'un transform CSS sur le fond),
    pour que l'aperçu, l'impression et l'export PDF montrent toujours exactement la même chose. */
@@ -1555,18 +1518,13 @@ function toggleDevisBgFlipX(){library.branding.devisBgFlipX=!library.branding.de
 function toggleDevisBgFlipY(){library.branding.devisBgFlipY=!library.branding.devisBgFlipY;renderDevisBgFromBase();}
 function ensureBgLibrary(){if(!Array.isArray(library.bgLibrary))library.bgLibrary=[];}
 function pickBgToLibrary(){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    if(!inp.files||!inp.files[0])return;
-    openImageCropper(inp.files[0],dataUri=>{
-      ensureBgLibrary();
-      library.bgLibrary.push({id:uid(),dataUri,addedAt:Date.now()});
-      store.set(K_LIB,library);
-      openSettingsPanel();
-      toast('Fond ajouté à la bibliothèque');
-    },{vpW:220,vpH:311,title:'Cadrer la texture de fond'});
-  };
-  inp.click();
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    ensureBgLibrary();
+    library.bgLibrary.push({id:uid(),dataUri,addedAt:Date.now()});
+    store.set(K_LIB,library);
+    openSettingsPanel();
+    toast('Fond ajouté à la bibliothèque');
+  },{vpW:220,vpH:311,title:'Cadrer la texture de fond'}));
 }
 function saveDevisBgToLibrary(){
   ensureBgLibrary();
@@ -1597,16 +1555,13 @@ function deleteBgFromLibrary(id){
 }
 function setDevisBgOpacity(val){library.branding.devisBgOpacity=parseFloat(val)||0;applyBrandingLive();}
 function pickSignatureImage(){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=async()=>{
-    if(!inp.files||!inp.files[0])return;
+  pickImageFile(async file=>{
     try{
-      const dataUri=await readLogoAsDataUri(inp.files[0]);
+      const dataUri=await readLogoAsDataUri(file);
       library.branding.signatureImage=dataUri;
       applyBrandingLive();openSettingsPanel();
     }catch(e){toast('Échec import de la signature : '+e.message);}
-  };
-  inp.click();
+  });
 }
 function clearSignatureImage(){library.branding.signatureImage=null;applyBrandingLive();openSettingsPanel();}
 function settingsEdit(key,val){library.branding[key]=val;applyBrandingLive();}
@@ -1635,9 +1590,7 @@ function extractDominantColor(img){
   return rgbToHex(best.r/best.wsum,best.g/best.wsum,best.b/best.wsum);
 }
 function pickThemeFromPhoto(){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    if(!inp.files||!inp.files[0])return;
+  pickImageFile(file=>{
     const reader=new FileReader();
     reader.onerror=()=>toast('Échec de lecture du fichier');
     reader.onload=()=>{
@@ -1654,15 +1607,12 @@ function pickThemeFromPhoto(){
       };
       img.src=reader.result;
     };
-    reader.readAsDataURL(inp.files[0]);
-  };
-  inp.click();
+    reader.readAsDataURL(file);
+  });
 }
 function settingsSetSitePalette(key){library.branding.sitePalette=key;applyBrandingLive();openSettingsPanel();}
 function pickSiteThemeFromPhoto(){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    if(!inp.files||!inp.files[0])return;
+  pickImageFile(file=>{
     const reader=new FileReader();
     reader.onerror=()=>toast('Échec de lecture du fichier');
     reader.onload=()=>{
@@ -1679,9 +1629,8 @@ function pickSiteThemeFromPhoto(){
       };
       img.src=reader.result;
     };
-    reader.readAsDataURL(inp.files[0]);
-  };
-  inp.click();
+    reader.readAsDataURL(file);
+  });
 }
 function openSettingsPanel(){
   ensureBranding();
@@ -1850,17 +1799,6 @@ async function settingsSave(){
 }
 
 /* ============ EXPORT PDF ============ */
-async function ensureFonts(){try{if(document.fonts&&document.fonts.ready)await document.fonts.ready;}catch(e){}}
-async function downloadPDF(){
-  render();await ensureFonts();
-  const el=$('devis');
-  if(typeof html2pdf!=='undefined'){
-    const fnPrefix=current.docType==='facture'?'Facture':'Devis';
-    const opt={margin:0,filename:`${fnPrefix}_${(current.num||'MN').replace(/\s+/g,'_')}.pdf`,image:{type:'jpeg',quality:.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#f4efe6'},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},pagebreak:{mode:['css','legacy'],before:'.cond'}};
-    try{await html2pdf().set(opt).from(el).save();toast('PDF téléchargé');return;}catch(e){console.error(e);toast('Échec PDF, passage à l\'impression');}
-  }
-  printDevis();
-}
 function printDevis(){render();window.print();}
 function openDevisWindowHTML(devisHTML,num,companyName,docType){
   const styles=Array.from(document.querySelectorAll('style,link[rel=stylesheet]')).map(n=>n.outerHTML).join('');
@@ -2317,17 +2255,6 @@ async function cgvSave(){
 function libApplyToCurrent(){askConfirm('Recharger la bibliothèque effacera les lignes du devis en cours. Continuer ?',async()=>{await store.set(K_LIB,library);seedComposerFromLibrary();buildPrest();buildExclu();render();toast('Bibliothèque rechargée');});}
 
 /* ============ CLIENTS / COMPTES ============ */
-function mkClient(name,lines,extra){return Object.assign({id:uid(),name,contact:'',phone:'',email:'',ville:'',debut:'',fin:'',commentaire:'',tva:18,lignes:(lines||[]).map(l=>({id:uid(),type:l[0],prixFinal:l[1]||0,recu:l[2]||0,devis:l[3]||'',paiements:l[4]||''}))},extra||{});}
-const CLIENTS_SEED=[
-  mkClient('Raph Grunzweig',[['Plans',13000,13000,'3 230 €','3230 € vir. Revolut Raph'],['Kablan',30000,30000,'','']],{statut:'termine'}),
-  mkClient('Jonas Dahan',[['Plans',18500,18500,'17 500','10000 espèces payé']],{statut:'termine'}),
-  mkClient('David Mourjan',[['Plans',18000,18000,'23 000','5000 avance + 3000 espèces (19 nov.) + 5000 espèces (21 janv.)'],['Yossi keramika',2000,2000,'','']],{statut:'termine'}),
-  mkClient('Marc Dahan',[['Kablanoute',2000,2000,'','']],{debut:'4 avril',statut:'termine'}),
-  mkClient('Sarah',[['Plans',23000,23000,'',''],['Kablan',5000,5000,'',''],['Marbre',1600,1600,'',''],['Menuiserie',1800,0,'',''],['Yossi keramika',1600,1600,'','']],{statut:'en_cours'}),
-  mkClient('Sebastien Maison',[['Plan',10000,5000,'','5000 espèces'],['Kablan',35000,0,'','']],{statut:'en_cours'}),
-  mkClient('Sebastien Bureau',[['Plan',15000,7500,'','']],{statut:'en_cours'}),
-  mkClient('Isaac',[['Plan',27848,16300,'','']],{statut:'en_cours'}),
-];
 function normalizeClient(c){
   let montantFinal,paiements,commissions;
   if(c.montantFinal!=null||Array.isArray(c.paiements)||Array.isArray(c.commissions)){
@@ -2349,14 +2276,6 @@ function clientTotals(c){
   return {montant,recu,reste:montant-recu,commissions:commissionsDue,commissionsPaye,commissionsReste:commissionsDue-commissionsPaye};
 }
 function globalTotals(cs){return cs.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.recu+=t.recu;a.reste+=t.reste;a.commissions+=t.commissions;a.commissionsPaye+=t.commissionsPaye;a.commissionsReste+=t.commissionsReste;return a;},{montant:0,recu:0,reste:0,commissions:0,commissionsPaye:0,commissionsReste:0});}
-function globalTotalsSynth(cs){
-  const eligPlans=cs.filter(c=>c.statut!=='annule'&&clientTotals(c).recu>0);
-  const eligCommission=cs.filter(c=>c.statut!=='annule'&&clientTotals(c).commissionsPaye>0);
-  const plans=eligPlans.reduce((a,c)=>{const t=clientTotals(c);a.ca+=t.montant;a.reste+=t.reste;return a;},{ca:0,reste:0});
-  const commission=eligCommission.reduce((a,c)=>{const t=clientTotals(c);a.ca+=t.commissions;a.reste+=t.commissionsReste;return a;},{ca:0,reste:0});
-  return {plans,commission,totalCa:plans.ca+commission.ca,totalReste:plans.reste+commission.reste};
-}
-function clientStatut(c){const t=clientTotals(c);if(t.montant<=0)return 'na';return t.reste<=0?'ok':'due';}
 
 const clientFilters={q:'',statuts:[],sortKey:'name',sortDir:'asc'};
 const clientOpen={};
@@ -3107,7 +3026,6 @@ function applySplitView(on){
 function toggleSplitView(){applySplitView(!document.body.classList.contains('force-split'));}
 try{if(localStorage.getItem('mn_split_view')==='1')applySplitView(true);}catch(e){}
 
-/* ============ INIT ============ */
 /* ============ SYNCHRONISATION SUPABASE (granulaire) ============ */
 const SB_URL='https://njaamykxnvohoesrtpvv.supabase.co';
 const SB_KEY='sb_publishable_h7zdNqYow8o3jdofbWKIlg_IaEEcjj0';
@@ -3219,7 +3137,6 @@ async function cloudPush(){
   }catch(e){lastSyncError=(e&&(e.message||e.code))||'écriture refusée';setSyncStatus('err');}
 }
 function scheduleSyncPush(){if(!cloudReady)return;clearTimeout(pushT);pushT=setTimeout(cloudPush,500);}
-function pullOnce(){if(sb&&sbUser)loadAll();}
 function openSyncPanel(){
   const email=sbUser?sbUser.email:'(non connecté)';
   const uid=sbUser?('…'+String(sbUser.id).slice(-8)):'—';
