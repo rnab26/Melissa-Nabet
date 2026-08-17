@@ -26,6 +26,7 @@
   .btn-primary{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
   .btn-primary:hover{filter:brightness(.88);}
   .tabs{display:none;gap:6px;}
+  #split-toggle{display:none;}
   .tab{font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:7px 12px;border:1px solid var(--stone);color:var(--stone-light);background:transparent;cursor:pointer;border-radius:2px;}
   .tab.active{background:var(--paper);color:var(--ink);border-color:var(--paper);}
 
@@ -383,6 +384,7 @@
   @media (max-width:1100px){.devis{transform:scale(.82);transform-origin:top center;}}
   @media (max-width:900px){
     .tabs{display:flex;}
+    #split-toggle{display:inline-block;}
     .stage{flex-direction:column;}
     .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
     .preview-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
@@ -399,6 +401,17 @@
   @media (max-width:600px){
     .two-col{flex-direction:column;gap:0;}
   }
+  /* Vue bureau forcée : bouton manuel dans la barre d'outils, indépendant du "Version
+     ordinateur" du navigateur (peu fiable/absent sur tablette, Samsung Internet, etc.) —
+     annule les règles mobiles ci-dessus quelle que soit la largeur réelle de l'écran. */
+  body.force-split{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+  body.force-split .tabs{display:none;}
+  body.force-split .stage{flex-direction:row;flex:1 1 auto;min-height:0;overflow:hidden;}
+  body.force-split .editor{width:44%;max-width:600px;min-width:360px;border-right:1px solid var(--panel-edge);height:100%;min-height:0;overflow-y:auto;}
+  body.force-split .preview-wrap{width:auto;overflow-x:visible;height:100%;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:auto;}
+  body.force-split .devis{transform:none !important;margin-top:0;}
+  body.force-split.show-preview .editor{display:block;}
+  body.force-split.show-editor .preview-wrap{display:flex;}
   @media print{
     /* AUCUNE marge blanche : la feuille est colorée bord à bord (@page margin:0 + fond papier
        sur html/body/feuille). L'espacement du texte (16 mm) est géré À L'INTÉRIEUR, et
@@ -456,6 +469,7 @@
     <button class="tab" id="tab-pv" onclick="showTab('preview')">Aperçu</button>
     <button class="btn" id="desktop-toggle" style="flex-shrink:0;display:none" onclick="toggleDesktopView()">🔍 Taille réelle</button>
   </div>
+  <button class="btn" id="split-toggle" style="flex-shrink:0;" onclick="toggleSplitView()">🖥 Vue bureau</button>
   <div style="display:flex;gap:10px;flex-wrap:wrap;">
     <span id="devis-actions" style="display:contents">
       <button class="btn" onclick="openDevisPanel()">Mes devis</button>
@@ -3019,6 +3033,13 @@ function applyDesktopView(on){
 }
 function toggleDesktopView(){applyDesktopView(!document.body.classList.contains('force-desktop'));}
 try{if(localStorage.getItem('mn_desktop_view')==='1')applyDesktopView(true);}catch(e){}
+function applySplitView(on){
+  document.body.classList.toggle('force-split',on);
+  const btn=$('split-toggle');if(btn)btn.textContent=on?'📱 Vue mobile':'🖥 Vue bureau';
+  try{localStorage.setItem('mn_split_view',on?'1':'0');}catch(e){}
+}
+function toggleSplitView(){applySplitView(!document.body.classList.contains('force-split'));}
+try{if(localStorage.getItem('mn_split_view')==='1')applySplitView(true);}catch(e){}
 
 /* ============ INIT ============ */
 /* ============ SYNCHRONISATION SUPABASE (granulaire) ============ */
