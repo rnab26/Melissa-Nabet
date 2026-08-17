@@ -149,6 +149,7 @@
   .dash-todo-amt{font-size:13px;font-weight:600;white-space:nowrap;}
   .dash-todo-amt.due{color:#b6543f;}
   .task-row{background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:11px 14px;margin-bottom:7px;}
+  .task-head{cursor:pointer;}
   .task-row.done{opacity:.55;}
   .task-head{display:flex;align-items:flex-start;gap:10px;}
   .task-icon{flex:0 0 auto;font-size:16px;line-height:1.5;cursor:pointer;}
@@ -547,8 +548,14 @@
   <div class="dash-wrap">
     <h2>Tableau de bord</h2>
     <div class="dash-kpi-row" id="dash-kpi"></div>
-    <div class="ed-eyebrow" style="margin-top:22px;display:flex;align-items:center;gap:10px;">
+    <div class="ed-eyebrow" style="margin-top:22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="flex:1">Mes tâches</span>
+      <select id="task-sort-select" class="mini" onchange="setTaskSort(this.value)">
+        <option value="priority">Trier : Priorité</option>
+        <option value="due">Trier : Échéance</option>
+        <option value="alpha">Trier : Alphabétique</option>
+        <option value="created">Trier : Récentes</option>
+      </select>
       <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
     </div>
     <div id="dash-tasks"></div>
@@ -2610,13 +2617,16 @@ function gotoClient(id){
 }
 /* ============ TÂCHES (tableau de bord) ============ */
 const TASK_PRIORITIES={
-  faible:{label:'Faible',icon:'▾',rank:4},
-  normal:{label:'Normal',icon:'○',rank:3},
+  attente:{label:'En attente',icon:'⏳',rank:5},
+  faible:{label:'Faible',icon:'🟢',rank:4},
+  normal:{label:'Normal',icon:'🔵',rank:3},
   urgent:{label:'Urgent',icon:'🔥',rank:2},
   critique:{label:'Critique',icon:'🚨',rank:1},
 };
 let _taskOpenIds=new Set();
 let _taskSaveT=null;
+let taskSortMode=(()=>{try{return localStorage.getItem('mn_task_sort')||'priority';}catch(e){return 'priority';}})();
+function setTaskSort(v){taskSortMode=v;try{localStorage.setItem('mn_task_sort',v);}catch(e){}renderTaskList();}
 function saveTasks(){store.set(K_TASKS,tasks);}
 function saveTasksDebounced(){clearTimeout(_taskSaveT);_taskSaveT=setTimeout(saveTasks,500);}
 function todayIso(){return new Date().toISOString().slice(0,10);}
@@ -2649,7 +2659,29 @@ function fmtDateFr(iso){
   return d&&m&&y?`${d}/${m}/${y}`:iso;
 }
 function sortedTasks(){
-  const rank={overdue:0,critique:1,urgent:2,normal:3,faible:4,done:5};
+  const doneRank=t=>t.done?1:0;
+  if(taskSortMode==='due'){
+    return [...tasks].sort((a,b)=>{
+      const dr=doneRank(a)-doneRank(b);if(dr)return dr;
+      if(a.dueDate&&b.dueDate)return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;
+      if(a.dueDate)return -1;
+      if(b.dueDate)return 1;
+      return (a.createdAt||0)-(b.createdAt||0);
+    });
+  }
+  if(taskSortMode==='alpha'){
+    return [...tasks].sort((a,b)=>{
+      const dr=doneRank(a)-doneRank(b);if(dr)return dr;
+      return (a.title||'').localeCompare(b.title||'');
+    });
+  }
+  if(taskSortMode==='created'){
+    return [...tasks].sort((a,b)=>{
+      const dr=doneRank(a)-doneRank(b);if(dr)return dr;
+      return (b.createdAt||0)-(a.createdAt||0);
+    });
+  }
+  const rank={overdue:0,critique:1,urgent:2,normal:3,faible:4,attente:5,done:6};
   return [...tasks].sort((a,b)=>{
     const ra=rank[taskStatus(a)],rb=rank[taskStatus(b)];
     if(ra!==rb)return ra-rb;
@@ -2675,29 +2707,30 @@ function taskDocsHtml(t){
 }
 function renderTaskList(){
   const root=$('dash-tasks');if(!root)return;
+  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode;
   if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';return;}
   root.innerHTML=sortedTasks().map(t=>{
     const open=_taskOpenIds.has(t.id);
     if(!open){
-      return `<div class="task-row ${t.done?'done':''}">
+      return `<div class="task-row ${t.done?'done':''}" onclick="toggleTaskOpen('${t.id}')">
         <div class="task-head">
-          <span class="task-icon" onclick="toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">${taskIcon(t)}</span>
-          <div class="task-main" onclick="toggleTaskOpen('${t.id}')">
+          <span class="task-icon" onclick="event.stopPropagation();toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">${taskIcon(t)}</span>
+          <div class="task-main">
             <div class="task-title">${esc(t.title)}</div>
             ${t.detail?`<div class="task-detail-preview">${esc(t.detail)}</div>`:''}
             <div class="task-meta">${taskTagsHtml(t)}</div>
           </div>
-          <span class="task-chevron" onclick="toggleTaskOpen('${t.id}')">▾</span>
+          <span class="task-chevron">▾</span>
         </div>
       </div>`;
     }
     return `<div class="task-row ${t.done?'done':''}">
-      <div class="task-head">
-        <span class="task-icon" onclick="toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">${taskIcon(t)}</span>
+      <div class="task-head" onclick="toggleTaskOpen('${t.id}')">
+        <span class="task-icon" onclick="event.stopPropagation();toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">${taskIcon(t)}</span>
         <div class="task-meta" style="flex:1">${taskTagsHtml(t)}</div>
-        <span class="task-chevron" onclick="toggleTaskOpen('${t.id}')">▴</span>
+        <span class="task-chevron">▴</span>
       </div>
-      <div class="task-body">
+      <div class="task-body" onclick="event.stopPropagation()">
         <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
         <label class="fld"><span class="lbl">Détail</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
         <div class="row3">
