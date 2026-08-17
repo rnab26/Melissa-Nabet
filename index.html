@@ -411,6 +411,16 @@
     .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
     *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
   }
+  /* Bureau : éditeur et aperçu défilent chacun dans leur propre colonne (au lieu de partager
+     le défilement de la page), pour que le scroll-sync vers une section du devis n'entraîne
+     pas le champ en cours d'édition hors de vue. */
+  @media (min-width:901px){
+    html,body{height:100%;}
+    body{display:flex;flex-direction:column;overflow:hidden;}
+    .stage{flex:1 1 auto;min-height:0;overflow:hidden;}
+    .editor{height:100%;min-height:0;overflow-y:auto;}
+    .preview-wrap{height:100%;min-height:0;overflow-y:auto;}
+  }
 </style>
 </head>
 <body class="show-editor">
@@ -693,7 +703,7 @@ function buildDevisHTML(S){
       const pl=detail?priceLabel(S,v):'',ml=detail?metaLabel(S,v):'';
       return `<div class="dv-item"><div class="it-t"><span>${esc(v.title)}</span>${pl?`<span class="price">${pl}</span>`:''}</div>${ml?`<div class="it-meta">${ml}</div>`:''}${v.desc?`<div class="it-d">${esc(v.desc)}</div>`:''}</div>`;
     }).join('');
-    return `<div class="dv-group"><div class="dv-group-h">${esc(cat)}</div>${items}</div>`;
+    return `<div class="dv-group" data-cat="${esc(cat)}"><div class="dv-group-h">${esc(cat)}</div>${items}</div>`;
   }).join('');
   const exclHtml=exc.length?`<div class="dv-excl"><div class="dv-group-h">Hors prestation</div><ul>${exc.map(v=>`<li>${esc(v.title)}</li>`).join('')}</ul><p style="font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:#8c7b63;text-align:center;font-style:italic;margin-top:2mm;">Des partenaires spécialisés peuvent être recommandés selon les besoins du projet.</p></div>`:'';
   const T=computeTotals(S,inc);
@@ -1071,6 +1081,7 @@ function wireBindings(){
   $('f-gttc').addEventListener('change',e=>{current.gIsTTC=e.target.value==='ttc';render();});
   const bc=(id,key)=>$(id).addEventListener('change',e=>{current[key]=e.target.checked;render();});
   bc('f-tva-off','tvaOff');bc('f-cond-on','condOn');bc('f-tl-on','tlOn');
+  $('prest').addEventListener('focusin',e=>{const acc=e.target.closest('.acc');if(acc&&acc.dataset.cat)scrollDevisToCat(acc.dataset.cat);});
 }
 function setPricing(m){
   current.pricingMode=m;
@@ -1094,16 +1105,26 @@ function priceInputs(sv){
   return `<select data-k="mode">${opts}</select>${inp}`;
 }
 function sectionCount(name){return current.services.filter(s=>s.cat===name&&s.on).length;}
+let _scrollCatT=null;
+function scrollDevisToCat(name){
+  clearTimeout(_scrollCatT);
+  _scrollCatT=setTimeout(()=>{
+    const pw=document.querySelector('.preview-wrap');
+    if(!pw||pw.offsetParent===null)return;
+    const g=document.querySelector(`#devis .dv-group[data-cat="${(window.CSS&&CSS.escape)?CSS.escape(name):name}"]`);
+    if(g)g.scrollIntoView({behavior:'smooth',block:'start'});
+  },80);
+}
 function buildPrest(){
   const root=$('prest');root.innerHTML='';
   const order=[...new Set(current.services.map(s=>s.cat))];
   order.forEach(name=>{
     const items=current.services.filter(s=>s.cat===name);
     if(!items.length)return;
-    const acc=document.createElement('div');acc.className='acc'+(current.open[name]?' open':'');
+    const acc=document.createElement('div');acc.className='acc'+(current.open[name]?' open':'');acc.dataset.cat=name;
     const cnt=sectionCount(name);
     acc.innerHTML=`<button class="acc-head"><span class="acc-name">${esc(name)}</span><span class="acc-count ${cnt?'':'zero'}">${cnt}</span><span class="acc-chev">▶</span></button><div class="acc-body"></div>`;
-    acc.querySelector('.acc-head').addEventListener('click',()=>{current.open[name]=!current.open[name];acc.classList.toggle('open',current.open[name]);});
+    acc.querySelector('.acc-head').addEventListener('click',()=>{current.open[name]=!current.open[name];acc.classList.toggle('open',current.open[name]);if(current.open[name])scrollDevisToCat(name);});
     const body=acc.querySelector('.acc-body');
     items.forEach(sv=>{
       const row=document.createElement('div');row.className='it'+(sv.on?' on':'');
