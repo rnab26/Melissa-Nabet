@@ -148,6 +148,19 @@
   .dash-todo-main{font-size:13.5px;color:var(--ink);}
   .dash-todo-amt{font-size:13px;font-weight:600;white-space:nowrap;}
   .dash-todo-amt.due{color:#b6543f;}
+  .task-row{display:flex;align-items:flex-start;gap:10px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:11px 14px;margin-bottom:7px;}
+  .task-row.done{opacity:.55;}
+  .task-icon{flex:0 0 auto;font-size:16px;line-height:1.5;cursor:pointer;}
+  .task-main{flex:1;min-width:0;}
+  .task-title{font-size:13.5px;color:var(--ink);font-weight:500;}
+  .task-row.done .task-title{text-decoration:line-through;}
+  .task-detail{font-size:12px;color:var(--stone);margin-top:2px;white-space:pre-wrap;}
+  .task-meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px;}
+  .task-tag{font-size:10.5px;letter-spacing:.03em;padding:2px 7px;border-radius:9px;background:var(--travertine);color:var(--stone-deep);}
+  .task-tag.overdue{background:#f0e2d8;color:#9a5a3a;}
+  .task-tag.urgent{background:#f7e2df;color:#b6543f;}
+  .task-actions{flex:0 0 auto;display:flex;gap:6px;}
+  .task-empty{font-size:13px;color:var(--stone);padding:6px 2px 16px;}
   #chantier-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
   .ch-wrap{max-width:900px;margin:0 auto;}
   .ch-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
@@ -523,6 +536,11 @@
   <div class="dash-wrap">
     <h2>Tableau de bord</h2>
     <div class="dash-kpi-row" id="dash-kpi"></div>
+    <div class="ed-eyebrow" style="margin-top:22px;display:flex;align-items:center;gap:10px;">
+      <span style="flex:1">Mes tâches</span>
+      <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
+    </div>
+    <div id="dash-tasks"></div>
     <div class="ed-eyebrow" style="margin-top:22px">Assistant · à faire</div>
     <div id="dash-todos"></div>
   </div>
@@ -900,7 +918,8 @@ const store={
     try{if(typeof window!=='undefined'&&window.storage){await window.storage.delete(k,false);return;}}catch(e){}
     try{if(typeof window!=='undefined'&&window.localStorage){localStorage.removeItem(k);return;}}catch(e){}},
 };
-const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier';
+const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier',K_TASKS='mn_tasks';
+let tasks=[];
 
 /* ============ ÉTAT APPLI ============ */
 let library=defaultLibrary(), clients=[], devisList=[], currentDevisId=null;
@@ -2578,6 +2597,106 @@ function gotoClient(id){
   const el=document.querySelector('.cl-group[data-cid="'+id+'"]');
   if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
 }
+/* ============ TÂCHES (tableau de bord) ============ */
+function saveTasks(){store.set(K_TASKS,tasks);}
+function todayIso(){return new Date().toISOString().slice(0,10);}
+function taskStatus(t){
+  if(t.done)return 'done';
+  if(t.dueDate&&t.dueDate<todayIso())return 'overdue';
+  if(t.priority==='urgent')return 'urgent';
+  return 'normal';
+}
+function taskIcon(t){
+  switch(taskStatus(t)){
+    case 'done':return '✓';
+    case 'overdue':return '⏰';
+    case 'urgent':return '🔥';
+    default:return '○';
+  }
+}
+function taskTagsHtml(t){
+  const st=taskStatus(t);
+  const tags=[];
+  if(st==='overdue')tags.push('<span class="task-tag overdue">En retard</span>');
+  else if(st==='urgent')tags.push('<span class="task-tag urgent">Urgent</span>');
+  if(t.dueDate)tags.push(`<span class="task-tag">Échéance : ${esc(fmtDateFr(t.dueDate))}</span>`);
+  if(t.reminderDate)tags.push(`<span class="task-tag">Rappel : ${esc(fmtDateFr(t.reminderDate))}</span>`);
+  return tags.join('');
+}
+function fmtDateFr(iso){
+  if(!iso)return '';
+  const [y,m,d]=iso.split('-');
+  return d&&m&&y?`${d}/${m}/${y}`:iso;
+}
+function sortedTasks(){
+  const rank={overdue:0,urgent:1,normal:2,done:3};
+  return [...tasks].sort((a,b)=>{
+    const ra=rank[taskStatus(a)],rb=rank[taskStatus(b)];
+    if(ra!==rb)return ra-rb;
+    if(a.dueDate&&b.dueDate)return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;
+    if(a.dueDate)return -1;
+    if(b.dueDate)return 1;
+    return (a.createdAt||0)-(b.createdAt||0);
+  });
+}
+function renderTaskList(){
+  const root=$('dash-tasks');if(!root)return;
+  if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';return;}
+  root.innerHTML=sortedTasks().map(t=>`
+    <div class="task-row ${t.done?'done':''}">
+      <span class="task-icon" onclick="toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">${taskIcon(t)}</span>
+      <div class="task-main" onclick="openTaskModal('${t.id}')" style="cursor:pointer">
+        <div class="task-title">${esc(t.title)}</div>
+        ${t.detail?`<div class="task-detail">${esc(t.detail)}</div>`:''}
+        <div class="task-meta">${taskTagsHtml(t)}</div>
+      </div>
+      <div class="task-actions">
+        <button class="mini danger" onclick="event.stopPropagation();deleteTaskConfirm('${t.id}')">×</button>
+      </div>
+    </div>`).join('');
+}
+function toggleTaskDone(id){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  t.done=!t.done;t.updatedAt=Date.now();
+  saveTasks();renderTaskList();
+}
+function deleteTaskConfirm(id){
+  askConfirm('Supprimer cette tâche ?',()=>{
+    tasks=tasks.filter(x=>x.id!==id);
+    saveTasks();renderTaskList();toast('Tâche supprimée');
+  });
+}
+function openTaskModal(id){
+  const t=id?tasks.find(x=>x.id===id):null;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>${t?'Modifier la tâche':'Nouvelle tâche'}</h3>
+    <label class="fld"><span class="lbl">Titre</span><input type="text" id="task-title" value="${t?esc(t.title):''}" placeholder="Ex. Commander les échantillons de parquet"></label>
+    <label class="fld"><span class="lbl">Détail (optionnel)</span><textarea id="task-detail" style="min-height:70px;">${t?esc(t.detail||''):''}</textarea></label>
+    <div class="row3">
+      <label class="fld"><span class="lbl">Échéance</span><input type="date" id="task-due" value="${t&&t.dueDate?t.dueDate:''}"></label>
+      <label class="fld"><span class="lbl">Rappel</span><input type="date" id="task-reminder" value="${t&&t.reminderDate?t.reminderDate:''}"></label>
+      <label class="fld"><span class="lbl">Priorité</span><select id="task-priority">
+        <option value="normal" ${!t||t.priority!=='urgent'?'selected':''}>Normal</option>
+        <option value="urgent" ${t&&t.priority==='urgent'?'selected':''}>Urgent</option>
+      </select></label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:10px;">
+      ${t?`<button class="mini danger" onclick="deleteTaskConfirm('${t.id}');closeModal();">Supprimer</button>`:'<span></span>'}
+      <button class="btn btn-primary" onclick="saveTaskFromModal(${t?`'${t.id}'`:'null'})">Enregistrer</button>
+    </div>`);
+  setTimeout(()=>{const el=$('task-title');if(el)el.focus();},50);
+}
+function saveTaskFromModal(id){
+  const title=($('task-title').value||'').trim();
+  if(!title){toast('Le titre est requis');return;}
+  const detail=$('task-detail').value||'';
+  const dueDate=$('task-due').value||'';
+  const reminderDate=$('task-reminder').value||'';
+  const priority=$('task-priority').value==='urgent'?'urgent':'normal';
+  let t=id?tasks.find(x=>x.id===id):null;
+  if(t){Object.assign(t,{title,detail,dueDate,reminderDate,priority,updatedAt:Date.now()});}
+  else{tasks.push({id:uid(),title,detail,dueDate,reminderDate,priority,done:false,createdAt:Date.now(),updatedAt:Date.now()});}
+  saveTasks();closeModal();renderTaskList();toast(id?'Tâche mise à jour':'Tâche ajoutée');
+}
 function computeTodos(){
   const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
   const brouillons=devisList.filter(d=>d.status==='brouillon').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
@@ -2587,6 +2706,7 @@ function computeTodos(){
 function renderDashboard(){
   const kpiRoot=$('dash-kpi'),todoRoot=$('dash-todos');
   if(!kpiRoot||!todoRoot)return;
+  renderTaskList();
   const {relances,brouillons,enAttente}=computeTodos();
   const gt=globalTotals(clients);
   kpiRoot.innerHTML=`
@@ -2743,9 +2863,9 @@ try{if(localStorage.getItem('mn_desktop_view')==='1')applyDesktopView(true);}cat
 const SB_URL='https://njaamykxnvohoesrtpvv.supabase.co';
 const SB_KEY='sb_publishable_h7zdNqYow8o3jdofbWKIlg_IaEEcjj0';
 const APP_VERSION='v14 · 2026-08-03 (Supabase)';
-const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS]);
+const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS]);
 let sb=null,sbUser=null,ownerId=null,sbChannel=null,applyingRemote=false,offlineMode=false,lastSyncError='',cloudReady=false,loggedIn=false;
-let remoteClients={},remoteDevis={},remoteLibJson='',pushT=null;
+let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',pushT=null;
 function setSyncStatus(s){const b=document.getElementById('sync-badge');if(!b)return;b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function friendlyAuthErr(e){const m=((e&&e.message)||'').toLowerCase();
@@ -2792,12 +2912,13 @@ async function loadAll(){
       if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0)clients[i]=nc;else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
       else if(r.kind==='devis'){const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
       else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
+      else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=r.data;remoteTasksJson=JSON.stringify(tasks);}}
     });
     clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
     devisList=devisList.filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));
     Object.keys(remoteClients).forEach(id=>{if(!cloudIds.has(id))delete remoteClients[id];});
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);
     applyingRemote=false;cloudReady=true;
     try{renderClients();render();}catch(e){}
     setSyncStatus('ok');
@@ -2824,9 +2945,10 @@ function handleRealtime(payload){
         if(row.kind==='client'){const nc=normalizeClient(row.data);const i=clients.findIndex(x=>x.id===row.id);if(i>=0)clients[i]=nc;else clients.push(nc);remoteClients[row.id]=JSON.stringify(nc);}
         else if(row.kind==='devis'){const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);}
         else if(row.kind==='library'){if(row.data&&row.data.sections){library=row.data;remoteLibJson=JSON.stringify(library);}}
+        else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=row.data;remoteTasksJson=JSON.stringify(tasks);}}
       }
     }
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);
   }catch(e){}
   applyingRemote=false;
   try{if(!isEditingClients())renderClients();}catch(e){}
@@ -2838,6 +2960,7 @@ async function cloudPush(){
   clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){remoteClients[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
   devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){remoteDevis[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
   const lj=JSON.stringify(library);if(lj!==remoteLibJson){remoteLibJson=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
+  const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){remoteTasksJson=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
   Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id)){delete remoteClients[id];delIds.push(id);}});
   Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id)){delete remoteDevis[id];delIds.push(id);}});
   try{
@@ -2902,6 +3025,7 @@ async function init(){
   const cs=await store.get(K_CLIENTS);
   clients=Array.isArray(cs)?cs.map(normalizeClient):[];
   devisList=(await store.get(K_DEVIS))||[];
+  tasks=(await store.get(K_TASKS))||[];
   chantierList=(await store.get(K_CHANTIER))||[];
   const chDraft=await store.get('mn_chantier_draft');
   if(chDraft&&Array.isArray(chDraft.cats))chantier=chDraft;
