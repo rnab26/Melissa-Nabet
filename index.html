@@ -1554,6 +1554,20 @@ function clearDevisBgImage(){library.branding.devisBgImageBase=null;library.bran
 function toggleDevisBgFlipX(){library.branding.devisBgFlipX=!library.branding.devisBgFlipX;renderDevisBgFromBase();}
 function toggleDevisBgFlipY(){library.branding.devisBgFlipY=!library.branding.devisBgFlipY;renderDevisBgFromBase();}
 function ensureBgLibrary(){if(!Array.isArray(library.bgLibrary))library.bgLibrary=[];}
+function pickBgToLibrary(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{
+    if(!inp.files||!inp.files[0])return;
+    openImageCropper(inp.files[0],dataUri=>{
+      ensureBgLibrary();
+      library.bgLibrary.push({id:uid(),dataUri,addedAt:Date.now()});
+      store.set(K_LIB,library);
+      openSettingsPanel();
+      toast('Fond ajouté à la bibliothèque');
+    },{vpW:220,vpH:311,title:'Cadrer la texture de fond'});
+  };
+  inp.click();
+}
 function saveDevisBgToLibrary(){
   ensureBgLibrary();
   const base=library.branding.devisBgImageBase;
@@ -1787,6 +1801,7 @@ function openSettingsPanel(){
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--panel-edge);">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
             <span class="lbl" style="margin:0;">Bibliothèque de fonds</span>
+            <button class="mini" onclick="pickBgToLibrary()">+ Ajouter un fond</button>
             ${b.devisBgImageBase?`<button class="mini" onclick="saveDevisBgToLibrary()">+ Enregistrer le fond actuel</button>`:''}
           </div>
           ${library.bgLibrary.length?`<div class="bg-lib-grid">${library.bgLibrary.map(x=>`<div class="bg-lib-tile">
