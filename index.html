@@ -51,6 +51,7 @@
   input:focus,textarea:focus,select:focus{border-color:var(--stone-light);}
   textarea{resize:vertical;line-height:1.5;}
   .row2{display:flex;gap:10px;}.row2>*{flex:1;}
+  .two-col{display:flex;gap:16px;}.two-col>.col{flex:1;min-width:0;}
   .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;flex-direction:column;gap:6px;}.devis-action-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-start;}.devis-action-row .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;}.devis-action-row .btn:hover{filter:brightness(.88);}@media (max-width:900px){.devis-action-row{flex-direction:column;align-items:stretch;}.devis-action-row .btn{width:100%;}}
   .seg{display:flex;border:1px solid var(--panel-edge);border-radius:3px;overflow:hidden;width:fit-content;margin-bottom:12px;}
   .seg-btn{border:none;background:var(--panel);color:var(--stone);padding:9px 18px;font-size:12.5px;cursor:pointer;font-family:'Inter';}
@@ -394,6 +395,7 @@
     input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],textarea,select{font-size:16px;}
     .btn,.vnav,.tab,.mini{padding-top:10px;padding-bottom:10px;}
     .cl-scroll{-webkit-overflow-scrolling:touch;}
+    .two-col{flex-direction:column;gap:0;}
   }
   @media print{
     /* AUCUNE marge blanche : la feuille est colorée bord à bord (@page margin:0 + fond papier
@@ -485,17 +487,19 @@
     </div>
     <div class="ed-section">
       <p class="ed-eyebrow">Client</p>
-      <label class="fld"><span class="lbl">Raison sociale / nom</span><input type="text" id="f-raison"></label>
-      <div class="row2">
-        <label class="fld"><span class="lbl">Contact</span><input type="text" id="f-contact"></label>
-        <label class="fld"><span class="lbl">Téléphone</span><input type="text" id="f-cphone"></label>
-      </div>
-      <label class="fld"><span class="lbl">Email</span><input type="email" id="f-cemail"></label>
-      <label class="fld"><span class="lbl">Adresse</span><input type="text" id="f-caddr"></label>
-      <div class="row3">
-        <label class="fld"><span class="lbl">Ville</span><input type="text" id="f-ville"></label>
-        <label class="fld"><span class="lbl">Code postal</span><input type="text" id="f-cp"></label>
-        <label class="fld"><span class="lbl">N° société</span><input type="text" id="f-siret"></label>
+      <div class="two-col">
+        <div class="col">
+          <label class="fld"><span class="lbl">Raison sociale / nom</span><input type="text" id="f-raison"></label>
+          <label class="fld"><span class="lbl">Contact</span><input type="text" id="f-contact"></label>
+          <label class="fld"><span class="lbl">Téléphone</span><input type="text" id="f-cphone"></label>
+          <label class="fld"><span class="lbl">Email</span><input type="email" id="f-cemail"></label>
+        </div>
+        <div class="col">
+          <label class="fld"><span class="lbl">Adresse</span><input type="text" id="f-caddr"></label>
+          <label class="fld"><span class="lbl">N° société</span><input type="text" id="f-siret"></label>
+          <label class="fld"><span class="lbl">Ville</span><input type="text" id="f-ville"></label>
+          <label class="fld"><span class="lbl">Code postal</span><input type="text" id="f-cp"></label>
+        </div>
       </div>
     </div>
     <div class="ed-section">
