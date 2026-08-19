@@ -57,7 +57,7 @@
   textarea{resize:vertical;line-height:1.5;}
   .row2{display:flex;gap:10px;}.row2>*{flex:1;}
   .two-col{display:flex;gap:16px;}.two-col>.col{flex:1;min-width:0;}
-  .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;flex-direction:column;gap:6px;}.devis-action-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-start;}.devis-action-row .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;}.devis-action-row .btn:hover{filter:brightness(.88);}@media (max-width:900px){.devis-action-row{flex-direction:column;align-items:stretch;}.devis-action-row .btn{width:100%;}}
+  .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;gap:16px;}.devis-action-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}.devis-action-heading{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone-light);margin-bottom:2px;}.devis-action-col .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;text-align:left;}.devis-action-col .btn:hover{filter:brightness(.88);}@media (max-width:900px){.devis-action-block{flex-direction:column;gap:6px;}}
   .seg{display:flex;border:1px solid var(--panel-edge);border-radius:3px;overflow:hidden;width:fit-content;margin-bottom:12px;}
   .seg-btn{border:none;background:var(--panel);color:var(--stone);padding:9px 18px;font-size:12.5px;cursor:pointer;font-family:'Inter';}
   .seg-btn.active{background:var(--oxblood);color:#fff;}
@@ -461,16 +461,19 @@
     <div class="ed-section">
       <p class="ed-eyebrow">Devis</p>
       <div class="devis-action-block">
-        <div class="devis-action-row devis-action-row-top">
-          <button class="btn" onclick="openLibraryPanel()">Édition des services</button>
-          <button class="btn" onclick="newDevis()">Nouveau Devis</button>
-          <button class="btn btn-primary" onclick="openSavePanel()">Enregistrer Devis</button>
-          <button class="btn" onclick="saveDraftManual()">Enregistrer brouillon</button>
+        <div class="devis-action-col">
+          <span class="devis-action-heading">Gérer le devis</span>
+          <button class="btn" onclick="newDevis()">🆕 Nouveau Devis</button>
+          <button class="btn" onclick="openLibraryPanel()">📋 Édition des services</button>
+          <button class="btn" onclick="saveDraftManual()">📝 Enregistrer brouillon</button>
+          <button class="btn btn-primary" onclick="openSavePanel()">💾 Enregistrer Devis</button>
         </div>
-        <div class="devis-action-row devis-action-row-bottom">
-          <button class="btn btn-primary" onclick="exportDevis()">Imprimer PDF</button>
-          <button class="btn" id="doctype-toggle" onclick="toggleDocType()">Convertir en facture</button>
+        <div class="devis-action-col">
+          <span class="devis-action-heading">Produire &amp; envoyer</span>
+          <button class="btn" id="doctype-toggle" onclick="toggleDocType()">🧾 Convertir en facture</button>
+          <button class="btn btn-primary" onclick="exportDevis()">🖨 Imprimer PDF</button>
           <button class="btn" onclick="sendDevisEmail()">✉ Envoyer par email</button>
+          <button class="btn" onclick="sendDevisWhatsApp()">💬 Envoyer par WhatsApp</button>
         </div>
       </div>
       <div class="row2">
@@ -714,7 +717,7 @@ function buildDevisHTML(S){
   const clientBlock=`Destiné à : <span class="nm">${esc(S.raison)}</span><br>${S.contact?esc(S.contact)+'<br>':''}${S.cphone?'Tél : '+esc(S.cphone)+'<br>':''}${S.cemail?esc(S.cemail)+'<br>':''}${cAddr?esc(cAddr)+'<br>':''}${S.siret?'N° société : '+esc(S.siret)+'<br>':''}Projet : ${esc(S.proj)}<br>Adresse : ${esc(S.paddr)}`;
   const clientSigHtml=S.clientSignature?`<img src="${S.clientSignature}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
   const ownerSigHtml=B.signatureImage?`<img src="${B.signatureImage}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
-  const signOnly=`<div class="dv-sign"><div class="s">Signature : ${esc(B.signatureName)}<br>${ownerSigHtml}</div><div class="s">Signature client :<br>${clientSigHtml}</div></div>`;
+  const signOnly=`<div class="dv-sign"><div class="s">Signature : ${esc(B.signatureName)}<br>${ownerSigHtml}</div><div class="s">Signature client : ${esc(S.raison)}<br>${clientSigHtml}</div></div>`;
   const footOnly=`${B.licenseNumber?`<div class="dv-license" dir="rtl">${esc(B.licenseLabel)} : ${esc(B.licenseNumber)}</div>`:''}<div class="dv-foot">${esc(B.email)} · ${esc(B.phone)} · ${esc(B.social)}</div>`;
   const signOnDevis=B.signOnDevis!==false;
   const signBlock=(signOnDevis?signOnly:'')+footOnly;
@@ -994,7 +997,7 @@ function toggleDocType(){
 }
 function updateDocTypeUI(){
   const btn=$('doctype-toggle');if(!btn)return;
-  btn.textContent=current.docType==='facture'?'Repasser en devis':'Convertir en facture';
+  btn.textContent=current.docType==='facture'?'↺ Repasser en devis':'🧾 Convertir en facture';
 }
 let _sigPadOnSave=null;
 function openSignaturePad(title,sub,onSave){
@@ -1871,6 +1874,25 @@ function sendDevisEmail(){
   const url=`mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.location.href=url;
   toast('Client de messagerie ouvert — pensez à joindre le PDF téléchargé');
+}
+/* wa.me exige l'indicatif pays ; les numéros locaux commençant par 0 sont réputés israéliens (972). */
+function toWhatsAppPhone(raw){
+  const digits=(raw||'').replace(/\D/g,'');
+  if(!digits)return '';
+  return digits.startsWith('0')?'972'+digits.slice(1):digits;
+}
+function sendDevisWhatsApp(){
+  const B=(current.branding&&current.branding.companyName)?current.branding:DEFAULT_BRANDING;
+  const docLabel=current.docType==='facture'?'Facture':'Devis';
+  const phone=toWhatsAppPhone(current.cphone);
+  const text=`Bonjour${current.contact?' '+current.contact:''},\n\n`+
+    `Veuillez trouver ci-joint ${docLabel==='Facture'?'la facture':'le devis'} N°${current.num}`+
+    `${current.proj?' pour le projet « '+current.proj+' »':''}.\n\n`+
+    `(pensez à joindre le PDF téléchargé — WhatsApp Web ne permet pas de le joindre automatiquement)\n\n`+
+    `Cordialement,\n${B.signatureName||B.companyName}`;
+  const url=`https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  window.open(url,'_blank');
+  toast('WhatsApp ouvert — pensez à joindre le PDF téléchargé');
 }
 
 /* ============ IA — embellissement ============ */
