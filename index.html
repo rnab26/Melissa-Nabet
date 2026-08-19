@@ -351,9 +351,9 @@
   .dv-cond p b{color:var(--ink);}
   .dv-cond ul{margin:1mm 0 3mm;padding-left:6mm;}
   .dv-cond li{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12px;color:#3a352d;line-height:1.55;margin-bottom:1mm;}
-  .dv-sign{display:flex;justify-content:space-between;margin-top:14mm;padding-top:4mm;}
-  .dv-sign .s{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13px;color:#3a352d;}
-  .dv-sign .s .line{display:inline-block;width:52mm;border-bottom:1px solid var(--stone-light);margin-top:12mm;}
+  .dv-sign{display:flex;gap:12mm;margin-top:14mm;padding-top:4mm;}
+  .dv-sign .s{flex:1 1 0;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13px;color:#3a352d;}
+  .dv-sign .s .line{display:block;width:100%;border-bottom:1px solid var(--stone-light);margin-top:12mm;}
   .dv-license{text-align:center;font-size:10.5px;color:var(--stone);margin-top:5mm;}
   .dv-foot{text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11px;color:var(--stone);margin-top:6mm;border-top:1px solid var(--hair);padding-top:3mm;}
   .dv-pricesign{break-inside:avoid;page-break-inside:avoid;}
@@ -464,16 +464,16 @@
         <div class="devis-action-col">
           <span class="devis-action-heading">Gérer le devis</span>
           <button class="btn" onclick="newDevis()">🆕 Nouveau Devis</button>
-          <button class="btn" onclick="openLibraryPanel()">📋 Édition des services</button>
           <button class="btn" onclick="saveDraftManual()">📝 Enregistrer brouillon</button>
           <button class="btn btn-primary" onclick="openSavePanel()">💾 Enregistrer Devis</button>
+          <button class="btn" onclick="openLibraryPanel()">📋 Édition des services</button>
         </div>
         <div class="devis-action-col">
           <span class="devis-action-heading">Produire &amp; envoyer</span>
           <button class="btn" id="doctype-toggle" onclick="toggleDocType()">🧾 Convertir en facture</button>
           <button class="btn btn-primary" onclick="exportDevis()">🖨 Imprimer PDF</button>
-          <button class="btn" onclick="sendDevisEmail()">✉ Envoyer par email</button>
-          <button class="btn" onclick="sendDevisWhatsApp()">💬 Envoyer par WhatsApp</button>
+          <button class="btn" onclick="sendDevisEmail()">📧 Envoyer par email</button>
+          <button class="btn btn-whatsapp" onclick="sendDevisWhatsApp()"><svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px;margin-right:2px;"><path fill="#25D366" d="M12 0C5.373 0 0 5.373 0 12c0 2.123.557 4.116 1.53 5.844L0 24l6.335-1.652A11.94 11.94 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/><path fill="#fff" d="M17.6 14.28c-.28-.14-1.65-.81-1.9-.9-.26-.1-.45-.14-.63.14-.19.28-.72.9-.88 1.08-.16.19-.33.21-.61.07-.28-.14-1.18-.44-2.25-1.4-.83-.74-1.4-1.66-1.56-1.94-.16-.28-.02-.43.12-.57.13-.13.28-.33.42-.5.14-.16.19-.28.28-.47.09-.19.05-.35-.02-.5-.07-.14-.63-1.53-.87-2.1-.23-.55-.46-.48-.63-.49-.16-.01-.35-.01-.54-.01-.19 0-.5.07-.76.35-.26.28-1 1-1 2.42 0 1.42 1.02 2.8 1.16 3 .14.19 2 3.05 4.85 4.28.68.29 1.2.47 1.62.6.68.22 1.3.19 1.79.11.55-.08 1.65-.67 1.88-1.32.23-.65.23-1.2.16-1.32-.07-.12-.26-.19-.54-.33z"/></svg> Envoyer par WhatsApp</button>
         </div>
       </div>
       <div class="row2">
@@ -544,6 +544,8 @@
     </div>
     <div class="ed-section">
       <p class="ed-eyebrow">Signature client</p>
+      <label class="toggle-line"><input type="checkbox" id="f-sig-override" onchange="toggleSigOverride(this.checked)"> Signataire différent de la raison sociale (personne physique)</label>
+      <label class="fld" id="sig-name-fld" style="display:none;"><span class="lbl">Nom du signataire</span><input type="text" id="f-sig-name" placeholder="ex. Jean Dupont"></label>
       <div id="sig-status" style="font-size:12.5px;color:var(--stone);margin-bottom:8px;"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-onlight" onclick="openClientSignaturePad()">✎ Faire signer le client</button>
@@ -717,7 +719,8 @@ function buildDevisHTML(S){
   const clientBlock=`Destiné à : <span class="nm">${esc(S.raison)}</span><br>${S.contact?esc(S.contact)+'<br>':''}${S.cphone?'Tél : '+esc(S.cphone)+'<br>':''}${S.cemail?esc(S.cemail)+'<br>':''}${cAddr?esc(cAddr)+'<br>':''}${S.siret?'N° société : '+esc(S.siret)+'<br>':''}Projet : ${esc(S.proj)}<br>Adresse : ${esc(S.paddr)}`;
   const clientSigHtml=S.clientSignature?`<img src="${S.clientSignature}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
   const ownerSigHtml=B.signatureImage?`<img src="${B.signatureImage}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
-  const signOnly=`<div class="dv-sign"><div class="s">Signature : ${esc(B.signatureName)}<br>${ownerSigHtml}</div><div class="s">Signature client : ${esc(S.raison)}<br>${clientSigHtml}</div></div>`;
+  const signerName=(S.sigOverride&&S.sigName)?S.sigName:S.raison;
+  const signOnly=`<div class="dv-sign"><div class="s">Signature : ${esc(B.signatureName)}<br>${ownerSigHtml}</div><div class="s">Signature client : ${esc(signerName)}<br>${clientSigHtml}</div></div>`;
   const footOnly=`${B.licenseNumber?`<div class="dv-license" dir="rtl">${esc(B.licenseLabel)} : ${esc(B.licenseNumber)}</div>`:''}<div class="dv-foot">${esc(B.email)} · ${esc(B.phone)} · ${esc(B.social)}</div>`;
   const signOnDevis=B.signOnDevis!==false;
   const signBlock=(signOnDevis?signOnly:'')+footOnly;
@@ -970,6 +973,7 @@ const current={
   tva:18,cur:'₪',tvaOff:false,condOn:true,tlOn:false,
   tl:'',
   services:[],exclus:[],cgv:[],branding:{},clientSignature:null,docType:'devis',open:{},
+  sigOverride:false,sigName:'',
 };
 function seedComposerFromLibrary(){
   current.services=[];current.open={};
@@ -1069,12 +1073,15 @@ async function saveDraftManual(){
 
 /* --- charger l'état dans les champs --- */
 function fillFields(){
-  const map={num:'f-num',date:'f-date',raison:'f-raison',contact:'f-contact',cphone:'f-cphone',cemail:'f-cemail',caddr:'f-caddr',ville:'f-ville',cp:'f-cp',siret:'f-siret',proj:'f-proj',surf:'f-surf',paddr:'f-paddr',intro:'f-intro',gAmount:'f-gamount',tva:'f-tva',cur:'f-cur',tl:'f-tl'};
+  const map={num:'f-num',date:'f-date',raison:'f-raison',contact:'f-contact',cphone:'f-cphone',cemail:'f-cemail',caddr:'f-caddr',ville:'f-ville',cp:'f-cp',siret:'f-siret',proj:'f-proj',surf:'f-surf',paddr:'f-paddr',intro:'f-intro',gAmount:'f-gamount',tva:'f-tva',cur:'f-cur',tl:'f-tl',sigName:'f-sig-name'};
   Object.entries(map).forEach(([k,id])=>{const el=$(id);if(el)el.value=current[k];});
   $('f-gttc').value=current.gIsTTC?'ttc':'ht';
   $('f-tva-off').checked=current.tvaOff;$('f-cond-on').checked=current.condOn;$('f-tl-on').checked=current.tlOn;
+  $('f-sig-override').checked=current.sigOverride;
+  $('sig-name-fld').style.display=current.sigOverride?'block':'none';
   setPricing(current.pricingMode);
 }
+function toggleSigOverride(on){current.sigOverride=on;$('sig-name-fld').style.display=on?'block':'none';render();}
 
 /* --- bindings --- */
 function wireBindings(){
@@ -1082,7 +1089,7 @@ function wireBindings(){
   bind('f-num','num');bind('f-date','date');bind('f-raison','raison');bind('f-contact','contact');
   bind('f-cphone','cphone');bind('f-cemail','cemail');bind('f-caddr','caddr');bind('f-ville','ville');bind('f-cp','cp');bind('f-siret','siret');
   bind('f-proj','proj');bind('f-surf','surf',true);bind('f-paddr','paddr');bind('f-intro','intro');
-  bind('f-gamount','gAmount',true);bind('f-tva','tva',true);bind('f-tl','tl');
+  bind('f-gamount','gAmount',true);bind('f-tva','tva',true);bind('f-tl','tl');bind('f-sig-name','sigName');
   $('f-cur').addEventListener('change',e=>{current.cur=e.target.value;buildPrest();render();});
   $('f-gttc').addEventListener('change',e=>{current.gIsTTC=e.target.value==='ttc';render();});
   const bc=(id,key)=>$(id).addEventListener('change',e=>{current[key]=e.target.checked;render();});
@@ -2121,6 +2128,7 @@ function newDevis(){currentDevisId=null;seedComposerFromLibrary();
   current.pricingMode='global';current.gAmount=0;current.gIsTTC=false;current.tl='';
   current.cur=library.branding.defaultCurrency||'₪';current.tva=library.branding.defaultTva!=null?library.branding.defaultTva:18;
   current.docType='devis';current.clientSignature=null;
+  current.sigOverride=false;current.sigName='';
   current.services.forEach(sv=>sv.on=false);
   current.exclus.forEach(ex=>ex.on=false);
   fillFields();buildPrest();buildExclu();render();toast('Nouveau devis');}
