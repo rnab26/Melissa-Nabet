@@ -13,6 +13,12 @@
 <style>
   :root{--ink:#3d3934;--stone:#8a8074;--stone-light:#b4aa9b;--stone-deep:#6f665b;--travertine:#e8e2d7;--paper:#f4efe6;--hair:#d3cabb;--oxblood:#9a8574;--panel:#fbf9f5;--panel-edge:#e5ded2;--devis-heading-font:'Cormorant Garamond',serif;--devis-body-font:'EB Garamond',serif;}
   *{box-sizing:border-box;}
+  /* Filet de sécurité global : un mot ou une URL sans espace (ex. lien collé dans un champ
+     Détail) ne doit jamais pousser la mise en page hors de l'écran sur mobile — surtout utile
+     à chaque nouvel ajout de champ texte/textarea, pour ne pas avoir à y repenser à chaque fois. */
+  body{overflow-wrap:break-word;word-break:break-word;}
+  textarea{overflow-wrap:break-word;word-break:break-word;}
+  img,video{max-width:100%;height:auto;}
   html,body{margin:0;padding:0;}
   body{font-family:'Inter',sans-serif;color:var(--ink);background:var(--travertine);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
   .toolbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 18px;background:var(--ink);color:var(--paper);}
