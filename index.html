@@ -209,7 +209,6 @@
   .cl-statut-chip{border:1px solid var(--panel-edge);background:var(--panel);color:var(--stone);font-size:11.5px;padding:6px 11px;border-radius:14px;cursor:pointer;transition:.15s;}
   .cl-statut-chip:hover{border-color:var(--oxblood);}
   .cl-statut-chip.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
-  .task-filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
   .cl-scroll{overflow-x:auto;border:1px solid var(--panel-edge);border-radius:6px;background:var(--panel);}
   .cl-table{min-width:840px;}
   .cl-row{display:grid;grid-template-columns:58px 58px minmax(150px,300px) 116px 116px 116px 116px 24px 16px 1fr;gap:6px;align-items:center;padding:6px 10px;border-bottom:1px solid #f1ece2;cursor:pointer;font-size:12px;}
@@ -570,10 +569,10 @@
         <option value="alpha">Trier : Alphabétique</option>
         <option value="created">Trier : Récentes</option>
       </select>
+      <button class="mini" id="task-sort-dir" onclick="toggleTaskSortDir()" title="Inverser l'ordre">▲</button>
       <button class="mini" onclick="openTaskCategoriesPanel()">⚙ Catégories</button>
       <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
     </div>
-    <div id="task-filters"></div>
     <div id="dash-tasks"></div>
     <div class="ed-eyebrow" style="margin-top:22px">Assistant · à faire</div>
     <div id="dash-todos"></div>
@@ -2694,13 +2693,14 @@ const TASK_PRIORITIES={
   urgent:{label:'Urgent',icon:'🔥',rank:2},
   critique:{label:'Critique',icon:'🚨',rank:1},
 };
-let taskFilters={priorities:[],categories:[]};
 function ensureTaskCategories(){if(!Array.isArray(library.taskCategories))library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));}
 function taskCategory(t){ensureTaskCategories();return library.taskCategories.find(c=>c.id===t.category)||null;}
 let _taskOpenIds=new Set();
 let _taskSaveT=null;
 let taskSortMode=(()=>{try{return localStorage.getItem('mn_task_sort')||'priority';}catch(e){return 'priority';}})();
+let taskSortDir=(()=>{try{return localStorage.getItem('mn_task_sort_dir')||'asc';}catch(e){return 'asc';}})();
 function setTaskSort(v){taskSortMode=v;try{localStorage.setItem('mn_task_sort',v);}catch(e){}renderTaskList();}
+function toggleTaskSortDir(){taskSortDir=taskSortDir==='asc'?'desc':'asc';try{localStorage.setItem('mn_task_sort_dir',taskSortDir);}catch(e){}renderTaskList();}
 function saveTasks(){store.set(K_TASKS,tasks);}
 function saveTasksDebounced(){clearTimeout(_taskSaveT);_taskSaveT=setTimeout(saveTasks,500);}
 function todayIso(){return new Date().toISOString().slice(0,10);}
@@ -2735,20 +2735,14 @@ function fmtDateFr(iso){
   const [y,m,d]=iso.split('-');
   return d&&m&&y?`${d}/${m}/${y}`:iso;
 }
-function filteredTasks(){
-  return tasks.filter(t=>{
-    if(taskFilters.priorities.length&&!taskFilters.priorities.includes(taskPriority(t)))return false;
-    if(taskFilters.categories.length&&!taskFilters.categories.includes(t.category||''))return false;
-    return true;
-  });
-}
 function sortedTasks(){
-  const list=filteredTasks();
+  const list=[...tasks];
+  const dir=taskSortDir==='asc'?1:-1;
   const doneRank=t=>t.done?1:0;
   if(taskSortMode==='due'){
     return list.sort((a,b)=>{
       const dr=doneRank(a)-doneRank(b);if(dr)return dr;
-      if(a.dueDate&&b.dueDate)return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;
+      if(a.dueDate&&b.dueDate)return dir*(a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0);
       if(a.dueDate)return -1;
       if(b.dueDate)return 1;
       return (a.createdAt||0)-(b.createdAt||0);
@@ -2757,19 +2751,20 @@ function sortedTasks(){
   if(taskSortMode==='alpha'){
     return list.sort((a,b)=>{
       const dr=doneRank(a)-doneRank(b);if(dr)return dr;
-      return (a.title||'').localeCompare(b.title||'');
+      return dir*((a.title||'').localeCompare(b.title||''));
     });
   }
   if(taskSortMode==='created'){
     return list.sort((a,b)=>{
       const dr=doneRank(a)-doneRank(b);if(dr)return dr;
-      return (b.createdAt||0)-(a.createdAt||0);
+      return dir*((a.createdAt||0)-(b.createdAt||0));
     });
   }
-  const rank={overdue:0,critique:1,urgent:2,important:3,normal:4,faible:5,attente:6,done:7};
+  const rank={overdue:0,critique:1,urgent:2,important:3,normal:4,faible:5,attente:6};
   return list.sort((a,b)=>{
+    const dr=doneRank(a)-doneRank(b);if(dr)return dr;
     const ra=rank[taskStatus(a)],rb=rank[taskStatus(b)];
-    if(ra!==rb)return ra-rb;
+    if(ra!==rb)return dir*(ra-rb);
     if(a.dueDate&&b.dueDate)return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;
     if(a.dueDate)return -1;
     if(b.dueDate)return 1;
@@ -2795,28 +2790,12 @@ function taskDocsHtml(t){
   }).join('');
   return `<div class="task-docs">${tiles}<button class="task-doc-add" onclick="pickTaskFiles('${t.id}')">＋<br>Photo/doc</button></div>`;
 }
-function renderTaskFilters(){
-  ensureTaskCategories();
-  const root=$('task-filters');if(!root)return;
-  const prioChips=Object.entries(TASK_PRIORITIES).map(([k,p])=>`<button type="button" class="cl-statut-chip ${taskFilters.priorities.includes(k)?'active':''}" onclick="toggleTaskFilter('priorities','${k}')">${p.icon} ${p.label}</button>`).join('');
-  const catChips=library.taskCategories.map(c=>`<button type="button" class="cl-statut-chip ${taskFilters.categories.includes(c.id)?'active':''}" onclick="toggleTaskFilter('categories','${c.id}')">${c.icon} ${esc(c.label)}</button>`).join('');
-  const hasFilters=taskFilters.priorities.length||taskFilters.categories.length;
-  root.innerHTML=`<div class="task-filter-row">${prioChips}</div><div class="task-filter-row">${catChips}${hasFilters?`<button type="button" class="mini" onclick="clearTaskFilters()">✕ Effacer les filtres</button>`:''}</div>`;
-}
-function toggleTaskFilter(kind,v){
-  const arr=taskFilters[kind];
-  const i=arr.indexOf(v);
-  if(i>=0)arr.splice(i,1);else arr.push(v);
-  renderTaskFilters();renderTaskList();
-}
-function clearTaskFilters(){taskFilters={priorities:[],categories:[]};renderTaskFilters();renderTaskList();}
 function renderTaskList(){
   const root=$('dash-tasks');if(!root)return;
   const sel=$('task-sort-select');if(sel)sel.value=taskSortMode;
-  renderTaskFilters();
+  const dirBtn=$('task-sort-dir');if(dirBtn)dirBtn.textContent=taskSortDir==='asc'?'▲':'▼';
   if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';return;}
   const list=sortedTasks();
-  if(!list.length){root.innerHTML='<div class="task-empty">Aucune tâche ne correspond aux filtres.</div>';return;}
   root.innerHTML=list.map(t=>{
     const open=_taskOpenIds.has(t.id);
     if(!open){
