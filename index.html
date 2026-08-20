@@ -2985,7 +2985,7 @@ function renderDashboard(){
 function openBackupPanel(){
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
     <h3>Sauvegarde des données</h3>
-    <p class="msub">Vos clients, devis, bibliothèque et documents sont enregistrés sur cet appareil. Exportez un fichier de secours — et réimportez-le sur un autre appareil (ou un nouveau téléphone) pour y retrouver toutes vos données.</p>
+    <p class="msub">Vos clients, devis, tâches, bibliothèque et documents sont enregistrés sur cet appareil. Exportez un fichier de secours — et réimportez-le sur un autre appareil (ou un nouveau téléphone) pour y retrouver toutes vos données.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
       <button class="btn btn-primary" onclick="exportData()">⬇ Exporter mes données</button>
       <button class="btn btn-onlight" onclick="document.getElementById('import-file').click()">⬆ Importer une sauvegarde</button>
@@ -2998,7 +2998,8 @@ async function exportData(){
   toast('Préparation de la sauvegarde…');
   const docs={};
   for(const c of clients){for(const d of (c.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
-  const data={app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,docs};
+  for(const t of tasks){for(const d of (t.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
+  const data={app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,docs};
   try{
     const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
@@ -3016,8 +3017,9 @@ async function importData(file){
       if(data.library&&data.library.sections){library=data.library;await store.set(K_LIB,library);}
       clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
       devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
+      if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
       if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
-      render();renderClients();toast('Données importées');
+      render();renderClients();renderTaskList();toast('Données importées');
     });
   }catch(e){toast('Échec import : '+e.message);}
 }
