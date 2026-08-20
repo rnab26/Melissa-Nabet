@@ -563,13 +563,16 @@
     <div class="dash-kpi-row" id="dash-kpi"></div>
     <div class="ed-eyebrow" style="margin-top:22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="flex:1">Mes tâches</span>
-      <select id="task-sort-select" class="mini" onchange="setTaskSort(this.value)">
-        <option value="priority">Trier : Priorité</option>
-        <option value="due">Trier : Échéance</option>
-        <option value="alpha">Trier : Alphabétique</option>
-        <option value="created">Trier : Récentes</option>
+      <select id="task-sort-select" class="mini" onchange="setTaskSortCombo(this.value)">
+        <option value="priority:asc">🔥 Priorité — urgent en premier</option>
+        <option value="priority:desc">🔥 Priorité — faible en premier</option>
+        <option value="due:asc">📅 Échéance — la plus proche</option>
+        <option value="due:desc">📅 Échéance — la plus lointaine</option>
+        <option value="alpha:asc">🔤 Alphabétique A → Z</option>
+        <option value="alpha:desc">🔤 Alphabétique Z → A</option>
+        <option value="created:desc">🆕 Récentes en premier</option>
+        <option value="created:asc">🕰 Anciennes en premier</option>
       </select>
-      <button class="mini" id="task-sort-dir" onclick="toggleTaskSortDir()" title="Inverser l'ordre">▲</button>
       <button class="mini" onclick="openTaskCategoriesPanel()">⚙ Catégories</button>
       <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
     </div>
@@ -2699,8 +2702,12 @@ let _taskOpenIds=new Set();
 let _taskSaveT=null;
 let taskSortMode=(()=>{try{return localStorage.getItem('mn_task_sort')||'priority';}catch(e){return 'priority';}})();
 let taskSortDir=(()=>{try{return localStorage.getItem('mn_task_sort_dir')||'asc';}catch(e){return 'asc';}})();
-function setTaskSort(v){taskSortMode=v;try{localStorage.setItem('mn_task_sort',v);}catch(e){}renderTaskList();}
-function toggleTaskSortDir(){taskSortDir=taskSortDir==='asc'?'desc':'asc';try{localStorage.setItem('mn_task_sort_dir',taskSortDir);}catch(e){}renderTaskList();}
+function setTaskSortCombo(v){
+  const [mode,dir]=v.split(':');
+  taskSortMode=mode;taskSortDir=dir;
+  try{localStorage.setItem('mn_task_sort',mode);localStorage.setItem('mn_task_sort_dir',dir);}catch(e){}
+  renderTaskList();
+}
 function saveTasks(){store.set(K_TASKS,tasks);}
 function saveTasksDebounced(){clearTimeout(_taskSaveT);_taskSaveT=setTimeout(saveTasks,500);}
 function todayIso(){return new Date().toISOString().slice(0,10);}
@@ -2792,8 +2799,7 @@ function taskDocsHtml(t){
 }
 function renderTaskList(){
   const root=$('dash-tasks');if(!root)return;
-  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode;
-  const dirBtn=$('task-sort-dir');if(dirBtn)dirBtn.textContent=taskSortDir==='asc'?'▲':'▼';
+  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode+':'+taskSortDir;
   if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';return;}
   const list=sortedTasks();
   root.innerHTML=list.map(t=>{
