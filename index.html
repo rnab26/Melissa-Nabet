@@ -428,7 +428,6 @@
     <input type="password" id="login-pass" placeholder="Mot de passe" autocomplete="current-password">
     <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Se connecter</button>
     <div id="login-err" class="login-err"></div>
-    <a id="login-offline" onclick="loginOffline()">Continuer hors ligne (données de cet appareil)</a>
   </div>
 </div>
 
@@ -3146,6 +3145,9 @@ function doLogin(){
     if(error){$('login-err').textContent=friendlyAuthErr(error);}
   }).catch(err=>{$('login-err').textContent=friendlyAuthErr(err);}).finally(()=>{$('login-btn').disabled=false;});
 }
+/* Plus de bypass visible dans l'UI (un mode local anonyme non lié à un compte a causé une perte
+   de données réelle — cf. incident du 20/08/2026). Fonction gardée uniquement pour les tests
+   automatisés en développement (appelée directement via la console, jamais depuis un bouton). */
 function loginOffline(){offlineMode=true;document.getElementById('login-overlay').style.display='none';setSyncStatus('local');toast('Mode hors ligne — données de cet appareil');}
 function onLogin(session){
   if(!session||!session.user)return;
@@ -3212,18 +3214,33 @@ function handleRealtime(payload){
 async function cloudPush(){
   if(!sb||!sbUser)return;setSyncStatus('sync');
   const rows=[],seenC=new Set(),seenD=new Set(),delIds=[];
-  clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){remoteClients[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
-  devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){remoteDevis[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
-  const lj=JSON.stringify(library);if(lj!==remoteLibJson){remoteLibJson=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
-  const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){remoteTasksJson=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
-  Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id)){delete remoteClients[id];delIds.push(id);}});
-  Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id)){delete remoteDevis[id];delIds.push(id);}});
+  /* Le marquage "synchronisé" (remoteClients/remoteDevis/remoteLibJson/remoteTasksJson) n'est
+     appliqué qu'APRÈS confirmation d'écriture réussie — sinon un push qui échoue (hors ligne,
+     erreur réseau) était marqué à tort comme envoyé, et la modification locale ne repartait
+     plus jamais en synchro (silencieusement perdue au prochain rechargement/loadAll). */
+  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null;
+  const pendingDelC=[],pendingDelD=[];
+  clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){pendingC[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
+  devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){pendingD[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
+  const lj=JSON.stringify(library);if(lj!==remoteLibJson){pendingLib=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
+  const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){pendingTasks=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
+  Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id))pendingDelC.push(id);});
+  Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id))pendingDelD.push(id);});
+  delIds.push(...pendingDelC,...pendingDelD);
   try{
     if(rows.length){const {error}=await sb.from('app_data').upsert(rows,{onConflict:'id'});if(error)throw error;}
     if(delIds.length){const {error}=await sb.from('app_data').delete().in('id',delIds);if(error)throw error;}
-    setSyncStatus('ok');
-  }catch(e){lastSyncError=(e&&(e.message||e.code))||'écriture refusée';setSyncStatus('err');}
+    Object.assign(remoteClients,pendingC);Object.assign(remoteDevis,pendingD);
+    if(pendingLib!==null)remoteLibJson=pendingLib;
+    if(pendingTasks!==null)remoteTasksJson=pendingTasks;
+    pendingDelC.forEach(id=>delete remoteClients[id]);
+    pendingDelD.forEach(id=>delete remoteDevis[id]);
+    lastSyncError='';setSyncStatus('ok');
+  }catch(e){lastSyncError=(e&&(e.message||e.code))||'écriture refusée';setSyncStatus('err');scheduleSyncRetry();}
 }
+let syncRetryT=null;
+function scheduleSyncRetry(){clearTimeout(syncRetryT);syncRetryT=setTimeout(()=>{if(sb&&sbUser)cloudPush();},20000);}
+window.addEventListener('online',()=>{if(sb&&sbUser)cloudPush();});
 function scheduleSyncPush(){if(!cloudReady)return;clearTimeout(pushT);pushT=setTimeout(cloudPush,500);}
 function openSyncPanel(){
   const email=sbUser?sbUser.email:'(non connecté)';
