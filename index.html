@@ -569,6 +569,7 @@
         <option value="alpha">Trier : Alphabétique</option>
         <option value="created">Trier : Récentes</option>
       </select>
+      <button class="mini" onclick="openTaskCategoriesPanel()">⚙ Catégories</button>
       <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
     </div>
     <div id="dash-tasks"></div>
@@ -791,7 +792,7 @@ function defaultLibrary(){
       mk("Gestion du projet de A à Z",""),
       mk("Travail express",""),
     ]},
-  ],exclus:DEFAULT_EXCLUS.slice(),cgv:DEFAULT_CGV.map(c=>({...c})),chantierCats:DEFAULT_CHANTIER_CATS.map(c=>({...c})),branding:{...DEFAULT_BRANDING},bgLibrary:[]};
+  ],exclus:DEFAULT_EXCLUS.slice(),cgv:DEFAULT_CGV.map(c=>({...c})),chantierCats:DEFAULT_CHANTIER_CATS.map(c=>({...c})),branding:{...DEFAULT_BRANDING},bgLibrary:[],taskCategories:DEFAULT_TASK_CATEGORIES.map(c=>({...c}))};
 }
 const DEFAULT_EXCLUS=[
   "Honoraires des prestataires et corps de métier (facturés séparément)",
@@ -939,6 +940,16 @@ const DEFAULT_CHANTIER_CATS=[
   {id:uid(),name:'Climatisation',unit:'point',price:1200},
   {id:uid(),name:'Meubles',unit:'unité',price:0},
   {id:uid(),name:'Luminaires',unit:'unité',price:0},
+];
+const DEFAULT_TASK_CATEGORIES=[
+  {id:uid(),label:'Administratif',icon:'📁'},
+  {id:uid(),label:'Marketing',icon:'📣'},
+  {id:uid(),label:'Commercial',icon:'🤝'},
+  {id:uid(),label:'Conception',icon:'✏️'},
+  {id:uid(),label:'Chantier',icon:'🏗️'},
+  {id:uid(),label:'Fournisseurs',icon:'📦'},
+  {id:uid(),label:'Comptabilité',icon:'💶'},
+  {id:uid(),label:'Relation client',icon:'👥'},
 ];
 
 /* ============ STOCKAGE PERSISTANT (avec repli mémoire) ============ */
@@ -2680,6 +2691,8 @@ const TASK_PRIORITIES={
   urgent:{label:'Urgent',icon:'🔥',rank:2},
   critique:{label:'Critique',icon:'🚨',rank:1},
 };
+function ensureTaskCategories(){if(!Array.isArray(library.taskCategories))library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));}
+function taskCategory(t){ensureTaskCategories();return library.taskCategories.find(c=>c.id===t.category)||null;}
 let _taskOpenIds=new Set();
 let _taskSaveT=null;
 let taskSortMode=(()=>{try{return localStorage.getItem('mn_task_sort')||'priority';}catch(e){return 'priority';}})();
@@ -2705,6 +2718,8 @@ function taskTagsHtml(t){
   if(st==='overdue')tags.push('<span class="task-tag overdue">En retard</span>');
   else if(st==='urgent')tags.push('<span class="task-tag urgent">Urgent</span>');
   else if(st==='critique')tags.push('<span class="task-tag critique">Critique</span>');
+  const cat=taskCategory(t);
+  if(cat)tags.push(`<span class="task-tag">${cat.icon} ${esc(cat.label)}</span>`);
   if(t.dueDate)tags.push(`<span class="task-tag">Échéance : ${esc(fmtDateFr(t.dueDate))}</span>`);
   if(t.reminderDate)tags.push(`<span class="task-tag">Rappel : ${esc(fmtDateFr(t.reminderDate))}</span>`);
   if((t.docs||[]).length)tags.push(`<span class="task-tag">📎 ${t.docs.length}</span>`);
@@ -2751,6 +2766,11 @@ function sortedTasks(){
 function taskPriorityOptionsHtml(t){
   return Object.entries(TASK_PRIORITIES).map(([k,p])=>`<option value="${k}" ${taskPriority(t)===k?'selected':''}>${p.icon} ${p.label}</option>`).join('');
 }
+function taskCategoryOptionsHtml(t){
+  ensureTaskCategories();
+  const cur=t&&t.category||'';
+  return `<option value="">— Sans catégorie —</option>`+library.taskCategories.map(c=>`<option value="${c.id}" ${cur===c.id?'selected':''}>${c.icon} ${esc(c.label)}</option>`).join('');
+}
 function taskDocsHtml(t){
   const tiles=(t.docs||[]).map(d=>{
     const isImg=(d.type||'').indexOf('image/')===0;
@@ -2790,9 +2810,12 @@ function renderTaskList(){
       <div class="task-body" onclick="event.stopPropagation()">
         <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
         <label class="fld"><span class="lbl">Détail</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
-        <div class="row3">
+        <div class="row2">
           <label class="fld"><span class="lbl">Échéance</span><input type="date" value="${t.dueDate||''}" onchange="updateTaskFieldRerender('${t.id}','dueDate',this.value)"></label>
           <label class="fld"><span class="lbl">Rappel</span><input type="date" value="${t.reminderDate||''}" onchange="updateTaskFieldRerender('${t.id}','reminderDate',this.value)"></label>
+        </div>
+        <div class="row2">
+          <label class="fld"><span class="lbl">Catégorie</span><select onchange="updateTaskFieldRerender('${t.id}','category',this.value)">${taskCategoryOptionsHtml(t)}</select></label>
           <label class="fld"><span class="lbl">Priorité</span><select onchange="updateTaskFieldRerender('${t.id}','priority',this.value)">${taskPriorityOptionsHtml(t)}</select></label>
         </div>
         ${taskDocsHtml(t)}
@@ -2865,11 +2888,15 @@ function removeTaskDoc(taskId,docId){
   });
 }
 function openTaskModal(){
+  ensureTaskCategories();
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Nouvelle tâche</h3>
     <label class="fld"><span class="lbl">Titre</span><input type="text" id="task-title" placeholder="Ex. Commander les échantillons de parquet"></label>
-    <div class="row3">
+    <div class="row2">
       <label class="fld"><span class="lbl">Échéance</span><input type="date" id="task-due"></label>
       <label class="fld"><span class="lbl">Rappel</span><input type="date" id="task-reminder"></label>
+    </div>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Catégorie</span><select id="task-category">${taskCategoryOptionsHtml(null)}</select></label>
       <label class="fld"><span class="lbl">Priorité</span><select id="task-priority">${taskPriorityOptionsHtml({priority:'normal'})}</select></label>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:10px;">
@@ -2883,12 +2910,40 @@ function saveTaskFromModal(){
   const dueDate=$('task-due').value||'';
   const reminderDate=$('task-reminder').value||'';
   const priority=TASK_PRIORITIES[$('task-priority').value]?$('task-priority').value:'normal';
+  const category=$('task-category').value||'';
   const id=uid();
-  tasks.push({id,title,detail:'',dueDate,reminderDate,priority,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
+  tasks.push({id,title,detail:'',dueDate,reminderDate,priority,category,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
   saveTasks();closeModal();
   _taskOpenIds.add(id);
   renderTaskList();toast('Tâche ajoutée');
 }
+function openTaskCategoriesPanel(){
+  ensureTaskCategories();
+  const rows=library.taskCategories.map((c,i)=>`<div class="lib-item">
+    <input type="text" value="${esc(c.icon)}" oninput="taskCatEdit(${i},'icon',this.value)" placeholder="📁" style="flex:0 0 52px;text-align:center;">
+    <input type="text" value="${esc(c.label)}" oninput="taskCatEdit(${i},'label',this.value)" placeholder="Nom" style="flex:2">
+    <button class="mini danger" onclick="taskCatDel(${i})">×</button></div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Catégories de tâches</h3>
+    <p class="msub">Pour regrouper les tâches par domaine (icône + nom, modifiables).</p>
+    ${rows}
+    <button class="add-btn" onclick="taskCatAdd()">+ Ajouter une catégorie</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="taskCatReset()">↺ Catégories par défaut</button>
+      <button class="btn btn-primary" onclick="taskCatSave()">Enregistrer</button></div>`);
+}
+function taskCatEdit(i,key,val){ensureTaskCategories();library.taskCategories[i][key]=val;}
+function taskCatAdd(){ensureTaskCategories();library.taskCategories.push({id:uid(),label:'Nouvelle catégorie',icon:'🏷️'});openTaskCategoriesPanel();}
+function taskCatDel(i){
+  ensureTaskCategories();
+  askConfirm('Supprimer cette catégorie ? Les tâches qui l\'utilisent redeviendront sans catégorie.',()=>{
+    const removed=library.taskCategories[i];
+    library.taskCategories.splice(i,1);
+    if(removed)tasks.forEach(t=>{if(t.category===removed.id)t.category='';});
+    saveTasks();store.set(K_LIB,library);openTaskCategoriesPanel();renderTaskList();
+  });
+}
+function taskCatReset(){askConfirm('Réinitialiser les catégories de tâches sur la liste par défaut ?',()=>{library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));openTaskCategoriesPanel();});}
+async function taskCatSave(){await store.set(K_LIB,library);closeModal();renderTaskList();toast('Catégories enregistrées');}
 function computeTodos(){
   const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
   const brouillons=devisList.filter(d=>d.status==='brouillon').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
