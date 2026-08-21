@@ -441,8 +441,8 @@
 <div class="toolbar">
   <div class="brand" style="letter-spacing:.14em;font-size:18px;" id="toolbar-brand">MELISSA NABET</div>
   <div class="viewnav">
-    <button class="vnav" id="vn-dash" onclick="showView('dashboard')">Tableau de bord</button>
-    <button class="vnav active" id="vn-devis" onclick="showView('devis')">Devis</button>
+    <button class="vnav active" id="vn-dash" onclick="showView('dashboard')">Tableau de bord</button>
+    <button class="vnav" id="vn-devis" onclick="showView('devis')">Devis</button>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
     <button class="vnav" id="vn-chantier" onclick="showView('chantier')">Estimation</button>
   </div>
@@ -3337,6 +3337,7 @@ async function init(){
   current.branding={...library.branding};
   fillFields();wireBindings();buildPrest();buildExclu();render();
   wireClientFilters();
+  showView('dashboard');
   $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
   initSupabase();
 }
