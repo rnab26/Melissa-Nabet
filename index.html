@@ -13,10 +13,11 @@
 <style>
   :root{--ink:#3d3934;--stone:#8a8074;--stone-light:#b4aa9b;--stone-deep:#6f665b;--travertine:#e8e2d7;--paper:#f4efe6;--hair:#d3cabb;--oxblood:#9a8574;--panel:#fbf9f5;--panel-edge:#e5ded2;--devis-heading-font:'Cormorant Garamond',serif;--devis-body-font:'EB Garamond',serif;}
   *{box-sizing:border-box;}
-  /* Filet de sécurité global : un mot ou une URL sans espace (ex. lien collé dans un champ
-     Détail) ne doit jamais pousser la mise en page hors de l'écran sur mobile — surtout utile
-     à chaque nouvel ajout de champ texte/textarea, pour ne pas avoir à y repenser à chaque fois. */
-  body{overflow-wrap:break-word;word-break:break-word;}
+  /* Filet de sécurité pour les zones de texte libre : un mot ou une URL sans espace (ex. lien
+     collé dans un champ Détail) ne doit jamais pousser la mise en page hors de l'écran sur
+     mobile. Volontairement PAS sur tout le body — ça casse les mots des libellés courts
+     (boutons, onglets) au moindre manque de place, alors que ceux-là doivent juste passer à
+     la ligne normalement entre mots, jamais en plein milieu d'un mot. */
   textarea{overflow-wrap:break-word;word-break:break-word;}
   img,video{max-width:100%;height:auto;}
   html,body{margin:0;padding:0;}
