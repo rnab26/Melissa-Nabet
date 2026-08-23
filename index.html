@@ -2279,7 +2279,16 @@ function libExclEdit(ii,val){library.exclus[ii]=val;}
 function libExclAdd(){library.exclus.push('Nouvel élément non compris');openLibraryPanel();}
 function libExclDel(ii){library.exclus.splice(ii,1);openLibraryPanel();}
 async function libSave(){await store.set(K_LIB,library);closeModal();toast('Bibliothèque enregistrée');}
-function resetLibrary(){askConfirm('Réinitialiser la bibliothèque sur les services fournis ? Vos modifications de la bibliothèque seront perdues.',async()=>{library=defaultLibrary();await store.set(K_LIB,library);openLibraryPanel();toast('Bibliothèque réinitialisée');});}
+/* Ne réinitialise QUE sections/exclus (le bouton dit "Services fournis") — surtout ne pas
+   remplacer tout l'objet library, qui porte aussi le branding, la bibliothèque de fonds, les
+   catégories de tâches/chantier et les CGV : les écraser silencieusement au clic sur un bouton
+   qui ne parle que des services a déjà causé une vraie perte de données. */
+function resetLibrary(){askConfirm('Réinitialiser la bibliothèque sur les services fournis ? Vos modifications des services et de la liste hors-prestation seront perdues (le reste — réglages, fonds, catégories, CGV — n\'est pas touché).',async()=>{
+  const fresh=defaultLibrary();
+  library.sections=fresh.sections;
+  library.exclus=fresh.exclus;
+  await store.set(K_LIB,library);openLibraryPanel();toast('Services réinitialisés');
+});}
 
 /* --- Conditions générales --- */
 function openCgvPanel(){
