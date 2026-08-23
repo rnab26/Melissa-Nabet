@@ -318,7 +318,7 @@
   .cl-totals{display:flex;flex-direction:column;gap:8px;padding:14px 16px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);margin-top:14px;border-top:2px solid var(--hair);}
 
   /* devis */
-  .devis{width:210mm;min-height:297mm;background:var(--paper);box-shadow:0 12px 44px rgba(60,50,35,.22);color:var(--ink);position:relative;background-image:radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,.5), rgba(0,0,0,0) 55%),linear-gradient(180deg,#f4efe6 0%,#e9e3d8 100%);}
+  .devis{width:100%;max-width:1100px;min-height:297mm;background:var(--paper);box-shadow:0 12px 44px rgba(60,50,35,.22);color:var(--ink);position:relative;background-image:radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,.5), rgba(0,0,0,0) 55%),linear-gradient(180deg,#f4efe6 0%,#e9e3d8 100%);}
   .devis-page{padding:20mm 18mm;position:relative;overflow:hidden;min-height:297mm;}
   .devis-page + .devis-page{border-top:1px dashed #ded5c4;}
   .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
@@ -366,17 +366,14 @@
   .dv-foot{text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11px;color:var(--stone);margin-top:6mm;border-top:1px solid var(--hair);padding-top:3mm;}
   .dv-pricesign{break-inside:avoid;page-break-inside:avoid;}
 
-  @media (max-width:1100px){.devis{transform:scale(.82);transform-origin:top center;}}
   @media (max-width:900px){
     .tabs{display:flex;}
     #split-toggle{display:inline-block;}
     .stage{flex-direction:column;}
     .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
     .preview-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-    .devis{transform:scale(.62);transform-origin:top center;margin-top:-30mm;}
     body.show-preview .editor{display:none;}
     body.show-editor .preview-wrap{display:none;}
-    body.force-desktop .devis{transform:none;margin-top:0;}
     /* iOS/Safari zoome automatiquement sur un champ dont la police est < 16px, ce qui décale la
        mise en page et rend la frappe pénible : on force 16px sur mobile pour l'empêcher. */
     input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],textarea,select{font-size:16px;}
@@ -452,7 +449,6 @@
   <div class="tabs">
     <button class="tab active" id="tab-ed" onclick="showTab('editor')">Composer</button>
     <button class="tab" id="tab-pv" onclick="showTab('preview')">Aperçu</button>
-    <button class="btn" id="desktop-toggle" style="flex-shrink:0;display:none" onclick="toggleDesktopView()">🔍 Taille réelle</button>
   </div>
   <button class="btn" id="split-toggle" style="flex-shrink:0;" onclick="toggleSplitView()">🖥 Vue bureau</button>
   <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -987,6 +983,12 @@ let chantierList=[], currentChantierId=null;
 function blankChantier(){return {id:uid(),num:'',title:'',client:'',date:new Date().toLocaleDateString('fr-FR'),updatedAt:Date.now(),cats:[]};}
 let chantier=blankChantier();
 let pendingClientId=null; /* client cible quand on crée un devis depuis une fiche client */
+/* Sauvegarde automatique de tout ce qui touche `library` (services, CGV, catégories, réglages…) :
+   les panneaux ont un bouton "Enregistrer" explicite pour la confirmation visuelle, mais chaque
+   modification doit déjà être persistée toute seule — fermer un panneau sans cliquer ce bouton
+   ne doit jamais faire perdre une saisie. */
+let _libSaveT=null;
+function saveLibraryDebounced(){clearTimeout(_libSaveT);_libSaveT=setTimeout(()=>store.set(K_LIB,library),500);}
 const current={
   num:'0077',date:new Date().toLocaleDateString('fr-FR'),
   raison:'',contact:'',cphone:'',cemail:'',caddr:'',ville:'',cp:'',siret:'',
@@ -1373,10 +1375,10 @@ function openChantierCatsPanel(){
       <button class="mini" onclick="chCatLibReset()">↺ Catégories par défaut</button>
       <button class="btn btn-primary" onclick="chCatLibSave()">Enregistrer</button></div>`);
 }
-function chCatLibEdit(i,key,val){library.chantierCats[i][key]=(key==='price')?(parseFloat(val)||0):val;}
-function chCatLibAdd(){library.chantierCats.push({id:uid(),name:'Nouvelle catégorie',unit:'unité',price:0});openChantierCatsPanel();}
-function chCatLibDel(i){askConfirm('Supprimer cette catégorie ?',()=>{library.chantierCats.splice(i,1);openChantierCatsPanel();});}
-function chCatLibReset(){askConfirm('Réinitialiser les catégories de chantier sur la liste par défaut ?',()=>{library.chantierCats=DEFAULT_CHANTIER_CATS.map(c=>({...c}));openChantierCatsPanel();});}
+function chCatLibEdit(i,key,val){library.chantierCats[i][key]=(key==='price')?(parseFloat(val)||0):val;saveLibraryDebounced();}
+function chCatLibAdd(){library.chantierCats.push({id:uid(),name:'Nouvelle catégorie',unit:'unité',price:0});openChantierCatsPanel();saveLibraryDebounced();}
+function chCatLibDel(i){askConfirm('Supprimer cette catégorie ?',()=>{library.chantierCats.splice(i,1);openChantierCatsPanel();saveLibraryDebounced();});}
+function chCatLibReset(){askConfirm('Réinitialiser les catégories de chantier sur la liste par défaut ?',()=>{library.chantierCats=DEFAULT_CHANTIER_CATS.map(c=>({...c}));openChantierCatsPanel();saveLibraryDebounced();});}
 async function chCatLibSave(){await store.set(K_LIB,library);closeModal();toast('Catégories enregistrées');}
 
 /* ============ RÉGLAGES (identité, coordonnées, apparence) ============ */
@@ -1413,7 +1415,7 @@ function readLogoAsDataUri(file){
 }
 /* Applique immédiatement library.branding au devis affiché, sans attendre "Enregistrer"
    (qui ne fait que persister sur disque/cloud) — sinon un choix de thème semble "ne rien faire". */
-function applyBrandingLive(){current.branding={...library.branding};applyBrandingToUI();renderDebounced();}
+function applyBrandingLive(){current.branding={...library.branding};applyBrandingToUI();renderDebounced();saveLibraryDebounced();}
 /* Détourage : recadrage/zoom d'une image importée avant de l'utiliser (logo, marque…). */
 let _cropState=null;
 function openImageCropper(file,onSave,opts){
@@ -2260,24 +2262,24 @@ function attachDragReorder(container,itemSelector,handleSelector,onReorder){
 function wireLibraryDrag(){
   attachDragReorder($('lib-sections'),'.lib-sec','.sec-drag-handle',newOrder=>{
     library.sections=newOrder.map(i=>library.sections[i]);
-    openLibraryPanel();
+    openLibraryPanel();saveLibraryDebounced();
   });
   document.querySelectorAll('.lib-items').forEach(container=>{
     const si=parseInt(container.dataset.sec,10);
     attachDragReorder(container,'.lib-item','.item-drag-handle',newOrder=>{
       library.sections[si].items=newOrder.map(i=>library.sections[si].items[i]);
-      openLibraryPanel();
+      openLibraryPanel();saveLibraryDebounced();
     });
   });
 }
-function libEdit(si,ii,key,val){if(ii===null)library.sections[si].name=val;else library.sections[si].items[ii][key]=val;}
-function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvelle prestation',desc:'',mode:'none',price:0,qty:1,pu:0,defaultOn:false});openLibraryPanel();}
-function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();}
-function libAddSection(){library.sections.push({id:uid(),name:'Nouvelle section',items:[]});openLibraryPanel();}
-function libDelSection(si){askConfirm('Supprimer cette section ?',()=>{library.sections.splice(si,1);openLibraryPanel();});}
-function libExclEdit(ii,val){library.exclus[ii]=val;}
-function libExclAdd(){library.exclus.push('Nouvel élément non compris');openLibraryPanel();}
-function libExclDel(ii){library.exclus.splice(ii,1);openLibraryPanel();}
+function libEdit(si,ii,key,val){if(ii===null)library.sections[si].name=val;else library.sections[si].items[ii][key]=val;saveLibraryDebounced();}
+function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvelle prestation',desc:'',mode:'none',price:0,qty:1,pu:0,defaultOn:false});openLibraryPanel();saveLibraryDebounced();}
+function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
+function libAddSection(){library.sections.push({id:uid(),name:'Nouvelle section',items:[]});openLibraryPanel();saveLibraryDebounced();}
+function libDelSection(si){askConfirm('Supprimer cette section ?',()=>{library.sections.splice(si,1);openLibraryPanel();saveLibraryDebounced();});}
+function libExclEdit(ii,val){library.exclus[ii]=val;saveLibraryDebounced();}
+function libExclAdd(){library.exclus.push('Nouvel élément non compris');openLibraryPanel();saveLibraryDebounced();}
+function libExclDel(ii){library.exclus.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
 async function libSave(){await store.set(K_LIB,library);closeModal();toast('Bibliothèque enregistrée');}
 /* Ne réinitialise QUE sections/exclus (le bouton dit "Services fournis") — surtout ne pas
    remplacer tout l'objet library, qui porte aussi le branding, la bibliothèque de fonds, les
@@ -2305,10 +2307,10 @@ function openCgvPanel(){
       <button class="mini" onclick="resetCgv()">↺ Texte par défaut</button>
       <button class="btn btn-primary" onclick="cgvSave()">Enregistrer</button></div>`);
 }
-function cgvEdit(i,key,val){library.cgv[i][key]=val;}
-function cgvAdd(){library.cgv.push({title:'Nouvel article.',body:''});openCgvPanel();}
-function cgvDel(i){askConfirm('Supprimer cet article ?',()=>{library.cgv.splice(i,1);openCgvPanel();});}
-function resetCgv(){askConfirm('Réinitialiser les conditions générales sur le texte par défaut ? Vos modifications seront perdues.',()=>{library.cgv=DEFAULT_CGV.map(c=>({...c}));openCgvPanel();});}
+function cgvEdit(i,key,val){library.cgv[i][key]=val;saveLibraryDebounced();}
+function cgvAdd(){library.cgv.push({title:'Nouvel article.',body:''});openCgvPanel();saveLibraryDebounced();}
+function cgvDel(i){askConfirm('Supprimer cet article ?',()=>{library.cgv.splice(i,1);openCgvPanel();saveLibraryDebounced();});}
+function resetCgv(){askConfirm('Réinitialiser les conditions générales sur le texte par défaut ? Vos modifications seront perdues.',()=>{library.cgv=DEFAULT_CGV.map(c=>({...c}));openCgvPanel();saveLibraryDebounced();});}
 async function cgvSave(){
   await store.set(K_LIB,library);
   current.cgv=library.cgv.map(c=>({...c}));
@@ -2963,8 +2965,8 @@ function openTaskCategoriesPanel(){
       <button class="mini" onclick="taskCatReset()">↺ Catégories par défaut</button>
       <button class="btn btn-primary" onclick="taskCatSave()">Enregistrer</button></div>`);
 }
-function taskCatEdit(i,key,val){ensureTaskCategories();library.taskCategories[i][key]=val;}
-function taskCatAdd(){ensureTaskCategories();library.taskCategories.push({id:uid(),label:'Nouvelle catégorie',icon:'🏷️'});openTaskCategoriesPanel();}
+function taskCatEdit(i,key,val){ensureTaskCategories();library.taskCategories[i][key]=val;saveLibraryDebounced();}
+function taskCatAdd(){ensureTaskCategories();library.taskCategories.push({id:uid(),label:'Nouvelle catégorie',icon:'🏷️'});openTaskCategoriesPanel();saveLibraryDebounced();}
 function taskCatDel(i){
   ensureTaskCategories();
   askConfirm('Supprimer cette catégorie ? Les tâches qui l\'utilisent redeviendront sans catégorie.',()=>{
@@ -2974,7 +2976,7 @@ function taskCatDel(i){
     saveTasks();store.set(K_LIB,library);openTaskCategoriesPanel();renderTaskList();
   });
 }
-function taskCatReset(){askConfirm('Réinitialiser les catégories de tâches sur la liste par défaut ?',()=>{library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));openTaskCategoriesPanel();});}
+function taskCatReset(){askConfirm('Réinitialiser les catégories de tâches sur la liste par défaut ?',()=>{library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));openTaskCategoriesPanel();saveLibraryDebounced();});}
 async function taskCatSave(){await store.set(K_LIB,library);closeModal();renderTaskList();toast('Catégories enregistrées');}
 function computeTodos(){
   const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
@@ -3130,14 +3132,7 @@ async function importClientsCSV(file){
 }
 
 /* ============ TABS ============ */
-function showTab(w){document.body.classList.toggle('show-preview',w==='preview');document.body.classList.toggle('show-editor',w==='editor');$('tab-ed').classList.toggle('active',w==='editor');$('tab-pv').classList.toggle('active',w==='preview');const dt=$('desktop-toggle');if(dt)dt.style.display=w==='preview'?'':'none';}
-function applyDesktopView(on){
-  document.body.classList.toggle('force-desktop',on);
-  const btn=$('desktop-toggle');if(btn)btn.textContent=on?'↕ Ajusté à l\'écran':'🔍 Taille réelle';
-  try{localStorage.setItem('mn_desktop_view',on?'1':'0');}catch(e){}
-}
-function toggleDesktopView(){applyDesktopView(!document.body.classList.contains('force-desktop'));}
-try{if(localStorage.getItem('mn_desktop_view')==='1')applyDesktopView(true);}catch(e){}
+function showTab(w){document.body.classList.toggle('show-preview',w==='preview');document.body.classList.toggle('show-editor',w==='editor');$('tab-ed').classList.toggle('active',w==='editor');$('tab-pv').classList.toggle('active',w==='preview');}
 function applySplitView(on){
   document.body.classList.toggle('force-split',on);
   const btn=$('split-toggle');if(btn)btn.textContent=on?'📱 Vue mobile':'🖥 Vue bureau';
