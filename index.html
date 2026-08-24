@@ -386,12 +386,15 @@
   }
   /* Vue bureau forcée : bouton manuel dans la barre d'outils, indépendant du "Version
      ordinateur" du navigateur (peu fiable/absent sur tablette, Samsung Internet, etc.) —
-     annule les règles mobiles ci-dessus quelle que soit la largeur réelle de l'écran. */
-  body.force-split{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+     annule les règles mobiles ci-dessus quelle que soit la largeur réelle de l'écran.
+     Scopé à .devis-active comme la règle bureau ≥901px : sinon, activer Vue bureau depuis
+     le Tableau de bord (ou Clients/Estimation) fige la page en overflow:hidden sans qu'aucune
+     colonne éditeur/aperçu n'existe pour absorber le scroll — plus moyen de descendre. */
+  body.force-split.devis-active{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
   body.force-split .tabs{display:none;}
-  body.force-split .stage{flex-direction:row;flex:1 1 auto;min-height:0;overflow:hidden;}
-  body.force-split .editor{width:44%;max-width:600px;min-width:360px;border-right:1px solid var(--panel-edge);height:100%;min-height:0;overflow-y:auto;}
-  body.force-split .preview-wrap{width:auto;overflow-x:visible;height:100%;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:auto;}
+  body.force-split.devis-active .stage{flex-direction:row;flex:1 1 auto;min-height:0;overflow:hidden;}
+  body.force-split.devis-active .editor{width:44%;max-width:600px;min-width:360px;border-right:1px solid var(--panel-edge);height:100%;min-height:0;overflow-y:auto;}
+  body.force-split.devis-active .preview-wrap{width:auto;overflow-x:visible;height:100%;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:auto;}
   body.force-split .devis{transform:none !important;margin-top:0;}
   body.force-split.show-preview .editor{display:block;}
   body.force-split.show-editor .preview-wrap{display:flex;}
