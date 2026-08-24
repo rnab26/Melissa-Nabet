@@ -411,15 +411,17 @@
     .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
     *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
   }
-  /* Bureau : éditeur et aperçu défilent chacun dans leur propre colonne (au lieu de partager
-     le défilement de la page), pour que le scroll-sync vers une section du devis n'entraîne
-     pas le champ en cours d'édition hors de vue. */
+  /* Bureau, vue Devis uniquement : éditeur et aperçu défilent chacun dans leur propre colonne
+     (au lieu de partager le défilement de la page), pour que le scroll-sync vers une section du
+     devis n'entraîne pas le champ en cours d'édition hors de vue. Scopé à body.devis-active :
+     appliqué sans condition, ça figeait aussi le Tableau de bord/Clients/Estimation sur les
+     écrans ≥901px (tablette) — plus moyen d'y descendre en scroll. */
   @media (min-width:901px){
     html,body{height:100%;}
-    body{display:flex;flex-direction:column;overflow:hidden;}
-    .stage{flex:1 1 auto;min-height:0;overflow:hidden;}
-    .editor{height:100%;min-height:0;overflow-y:auto;}
-    .preview-wrap{height:100%;min-height:0;overflow-y:auto;}
+    body.devis-active{display:flex;flex-direction:column;overflow:hidden;}
+    body.devis-active .stage{flex:1 1 auto;min-height:0;overflow:hidden;}
+    body.devis-active .editor{height:100%;min-height:0;overflow-y:auto;}
+    body.devis-active .preview-wrap{height:100%;min-height:0;overflow-y:auto;}
   }
 </style>
 </head>
@@ -2687,6 +2689,7 @@ function wireClientFilters(){
 function showView(v){
   const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier';
   document.querySelector('.stage').style.display=dev?'flex':'none';
+  document.body.classList.toggle('devis-active',dev);
   $('clients-view').style.display=cli?'block':'none';
   $('dashboard-view').style.display=dash?'block':'none';
   $('chantier-view').style.display=ch?'block':'none';
