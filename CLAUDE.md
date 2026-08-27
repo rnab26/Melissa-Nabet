@@ -2,22 +2,18 @@
 
 Consignes de travail pour Claude sur ce dépôt. À lire avant toute intervention.
 
+## Exécution autonome
+
+- "Demande explicite" veut dire : la tâche (ou la liste de tâches) a été confirmée une fois dans la discussion. À partir de là, exécuter TOUT de bout en bout soi-même — commit, push, merge sur `main`, déploiement si c'est le but — sans redemander à chaque étape, et sans jamais demander à l'utilisateur de cliquer lui-même quelque part (GitHub, dashboard, etc.).
+- Si un outil technique bloque une action normalement autorisée, chercher un autre chemin qui aboutit au même résultat plutôt que de renvoyer la balle à l'utilisateur.
+- Rendre compte après coup, pas avant — sauf vraie décision ambiguë que l'utilisateur doit trancher lui-même (celle-là, on la pose avant d'agir).
+- Si quelque chose casse après une action faite en autonomie, revenir en arrière dès que l'utilisateur le signale, sans validation préalable requise pour le rollback.
+
 ## Discipline de branche
 
-- Ne jamais modifier `main` directement pour du **code applicatif** (`index.html`, etc.). Tout ce travail se fait sur la branche du chantier en cours.
-- Ne jamais merger ni déployer du code sur `main` sans demande explicite de l'utilisateur pour ce changement précis, même si un correctif est validé et testé. Proposer le merge, ne pas l'exécuter de soi-même.
-- Rester sur la branche du chantier en cours pour toute la durée de ce chantier ; ne pas en changer sans raison explicite.
-- Si le merge de code sur `main` est techniquement impossible dans la session (permissions, configuration), le dire clairement plutôt que de chercher un contournement (fork, push forcé, etc.).
-- **Exception explicite — fichiers de doc/suivi (`CLAUDE.md`, `PROJECT_LOG.md`)** : ceux-là se créent, se modifient et se poussent directement sur `main`, sans demander confirmation à chaque fois. Si `git push` vers `main` est bloqué par une contrainte de session, utiliser l'API GitHub (`create_or_update_file`) à la place plutôt que d'abandonner ou de contourner autrement.
-
-## Autonomie par défaut
-
-Ne pas demander la permission à chaque étape pour :
-- corriger un bug évident repéré en cours de route,
-- relancer un test après une modification,
-- pousser un correctif déjà validé par un test réel sur la branche du chantier.
-
-Demander avant toute action à risque réel : action destructive, modification de configuration partagée, merge/déploiement sur `main`, ou changement dont la portée dépasse ce qui a été demandé.
+- Chaque chantier de code a sa propre branche ; ne jamais déborder sur la branche d'un autre chantier en cours.
+- Merger/déployer du code reste conditionné à une tâche confirmée (voir Exécution autonome ci-dessus) — mais une fois confirmée, l'exécution complète, merge sur `main` inclus, est toujours faite directement, sans étape de validation supplémentaire.
+- **Fichiers de doc/suivi (`CLAUDE.md`, `PROJECT_LOG.md`)** : mise à jour de routine, pas une vraie décision — se créent, se modifient et se poussent directement sur `main`, sans demander confirmation à chaque fois. Si `git push` vers `main` est bloqué par une contrainte de session, utiliser l'API GitHub (`create_or_update_file`) à la place.
 
 ## Rigueur technique
 
