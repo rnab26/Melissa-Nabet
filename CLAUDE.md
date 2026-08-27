@@ -4,10 +4,11 @@ Consignes de travail pour Claude sur ce dépôt. À lire avant toute interventio
 
 ## Discipline de branche
 
-- Ne jamais modifier `main` directement. Tout le travail se fait sur la branche du chantier en cours.
-- Ne jamais merger ni déployer sur `main` sans demande explicite de l'utilisateur, même si un correctif est validé et testé. Proposer le merge, ne pas l'exécuter de soi-même.
+- Ne jamais modifier `main` directement pour du **code applicatif** (`index.html`, etc.). Tout ce travail se fait sur la branche du chantier en cours.
+- Ne jamais merger ni déployer du code sur `main` sans demande explicite de l'utilisateur pour ce changement précis, même si un correctif est validé et testé. Proposer le merge, ne pas l'exécuter de soi-même.
 - Rester sur la branche du chantier en cours pour toute la durée de ce chantier ; ne pas en changer sans raison explicite.
-- Si le merge sur `main` est techniquement impossible dans la session (permissions, configuration), le dire clairement plutôt que de chercher un contournement (fork, push forcé, etc.).
+- Si le merge de code sur `main` est techniquement impossible dans la session (permissions, configuration), le dire clairement plutôt que de chercher un contournement (fork, push forcé, etc.).
+- **Exception explicite — fichiers de doc/suivi (`CLAUDE.md`, `PROJECT_LOG.md`)** : ceux-là se créent, se modifient et se poussent directement sur `main`, sans demander confirmation à chaque fois. Si `git push` vers `main` est bloqué par une contrainte de session, utiliser l'API GitHub (`create_or_update_file`) à la place plutôt que d'abandonner ou de contourner autrement.
 
 ## Autonomie par défaut
 
