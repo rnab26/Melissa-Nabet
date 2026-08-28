@@ -112,7 +112,13 @@ Pour éviter de saturer le quota `localStorage` (5-10 Mo par origine) avec des f
 - [x] Lecteur DWG/DXF in-page pour les documents clients et tâches (gratuit, sans compte, sans installation).
 - [x] Isolation de licence GPL du convertisseur DWG (Web Worker séparé) + fichiers NOTICE/LICENSE dans `assets/cad/`.
 - [x] Anti-saturation `localStorage` pour les gros fichiers (cache local désactivé au-delà de 3 Mo, cloud/mémoire pris le relais).
-- [ ] RVT (Revit) : aucune option gratuite trouvée — resterait à évaluer si elle accepte un jour Autodesk Platform Services payant.
+- [ ] RVT (Revit) : aucune option gratuite trouvée — resterait à évaluer si elle accepte un jour Autodesk Platform Services payant. Ce qu'il faudrait faire, le jour où c'est validé :
+  - [ ] Elle crée un compte développeur Autodesk Platform Services (APS) — https://aps.autodesk.com — et une "app" pour obtenir un `client_id`/`client_secret`.
+  - [ ] Vérifier le tarif réel au moment voulu (modèle qui change le 17/08/2026 d'après ce qui a été trouvé) et le nombre de conversions gratuites incluses.
+  - [ ] Stocker `client_id`/`client_secret` côté serveur uniquement (jamais dans `index.html` en clair — actuellement tout est front-end statique, donc il faudrait une petite fonction serverless, ex. Supabase Edge Function, pour l'auth OAuth2 + upload vers le bucket Object Storage APS).
+  - [ ] Flux Model Derivative API : upload du .rvt vers le bucket APS → lancement de la conversion (`POST /modelderivative/v2/designdata/job`) → polling du statut → une fois prêt, charger le viewer via le SDK `Autodesk.Viewing.Viewer3D` (script JS officiel APS) dans une modale, comme pour DWG/DXF.
+  - [ ] Prévenir clairement l'utilisatrice/ses clients que les fichiers .rvt transitent et sont stockés temporairement sur le cloud Autodesk (pas seulement Supabase) — implication RGPD/confidentialité à valider avec elle avant d'activer.
+  - [ ] Prévoir un garde-fou de coût (quota, alerte) vu que c'est payant au-delà du seuil gratuit.
 
 ## Nettoyage de code
 
