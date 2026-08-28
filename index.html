@@ -2574,8 +2574,10 @@ function blobToDataUri(blob){
 }
 const docStore={
   async save(id,obj){
-    await store.set('mn_doc_'+id,obj);
-    if(sb&&sbUser&&ownerId){
+    const hasCloud=sb&&sbUser&&ownerId;
+    const tooBigForLocal=(obj.dataUri||'').length>DOC_LOCAL_CACHE_LIMIT;
+    if(!tooBigForLocal||!hasCloud)await store.set('mn_doc_'+id,obj);else store.mem['mn_doc_'+id]=obj;
+    if(hasCloud){
       try{
         const blob=dataUriToBlob(obj.dataUri);
         const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+id,blob,{contentType:obj.type||'application/octet-stream',upsert:true});
@@ -2592,7 +2594,7 @@ const docStore={
         if(error||!data)return null;
         const dataUri=await blobToDataUri(data);
         const obj={type:data.type||'application/octet-stream',dataUri};
-        await store.set('mn_doc_'+id,obj);
+        if(dataUri.length>DOC_LOCAL_CACHE_LIMIT)store.mem['mn_doc_'+id]=obj;else await store.set('mn_doc_'+id,obj);
         return obj;
       }catch(e){return null;}
     }
@@ -2604,9 +2606,12 @@ const docStore={
   },
 };
 function pickFiles(c,ligneId){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf';
+  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf,.dwg,.dxf';
   inp.onchange=()=>attachFiles(c,ligneId,inp.files);inp.click();
 }
+const CAD_EXT=/\.(dwg|dxf)$/i;
+const CAD_MAX_SIZE=20*1024*1024;
+const DOC_LOCAL_CACHE_LIMIT=3*1024*1024;
 function readFileAsDoc(file){
   return new Promise((res,rej)=>{
     const reader=new FileReader();
@@ -2630,7 +2635,9 @@ function readFileAsDoc(file){
 async function attachFiles(c,ligneId,files){
   let n=0;
   for(const file of Array.from(files||[])){
-    if(file.size>4*1024*1024){toast(file.name+' : trop lourd (>4 Mo), ignoré');continue;}
+    const isCad=CAD_EXT.test(file.name);
+    const max=isCad?CAD_MAX_SIZE:4*1024*1024;
+    if(file.size>max){toast(file.name+' : trop lourd (>'+(max/1024/1024)+' Mo), ignoré');continue;}
     try{const doc=await readFileAsDoc(file);const id=uid();await docStore.save(id,doc);c.docs=c.docs||[];c.docs.push({id,name:doc.name,type:doc.type,ligneId:ligneId||null});n++;}catch(e){toast('Échec import '+file.name);}
   }
   saveClients();renderClients();if(n)toast(n+' document(s) ajouté(s)');
@@ -2642,7 +2649,7 @@ function buildDocGallery(c){
     const ligne=all.find(l=>l.id===d.ligneId);
     const tile=document.createElement('div');tile.className='doc-tile';
     const isImg=(d.type||'').indexOf('image/')===0;
-    tile.innerHTML=`<div class="doc-thumb" data-open>${isImg?'<img alt="">':'📄'}</div>
+    tile.innerHTML=`<div class="doc-thumb" data-open>${isImg?'<img alt="">':(CAD_EXT.test(d.name)?'📐':'📄')}</div>
       <input class="doc-name" value="${esc(d.name)}">
       <div class="doc-line">${ligne?esc(ligne.type||'ligne'):'— général'}</div>
       <div class="doc-tools"><button data-open>Voir</button><button data-del>Suppr.</button></div>`;
@@ -2661,7 +2668,44 @@ async function openDoc(d){
   const doc=await docStore.get(d.id);if(!doc){toast('Document introuvable');return;}
   const type=doc.type||d.type||'';
   if(type.indexOf('image/')===0){openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3 style="font-size:16px;margin-bottom:10px">${esc(d.name)}</h3><img src="${doc.dataUri}" style="max-width:100%;border-radius:5px">`);}
+  else if(CAD_EXT.test(d.name)){openCadViewer(d,doc);}
   else{const w=window.open();if(w){w.document.write('<title>'+esc(d.name)+'</title><iframe src="'+doc.dataUri+'" style="position:fixed;inset:0;width:100%;height:100%;border:none"></iframe>');w.document.close();}else{toast('Autorisez les pop-ups pour ouvrir le document');}}
+}
+let _cadMod=null,_cadDocManager=null,_cadDwgRegistered=false;
+async function loadCadViewerModule(){
+  if(_cadMod)return _cadMod;
+  _cadMod=await import('https://esm.sh/@mlightcad/cad-simple-viewer@1.6.3');
+  return _cadMod;
+}
+async function ensureDwgSupport(){
+  if(_cadDwgRegistered)return;
+  const [dm,conv]=await Promise.all([
+    import('https://esm.sh/@mlightcad/data-model@1.14.2'),
+    import('https://esm.sh/@mlightcad/libredwg-converter@3.14.3')
+  ]);
+  const workerUrl=new URL('assets/cad/libredwg-parser-worker.js',location.href).href;
+  const dwgConv=new conv.AcDbLibreDwgConverter({useWorker:true,parserWorkerUrl:workerUrl});
+  dm.AcDbDatabaseConverterManager.instance.register(dm.AcDbFileType.DWG,dwgConv);
+  _cadDwgRegistered=true;
+}
+async function openCadViewer(d,doc){
+  openModal(`<button class="modal-x" onclick="closeCadViewer()">×</button><h3 style="font-size:16px;margin-bottom:10px">${esc(d.name)}</h3><div id="cad-viewer-box" style="width:min(90vw,1100px);height:75vh;background:#2b2b2b;border-radius:6px;position:relative"><div id="cad-viewer-status" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#ddd;font-size:14px">Chargement du lecteur…</div></div>`);
+  const box=$('cad-viewer-box');
+  try{
+    const mod=await loadCadViewerModule();
+    if(/\.dwg$/i.test(d.name))await ensureDwgSupport();
+    if(_cadDocManager){try{await _cadDocManager.destroy();}catch(e){}_cadDocManager=null;}
+    _cadDocManager=mod.AcApDocManager.createInstance({container:box,autoResize:true});
+    const status=$('cad-viewer-status');if(status)status.textContent='Ouverture du fichier…';
+    const buf=await dataUriToBlob(doc.dataUri).arrayBuffer();
+    const ok=await _cadDocManager.openDocument(d.name,buf,{});
+    const st2=$('cad-viewer-status');if(st2)st2.remove();
+    if(!ok)toast("Impossible d'ouvrir ce fichier");
+  }catch(e){console.error('cad viewer',e);if(box)box.innerHTML='<div style="padding:20px;color:#f88">Échec du chargement du lecteur : '+esc(e.message||String(e))+'</div>';}
+}
+function closeCadViewer(){
+  if(_cadDocManager){try{_cadDocManager.destroy();}catch(e){}_cadDocManager=null;}
+  closeModal();
 }
 function addClient(){
   try{
@@ -2814,7 +2858,7 @@ function taskDocsHtml(t){
   const tiles=(t.docs||[]).map(d=>{
     const isImg=(d.type||'').indexOf('image/')===0;
     return `<div class="task-doc-tile">
-      <div class="task-doc-thumb" onclick="openDoc({id:'${d.id}',name:'${esc(d.name).replace(/'/g,"\\'")}',type:'${d.type||''}'})">${isImg?`<img id="task-doc-img-${d.id}" alt="">`:'📄'}</div>
+      <div class="task-doc-thumb" onclick="openDoc({id:'${d.id}',name:'${esc(d.name).replace(/'/g,"\\'")}',type:'${d.type||''}'})">${isImg?`<img id="task-doc-img-${d.id}" alt="">`:(CAD_EXT.test(d.name)?'📐':'📄')}</div>
       <div class="task-doc-name">${esc(d.name)}</div>
       <button class="task-doc-del" onclick="removeTaskDoc('${t.id}','${d.id}')">Suppr.</button>
     </div>`;
@@ -2904,14 +2948,16 @@ function deleteTaskConfirm(id){
   });
 }
 function pickTaskFiles(id){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf';
+  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf,.dwg,.dxf';
   inp.onchange=()=>attachTaskFiles(id,inp.files);inp.click();
 }
 async function attachTaskFiles(id,files){
   const t=tasks.find(x=>x.id===id);if(!t)return;
   let n=0;
   for(const file of Array.from(files||[])){
-    if(file.size>4*1024*1024){toast(file.name+' : trop lourd (>4 Mo), ignoré');continue;}
+    const isCad=CAD_EXT.test(file.name);
+    const max=isCad?CAD_MAX_SIZE:4*1024*1024;
+    if(file.size>max){toast(file.name+' : trop lourd (>'+(max/1024/1024)+' Mo), ignoré');continue;}
     try{const doc=await readFileAsDoc(file);const did=uid();await docStore.save(did,doc);t.docs=t.docs||[];t.docs.push({id:did,name:doc.name,type:doc.type});n++;}
     catch(e){toast('Échec import '+file.name);}
   }

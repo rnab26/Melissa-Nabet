@@ -1,0 +1,13 @@
+Ce dossier contient des fichiers binaires tiers utilisés pour la visualisation
+de fichiers DWG dans le CRM, chargés dans un Web Worker séparé pour isolation
+de licence :
+
+- libredwg-web.wasm
+- libredwg-parser-worker.js
+
+Provenance : package npm @mlightcad/libredwg-converter (v3.14.3)
+https://github.com/mlightcad/realdwg-web
+
+Ce package embarque LibreDWG (GNU LibreDWG), sous licence GPL-3.0.
+Fichiers non modifiés, distribués tels quels, exécutés dans un Worker isolé
+du reste de l'application (qui reste MIT). Voir LICENSE-libredwg-converter.txt.

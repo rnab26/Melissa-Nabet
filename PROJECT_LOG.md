@@ -98,6 +98,22 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [ ] Langue de l'UI et langue du devis indépendantes l'une de l'autre.
 - [ ] Parcours d'inscription self-service (actuellement, un compte doit être créé manuellement côté Supabase).
 
+## Documents clients & tâches — lecteur DWG/DXF
+
+**État** : ajout de fichiers `.dwg`/`.dxf` possible sur les clients et les tâches (jusqu'à 20 Mo). À l'ouverture, un lecteur CAD in-page s'affiche dans une modale (bibliothèque `@mlightcad/cad-simple-viewer`, chargée à la demande depuis esm.sh — aucune installation, aucun compte requis, gratuit). DXF géré nativement par la bibliothèque. DWG géré via `@mlightcad/libredwg-converter` (WASM, licence GPL-3.0) : ses deux fichiers binaires (`libredwg-web.wasm` ~10 Mo, `libredwg-parser-worker.js`) sont hébergés en statique dans `assets/cad/` du dépôt (voir `NOTICE.txt`/`LICENSE-libredwg-converter.txt` dans ce dossier), exécutés dans un Web Worker isolé — c'est l'isolation de licence voulue par les auteurs, l'appli elle-même reste MIT.
+
+RVT (Revit) : **pas de solution gratuite** — seule option existante est Autodesk Platform Services (payant au-delà d'un petit quota, nécessite un compte développeur Autodesk à elle et l'envoi des fichiers clients sur le cloud Autodesk). Non implémenté, écarté par manque d'option gratuite/simple correspondant à la demande.
+
+Pour éviter de saturer le quota `localStorage` (5-10 Mo par origine) avec des fichiers volumineux : au-delà de 3 Mo, un document n'est plus mis en cache local (`docStore`) — il reste seulement en mémoire pour la session + sur Supabase Storage (compte obligatoire de toute façon). Sur un appareil hors ligne, un très gros fichier CAD ne s'ouvrira qu'une fois reconnecté si pas déjà mis en cache.
+
+**Ne pas casser** : `assets/cad/libredwg-web.wasm` et `assets/cad/libredwg-parser-worker.js` doivent rester dans le même dossier l'un que l'autre (le worker charge le wasm à côté de lui-même). `parserWorkerUrl` doit rester une URL absolue (résolue via `new URL(...,location.href)`) — une URL relative se résoudrait par erreur contre le domaine d'esm.sh si un jour ce chemin passe par un contexte de module externe.
+
+**Notes / À faire**
+- [x] Lecteur DWG/DXF in-page pour les documents clients et tâches (gratuit, sans compte, sans installation).
+- [x] Isolation de licence GPL du convertisseur DWG (Web Worker séparé) + fichiers NOTICE/LICENSE dans `assets/cad/`.
+- [x] Anti-saturation `localStorage` pour les gros fichiers (cache local désactivé au-delà de 3 Mo, cloud/mémoire pris le relais).
+- [ ] RVT (Revit) : aucune option gratuite trouvée — resterait à évaluer si elle accepte un jour Autodesk Platform Services payant.
+
 ## Nettoyage de code
 
 **État** : passe de nettoyage effectuée une fois (code mort supprimé — dont des données clients réelles codées en dur —, CSS dupliqué fusionné, `pickImageFile()` factorisé pour les 7 imports d'image).
