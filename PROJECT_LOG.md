@@ -63,6 +63,8 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [x] Onglets Composer/Aperçu retirés de la barre du haut → bouton flottant unique en bas d'écran (mobile/tablette uniquement, masqué en Vue bureau).
 - [x] Nav "Devis" transformée en menu déroulant (Composer / Mes devis) — l'ancien bouton "Composer" ne servait à rien une fois déjà sur le composeur.
 - [x] Sections de services repliées par défaut à chaque ouverture (nouveau devis, devis existant rechargé, ou rechargement de la page) — restaient ouvertes tant qu'on ne fermait pas manuellement, remplissant toute la page.
+- [x] Fond de l'aperçu (papier) qui s'arrêtait au milieu d'un devis long (2 pages+) en bureau/Vue bureau — `.devis` (flex item de `.preview-wrap`) plafonnait à sa `min-height` (une page) au lieu de grandir avec le contenu réel ; fix `align-self:flex-start`.
+- [x] Bouton flottant Aperçu recentré (bas d'écran, horizontalement centré) et agrandi pour être plus visible/facile à toucher.
 
 ## Tableau de bord — tâches
 
@@ -144,6 +146,17 @@ Pour éviter de saturer le quota `localStorage` (5-10 Mo par origine) avec des f
 - [x] Message de relance auto-généré (montant/réglé/reste) dans la fiche client.
 - [x] Copier presse-papier + envoi WhatsApp direct.
 - [x] Détail des règlements dans le message (montant + date si renseignée, sinon omise sans bloquer). Champ date optionnel ajouté sur chaque ligne de paiement.
+
+## Clients — tableau (colonnes trop larges, débordement horizontal)
+
+**État** : colonnes resserrées (Début/Statut/4 colonnes montants + gap réduit) pour que le tableau tienne dans ~740-840px sans avoir besoin de défiler horizontalement sur tablette/petit bureau. `.cl-table{min-width:840px}` faisait déborder systématiquement même après resserrement des colonnes — c'était la vraie cause, ramené à 680px. Nom de client trop long : ellipsis au lieu d'élargir toute la ligne (`.cl-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`).
+
+**Ne pas casser** : un `div.grid` de largeur `auto` (pas de `width:100%` explicite) grandit à la taille de contenu de ses enfants (ex. un nom non tronqué) même à l'intérieur d'un parent `overflow-x:auto` — il ne se limite pas silencieusement à l'espace disponible. D'où le combo nécessaire : `width:100%` sur `.cl-row` + un plancher raisonnable sur `.cl-table` (`min-width`) + ellipsis sur le texte qui peut être long, plutôt que de compter sur le simple resserrement des colonnes fixes.
+
+**Notes / À faire**
+- [x] Colonnes resserrées, tableau tient sans défilement horizontal sur tablette/petit bureau.
+- [x] `.cl-table{min-width}` ramené à une valeur cohérente avec les nouvelles largeurs de colonnes (840→680px).
+- [x] Nom de client long : ellipsis au lieu de faire déborder la ligne.
 
 ## Nettoyage de code
 
