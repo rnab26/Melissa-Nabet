@@ -98,6 +98,16 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [ ] Langue de l'UI et langue du devis indépendantes l'une de l'autre.
 - [ ] Parcours d'inscription self-service (actuellement, un compte doit être créé manuellement côté Supabase).
 
+## Clients — bug de saisie (nom de client corrompu pendant la frappe)
+
+**État** : bug réel signalé et corrigé. `handleRealtime()` et `loadAll()` remplaçaient l'objet client en mémoire par une nouvelle référence à chaque évènement Supabase (y compris l'écho de notre propre écriture, ~1s après une pause de frappe). Le champ nom en cours d'édition dans le DOM restait lié à l'ANCIEN objet (via la closure de l'input), devenu orphelin — la suite de la frappe n'était plus jamais sauvegardée, et un rendu ultérieur affichait l'ancienne valeur (parfois le nom par défaut "Client"). Corrigé : fusion en place (`Object.assign`, identité d'objet préservée) partout, + la fiche activement en cours de saisie ignore complètement les mises à jour distantes le temps de l'édition (`activeEditingClientId()`) — rien n'est perdu, le prochain `cloudPush()` renvoie la version locale plus récente.
+
+**Ne pas casser** : ne jamais remplacer un élément de `clients`/`devisList` par une nouvelle référence d'objet (`arr[i]=nouveauObjet`) dans le code de synchro — toujours fusionner en place (`Object.assign(arr[i], nouveauObjet)`), sous peine d'orpheliner les champs de formulaire liés par closure. Le même risque existe en théorie pour `devisList`/`library`/`tasks` (non corrigé, non signalé à ce jour — à surveiller si un bug similaire est rapporté sur l'éditeur de devis ou les tâches).
+
+**Notes / À faire**
+- [x] Corriger la corruption du nom client pendant la frappe (fusion en place + protection de la fiche activement éditée).
+- [ ] Vérifier si le même risque existe concrètement sur devis/tâches (pas de bug rapporté à ce jour, juste le même pattern de code repéré).
+
 ## Documents clients & tâches — lecteur DWG/DXF
 
 **État** : ajout de fichiers `.dwg`/`.dxf` possible sur les clients et les tâches (jusqu'à 20 Mo). À l'ouverture, un lecteur CAD in-page s'affiche dans une modale (bibliothèque `@mlightcad/cad-simple-viewer`, chargée à la demande depuis esm.sh — aucune installation, aucun compte requis, gratuit). DXF géré nativement par la bibliothèque. DWG géré via `@mlightcad/libredwg-converter` (WASM, licence GPL-3.0) : ses deux fichiers binaires (`libredwg-web.wasm` ~10 Mo, `libredwg-parser-worker.js`) sont hébergés en statique dans `assets/cad/` du dépôt (voir `NOTICE.txt`/`LICENSE-libredwg-converter.txt` dans ce dossier), exécutés dans un Web Worker isolé — c'est l'isolation de licence voulue par les auteurs, l'appli elle-même reste MIT.

@@ -3269,6 +3269,13 @@ let sb=null,sbUser=null,ownerId=null,sbChannel=null,applyingRemote=false,offline
 let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',pushT=null;
 function setSyncStatus(s){const b=document.getElementById('sync-badge');if(!b)return;b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+/* Id du client dont une fiche est en cours de saisie (champ actif dans .cl-group[data-cid]).
+   Sert à protéger cette fiche d'un écrasement par une mise à jour distante (voir handleRealtime) :
+   sans ça, un écho temps-réel de notre propre écriture (ou une synchro d'un autre appareil)
+   pouvait remplacer l'objet client en mémoire PENDANT la frappe — le champ édité continuait
+   à écrire dans un objet devenu orphelin (jamais sauvegardé), ou une valeur plus ancienne
+   écrasait en partie le texte tout juste tapé. */
+function activeEditingClientId(){const a=document.activeElement;const grp=a&&a.closest&&a.closest('.cl-group[data-cid]');return grp?grp.dataset.cid:null;}
 function friendlyAuthErr(e){const m=((e&&e.message)||'').toLowerCase();
   if(m.includes('invalid login'))return "E-mail ou mot de passe incorrect.";
   if(m.includes('email not confirmed'))return "Compte non confirmé (cochez « Auto Confirm » dans Supabase).";
@@ -3313,7 +3320,7 @@ async function loadAll(){
     const prevC=new Set(Object.keys(remoteClients)),prevD=new Set(Object.keys(remoteDevis));
     const cloudIds=new Set();
     (data||[]).forEach(r=>{cloudIds.add(r.id);
-      if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0)clients[i]=nc;else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
+      if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
       else if(r.kind==='devis'){const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
       else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
       else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=r.data;remoteTasksJson=JSON.stringify(tasks);}}
@@ -3346,7 +3353,13 @@ function handleRealtime(payload){
     }else{
       const row=payload.new;
       if(row&&row.id){
-        if(row.kind==='client'){const nc=normalizeClient(row.data);const i=clients.findIndex(x=>x.id===row.id);if(i>=0)clients[i]=nc;else clients.push(nc);remoteClients[row.id]=JSON.stringify(nc);}
+        if(row.kind==='client'&&row.id===activeEditingClientId()){
+          /* Fiche en cours de saisie : on ignore cette mise à jour distante (écho probable de
+             notre propre écriture, ou modif concurrente) plutôt que d'écraser une frappe en
+             cours. remoteClients[row.id] n'est PAS mis à jour : le prochain cloudPush() renverra
+             donc notre version locale (plus récente), qui redeviendra la référence pour tout le
+             monde — rien n'est perdu. */
+        }else if(row.kind==='client'){const nc=normalizeClient(row.data);const i=clients.findIndex(x=>x.id===row.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[row.id]=JSON.stringify(nc);}
         else if(row.kind==='devis'){const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);}
         else if(row.kind==='library'){if(row.data&&row.data.sections){library=row.data;remoteLibJson=JSON.stringify(library);}}
         else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=row.data;remoteTasksJson=JSON.stringify(tasks);}}
