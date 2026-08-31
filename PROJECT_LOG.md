@@ -59,6 +59,10 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [x] Bibliothèque de fonds (ajout direct, réapplication, suppression).
 - [x] Boutons d'action regroupés + bouton WhatsApp.
 - [ ] Aperçu devis "zoomé" façon vue à 200% quand on clique la moitié de l'écran (barre de menu qui mange la vue) — signalé, pas encore traité.
+- [x] Boutons d'action (Gérer le devis / Produire & envoyer) recompactés en 2 colonnes même sur mobile étroit (au lieu d'un empilement en 8 lignes).
+- [x] Onglets Composer/Aperçu retirés de la barre du haut → bouton flottant unique en bas d'écran (mobile/tablette uniquement, masqué en Vue bureau).
+- [x] Nav "Devis" transformée en menu déroulant (Composer / Mes devis) — l'ancien bouton "Composer" ne servait à rien une fois déjà sur le composeur.
+- [x] Sections de services repliées par défaut à chaque ouverture (nouveau devis, devis existant rechargé, ou rechargement de la page) — restaient ouvertes tant qu'on ne fermait pas manuellement, remplissant toute la page.
 
 ## Tableau de bord — tâches
 

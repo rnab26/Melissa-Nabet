@@ -32,10 +32,20 @@
   .btn-onlight:hover{background:var(--ink);color:var(--paper);}
   .btn-primary{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
   .btn-primary:hover{filter:brightness(.88);}
-  .tabs{display:none;gap:6px;}
   #split-toggle{display:none;}
-  .tab{font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:7px 12px;border:1px solid var(--stone);color:var(--stone-light);background:transparent;cursor:pointer;border-radius:2px;}
-  .tab.active{background:var(--paper);color:var(--ink);border-color:var(--paper);}
+  /* Bouton flottant Composer/Aperçu (mobile étroit uniquement) : remplace les anciens onglets
+     dans la barre du haut, trop chargée. Toujours accessible en bas de l'écran, peu importe où
+     on a défilé. Masqué en Vue bureau forcée (les deux volets sont déjà côte à côte). */
+  #devis-tab-fab{display:none;position:fixed;right:16px;bottom:18px;z-index:45;border-radius:26px;padding:13px 20px;box-shadow:0 4px 18px rgba(0,0,0,.28);background:var(--oxblood);color:#fff;border:none;font-family:'Inter';font-size:13px;font-weight:600;letter-spacing:.03em;cursor:pointer;}
+  @media (max-width:900px){body.devis-active:not(.force-split) #devis-tab-fab{display:block;}}
+  /* Dropdown "Devis" dans la nav du haut : regroupe Composer / Mes devis, au lieu de deux
+     boutons permanents qui encombrent la barre. */
+  .vnav-dropdown{position:relative;}
+  .vnav-caret{font-size:9px;margin-left:3px;opacity:.75;}
+  .vnav-menu{display:none;flex-direction:column;position:absolute;top:100%;left:0;margin-top:4px;background:var(--ink);border:1px solid var(--stone);border-radius:3px;min-width:150px;z-index:50;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.3);}
+  .vnav-menu.open{display:flex;}
+  .vnav-menu button{background:transparent;border:none;color:var(--stone-light);text-align:left;padding:10px 14px;font-size:12.5px;font-family:'Inter';cursor:pointer;}
+  .vnav-menu button:hover{background:rgba(255,255,255,.08);color:var(--paper);}
 
   .stage{display:flex;align-items:flex-start;}
   .editor{width:44%;max-width:600px;min-width:360px;padding:24px 24px 120px;background:var(--travertine);border-right:1px solid var(--panel-edge);min-height:100vh;}
@@ -64,7 +74,11 @@
   textarea{resize:vertical;line-height:1.5;}
   .row2{display:flex;gap:10px;}.row2>*{flex:1;}
   .two-col{display:flex;gap:16px;}.two-col>.col{flex:1;min-width:0;}
-  .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;gap:16px;}.devis-action-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}.devis-action-heading{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone-light);margin-bottom:2px;}.devis-action-col .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;text-align:left;}.devis-action-col .btn:hover{filter:brightness(.88);}@media (max-width:900px){.devis-action-block{flex-direction:column;gap:6px;}}
+  .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;gap:16px;}.devis-action-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}.devis-action-heading{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone-light);margin-bottom:2px;}.devis-action-col .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;text-align:left;}.devis-action-col .btn:hover{filter:brightness(.88);}
+  /* En dessous de 900px, on GARDE les deux colonnes côte à côte (plus compact) au lieu de tout
+     empiler en une seule colonne verticale de 8 boutons — le texte passe juste à la ligne. */
+  @media (max-width:900px){.devis-action-block{gap:8px;}.devis-action-col{gap:5px;}.devis-action-col .btn{white-space:normal;line-height:1.25;font-size:12.5px;padding:8px 9px;}}
+  @media (max-width:420px){.devis-action-col .btn{font-size:11.5px;padding:7px 7px;}}
   .seg{display:flex;border:1px solid var(--panel-edge);border-radius:3px;overflow:hidden;width:fit-content;margin-bottom:12px;}
   .seg-btn{border:none;background:var(--panel);color:var(--stone);padding:9px 18px;font-size:12.5px;cursor:pointer;font-family:'Inter';}
   .seg-btn.active{background:var(--oxblood);color:#fff;}
@@ -373,7 +387,6 @@
   .dv-pricesign{break-inside:avoid;page-break-inside:avoid;}
 
   @media (max-width:900px){
-    .tabs{display:flex;}
     #split-toggle{display:inline-block;}
     .stage{flex-direction:column;}
     .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
@@ -383,7 +396,7 @@
     /* iOS/Safari zoome automatiquement sur un champ dont la police est < 16px, ce qui décale la
        mise en page et rend la frappe pénible : on force 16px sur mobile pour l'empêcher. */
     input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],textarea,select{font-size:16px;}
-    .btn,.vnav,.tab,.mini{padding-top:10px;padding-bottom:10px;}
+    .btn,.vnav,.mini{padding-top:10px;padding-bottom:10px;}
     .cl-scroll{-webkit-overflow-scrolling:touch;}
   }
   @media (max-width:600px){
@@ -404,7 +417,6 @@
      le Tableau de bord (ou Clients/Estimation) fige la page en overflow:hidden sans qu'aucune
      colonne éditeur/aperçu n'existe pour absorber le scroll — plus moyen de descendre. */
   body.force-split.devis-active{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
-  body.force-split .tabs{display:none;}
   body.force-split.devis-active .stage{flex-direction:row;flex:1 1 auto;min-height:0;overflow:hidden;}
   body.force-split.devis-active .editor{width:44%;max-width:600px;min-width:360px;border-right:1px solid var(--panel-edge);height:100%;min-height:0;overflow-y:auto;}
   body.force-split.devis-active .preview-wrap{width:auto;overflow-x:visible;height:100%;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:auto;}
@@ -458,25 +470,25 @@
   <div class="brand" style="letter-spacing:.14em;font-size:18px;" id="toolbar-brand">MELISSA NABET</div>
   <div class="viewnav">
     <button class="vnav active" id="vn-dash" onclick="showView('dashboard')">Tableau de bord</button>
-    <button class="vnav" id="vn-devis" onclick="showView('devis')">Devis</button>
+    <div class="vnav-dropdown" id="vn-devis-wrap">
+      <button class="vnav" id="vn-devis" onclick="toggleDevisMenu(event)">Devis <span class="vnav-caret">▾</span></button>
+      <div class="vnav-menu" id="vn-devis-menu">
+        <button onclick="gotoComposer()">📝 Composer</button>
+        <button onclick="gotoMesDevis()">📂 Mes devis</button>
+      </div>
+    </div>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
     <button class="vnav" id="vn-chantier" onclick="showView('chantier')">Estimation</button>
   </div>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
   <div class="spacer"></div>
-  <div class="tabs">
-    <button class="tab active" id="tab-ed" onclick="showTab('editor')">Composer</button>
-    <button class="tab" id="tab-pv" onclick="showTab('preview')">Aperçu</button>
-  </div>
   <button class="btn" id="split-toggle" style="flex-shrink:0;" onclick="toggleSplitView()">🖥 Vue bureau</button>
   <div style="display:flex;gap:10px;flex-wrap:wrap;">
-    <span id="devis-actions" style="display:contents">
-      <button class="btn" onclick="openDevisPanel()">Mes devis</button>
-    </span>
     <button class="btn" onclick="openSettingsPanel()">⚙ Réglages</button>
     <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
   </div>
 </div>
+<button class="btn" id="devis-tab-fab" onclick="toggleDevisTab()">👁 Aperçu</button>
 
 <div class="stage">
   <div class="editor">
@@ -1021,7 +1033,7 @@ const current={
 function seedComposerFromLibrary(){
   current.services=[];current.open={};
   library.sections.forEach((sec,i)=>{
-    current.open[sec.name]=i<2;
+    current.open[sec.name]=false;
     sec.items.forEach(it=>current.services.push({id:uid(),cat:sec.name,on:!!it.defaultOn,title:it.title,desc:it.desc||'',mode:it.mode||'none',price:it.price||0,qty:it.qty||1,pu:it.pu||0,custom:false}));
   });
   current.exclus=(library.exclus||DEFAULT_EXCLUS).map(t=>({id:uid(),on:true,title:t,custom:false}));
@@ -2119,6 +2131,7 @@ function openDevisPanel(){
 function loadDevis(id){
   const d=devisList.find(x=>x.id===id);if(!d)return;
   Object.assign(current,JSON.parse(JSON.stringify(d.snapshot)));
+  current.open={}; /* sections repliées par défaut à l'ouverture, même si sauvegardées ouvertes */
   current.docType=d.snapshot.docType||'devis';current.clientSignature=d.snapshot.clientSignature||null;
   /* Un brouillon n'est pas figé : il doit suivre les derniers réglages de la bibliothèque.
      Seul un devis validé garde son branding gelé, pour l'exactitude historique. */
@@ -2807,7 +2820,6 @@ function showView(v){
   $('clients-view').style.display=cli?'block':'none';
   $('dashboard-view').style.display=dash?'block':'none';
   $('chantier-view').style.display=ch?'block':'none';
-  $('devis-actions').style.display=dev?'contents':'none';
   $('vn-devis').classList.toggle('active',dev);
   $('vn-clients').classList.toggle('active',cli);
   $('vn-dash').classList.toggle('active',dash);
@@ -3251,7 +3263,17 @@ async function importClientsCSV(file){
 }
 
 /* ============ TABS ============ */
-function showTab(w){document.body.classList.toggle('show-preview',w==='preview');document.body.classList.toggle('show-editor',w==='editor');$('tab-ed').classList.toggle('active',w==='editor');$('tab-pv').classList.toggle('active',w==='preview');}
+function showTab(w){
+  document.body.classList.toggle('show-preview',w==='preview');
+  document.body.classList.toggle('show-editor',w==='editor');
+  const fab=$('devis-tab-fab');if(fab)fab.textContent=w==='preview'?'✏️ Composer':'👁 Aperçu';
+}
+function toggleDevisTab(){showTab(document.body.classList.contains('show-preview')?'editor':'preview');}
+function toggleDevisMenu(e){if(e)e.stopPropagation();const m=$('vn-devis-menu');if(m)m.classList.toggle('open');}
+function closeDevisMenu(){const m=$('vn-devis-menu');if(m)m.classList.remove('open');}
+function gotoComposer(){closeDevisMenu();showView('devis');showTab('editor');}
+function gotoMesDevis(){closeDevisMenu();showView('devis');openDevisPanel();}
+document.addEventListener('click',e=>{if(!e.target.closest('#vn-devis-wrap'))closeDevisMenu();});
 function applySplitView(on){
   document.body.classList.toggle('force-split',on);
   const btn=$('split-toggle');if(btn)btn.textContent=on?'📱 Vue mobile':'🖥 Vue bureau';
@@ -3463,6 +3485,7 @@ async function init(){
   const draft=await store.get(K_DRAFT);
   if(draft&&draft.services){
     Object.assign(current,draft);
+    current.open={}; /* sections repliées par défaut au rechargement de la page */
     currentDevisId=draft._draftDevisId||null;
   } else {
     seedComposerFromLibrary();
