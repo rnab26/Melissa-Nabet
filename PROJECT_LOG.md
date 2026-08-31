@@ -120,6 +120,16 @@ Pour éviter de saturer le quota `localStorage` (5-10 Mo par origine) avec des f
   - [ ] Prévenir clairement l'utilisatrice/ses clients que les fichiers .rvt transitent et sont stockés temporairement sur le cloud Autodesk (pas seulement Supabase) — implication RGPD/confidentialité à valider avec elle avant d'activer.
   - [ ] Prévoir un garde-fou de coût (quota, alerte) vu que c'est payant au-delà du seuil gratuit.
 
+## Clients — relance de paiement
+
+**État** : dans la fiche client (partie financière, sous le récap "Devis — montant"), message de relance généré automatiquement à partir du montant total / déjà réglé / solde restant (`relanceText()`). Boutons "📋 Copier" (presse-papier) et "💬 WhatsApp" (ouvre wa.me pré-rempli, réutilise `toWhatsAppPhone()`). Le texte est éditable avant copie/envoi. Si le solde est à 0, affiche juste "Solde à jour" (pas de relance à faire).
+
+**Ne pas casser** : `copyRelanceText()`/`sendRelanceWhatsApp()` lisent la valeur actuelle du `<textarea>` (pas `relanceText()` recalculé) — pour respecter les éventuelles modifications manuelles du texte avant envoi.
+
+**Notes / À faire**
+- [x] Message de relance auto-généré (montant/réglé/reste) dans la fiche client.
+- [x] Copier presse-papier + envoi WhatsApp direct.
+
 ## Nettoyage de code
 
 **État** : passe de nettoyage effectuée une fois (code mort supprimé — dont des données clients réelles codées en dur —, CSS dupliqué fusionné, `pickImageFile()` factorisé pour les 7 imports d'image).

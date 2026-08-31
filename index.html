@@ -240,6 +240,12 @@
   .cl-montant label span{display:block;font-size:11px;color:var(--stone);margin-bottom:3px;}
   .cl-montant .mf-reste{font-family:'EB Garamond',serif;font-size:15px;color:var(--ink);padding-bottom:8px;}
   .cl-montant .mf-reste b{color:var(--oxblood);font-family:'Cormorant Garamond',serif;font-size:19px;}
+  .cl-relance{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:11px 13px;margin:0 0 14px;}
+  .cl-relance .rl-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+  .cl-relance .rl-head span{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone);}
+  .cl-relance textarea{width:100%;min-height:96px;font-family:'EB Garamond',serif;font-size:13.5px;line-height:1.5;resize:vertical;background:var(--paper,#fff);border:1px solid var(--panel-edge);border-radius:5px;padding:8px 10px;color:var(--ink);}
+  .cl-relance .rl-ok{font-family:'EB Garamond',serif;font-size:14px;color:var(--stone);}
+  .cl-relance .rl-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
   .sub-h{font-size:11px;color:var(--stone);font-style:italic;margin:6px 0;}
   .cl-block-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--oxblood);font-weight:600;margin:6px 0 8px;border-top:1px solid var(--hair);padding-top:12px;}
   .mf-link{color:var(--stone);font-size:11px;font-style:italic;}
@@ -2345,6 +2351,34 @@ function clientTotals(c){
   return {montant,recu,reste:montant-recu,commissions:commissionsDue,commissionsPaye,commissionsReste:commissionsDue-commissionsPaye};
 }
 function globalTotals(cs){return cs.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.recu+=t.recu;a.reste+=t.reste;a.commissions+=t.commissions;a.commissionsPaye+=t.commissionsPaye;a.commissionsReste+=t.commissionsReste;return a;},{montant:0,recu:0,reste:0,commissions:0,commissionsPaye:0,commissionsReste:0});}
+function relanceText(c){
+  const t=clientTotals(c);const dv=c.devise||'₪';
+  const B=(library.branding&&library.branding.companyName)?library.branding:DEFAULT_BRANDING;
+  const dest=c.contact||c.name;
+  const proj=c.name?` pour « ${c.name} »`:'';
+  return `Bonjour ${dest},\n\nPetit rappel concernant le règlement de votre projet${proj} :\n- Montant total : ${fmt(t.montant)} ${dv}\n- Déjà réglé : ${fmt(t.recu)} ${dv}\n- Solde restant : ${fmt(t.reste)} ${dv}\n\nMerci de bien vouloir procéder au règlement du solde dès que possible. N'hésitez pas à me contacter pour toute question.\n\nCordialement,\n${B.signatureName||B.companyName}`;
+}
+function copyRelanceText(id){
+  const c=clients.find(x=>x.id===id);if(!c)return;
+  const ta=document.querySelector('.cl-detail textarea[data-relance="'+id+'"]');
+  const text=ta?ta.value:relanceText(c);
+  const done=()=>toast('Message copié — collez-le où vous voulez');
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));}
+  else fallbackCopy(text,done);
+}
+function fallbackCopy(text,done){
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');done();}catch(e){toast('Échec de la copie');}
+  document.body.removeChild(ta);
+}
+function sendRelanceWhatsApp(id){
+  const c=clients.find(x=>x.id===id);if(!c)return;
+  const ta=document.querySelector('.cl-detail textarea[data-relance="'+id+'"]');
+  const text=ta?ta.value:relanceText(c);
+  const phone=toWhatsAppPhone(c.phone);
+  if(!phone){toast('Aucun numéro de téléphone renseigné pour ce client');return;}
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`,'_blank');
+}
 
 const clientFilters={q:'',statuts:[],sortKey:'name',sortDir:'asc'};
 const clientOpen={};
@@ -2451,6 +2485,7 @@ function buildClientDetail(c){
   recap.innerHTML=`<div class="rc-box"><span>Devis — montant</span><b>${fmt(t.montant)} ${dv}</b><small>Reçu ${fmt(t.recu)} · Reste ${fmt(t.reste)} ${dv}</small></div>
     <div class="rc-box"><span>Commissions prestataires — cumul</span><b>${fmt(t.commissions)} ${dv}</b><small>Payé ${fmt(t.commissionsPaye)} · Reste à recevoir ${fmt(t.commissionsReste)} ${dv}</small></div>`;
   frag.appendChild(recap);
+  frag.appendChild(buildRelanceBox(c,t,dv));
 
   const h1=document.createElement('div');h1.className='cl-block-title';h1.textContent='Devis — montant';frag.appendChild(h1);
   const mf=document.createElement('div');mf.className='cl-montant';
@@ -2486,6 +2521,23 @@ function buildClientDetail(c){
   del.addEventListener('click',()=>askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');}));
   actions.appendChild(del);frag.appendChild(actions);
   return frag;
+}
+function buildRelanceBox(c,t,dv){
+  const box=document.createElement('div');box.className='cl-relance';
+  if(t.reste<=0){
+    box.innerHTML=`<div class="rl-head"><span>Relance client</span></div><div class="rl-ok">✅ Solde à jour — aucune relance nécessaire.</div>`;
+    return box;
+  }
+  const text=relanceText(c);
+  box.innerHTML=`<div class="rl-head"><span>Relance client</span></div>
+    <textarea data-relance="${c.id}">${esc(text)}</textarea>
+    <div class="rl-btns">
+      <button class="mini" data-rl-copy>📋 Copier</button>
+      <button class="mini" data-rl-wa>💬 WhatsApp</button>
+    </div>`;
+  box.querySelector('[data-rl-copy]').addEventListener('click',()=>copyRelanceText(c.id));
+  box.querySelector('[data-rl-wa]').addEventListener('click',()=>sendRelanceWhatsApp(c.id));
+  return box;
 }
 function buildClientDevisList(c){
   const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
