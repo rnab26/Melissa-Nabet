@@ -129,6 +129,7 @@ Pour éviter de saturer le quota `localStorage` (5-10 Mo par origine) avec des f
 **Notes / À faire**
 - [x] Message de relance auto-généré (montant/réglé/reste) dans la fiche client.
 - [x] Copier presse-papier + envoi WhatsApp direct.
+- [x] Détail des règlements dans le message (montant + date si renseignée, sinon omise sans bloquer). Champ date optionnel ajouté sur chaque ligne de paiement.
 
 ## Nettoyage de code
 

@@ -250,7 +250,7 @@
   .cl-block-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--oxblood);font-weight:600;margin:6px 0 8px;border-top:1px solid var(--hair);padding-top:12px;}
   .mf-link{color:var(--stone);font-size:11px;font-style:italic;}
   .sub-line{display:grid;grid-template-columns:2fr 1fr 34px 22px;gap:8px;align-items:center;padding:4px 0;}
-  .sub-line.with-cat{grid-template-columns:1.1fr 1.6fr 1fr 34px 22px;}
+  .sub-line.with-cat{grid-template-columns:1.1fr 1.4fr .9fr 1fr 34px 22px;}
   .sub-line select[data-cat]{padding:6px 6px;font-size:12px;}
   .sub-line input{padding:6px 8px;font-size:12.5px;}
   .sub-line .rm{border:none;background:none;color:var(--stone-light);cursor:pointer;font-size:15px;}
@@ -389,6 +389,13 @@
   @media (max-width:600px){
     .two-col{flex-direction:column;gap:0;}
     .row3{flex-direction:column;}
+    .sub-line.with-cat{grid-template-columns:1fr 1fr;grid-template-areas:"cat cat" "label label" "montant date" "doc rm";}
+    .sub-line.with-cat select[data-cat]{grid-area:cat;}
+    .sub-line.with-cat input[data-label]{grid-area:label;}
+    .sub-line.with-cat input[data-montant]{grid-area:montant;}
+    .sub-line.with-cat input[data-date]{grid-area:date;}
+    .sub-line.with-cat .doc-btn{grid-area:doc;}
+    .sub-line.with-cat .rm{grid-area:rm;justify-self:end;}
   }
   /* Vue bureau forcée : bouton manuel dans la barre d'outils, indépendant du "Version
      ordinateur" du navigateur (peu fiable/absent sur tablette, Samsung Internet, etc.) —
@@ -2334,7 +2341,7 @@ function normalizeClient(c){
   let montantFinal,paiements,commissions;
   if(c.montantFinal!=null||Array.isArray(c.paiements)||Array.isArray(c.commissions)){
     montantFinal=+c.montantFinal||0;
-    paiements=Array.isArray(c.paiements)?c.paiements.map(p=>({id:p.id||uid(),categorie:p.categorie||'Architecture',label:p.label||'',montant:+p.montant||0})):[];
+    paiements=Array.isArray(c.paiements)?c.paiements.map(p=>({id:p.id||uid(),categorie:p.categorie||'Architecture',label:p.label||'',montant:+p.montant||0,date:p.date||''})):[];
     commissions=Array.isArray(c.commissions)?c.commissions.map(p=>({id:p.id||uid(),label:p.label||'',montantDu:+(p.montantDu!=null?p.montantDu:p.montant)||0,paye:+p.paye||0})):[];
   } else if(Array.isArray(c.lignes)){
     montantFinal=c.lignes.reduce((a,l)=>a+(+l.prixFinal||0),0);
@@ -2356,7 +2363,13 @@ function relanceText(c){
   const B=(library.branding&&library.branding.companyName)?library.branding:DEFAULT_BRANDING;
   const dest=c.contact||c.name;
   const proj=c.name?` pour « ${c.name} »`:'';
-  return `Bonjour ${dest},\n\nPetit rappel concernant le règlement de votre projet${proj} :\n- Montant total : ${fmt(t.montant)} ${dv}\n- Déjà réglé : ${fmt(t.recu)} ${dv}\n- Solde restant : ${fmt(t.reste)} ${dv}\n\nMerci de bien vouloir procéder au règlement du solde dès que possible. N'hésitez pas à me contacter pour toute question.\n\nCordialement,\n${B.signatureName||B.companyName}`;
+  const lignes=(c.paiements||[]).filter(p=>(+p.montant||0)>0);
+  const detail=lignes.length?'\nRèglements reçus :\n'+lignes.map(p=>{
+    const lbl=p.label||'Paiement';
+    const d=p.date?fmtDateFr(p.date):'';
+    return `- ${lbl} : ${fmt(p.montant)} ${dv}${d?' (le '+d+')':''}`;
+  }).join('\n')+'\n':'';
+  return `Bonjour ${dest},\n\nPetit rappel concernant le règlement de votre projet${proj} :\n${detail}\n- Montant total : ${fmt(t.montant)} ${dv}\n- Déjà réglé : ${fmt(t.recu)} ${dv}\n- Solde restant : ${fmt(t.reste)} ${dv}\n\nMerci de bien vouloir procéder au règlement du solde dès que possible. N'hésitez pas à me contacter pour toute question.\n\nCordialement,\n${B.signatureName||B.companyName}`;
 }
 function copyRelanceText(id){
   const c=clients.find(x=>x.id===id);if(!c)return;
@@ -2571,10 +2584,12 @@ function buildSubList(c,key,ph,withCat){
     const nd=(c.docs||[]).filter(d=>d.ligneId===p.id).length;
     const r=document.createElement('div');r.className='sub-line'+(withCat?' with-cat':'');
     const catSel=withCat?`<select data-cat>${['Architecture','Prestataire','Matériaux','Autre'].map(o=>`<option ${p.categorie===o?'selected':''}>${o}</option>`).join('')}</select>`:'';
-    r.innerHTML=`${catSel}<input type="text" value="${esc(p.label)}" data-label placeholder="${ph}"><input type="number" value="${p.montant||''}" data-montant placeholder="Montant ${dv}"><button class="doc-btn" title="Joindre un fichier">📎${nd?`<span class="doc-n">${nd}</span>`:''}</button><button class="rm" title="Supprimer">×</button>`;
+    const dateFld=withCat?`<input type="date" value="${isoDate(p.date)}" data-date title="Date du règlement (optionnel)">`:'';
+    r.innerHTML=`${catSel}<input type="text" value="${esc(p.label)}" data-label placeholder="${ph}"><input type="number" value="${p.montant||''}" data-montant placeholder="Montant ${dv}">${dateFld}<button class="doc-btn" title="Joindre un fichier">📎${nd?`<span class="doc-n">${nd}</span>`:''}</button><button class="rm" title="Supprimer">×</button>`;
     if(withCat)r.querySelector('select[data-cat]').addEventListener('change',e=>{p.categorie=e.target.value;saveClientsDebounced();});
     r.querySelector('input[data-label]').addEventListener('input',e=>{p.label=e.target.value;saveClientsDebounced();});
     r.querySelector('input[data-montant]').addEventListener('change',e=>{p.montant=parseFloat(e.target.value)||0;saveClients();renderClients();});
+    if(withCat)r.querySelector('input[data-date]').addEventListener('change',e=>{p.date=e.target.value;saveClients();renderClients();});
     r.querySelector('.doc-btn').addEventListener('click',()=>pickFiles(c,p.id));
     r.querySelector('.rm').addEventListener('click',()=>{c[key]=c[key].filter(x=>x.id!==p.id);saveClients();renderClients();});
     wrap.appendChild(r);
