@@ -191,6 +191,14 @@
   .task-tag.critique{background:#b6543f;color:#fff;}
   .task-chevron{flex:0 0 auto;font-size:11px;color:var(--stone);cursor:pointer;padding:3px 4px;}
   .task-empty{font-size:13px;color:var(--stone);padding:6px 2px 16px;}
+  .task-check{flex:0 0 auto;width:19px;height:19px;margin-top:1px;cursor:pointer;accent-color:var(--oxblood);}
+  .task-archive{margin-top:16px;border:1px solid var(--panel-edge);border-radius:5px;background:var(--panel);overflow:hidden;}
+  .task-archive-head{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone);font-weight:600;}
+  .task-archive-head .chev{margin-left:auto;font-size:11px;transition:transform .15s;}
+  .task-archive.open .task-archive-head .chev{transform:rotate(90deg);}
+  .task-archive-body{display:none;padding:2px 14px 12px;}
+  .task-archive.open .task-archive-body{display:block;}
+  .task-archive .task-row{margin-bottom:7px;}
   .task-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--panel-edge);}
   .task-docs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px;}
   .task-doc-tile{width:64px;text-align:center;}
@@ -606,6 +614,7 @@
     <div class="dash-kpi-row" id="dash-kpi"></div>
     <div class="ed-eyebrow" style="margin-top:22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="flex:1">Mes tâches</span>
+      <select id="task-filter-select" class="mini" onchange="setTaskFilter(this.value)"></select>
       <select id="task-sort-select" class="mini" onchange="setTaskSortCombo(this.value)">
         <option value="priority:asc">🔥 Priorité — urgent en premier</option>
         <option value="priority:desc">🔥 Priorité — faible en premier</option>
@@ -620,6 +629,7 @@
       <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
     </div>
     <div id="dash-tasks"></div>
+    <div id="dash-tasks-archive"></div>
     <div class="ed-eyebrow" style="margin-top:22px">Assistant · à faire</div>
     <div id="dash-todos"></div>
   </div>
@@ -2859,12 +2869,33 @@ let _taskOpenIds=new Set();
 let _taskSaveT=null;
 let taskSortMode=(()=>{try{return localStorage.getItem('mn_task_sort')||'priority';}catch(e){return 'priority';}})();
 let taskSortDir=(()=>{try{return localStorage.getItem('mn_task_sort_dir')||'asc';}catch(e){return 'asc';}})();
+let taskFilterMode=(()=>{try{return localStorage.getItem('mn_task_filter')||'all';}catch(e){return 'all';}})();
+let _taskArchiveOpen=false;
 function setTaskSortCombo(v){
   const [mode,dir]=v.split(':');
   taskSortMode=mode;taskSortDir=dir;
   try{localStorage.setItem('mn_task_sort',mode);localStorage.setItem('mn_task_sort_dir',dir);}catch(e){}
   renderTaskList();
 }
+function setTaskFilter(v){
+  taskFilterMode=v;
+  try{localStorage.setItem('mn_task_filter',v);}catch(e){}
+  renderTaskList();
+}
+function taskFilterOptionsHtml(){
+  ensureTaskCategories();
+  return '<option value="all">👁 Toutes les tâches</option>'+
+    '<option value="__due__">📅 Avec échéance</option>'+
+    '<option value="__reminder__">🔔 Avec rappel</option>'+
+    library.taskCategories.map(c=>`<option value="${c.id}">${c.icon} ${esc(c.label)}</option>`).join('');
+}
+function applyTaskFilter(list){
+  if(taskFilterMode==='all')return list;
+  if(taskFilterMode==='__due__')return list.filter(t=>!!t.dueDate);
+  if(taskFilterMode==='__reminder__')return list.filter(t=>!!t.reminderDate);
+  return list.filter(t=>t.category===taskFilterMode);
+}
+function toggleTaskArchive(){_taskArchiveOpen=!_taskArchiveOpen;renderTaskList();}
 function saveTasks(){store.set(K_TASKS,tasks);}
 function saveTasksDebounced(){clearTimeout(_taskSaveT);_taskSaveT=setTimeout(saveTasks,500);}
 function todayIso(){return new Date().toISOString().slice(0,10);}
@@ -2954,51 +2985,70 @@ function taskDocsHtml(t){
   }).join('');
   return `<div class="task-docs">${tiles}<button class="task-doc-add" onclick="pickTaskFiles('${t.id}')">＋<br>Photo/doc</button></div>`;
 }
-function renderTaskList(){
-  const root=$('dash-tasks');if(!root)return;
-  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode+':'+taskSortDir;
-  if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';return;}
-  const list=sortedTasks();
-  root.innerHTML=list.map(t=>{
-    const open=_taskOpenIds.has(t.id);
-    if(!open){
-      return `<div class="task-row ${t.done?'done':''}" onclick="toggleTaskOpen('${t.id}')">
-        <div class="task-head">
-          <span class="task-icon" onclick="event.stopPropagation();toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">${taskIcon(t)}</span>
-          <div class="task-main">
-            <div class="task-title">${esc(t.title)}</div>
-            ${t.detail?`<div class="task-detail-preview">${esc(t.detail)}</div>`:''}
-            <div class="task-meta">${taskTagsHtml(t)}</div>
-          </div>
-          <span class="task-chevron">▾</span>
+function taskRowHtml(t){
+  const open=_taskOpenIds.has(t.id);
+  const check=`<input type="checkbox" class="task-check" ${t.done?'checked':''} onclick="event.stopPropagation();toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">`;
+  if(!open){
+    return `<div class="task-row ${t.done?'done':''}" onclick="toggleTaskOpen('${t.id}')">
+      <div class="task-head">
+        ${check}
+        <span class="task-icon" title="Statut">${taskIcon(t)}</span>
+        <div class="task-main">
+          <div class="task-title">${esc(t.title)}</div>
+          ${t.detail?`<div class="task-detail-preview">${esc(t.detail)}</div>`:''}
+          <div class="task-meta">${taskTagsHtml(t)}</div>
         </div>
-      </div>`;
-    }
-    return `<div class="task-row ${t.done?'done':''}">
-      <div class="task-head" onclick="toggleTaskOpen('${t.id}')">
-        <span class="task-icon" onclick="event.stopPropagation();toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">${taskIcon(t)}</span>
-        <div class="task-meta" style="flex:1">${taskTagsHtml(t)}</div>
-        <span class="task-chevron">▴</span>
-      </div>
-      <div class="task-body" onclick="event.stopPropagation()">
-        <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
-        <label class="fld"><span class="lbl">Détail</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
-        <div class="row2">
-          <label class="fld"><span class="lbl">Échéance</span><input type="date" value="${t.dueDate||''}" onchange="updateTaskFieldRerender('${t.id}','dueDate',this.value)"></label>
-          <label class="fld"><span class="lbl">Rappel</span><input type="date" value="${t.reminderDate||''}" onchange="updateTaskFieldRerender('${t.id}','reminderDate',this.value)"></label>
-        </div>
-        <div class="row2">
-          <label class="fld"><span class="lbl">Catégorie</span><select onchange="updateTaskFieldRerender('${t.id}','category',this.value)">${taskCategoryOptionsHtml(t)}</select></label>
-          <label class="fld"><span class="lbl">Priorité</span><select onchange="updateTaskFieldRerender('${t.id}','priority',this.value)">${taskPriorityOptionsHtml(t)}</select></label>
-        </div>
-        ${taskDocsHtml(t)}
-        <div style="display:flex;justify-content:space-between;margin-top:4px;">
-          <button class="mini danger" onclick="deleteTaskConfirm('${t.id}')">Supprimer la tâche</button>
-          <button class="mini" onclick="toggleTaskOpen('${t.id}')">Fermer</button>
-        </div>
+        <span class="task-chevron">▾</span>
       </div>
     </div>`;
-  }).join('');
+  }
+  return `<div class="task-row ${t.done?'done':''}">
+    <div class="task-head" onclick="toggleTaskOpen('${t.id}')">
+      ${check}
+      <span class="task-icon" title="Statut">${taskIcon(t)}</span>
+      <div class="task-meta" style="flex:1">${taskTagsHtml(t)}</div>
+      <span class="task-chevron">▴</span>
+    </div>
+    <div class="task-body" onclick="event.stopPropagation()">
+      <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
+      <label class="fld"><span class="lbl">Détail</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
+      <div class="row2">
+        <label class="fld"><span class="lbl">Échéance</span><input type="date" value="${t.dueDate||''}" onchange="updateTaskFieldRerender('${t.id}','dueDate',this.value)"></label>
+        <label class="fld"><span class="lbl">Rappel</span><input type="date" value="${t.reminderDate||''}" onchange="updateTaskFieldRerender('${t.id}','reminderDate',this.value)"></label>
+      </div>
+      <div class="row2">
+        <label class="fld"><span class="lbl">Catégorie</span><select onchange="updateTaskFieldRerender('${t.id}','category',this.value)">${taskCategoryOptionsHtml(t)}</select></label>
+        <label class="fld"><span class="lbl">Priorité</span><select onchange="updateTaskFieldRerender('${t.id}','priority',this.value)">${taskPriorityOptionsHtml(t)}</select></label>
+      </div>
+      ${taskDocsHtml(t)}
+      <div style="display:flex;justify-content:space-between;margin-top:4px;">
+        <button class="mini danger" onclick="deleteTaskConfirm('${t.id}')">Supprimer la tâche</button>
+        <button class="mini" onclick="toggleTaskOpen('${t.id}')">Fermer</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderTaskList(){
+  const root=$('dash-tasks');if(!root)return;
+  const fsel=$('task-filter-select');if(fsel){fsel.innerHTML=taskFilterOptionsHtml();fsel.value=taskFilterMode;}
+  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode+':'+taskSortDir;
+  const filtered=applyTaskFilter(sortedTasks());
+  const active=filtered.filter(t=>!t.done);
+  const archived=filtered.filter(t=>t.done);
+  if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';}
+  else if(!active.length&&!archived.length){root.innerHTML='<div class="task-empty">Aucune tâche ne correspond à ce filtre.</div>';}
+  else if(!active.length){root.innerHTML='<div class="task-empty">Aucune tâche active — tout est dans les archives.</div>';}
+  else{root.innerHTML=active.map(taskRowHtml).join('');}
+  const arch=$('dash-tasks-archive');
+  if(arch){
+    if(!archived.length){arch.innerHTML='';}
+    else{
+      arch.innerHTML=`<div class="task-archive ${_taskArchiveOpen?'open':''}">
+        <div class="task-archive-head" onclick="toggleTaskArchive()">📦 Archives (${archived.length})<span class="chev">▶</span></div>
+        <div class="task-archive-body">${archived.map(taskRowHtml).join('')}</div>
+      </div>`;
+    }
+  }
   (tasks||[]).forEach(t=>{
     if(!_taskOpenIds.has(t.id))return;
     (t.docs||[]).forEach(d=>{

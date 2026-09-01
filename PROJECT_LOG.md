@@ -80,6 +80,9 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [x] Niveau de priorité "Important".
 - [x] Tri compact (critère + sens en un seul menu).
 - [x] Tableau de bord comme page d'atterrissage par défaut.
+- [x] Vraie case à cocher pour valider une tâche (au lieu de cliquer sur l'icône de priorité, jugé pas assez intuitif).
+- [x] Bloc "Archives" replié en bas de la liste (tâches faites), dépliable, réactivation possible (recocher la case ramène la tâche dans la liste active).
+- [x] Filtre d'affichage séparé du tri (menu "Affichage" : toutes / avec échéance / avec rappel / par catégorie), en plus du menu "Tri" existant — les deux se combinent.
 
 ## Responsive mobile/tablette
 
