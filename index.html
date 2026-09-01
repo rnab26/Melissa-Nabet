@@ -361,7 +361,7 @@
   .cl-meta label{font-size:11px;color:var(--stone);display:block;}
   .cl-meta label span{font-size:10px;letter-spacing:.03em;display:block;margin-bottom:3px;}
   .cl-meta input{background:var(--panel);}
-  .cl-detail-actions{display:flex;justify-content:space-between;margin-top:10px;gap:8px;flex-wrap:wrap;}
+  .cl-detail-actions{display:flex;justify-content:flex-end;margin-top:10px;gap:8px;flex-wrap:wrap;}
   /* Fiche client — Modèle "deux colonnes" : identité fixe à gauche, blocs à bandeau à droite. */
   .cl-two-col{display:flex;gap:14px;align-items:flex-start;}
   .cl-side{flex:0 0 220px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;align-self:flex-start;}
@@ -374,6 +374,14 @@
   .cl-side-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
   .cl-side-body .fld .lbl{font-size:10px;color:var(--stone);letter-spacing:.03em;display:block;margin-bottom:3px;}
   .cl-side-body .fld input{padding:7px 8px;font-size:12.5px;}
+  .cl-side-sep{height:1px;background:var(--panel-edge);margin:2px 0;}
+  .cl-side-more{display:flex;flex-direction:column;gap:12px;}
+  /* Blocs financiers secondaires (devis-montant, commissions) encadrés comme "Tâches liées" —
+     avant, seule la relance client avait une bordure visible, le reste se fondait dans le fond. */
+  .cl-subbox{background:#fff;border:1px solid var(--panel-edge);border-radius:6px;padding:12px 14px;margin-bottom:14px;}
+  .sub-line-head{padding:0 0 4px;}
+  .sub-line-head span{font-size:10px;color:var(--stone);text-transform:uppercase;letter-spacing:.04em;}
+  @media (max-width:600px){.sub-line-head{display:none;}}
   .cl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;}
   .cl-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;}
   .cl-card-bar{background:var(--oxblood);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;}
@@ -2579,57 +2587,66 @@ function buildClientDetail(c){
   side.querySelector('select[data-statut]').addEventListener('change',e=>{c.statut=e.target.value;saveClients();updateClientRow(c);});
   twoCol.appendChild(side);
 
+  /* ---- Suite de la colonne identité : informations de base complémentaires ---- */
+  const sep=document.createElement('div');sep.className='cl-side-sep';side.querySelector('.cl-side-body').appendChild(sep);
+  const generalBody=document.createElement('div');generalBody.className='cl-side-more';
+  generalBody.innerHTML=
+    `<label class="fld"><span class="lbl">Ville</span><input type="text" data-cf="ville" value="${esc(c.ville||'')}"></label>`+
+    `<label class="fld"><span class="lbl">Début du projet</span><input type="date" data-cf="debut" value="${isoDate(c.debut)}"></label>`+
+    `<label class="fld"><span class="lbl">Fin du projet</span><input type="date" data-cf="fin" value="${isoDate(c.fin)}"></label>`+
+    `<label class="fld"><span class="lbl">Commentaire</span><input type="text" data-cf="commentaire" value="${esc(c.commentaire||'')}"></label>`;
+  wireMetaInputs(generalBody,c);
+  side.querySelector('.cl-side-body').appendChild(generalBody);
+
   /* ---- Colonne principale (droite) : blocs à bandeau ---- */
   const main=document.createElement('div');main.className='cl-main';
-
-  const generalBody=document.createElement('div');generalBody.className='cl-meta';
-  generalBody.innerHTML=
-    `<label style="flex:1 1 140px"><span>Ville</span><input type="text" data-cf="ville" value="${esc(c.ville||'')}"></label>`+
-    `<label style="flex:1 1 130px"><span>Début du projet</span><input type="date" data-cf="debut" value="${isoDate(c.debut)}"></label>`+
-    `<label style="flex:1 1 130px"><span>Fin du projet</span><input type="date" data-cf="fin" value="${isoDate(c.fin)}"></label>`+
-    `<label style="flex:2 1 200px"><span>Commentaire</span><input type="text" data-cf="commentaire" value="${esc(c.commentaire||'')}"></label>`;
-  wireMetaInputs(generalBody,c);
-  main.appendChild(cardWrap('📋','Général',generalBody));
 
   const finBody=document.createElement('div');
   const recap=document.createElement('div');recap.className='cl-recap';
   recap.innerHTML=`<div class="rc-box"><span>Devis — montant</span><b>${fmt(t.montant)} ${dv}</b><small>Reçu ${fmt(t.recu)} · Reste ${fmt(t.reste)} ${dv}</small></div>
     <div class="rc-box"><span>Commissions prestataires — cumul</span><b>${fmt(t.commissions)} ${dv}</b><small>Payé ${fmt(t.commissionsPaye)} · Reste à recevoir ${fmt(t.commissionsReste)} ${dv}</small></div>`;
   finBody.appendChild(recap);
-  finBody.appendChild(buildRelanceBox(c,t,dv));
 
-  const h1=document.createElement('div');h1.className='cl-block-title';h1.textContent='Devis — montant';finBody.appendChild(h1);
+  const devisBox=document.createElement('div');devisBox.className='cl-subbox';
+  const h1=document.createElement('div');h1.className='cl-block-title';h1.style.marginTop='0';h1.style.borderTop='none';h1.style.paddingTop='0';h1.textContent='Devis — montant';devisBox.appendChild(h1);
   const mf=document.createElement('div');mf.className='cl-montant';
   mf.innerHTML=`<label style="flex:0 0 150px"><span>Montant final du devis</span><input type="number" data-mf value="${c.montantFinal||''}" placeholder="ex. 24000"></label>
     <label style="flex:0 0 78px"><span>Devise</span><select data-devise><option ${dv==='₪'?'selected':''}>₪</option><option ${dv==='€'?'selected':''}>€</option><option ${dv==='$'?'selected':''}>$</option></select></label>
     <div class="mf-reste">Reste à recevoir : <b>${fmt(t.reste)} ${dv}</b>${c.devisId?' <span class="mf-link">· lié au devis généré</span>':''}</div>`;
   mf.querySelector('input[data-mf]').addEventListener('change',e=>{c.montantFinal=parseFloat(e.target.value)||0;c.devisId=null;saveClients();renderClients();});
   mf.querySelector('select[data-devise]').addEventListener('change',e=>{c.devise=e.target.value;saveClients();renderClients();});
-  finBody.appendChild(mf);
+  devisBox.appendChild(mf);
   /* Devis du client (aperçu PDF, modification, suppression) */
-  finBody.appendChild(buildClientDevisList(c));
-  const psub=document.createElement('div');psub.className='sub-h';psub.textContent='Paiements reçus (se déduisent du montant) — choisissez la catégorie';finBody.appendChild(psub);
+  devisBox.appendChild(buildClientDevisList(c));
+  finBody.appendChild(devisBox);
+
+  const psub=document.createElement('div');psub.className='sub-line with-cat sub-line-head';
+  psub.innerHTML='<span>Catégorie</span><span>Intitulé</span><span>Montant</span><span>Date</span><span></span><span></span>';
+  finBody.appendChild(psub);
   finBody.appendChild(buildSubList(c,'paiements','Intitulé (ex. 1er avance plan)',true));
   const addP=document.createElement('button');addP.className='add-btn';addP.style.marginTop='6px';addP.textContent='+ Ajouter une ligne';
   addP.addEventListener('click',()=>{(c.paiements=c.paiements||[]).push({id:uid(),categorie:'Architecture',label:'',montant:0});saveClients();renderClients();});
   finBody.appendChild(addP);
 
-  const h2=document.createElement('div');h2.className='cl-block-title';h2.style.marginTop='16px';h2.textContent='Commissions prestataires — cumul';finBody.appendChild(h2);
+  finBody.appendChild(buildRelanceBox(c,t,dv));
+
+  const commBox=document.createElement('div');commBox.className='cl-subbox';
+  const h2=document.createElement('div');h2.className='cl-block-title';h2.style.marginTop='0';h2.style.borderTop='none';h2.style.paddingTop='0';h2.textContent='Commissions prestataires — cumul';commBox.appendChild(h2);
   const commSummary=document.createElement('div');commSummary.className='comm-summary';
   commSummary.innerHTML=`<div><span>Total dû</span><b>${fmt(t.commissions)} ${dv}</b></div><div><span>Total payé</span><b>${fmt(t.commissionsPaye)} ${dv}</b></div><div><span>Reste à recevoir</span><b class="${t.commissionsReste<=0?'ok':'due'}">${fmt(t.commissionsReste)} ${dv}</b></div>`;
-  finBody.appendChild(commSummary);
-  finBody.appendChild(buildCommissionList(c));
+  commBox.appendChild(commSummary);
+  commBox.appendChild(buildCommissionList(c));
   const addC=document.createElement('button');addC.className='add-btn';addC.style.marginTop='6px';addC.textContent='+ Ajouter une commission';
   addC.addEventListener('click',()=>{(c.commissions=c.commissions||[]).push({id:uid(),label:'',montantDu:0,paye:0});saveClients();renderClients();});
-  finBody.appendChild(addC);
+  commBox.appendChild(addC);
+  finBody.appendChild(commBox);
   main.appendChild(cardWrap('💰','Financier',finBody));
 
   main.appendChild(cardWrap('✅','Tâches liées',buildClientTasksBox(c)));
   main.appendChild(cardWrap('📎','Documents',buildDocGallery(c)));
 
   const actions=document.createElement('div');actions.className='cl-detail-actions';
-  actions.innerHTML='<span style="font-size:11px;color:var(--stone)">Reste = montant final − paiements reçus. Fichiers &lt; 4 Mo ; images compressées.</span>';
-  const del=document.createElement('button');del.className='mini danger';del.textContent='Supprimer ce client';
+  const del=document.createElement('button');del.className='mini danger';del.innerHTML='🗑 Supprimer ce client';
   del.addEventListener('click',()=>askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');}));
   actions.appendChild(del);main.appendChild(actions);
 
