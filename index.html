@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Générateur de devis — Melissa Nabet</title>
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -199,6 +199,14 @@
   .task-archive-body{display:none;padding:2px 14px 12px;}
   .task-archive.open .task-archive-body{display:block;}
   .task-archive .task-row{margin-bottom:7px;}
+  .task-filter-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:8px;background:var(--oxblood);color:#fff;font-size:10px;font-weight:700;}
+  .task-filter-menu{min-width:210px;padding:6px 0;}
+  .task-filter-menu label{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:12.5px;color:var(--stone-light);cursor:pointer;}
+  .task-filter-menu label:hover{background:rgba(255,255,255,.08);color:var(--paper);}
+  .task-filter-menu input[type=checkbox]{accent-color:var(--oxblood);}
+  .task-filter-sep{height:1px;background:var(--stone);opacity:.3;margin:4px 0;}
+  .task-filter-actions{padding:6px 14px 2px;}
+  .task-filter-actions .mini{width:100%;}
   .task-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--panel-edge);}
   .task-docs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px;}
   .task-doc-tile{width:64px;text-align:center;}
@@ -614,19 +622,21 @@
     <div class="dash-kpi-row" id="dash-kpi"></div>
     <div class="ed-eyebrow" style="margin-top:22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="flex:1">Mes tâches</span>
-      <select id="task-filter-select" class="mini" onchange="setTaskFilter(this.value)"></select>
-      <select id="task-sort-select" class="mini" onchange="setTaskSortCombo(this.value)">
-        <option value="priority:asc">🔥 Priorité — urgent en premier</option>
-        <option value="priority:desc">🔥 Priorité — faible en premier</option>
-        <option value="due:asc">📅 Échéance — la plus proche</option>
-        <option value="due:desc">📅 Échéance — la plus lointaine</option>
-        <option value="alpha:asc">🔤 Alphabétique A → Z</option>
-        <option value="alpha:desc">🔤 Alphabétique Z → A</option>
-        <option value="created:desc">🆕 Récentes en premier</option>
-        <option value="created:asc">🕰 Anciennes en premier</option>
-      </select>
       <button class="mini" onclick="openTaskCategoriesPanel()">⚙ Catégories</button>
-      <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 10px;">
+      <div class="vnav-dropdown" id="task-filter-wrap">
+        <button class="mini" onclick="toggleTaskFilterMenu(event)">🔍 Filtrer<span id="task-filter-badge" class="task-filter-badge" style="display:none"></span></button>
+        <div class="vnav-menu task-filter-menu" id="task-filter-menu"></div>
+      </div>
+      <select id="task-sort-select" class="mini" onchange="setTaskSortMode(this.value)">
+        <option value="priority">🔥 Priorité</option>
+        <option value="due">📅 Échéance</option>
+        <option value="alpha">🔤 Alphabétique</option>
+        <option value="created">🕰 Date de création</option>
+      </select>
+      <button class="mini" id="task-sort-dir-btn" onclick="toggleTaskSortDir()" title="Inverser l'ordre">↑</button>
+      <button class="mini" onclick="openTaskModal()" style="margin-left:auto">+ Nouvelle tâche</button>
     </div>
     <div id="dash-tasks"></div>
     <div id="dash-tasks-archive"></div>
@@ -2869,31 +2879,63 @@ let _taskOpenIds=new Set();
 let _taskSaveT=null;
 let taskSortMode=(()=>{try{return localStorage.getItem('mn_task_sort')||'priority';}catch(e){return 'priority';}})();
 let taskSortDir=(()=>{try{return localStorage.getItem('mn_task_sort_dir')||'asc';}catch(e){return 'asc';}})();
-let taskFilterMode=(()=>{try{return localStorage.getItem('mn_task_filter')||'all';}catch(e){return 'all';}})();
+let taskFilterCats=new Set();
+let taskFilterDue=false;
+let taskFilterReminder=false;
+(function loadTaskFilters(){
+  try{
+    const raw=localStorage.getItem('mn_task_filters');
+    if(raw){const o=JSON.parse(raw);taskFilterCats=new Set(o.cats||[]);taskFilterDue=!!o.due;taskFilterReminder=!!o.reminder;}
+  }catch(e){}
+})();
 let _taskArchiveOpen=false;
-function setTaskSortCombo(v){
-  const [mode,dir]=v.split(':');
-  taskSortMode=mode;taskSortDir=dir;
-  try{localStorage.setItem('mn_task_sort',mode);localStorage.setItem('mn_task_sort_dir',dir);}catch(e){}
+function setTaskSortMode(mode){
+  taskSortMode=mode;
+  try{localStorage.setItem('mn_task_sort',mode);}catch(e){}
   renderTaskList();
 }
-function setTaskFilter(v){
-  taskFilterMode=v;
-  try{localStorage.setItem('mn_task_filter',v);}catch(e){}
+function toggleTaskSortDir(){
+  taskSortDir=taskSortDir==='asc'?'desc':'asc';
+  try{localStorage.setItem('mn_task_sort_dir',taskSortDir);}catch(e){}
   renderTaskList();
 }
-function taskFilterOptionsHtml(){
+function persistTaskFilters(){
+  try{localStorage.setItem('mn_task_filters',JSON.stringify({cats:[...taskFilterCats],due:taskFilterDue,reminder:taskFilterReminder}));}catch(e){}
+}
+function onTaskFilterToggle(tok,checked){
+  if(tok==='__due__')taskFilterDue=checked;
+  else if(tok==='__reminder__')taskFilterReminder=checked;
+  else if(checked)taskFilterCats.add(tok);
+  else taskFilterCats.delete(tok);
+  persistTaskFilters();
+  renderTaskList();
+}
+function clearTaskFilters(){
+  taskFilterCats=new Set();taskFilterDue=false;taskFilterReminder=false;
+  persistTaskFilters();
+  renderTaskList();
+}
+function taskFilterActiveCount(){return taskFilterCats.size+(taskFilterDue?1:0)+(taskFilterReminder?1:0);}
+function taskFilterMenuHtml(){
   ensureTaskCategories();
-  return '<option value="all">👁 Toutes les tâches</option>'+
-    '<option value="__due__">📅 Avec échéance</option>'+
-    '<option value="__reminder__">🔔 Avec rappel</option>'+
-    library.taskCategories.map(c=>`<option value="${c.id}">${c.icon} ${esc(c.label)}</option>`).join('');
+  const isChecked=tok=>tok==='__due__'?taskFilterDue:tok==='__reminder__'?taskFilterReminder:taskFilterCats.has(tok);
+  const row=(tok,label)=>`<label><input type="checkbox" ${isChecked(tok)?'checked':''} onchange="onTaskFilterToggle('${tok}',this.checked)"> ${label}</label>`;
+  let html=row('__due__','📅 Avec échéance')+row('__reminder__','🔔 Avec rappel')+'<div class="task-filter-sep"></div>';
+  html+=library.taskCategories.map(c=>row(c.id,`${c.icon} ${esc(c.label)}`)).join('');
+  html+=`<div class="task-filter-actions"><button type="button" class="mini" onclick="clearTaskFilters()">Réinitialiser</button></div>`;
+  return html;
 }
+function toggleTaskFilterMenu(e){if(e)e.stopPropagation();const m=$('task-filter-menu');if(m)m.classList.toggle('open');}
+function closeTaskFilterMenu(){const m=$('task-filter-menu');if(m)m.classList.remove('open');}
+document.addEventListener('click',e=>{if(!e.target.closest('#task-filter-wrap'))closeTaskFilterMenu();});
 function applyTaskFilter(list){
-  if(taskFilterMode==='all')return list;
-  if(taskFilterMode==='__due__')return list.filter(t=>!!t.dueDate);
-  if(taskFilterMode==='__reminder__')return list.filter(t=>!!t.reminderDate);
-  return list.filter(t=>t.category===taskFilterMode);
+  const anyCat=taskFilterCats.size>0;
+  return list.filter(t=>{
+    if(anyCat&&!taskFilterCats.has(t.category))return false;
+    if(taskFilterDue&&!t.dueDate)return false;
+    if(taskFilterReminder&&!t.reminderDate)return false;
+    return true;
+  });
 }
 function toggleTaskArchive(){_taskArchiveOpen=!_taskArchiveOpen;renderTaskList();}
 function saveTasks(){store.set(K_TASKS,tasks);}
@@ -3030,8 +3072,11 @@ function taskRowHtml(t){
 }
 function renderTaskList(){
   const root=$('dash-tasks');if(!root)return;
-  const fsel=$('task-filter-select');if(fsel){fsel.innerHTML=taskFilterOptionsHtml();fsel.value=taskFilterMode;}
-  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode+':'+taskSortDir;
+  const fmenu=$('task-filter-menu');if(fmenu)fmenu.innerHTML=taskFilterMenuHtml();
+  const fcount=taskFilterActiveCount();
+  const fbadge=$('task-filter-badge');if(fbadge){fbadge.style.display=fcount?'inline-flex':'none';fbadge.textContent=fcount||'';}
+  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode;
+  const dirBtn=$('task-sort-dir-btn');if(dirBtn)dirBtn.textContent=taskSortDir==='asc'?'↑':'↓';
   const filtered=applyTaskFilter(sortedTasks());
   const active=filtered.filter(t=>!t.done);
   const archived=filtered.filter(t=>t.done);

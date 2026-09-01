@@ -83,6 +83,9 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [x] Vraie case à cocher pour valider une tâche (au lieu de cliquer sur l'icône de priorité, jugé pas assez intuitif).
 - [x] Bloc "Archives" replié en bas de la liste (tâches faites), dépliable, réactivation possible (recocher la case ramène la tâche dans la liste active).
 - [x] Filtre d'affichage séparé du tri (menu "Affichage" : toutes / avec échéance / avec rappel / par catégorie), en plus du menu "Tri" existant — les deux se combinent.
+- [x] Filtre revu en menu déroulant à cases à cocher multi-sélection (catégories en union entre elles, échéance/rappel en ET par-dessus) — la V1 en deux menus déroulants séparés ne correspondait pas à la demande.
+- [x] Tri redécomposé en menu (critère) + bouton ↑/↓ séparé (au lieu du menu combiné critère+sens).
+- [x] Bouton "⚙ Catégories" remonté à côté du titre "Mes tâches" (réglage, pas un filtre).
 
 ## Responsive mobile/tablette
 
@@ -96,6 +99,7 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [x] `input[type=date]` dans le style de base (désaligné sinon).
 - [x] Scroll figé sur tablette (Tableau de bord et vue bureau).
 - [ ] Réorganisation du menu principal (barre du haut) en version mobile — pas encore traité.
+- [x] Barre du haut "mangée" par le contenu du dessous sur tablette (Devis, Vue bureau) — non reproduit en environnement de test à zoom 100% ; fix appliqué par précaution (`maximum-scale=1, user-scalable=no` sur le viewport, ce type de symptôme correspond à un conflit connu pinch-zoom + `position:sticky`). À reconfirmer sur son vrai appareil — si ça persiste après ce correctif, il faudra creuser plus loin (pas juste re-deviner).
 
 ## i18n & commercialisation
 
