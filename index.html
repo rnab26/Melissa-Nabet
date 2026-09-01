@@ -200,13 +200,18 @@
   .task-archive.open .task-archive-body{display:block;}
   .task-archive .task-row{margin-bottom:7px;}
   .task-filter-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:8px;background:var(--oxblood);color:#fff;font-size:10px;font-weight:700;}
-  .task-filter-menu{min-width:210px;padding:6px 0;}
-  .task-filter-menu label{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:12.5px;color:var(--stone-light);cursor:pointer;}
+  .task-controls-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;}
+  .task-filter-menu{width:min(94vw,620px);padding:10px;}
+  .task-filter-table{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px 4px;}
+  .tf-col{border-right:1px solid rgba(255,255,255,.12);padding:0 8px;}
+  .tf-col:last-child{border-right:none;}
+  .tf-col-h{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--stone);font-weight:700;padding:4px 6px 6px;}
+  .task-filter-menu label{display:flex;align-items:center;gap:6px;padding:5px 6px;font-size:12px;color:var(--stone-light);cursor:pointer;border-radius:3px;}
   .task-filter-menu label:hover{background:rgba(255,255,255,.08);color:var(--paper);}
-  .task-filter-menu input[type=checkbox]{accent-color:var(--oxblood);}
-  .task-filter-sep{height:1px;background:var(--stone);opacity:.3;margin:4px 0;}
-  .task-filter-actions{padding:6px 14px 2px;}
+  .task-filter-menu input[type=checkbox]{accent-color:var(--oxblood);flex:0 0 auto;}
+  .task-filter-actions{padding:10px 2px 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.12);}
   .task-filter-actions .mini{width:100%;}
+  .task-done-log{font-size:10.5px;color:var(--stone);margin-top:3px;}
   .task-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--panel-edge);}
   .task-docs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px;}
   .task-doc-tile{width:64px;text-align:center;}
@@ -620,23 +625,17 @@
   <div class="dash-wrap">
     <h2>Tableau de bord</h2>
     <div class="dash-kpi-row" id="dash-kpi"></div>
-    <div class="ed-eyebrow" style="margin-top:22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span style="flex:1">Mes tâches</span>
-      <button class="mini" onclick="openTaskCategoriesPanel()">⚙ Catégories</button>
+    <div class="ed-eyebrow" style="margin-top:22px;">
+      <span>Mes tâches</span>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 10px;">
+    <div class="task-controls-row">
+      <button class="mini" onclick="openTaskModal()">+ Nouvelle tâche</button>
       <div class="vnav-dropdown" id="task-filter-wrap">
         <button class="mini" onclick="toggleTaskFilterMenu(event)">🔍 Filtrer<span id="task-filter-badge" class="task-filter-badge" style="display:none"></span></button>
         <div class="vnav-menu task-filter-menu" id="task-filter-menu"></div>
       </div>
-      <select id="task-sort-select" class="mini" onchange="setTaskSortMode(this.value)">
-        <option value="priority">🔥 Priorité</option>
-        <option value="due">📅 Échéance</option>
-        <option value="alpha">🔤 Alphabétique</option>
-        <option value="created">🕰 Date de création</option>
-      </select>
-      <button class="mini" id="task-sort-dir-btn" onclick="toggleTaskSortDir()" title="Inverser l'ordre">↑</button>
-      <button class="mini" onclick="openTaskModal()" style="margin-left:auto">+ Nouvelle tâche</button>
+      <button class="mini" id="task-sort-dir-btn" onclick="toggleTaskSortDir()" title="Inverser l'ordre">↑ Ordre</button>
+      <button class="mini" style="margin-left:auto" onclick="openTaskCategoriesPanel()">⚙ Catégories</button>
     </div>
     <div id="dash-tasks"></div>
     <div id="dash-tasks-archive"></div>
@@ -2877,61 +2876,61 @@ function ensureTaskCategories(){if(!Array.isArray(library.taskCategories))librar
 function taskCategory(t){ensureTaskCategories();return library.taskCategories.find(c=>c.id===t.category)||null;}
 let _taskOpenIds=new Set();
 let _taskSaveT=null;
-let taskSortMode=(()=>{try{return localStorage.getItem('mn_task_sort')||'priority';}catch(e){return 'priority';}})();
 let taskSortDir=(()=>{try{return localStorage.getItem('mn_task_sort_dir')||'asc';}catch(e){return 'asc';}})();
 let taskFilterCats=new Set();
+let taskFilterPrios=new Set();
 let taskFilterDue=false;
 let taskFilterReminder=false;
 (function loadTaskFilters(){
   try{
     const raw=localStorage.getItem('mn_task_filters');
-    if(raw){const o=JSON.parse(raw);taskFilterCats=new Set(o.cats||[]);taskFilterDue=!!o.due;taskFilterReminder=!!o.reminder;}
+    if(raw){const o=JSON.parse(raw);taskFilterCats=new Set(o.cats||[]);taskFilterPrios=new Set(o.prios||[]);taskFilterDue=!!o.due;taskFilterReminder=!!o.reminder;}
   }catch(e){}
 })();
 let _taskArchiveOpen=false;
-function setTaskSortMode(mode){
-  taskSortMode=mode;
-  try{localStorage.setItem('mn_task_sort',mode);}catch(e){}
-  renderTaskList();
-}
 function toggleTaskSortDir(){
   taskSortDir=taskSortDir==='asc'?'desc':'asc';
   try{localStorage.setItem('mn_task_sort_dir',taskSortDir);}catch(e){}
   renderTaskList();
 }
 function persistTaskFilters(){
-  try{localStorage.setItem('mn_task_filters',JSON.stringify({cats:[...taskFilterCats],due:taskFilterDue,reminder:taskFilterReminder}));}catch(e){}
+  try{localStorage.setItem('mn_task_filters',JSON.stringify({cats:[...taskFilterCats],prios:[...taskFilterPrios],due:taskFilterDue,reminder:taskFilterReminder}));}catch(e){}
 }
 function onTaskFilterToggle(tok,checked){
   if(tok==='__due__')taskFilterDue=checked;
   else if(tok==='__reminder__')taskFilterReminder=checked;
+  else if(tok.indexOf('__prio_')===0){const p=tok.slice(7);if(checked)taskFilterPrios.add(p);else taskFilterPrios.delete(p);}
   else if(checked)taskFilterCats.add(tok);
   else taskFilterCats.delete(tok);
   persistTaskFilters();
   renderTaskList();
 }
 function clearTaskFilters(){
-  taskFilterCats=new Set();taskFilterDue=false;taskFilterReminder=false;
+  taskFilterCats=new Set();taskFilterPrios=new Set();taskFilterDue=false;taskFilterReminder=false;
   persistTaskFilters();
   renderTaskList();
 }
-function taskFilterActiveCount(){return taskFilterCats.size+(taskFilterDue?1:0)+(taskFilterReminder?1:0);}
+function taskFilterActiveCount(){return taskFilterCats.size+taskFilterPrios.size+(taskFilterDue?1:0)+(taskFilterReminder?1:0);}
 function taskFilterMenuHtml(){
   ensureTaskCategories();
-  const isChecked=tok=>tok==='__due__'?taskFilterDue:tok==='__reminder__'?taskFilterReminder:taskFilterCats.has(tok);
+  const isChecked=tok=>tok==='__due__'?taskFilterDue:tok==='__reminder__'?taskFilterReminder:tok.indexOf('__prio_')===0?taskFilterPrios.has(tok.slice(7)):taskFilterCats.has(tok);
   const row=(tok,label)=>`<label><input type="checkbox" ${isChecked(tok)?'checked':''} onchange="onTaskFilterToggle('${tok}',this.checked)"> ${label}</label>`;
-  let html=row('__due__','📅 Avec échéance')+row('__reminder__','🔔 Avec rappel')+'<div class="task-filter-sep"></div>';
-  html+=library.taskCategories.map(c=>row(c.id,`${c.icon} ${esc(c.label)}`)).join('');
-  html+=`<div class="task-filter-actions"><button type="button" class="mini" onclick="clearTaskFilters()">Réinitialiser</button></div>`;
-  return html;
+  const colDue=`<div class="tf-col"><div class="tf-col-h">Échéance</div>${row('__due__','📅 Avec échéance')}</div>`;
+  const colReminder=`<div class="tf-col"><div class="tf-col-h">Rappel</div>${row('__reminder__','🔔 Avec rappel')}</div>`;
+  const colCat=`<div class="tf-col"><div class="tf-col-h">Catégorie</div>${library.taskCategories.map(c=>row(c.id,`${c.icon} ${esc(c.label)}`)).join('')}</div>`;
+  const colPrio=`<div class="tf-col"><div class="tf-col-h">Priorité</div>${Object.entries(TASK_PRIORITIES).map(([k,p])=>row('__prio_'+k,`${p.icon} ${p.label}`)).join('')}</div>`;
+  return `<div class="task-filter-table">${colDue}${colReminder}${colCat}${colPrio}</div>`+
+    `<div class="task-filter-actions"><button type="button" class="mini" onclick="clearTaskFilters()">Réinitialiser</button></div>`;
 }
 function toggleTaskFilterMenu(e){if(e)e.stopPropagation();const m=$('task-filter-menu');if(m)m.classList.toggle('open');}
 function closeTaskFilterMenu(){const m=$('task-filter-menu');if(m)m.classList.remove('open');}
 document.addEventListener('click',e=>{if(!e.target.closest('#task-filter-wrap'))closeTaskFilterMenu();});
 function applyTaskFilter(list){
   const anyCat=taskFilterCats.size>0;
+  const anyPrio=taskFilterPrios.size>0;
   return list.filter(t=>{
     if(anyCat&&!taskFilterCats.has(t.category))return false;
+    if(anyPrio&&!taskFilterPrios.has(taskPriority(t)))return false;
     if(taskFilterDue&&!t.dueDate)return false;
     if(taskFilterReminder&&!t.reminderDate)return false;
     return true;
@@ -2965,47 +2964,33 @@ function taskTagsHtml(t){
   if(t.dueDate)tags.push(`<span class="task-tag">📅 ${esc(fmtDateFr(t.dueDate))}</span>`);
   if(t.reminderDate)tags.push(`<span class="task-tag">🔔 ${esc(fmtDateFr(t.reminderDate))}</span>`);
   if((t.docs||[]).length)tags.push(`<span class="task-tag">📎 ${t.docs.length}</span>`);
+  if(t.done&&t.completedAt)tags.push(`<span class="task-tag">✓ Terminée le ${esc(fmtDateTimeFr(t.completedAt))}</span>`);
   return tags.join('');
+}
+function fmtDateTimeFr(ts){
+  const d=new Date(ts);
+  const pad=n=>String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} à ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function fmtDateFr(iso){
   if(!iso)return '';
   const [y,m,d]=iso.split('-');
   return d&&m&&y?`${d}/${m}/${y}`:iso;
 }
+/* Tri unique : priorité (urgent → faible), puis échéance la plus proche. Le bouton ↑/↓
+   inverse ce classement dans son ensemble — pas de menu "critère" séparé (demandé simplifié :
+   un seul filtre-tableau + un sens de tri, rien d'autre à ce niveau). */
 function sortedTasks(){
   const list=[...tasks];
   const dir=taskSortDir==='asc'?1:-1;
-  const doneRank=t=>t.done?1:0;
-  if(taskSortMode==='due'){
-    return list.sort((a,b)=>{
-      const dr=doneRank(a)-doneRank(b);if(dr)return dr;
-      if(a.dueDate&&b.dueDate)return dir*(a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0);
-      if(a.dueDate)return -1;
-      if(b.dueDate)return 1;
-      return (a.createdAt||0)-(b.createdAt||0);
-    });
-  }
-  if(taskSortMode==='alpha'){
-    return list.sort((a,b)=>{
-      const dr=doneRank(a)-doneRank(b);if(dr)return dr;
-      return dir*((a.title||'').localeCompare(b.title||''));
-    });
-  }
-  if(taskSortMode==='created'){
-    return list.sort((a,b)=>{
-      const dr=doneRank(a)-doneRank(b);if(dr)return dr;
-      return dir*((a.createdAt||0)-(b.createdAt||0));
-    });
-  }
   const rank={overdue:0,critique:1,urgent:2,important:3,normal:4,faible:5,attente:6};
   return list.sort((a,b)=>{
-    const dr=doneRank(a)-doneRank(b);if(dr)return dr;
     const ra=rank[taskStatus(a)],rb=rank[taskStatus(b)];
     if(ra!==rb)return dir*(ra-rb);
-    if(a.dueDate&&b.dueDate)return a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0;
-    if(a.dueDate)return -1;
-    if(b.dueDate)return 1;
-    return (a.createdAt||0)-(b.createdAt||0);
+    if(a.dueDate&&b.dueDate)return dir*(a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0);
+    if(a.dueDate)return dir*-1;
+    if(b.dueDate)return dir*1;
+    return dir*((a.createdAt||0)-(b.createdAt||0));
   });
 }
 function taskPriorityOptionsHtml(t){
@@ -3075,11 +3060,10 @@ function renderTaskList(){
   const fmenu=$('task-filter-menu');if(fmenu)fmenu.innerHTML=taskFilterMenuHtml();
   const fcount=taskFilterActiveCount();
   const fbadge=$('task-filter-badge');if(fbadge){fbadge.style.display=fcount?'inline-flex':'none';fbadge.textContent=fcount||'';}
-  const sel=$('task-sort-select');if(sel)sel.value=taskSortMode;
-  const dirBtn=$('task-sort-dir-btn');if(dirBtn)dirBtn.textContent=taskSortDir==='asc'?'↑':'↓';
+  const dirBtn=$('task-sort-dir-btn');if(dirBtn)dirBtn.textContent=(taskSortDir==='asc'?'↑':'↓')+' Ordre';
   const filtered=applyTaskFilter(sortedTasks());
   const active=filtered.filter(t=>!t.done);
-  const archived=filtered.filter(t=>t.done);
+  const archived=filtered.filter(t=>t.done).sort((a,b)=>(b.completedAt||0)-(a.completedAt||0));
   if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';}
   else if(!active.length&&!archived.length){root.innerHTML='<div class="task-empty">Aucune tâche ne correspond à ce filtre.</div>';}
   else if(!active.length){root.innerHTML='<div class="task-empty">Aucune tâche active — tout est dans les archives.</div>';}
@@ -3119,7 +3103,9 @@ function updateTaskFieldRerender(id,key,val){
 }
 function toggleTaskDone(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;
-  t.done=!t.done;t.updatedAt=Date.now();
+  t.done=!t.done;
+  t.completedAt=t.done?Date.now():null;
+  t.updatedAt=Date.now();
   saveTasks();renderTaskList();
 }
 function deleteTaskConfirm(id){
