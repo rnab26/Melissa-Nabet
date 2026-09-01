@@ -180,7 +180,8 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 **Notes / À faire**
 - [x] 3 maquettes proposées (onglets / cartes couleur / deux colonnes), choix de l'utilisatrice : deux colonnes.
 - [x] Implémentation réelle sans régression (toutes les fonctionnalités existantes vérifiées après refonte).
-- [x] Ajustements après retour : "Général" fusionné dans la colonne gauche sous Email (ville/début/fin/commentaire, sans titre "Général" — coordonnées de base) ; Relance client déplacée entre Paiements et Commissions ; Devis-montant et Commissions encadrés (`.cl-subbox`) comme Tâches liées ; phrase "choisissez la catégorie" remplacée par des en-têtes de colonnes (Catégorie/Intitulé/Montant/Date) ; phrase "Reste = montant final…" supprimée ; icône 🗑 sur "Supprimer ce client".
+- [x] Ajustements après retour : "Général" fusionné dans la colonne gauche sous Email (ville/début/fin/commentaire, sans titre "Général" — coordonnées de base) ; Relance client déplacée entre Paiements et Commissions ; phrase "choisissez la catégorie" remplacée par des en-têtes de colonnes (Catégorie/Intitulé/Montant/Date) ; phrase "Reste = montant final…" supprimée ; icône 🗑 sur "Supprimer ce client".
+- [x] Devis-montant (🧾) et Commissions prestataires (🤝) passés en vrais bandeaux marron (`cardWrap`, comme Tâches liées/Documents/Financier) — le simple encadré fin (`.cl-subbox`) ne suffisait pas visuellement, demande explicite d'un "vrai" bandeau avec icône. `.cl-subbox` supprimé (plus utilisé).
 
 ## Nettoyage de code
 

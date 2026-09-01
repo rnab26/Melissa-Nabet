@@ -378,7 +378,6 @@
   .cl-side-more{display:flex;flex-direction:column;gap:12px;}
   /* Blocs financiers secondaires (devis-montant, commissions) encadrés comme "Tâches liées" —
      avant, seule la relance client avait une bordure visible, le reste se fondait dans le fond. */
-  .cl-subbox{background:#fff;border:1px solid var(--panel-edge);border-radius:6px;padding:12px 14px;margin-bottom:14px;}
   .sub-line-head{padding:0 0 4px;}
   .sub-line-head span{font-size:10px;color:var(--stone);text-transform:uppercase;letter-spacing:.04em;}
   @media (max-width:600px){.sub-line-head{display:none;}}
@@ -2601,14 +2600,13 @@ function buildClientDetail(c){
   /* ---- Colonne principale (droite) : blocs à bandeau ---- */
   const main=document.createElement('div');main.className='cl-main';
 
-  const finBody=document.createElement('div');
+  const finBody=document.createElement('div');finBody.style.cssText='display:flex;flex-direction:column;gap:14px;';
   const recap=document.createElement('div');recap.className='cl-recap';
   recap.innerHTML=`<div class="rc-box"><span>Devis — montant</span><b>${fmt(t.montant)} ${dv}</b><small>Reçu ${fmt(t.recu)} · Reste ${fmt(t.reste)} ${dv}</small></div>
     <div class="rc-box"><span>Commissions prestataires — cumul</span><b>${fmt(t.commissions)} ${dv}</b><small>Payé ${fmt(t.commissionsPaye)} · Reste à recevoir ${fmt(t.commissionsReste)} ${dv}</small></div>`;
   finBody.appendChild(recap);
 
-  const devisBox=document.createElement('div');devisBox.className='cl-subbox';
-  const h1=document.createElement('div');h1.className='cl-block-title';h1.style.marginTop='0';h1.style.borderTop='none';h1.style.paddingTop='0';h1.textContent='Devis — montant';devisBox.appendChild(h1);
+  const devisBox=document.createElement('div');
   const mf=document.createElement('div');mf.className='cl-montant';
   mf.innerHTML=`<label style="flex:0 0 150px"><span>Montant final du devis</span><input type="number" data-mf value="${c.montantFinal||''}" placeholder="ex. 24000"></label>
     <label style="flex:0 0 78px"><span>Devise</span><select data-devise><option ${dv==='₪'?'selected':''}>₪</option><option ${dv==='€'?'selected':''}>€</option><option ${dv==='$'?'selected':''}>$</option></select></label>
@@ -2618,20 +2616,21 @@ function buildClientDetail(c){
   devisBox.appendChild(mf);
   /* Devis du client (aperçu PDF, modification, suppression) */
   devisBox.appendChild(buildClientDevisList(c));
-  finBody.appendChild(devisBox);
+  finBody.appendChild(cardWrap('🧾','Devis — montant',devisBox));
 
+  const paymentsWrap=document.createElement('div');
   const psub=document.createElement('div');psub.className='sub-line with-cat sub-line-head';
   psub.innerHTML='<span>Catégorie</span><span>Intitulé</span><span>Montant</span><span>Date</span><span></span><span></span>';
-  finBody.appendChild(psub);
-  finBody.appendChild(buildSubList(c,'paiements','Intitulé (ex. 1er avance plan)',true));
+  paymentsWrap.appendChild(psub);
+  paymentsWrap.appendChild(buildSubList(c,'paiements','Intitulé (ex. 1er avance plan)',true));
   const addP=document.createElement('button');addP.className='add-btn';addP.style.marginTop='6px';addP.textContent='+ Ajouter une ligne';
   addP.addEventListener('click',()=>{(c.paiements=c.paiements||[]).push({id:uid(),categorie:'Architecture',label:'',montant:0});saveClients();renderClients();});
-  finBody.appendChild(addP);
+  paymentsWrap.appendChild(addP);
+  finBody.appendChild(paymentsWrap);
 
   finBody.appendChild(buildRelanceBox(c,t,dv));
 
-  const commBox=document.createElement('div');commBox.className='cl-subbox';
-  const h2=document.createElement('div');h2.className='cl-block-title';h2.style.marginTop='0';h2.style.borderTop='none';h2.style.paddingTop='0';h2.textContent='Commissions prestataires — cumul';commBox.appendChild(h2);
+  const commBox=document.createElement('div');
   const commSummary=document.createElement('div');commSummary.className='comm-summary';
   commSummary.innerHTML=`<div><span>Total dû</span><b>${fmt(t.commissions)} ${dv}</b></div><div><span>Total payé</span><b>${fmt(t.commissionsPaye)} ${dv}</b></div><div><span>Reste à recevoir</span><b class="${t.commissionsReste<=0?'ok':'due'}">${fmt(t.commissionsReste)} ${dv}</b></div>`;
   commBox.appendChild(commSummary);
@@ -2639,7 +2638,7 @@ function buildClientDetail(c){
   const addC=document.createElement('button');addC.className='add-btn';addC.style.marginTop='6px';addC.textContent='+ Ajouter une commission';
   addC.addEventListener('click',()=>{(c.commissions=c.commissions||[]).push({id:uid(),label:'',montantDu:0,paye:0});saveClients();renderClients();});
   commBox.appendChild(addC);
-  finBody.appendChild(commBox);
+  finBody.appendChild(cardWrap('🤝','Commissions prestataires — cumul',commBox));
   main.appendChild(cardWrap('💰','Financier',finBody));
 
   main.appendChild(cardWrap('✅','Tâches liées',buildClientTasksBox(c)));
