@@ -2567,7 +2567,7 @@ function buildClientDetail(c){
   addC.addEventListener('click',()=>{(c.commissions=c.commissions||[]).push({id:uid(),label:'',montantDu:0,paye:0});saveClients();renderClients();});
   frag.appendChild(addC);
 
-  const tt=document.createElement('div');tt.className='doc-section-title';tt.textContent='Tâches liées';frag.appendChild(tt);
+  const tt=document.createElement('div');tt.className='doc-section-title';tt.textContent='✅ Tâches liées';frag.appendChild(tt);
   frag.appendChild(buildClientTasksBox(c));
 
   const dt=document.createElement('div');dt.className='doc-section-title';dt.textContent='Documents (factures, achats, photos…)';frag.appendChild(dt);
