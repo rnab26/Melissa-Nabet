@@ -2567,6 +2567,9 @@ function buildClientDetail(c){
   addC.addEventListener('click',()=>{(c.commissions=c.commissions||[]).push({id:uid(),label:'',montantDu:0,paye:0});saveClients();renderClients();});
   frag.appendChild(addC);
 
+  const tt=document.createElement('div');tt.className='doc-section-title';tt.textContent='Tâches liées';frag.appendChild(tt);
+  frag.appendChild(buildClientTasksBox(c));
+
   const dt=document.createElement('div');dt.className='doc-section-title';dt.textContent='Documents (factures, achats, photos…)';frag.appendChild(dt);
   frag.appendChild(buildDocGallery(c));
 
@@ -2750,6 +2753,47 @@ async function attachFiles(c,ligneId,files){
     try{const doc=await readFileAsDoc(file);const id=uid();await docStore.save(id,doc);c.docs=c.docs||[];c.docs.push({id,name:doc.name,type:doc.type,ligneId:ligneId||null});n++;}catch(e){toast('Échec import '+file.name);}
   }
   saveClients();renderClients();if(n)toast(n+' document(s) ajouté(s)');
+}
+function buildClientTasksBox(c){
+  const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
+  const linked=tasks.filter(t=>t.clientId===c.id);
+  if(linked.length){
+    linked.forEach(t=>{
+      const r=document.createElement('div');r.className='list-row';
+      r.innerHTML=`<input type="checkbox" class="task-check" ${t.done?'checked':''} title="${t.done?'Marquer à faire':'Marquer fait'}">
+        <div class="lr-main" style="cursor:pointer">
+          <div class="lr-t" style="${t.done?'text-decoration:line-through;color:var(--stone);':''}">${esc(t.title)}</div>
+          <div class="lr-s">${taskTagsHtml(t,{hideClient:true})}</div>
+        </div>`;
+      r.querySelector('.task-check').addEventListener('click',e=>{e.stopPropagation();toggleTaskDone(t.id);renderClients();});
+      r.querySelector('.lr-main').addEventListener('click',()=>openClientTaskInDashboard(t.id));
+      wrap.appendChild(r);
+    });
+  } else {
+    const e=document.createElement('div');e.className='task-empty';e.textContent='Aucune tâche liée à ce client.';wrap.appendChild(e);
+  }
+  const addRow=document.createElement('div');addRow.style.cssText='display:flex;gap:8px;margin-top:2px;';
+  addRow.innerHTML=`<input type="text" placeholder="Nouvelle tâche pour ce client…" style="flex:1"><button class="mini">+ Ajouter</button>`;
+  const inp=addRow.querySelector('input'),btn=addRow.querySelector('button');
+  const doAdd=()=>{
+    const title=(inp.value||'').trim();if(!title)return;
+    const id=uid();
+    tasks.push({id,title,detail:'',dueDate:'',reminderDate:'',priority:'normal',category:'',clientId:c.id,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
+    saveTasks();inp.value='';renderClients();toast('Tâche ajoutée');
+  };
+  btn.addEventListener('click',doAdd);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')doAdd();});
+  wrap.appendChild(addRow);
+  return wrap;
+}
+function openClientTaskInDashboard(id){
+  showView('dashboard');
+  _taskOpenIds.add(id);
+  renderTaskList();
+  setTimeout(()=>{
+    const el=document.querySelector('.task-row[data-tid="'+id+'"]');
+    if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+  },80);
 }
 function buildDocGallery(c){
   const g=document.createElement('div');g.className='doc-gallery';
@@ -2952,7 +2996,8 @@ function taskIcon(t){
   if(st==='overdue')return '⏰';
   return TASK_PRIORITIES[st].icon;
 }
-function taskTagsHtml(t){
+function taskTagsHtml(t,opts){
+  opts=opts||{};
   const st=taskStatus(t);
   const tags=[];
   if(st==='overdue')tags.push('<span class="task-tag overdue">En retard</span>');
@@ -2961,6 +3006,7 @@ function taskTagsHtml(t){
   else if(st==='critique')tags.push('<span class="task-tag critique">Critique</span>');
   const cat=taskCategory(t);
   if(cat)tags.push(`<span class="task-tag">${cat.icon} ${esc(cat.label)}</span>`);
+  if(t.clientId&&!opts.hideClient)tags.push(`<span class="task-tag" onclick="event.stopPropagation();gotoClient('${t.clientId}')" style="cursor:pointer">👤 ${esc(clientName(t.clientId))}</span>`);
   if(t.dueDate)tags.push(`<span class="task-tag">📅 ${esc(fmtDateFr(t.dueDate))}</span>`);
   if(t.reminderDate)tags.push(`<span class="task-tag">🔔 ${esc(fmtDateFr(t.reminderDate))}</span>`);
   if((t.docs||[]).length)tags.push(`<span class="task-tag">📎 ${t.docs.length}</span>`);
@@ -3001,6 +3047,11 @@ function taskCategoryOptionsHtml(t){
   const cur=t&&t.category||'';
   return `<option value="">— Sans catégorie —</option>`+library.taskCategories.map(c=>`<option value="${c.id}" ${cur===c.id?'selected':''}>${c.icon} ${esc(c.label)}</option>`).join('');
 }
+function taskClientOptionsHtml(t){
+  const cur=t&&t.clientId||'';
+  const sorted=[...clients].sort((a,b)=>a.name.localeCompare(b.name));
+  return `<option value="">— Aucun client —</option>`+sorted.map(c=>`<option value="${c.id}" ${cur===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+}
 function taskDocsHtml(t){
   const tiles=(t.docs||[]).map(d=>{
     const isImg=(d.type||'').indexOf('image/')===0;
@@ -3016,7 +3067,7 @@ function taskRowHtml(t){
   const open=_taskOpenIds.has(t.id);
   const check=`<input type="checkbox" class="task-check" ${t.done?'checked':''} onclick="event.stopPropagation();toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">`;
   if(!open){
-    return `<div class="task-row ${t.done?'done':''}" onclick="toggleTaskOpen('${t.id}')">
+    return `<div class="task-row ${t.done?'done':''}" data-tid="${t.id}" onclick="toggleTaskOpen('${t.id}')">
       <div class="task-head">
         ${check}
         <span class="task-icon" title="Statut">${taskIcon(t)}</span>
@@ -3029,7 +3080,7 @@ function taskRowHtml(t){
       </div>
     </div>`;
   }
-  return `<div class="task-row ${t.done?'done':''}">
+  return `<div class="task-row ${t.done?'done':''}" data-tid="${t.id}">
     <div class="task-head" onclick="toggleTaskOpen('${t.id}')">
       ${check}
       <span class="task-icon" title="Statut">${taskIcon(t)}</span>
@@ -3039,6 +3090,7 @@ function taskRowHtml(t){
     <div class="task-body" onclick="event.stopPropagation()">
       <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
       <label class="fld"><span class="lbl">Détail</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
+      <label class="fld"><span class="lbl">Client</span><select onchange="updateTaskFieldRerender('${t.id}','clientId',this.value)">${taskClientOptionsHtml(t)}</select></label>
       <div class="row2">
         <label class="fld"><span class="lbl">Échéance</span><input type="date" value="${t.dueDate||''}" onchange="updateTaskFieldRerender('${t.id}','dueDate',this.value)"></label>
         <label class="fld"><span class="lbl">Rappel</span><input type="date" value="${t.reminderDate||''}" onchange="updateTaskFieldRerender('${t.id}','reminderDate',this.value)"></label>
@@ -3143,10 +3195,11 @@ function removeTaskDoc(taskId,docId){
     saveTasks();renderTaskList();
   });
 }
-function openTaskModal(){
+function openTaskModal(clientId){
   ensureTaskCategories();
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Nouvelle tâche</h3>
     <label class="fld"><span class="lbl">Titre</span><input type="text" id="task-title" placeholder="Ex. Commander les échantillons de parquet"></label>
+    <label class="fld"><span class="lbl">Client</span><select id="task-client">${taskClientOptionsHtml(clientId?{clientId}:null)}</select></label>
     <div class="row2">
       <label class="fld"><span class="lbl">Échéance</span><input type="date" id="task-due"></label>
       <label class="fld"><span class="lbl">Rappel</span><input type="date" id="task-reminder"></label>
@@ -3167,8 +3220,9 @@ function saveTaskFromModal(){
   const reminderDate=$('task-reminder').value||'';
   const priority=TASK_PRIORITIES[$('task-priority').value]?$('task-priority').value:'normal';
   const category=$('task-category').value||'';
+  const clientId=$('task-client').value||'';
   const id=uid();
-  tasks.push({id,title,detail:'',dueDate,reminderDate,priority,category,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
+  tasks.push({id,title,detail:'',dueDate,reminderDate,priority,category,clientId,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
   saveTasks();closeModal();
   _taskOpenIds.add(id);
   renderTaskList();toast('Tâche ajoutée');

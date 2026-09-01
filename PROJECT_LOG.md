@@ -89,6 +89,7 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 - [x] V3 filtre : refait en "tableau" à 4 colonnes (Échéance / Rappel / Catégorie / Priorité) dans le menu déroulant unique "🔍 Filtrer" — priorité ajoutée comme axe de filtre (n'existait qu'en tri avant). Barre de contrôle sur une seule ligne : "+ Nouvelle tâche" à gauche, Filtrer + Ordre (↑/↓) au centre, "⚙ Catégories" à droite.
 - [x] Tri simplifié à un seul critère fixe (priorité puis échéance) + bouton ↑/↓ unique — plus de sélecteur de critère séparé (demande explicite de simplification).
 - [x] Horodatage de fin de tâche (`completedAt`) : affiché en tag "✓ Terminée le {date} à {heure}" sur la tâche archivée — sert de garde-fou si elle a été cochée par erreur. Les archives sont triées par date de complétion la plus récente en premier (indépendamment du tri de la liste active).
+- [x] Tâches liées à un client : champ `clientId` sur la tâche (sélecteur dans le formulaire de tâche + dans la modale de création, pré-rempli si créée depuis la fiche client). Section "Tâches liées" dans la fiche client (liste + case à cocher + ajout rapide par intitulé). Tag "👤 Nom du client" cliquable sur la tâche (ramène à la fiche). Les deux sens marchent sur le même tableau `tasks` partagé — pas de duplication de données.
 
 ## Responsive mobile/tablette
 
