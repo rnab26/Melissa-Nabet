@@ -362,6 +362,27 @@
   .cl-meta label span{font-size:10px;letter-spacing:.03em;display:block;margin-bottom:3px;}
   .cl-meta input{background:var(--panel);}
   .cl-detail-actions{display:flex;justify-content:space-between;margin-top:10px;gap:8px;flex-wrap:wrap;}
+  /* Fiche client — Modèle "deux colonnes" : identité fixe à gauche, blocs à bandeau à droite. */
+  .cl-two-col{display:flex;gap:14px;align-items:flex-start;}
+  .cl-side{flex:0 0 220px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;align-self:flex-start;}
+  .cl-side-head{background:var(--ink);padding:18px 14px;text-align:center;}
+  .cl-side-avatar{width:46px;height:46px;border-radius:50%;background:var(--oxblood);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:18px;margin:0 auto 10px;}
+  .cl-side-head input.cl-side-name{background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.3);color:#fff;text-align:center;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;padding:2px 4px 6px;margin-bottom:8px;}
+  .cl-side-head input.cl-side-name:focus{border-bottom-color:#fff;}
+  .cl-side-head select.cl-side-statut{background:transparent;border:1px solid rgba(255,255,255,.3);color:#d8d2c8;text-align:center;text-align-last:center;font-size:11px;border-radius:3px;padding:4px 6px;}
+  .cl-side-head select.cl-side-statut option{color:#3d3934;}
+  .cl-side-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
+  .cl-side-body .fld .lbl{font-size:10px;color:var(--stone);letter-spacing:.03em;display:block;margin-bottom:3px;}
+  .cl-side-body .fld input{padding:7px 8px;font-size:12.5px;}
+  .cl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;}
+  .cl-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;}
+  .cl-card-bar{background:var(--oxblood);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;}
+  .cl-card-body{padding:14px;}
+  .cl-card-body .cl-meta{background:transparent;border:none;padding:0;margin:0;}
+  @media (max-width:760px){
+    .cl-two-col{flex-direction:column;}
+    .cl-side{flex:1 1 auto;width:100%;}
+  }
   .cl-totals{display:flex;flex-direction:column;gap:8px;padding:14px 16px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);margin-top:14px;border-top:2px solid var(--hair);}
 
   /* devis */
@@ -2513,71 +2534,107 @@ function renderClientsFooter(tbl,list){
   grand.innerHTML=`<div></div><div></div><div class="ft-label">Total général</div><div class="num ft-val">${fmt(caGlobal)} ${dv}</div><div class="num ft-sub col-sep" style="align-self:center">reste →</div><div class="num ft-val col-after-sep ${resteGlobal>0?'due-txt':'ok-txt'}" style="grid-column:span 2">${fmt(resteGlobal)} ${dv}</div><div></div><div></div><div></div>`;
   tbl.appendChild(grand);
 }
-function buildClientDetail(c){
-  const frag=document.createElement('div');const dv=c.devise||'₪';
-  const meta=document.createElement('div');meta.className='cl-meta';
-  const mk=(lbl,f,ph,wide)=>`<label style="flex:${wide?'2 1 200px':'1 1 110px'}"><span>${lbl}</span><input type="text" value="${esc(c[f]||'')}" data-cf="${f}" placeholder="${ph||''}"></label>`;
-  meta.innerHTML=
-    `<label style="flex:2 1 200px"><span>Nom du client</span><input type="text" value="${esc(c.name)}" data-name placeholder="Nom"></label>`+
-    `<label style="flex:1 1 160px"><span>Statut du chantier</span><select data-statut><option value="en_cours" ${c.statut==='en_cours'?'selected':''}>🟠 En cours</option><option value="devis" ${c.statut==='devis'?'selected':''}>🔵 Devis envoyé (attente signature)</option><option value="termine" ${c.statut==='termine'?'selected':''}>🟢 Terminé</option><option value="annule" ${c.statut==='annule'?'selected':''}>🔴 Annulé</option></select></label>`+
-    mk('Contact','contact')+mk('Téléphone','phone')+mk('Email','email')+mk('Ville','ville')+
-    `<label style="flex:1 1 130px"><span>Début du projet</span><input type="date" value="${isoDate(c.debut)}" data-cf="debut"></label>`+
-    `<label style="flex:1 1 130px"><span>Fin du projet</span><input type="date" value="${isoDate(c.fin)}" data-cf="fin"></label>`+
-    mk('Commentaire','commentaire','',true);
-  meta.querySelectorAll('input[data-cf]').forEach(inp=>{
+function wireMetaInputs(container,c){
+  container.querySelectorAll('input[data-cf]').forEach(inp=>{
     inp.addEventListener('input',()=>{c[inp.dataset.cf]=inp.value;saveClientsDebounced();});
     // À la sortie du champ : on met à jour la ligne concernée seulement (sans refermer la fiche)
     inp.addEventListener('change',()=>{c[inp.dataset.cf]=inp.value;saveClients();updateClientRow(c);});
   });
-  const nameInp=meta.querySelector('input[data-name]');
+}
+function cardWrap(icon,title,bodyEl){
+  const card=document.createElement('div');card.className='cl-card';
+  const bar=document.createElement('div');bar.className='cl-card-bar';bar.textContent=icon+' '+title;
+  const body=document.createElement('div');body.className='cl-card-body';
+  body.appendChild(bodyEl);
+  card.appendChild(bar);card.appendChild(body);
+  return card;
+}
+function buildClientDetail(c){
+  const frag=document.createElement('div');const dv=c.devise||'₪';
+  const t=clientTotals(c);
+  const twoCol=document.createElement('div');twoCol.className='cl-two-col';
+
+  /* ---- Colonne identité (gauche) : nom, statut, coordonnées de contact rapide ---- */
+  const side=document.createElement('div');side.className='cl-side';
+  const initials=(c.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
+  side.innerHTML=`<div class="cl-side-head">
+      <div class="cl-side-avatar">${esc(initials)}</div>
+      <input type="text" class="cl-side-name" data-name value="${esc(c.name)}" placeholder="Nom du client">
+      <select class="cl-side-statut" data-statut>
+        <option value="en_cours" ${c.statut==='en_cours'?'selected':''}>🟠 En cours</option>
+        <option value="devis" ${c.statut==='devis'?'selected':''}>🔵 Devis envoyé</option>
+        <option value="termine" ${c.statut==='termine'?'selected':''}>🟢 Terminé</option>
+        <option value="annule" ${c.statut==='annule'?'selected':''}>🔴 Annulé</option>
+      </select>
+    </div>
+    <div class="cl-side-body">
+      <label class="fld"><span class="lbl">Contact</span><input type="text" data-cf="contact" value="${esc(c.contact||'')}"></label>
+      <label class="fld"><span class="lbl">Téléphone</span><input type="text" data-cf="phone" value="${esc(c.phone||'')}"></label>
+      <label class="fld"><span class="lbl">Email</span><input type="text" data-cf="email" value="${esc(c.email||'')}"></label>
+    </div>`;
+  wireMetaInputs(side,c);
+  const nameInp=side.querySelector('input[data-name]');
   nameInp.addEventListener('input',()=>{c.name=nameInp.value;saveClientsDebounced();});
   nameInp.addEventListener('change',()=>{saveClients();updateClientRow(c);});
-  meta.querySelector('select[data-statut]').addEventListener('change',e=>{c.statut=e.target.value;saveClients();updateClientRow(c);});
-  frag.appendChild(meta);
+  side.querySelector('select[data-statut]').addEventListener('change',e=>{c.statut=e.target.value;saveClients();updateClientRow(c);});
+  twoCol.appendChild(side);
 
-  const t=clientTotals(c);
+  /* ---- Colonne principale (droite) : blocs à bandeau ---- */
+  const main=document.createElement('div');main.className='cl-main';
+
+  const generalBody=document.createElement('div');generalBody.className='cl-meta';
+  generalBody.innerHTML=
+    `<label style="flex:1 1 140px"><span>Ville</span><input type="text" data-cf="ville" value="${esc(c.ville||'')}"></label>`+
+    `<label style="flex:1 1 130px"><span>Début du projet</span><input type="date" data-cf="debut" value="${isoDate(c.debut)}"></label>`+
+    `<label style="flex:1 1 130px"><span>Fin du projet</span><input type="date" data-cf="fin" value="${isoDate(c.fin)}"></label>`+
+    `<label style="flex:2 1 200px"><span>Commentaire</span><input type="text" data-cf="commentaire" value="${esc(c.commentaire||'')}"></label>`;
+  wireMetaInputs(generalBody,c);
+  main.appendChild(cardWrap('📋','Général',generalBody));
+
+  const finBody=document.createElement('div');
   const recap=document.createElement('div');recap.className='cl-recap';
   recap.innerHTML=`<div class="rc-box"><span>Devis — montant</span><b>${fmt(t.montant)} ${dv}</b><small>Reçu ${fmt(t.recu)} · Reste ${fmt(t.reste)} ${dv}</small></div>
     <div class="rc-box"><span>Commissions prestataires — cumul</span><b>${fmt(t.commissions)} ${dv}</b><small>Payé ${fmt(t.commissionsPaye)} · Reste à recevoir ${fmt(t.commissionsReste)} ${dv}</small></div>`;
-  frag.appendChild(recap);
-  frag.appendChild(buildRelanceBox(c,t,dv));
+  finBody.appendChild(recap);
+  finBody.appendChild(buildRelanceBox(c,t,dv));
 
-  const h1=document.createElement('div');h1.className='cl-block-title';h1.textContent='Devis — montant';frag.appendChild(h1);
+  const h1=document.createElement('div');h1.className='cl-block-title';h1.textContent='Devis — montant';finBody.appendChild(h1);
   const mf=document.createElement('div');mf.className='cl-montant';
   mf.innerHTML=`<label style="flex:0 0 150px"><span>Montant final du devis</span><input type="number" data-mf value="${c.montantFinal||''}" placeholder="ex. 24000"></label>
     <label style="flex:0 0 78px"><span>Devise</span><select data-devise><option ${dv==='₪'?'selected':''}>₪</option><option ${dv==='€'?'selected':''}>€</option><option ${dv==='$'?'selected':''}>$</option></select></label>
     <div class="mf-reste">Reste à recevoir : <b>${fmt(t.reste)} ${dv}</b>${c.devisId?' <span class="mf-link">· lié au devis généré</span>':''}</div>`;
   mf.querySelector('input[data-mf]').addEventListener('change',e=>{c.montantFinal=parseFloat(e.target.value)||0;c.devisId=null;saveClients();renderClients();});
   mf.querySelector('select[data-devise]').addEventListener('change',e=>{c.devise=e.target.value;saveClients();renderClients();});
-  frag.appendChild(mf);
+  finBody.appendChild(mf);
   /* Devis du client (aperçu PDF, modification, suppression) */
-  frag.appendChild(buildClientDevisList(c));
-  const psub=document.createElement('div');psub.className='sub-h';psub.textContent='Paiements reçus (se déduisent du montant) — choisissez la catégorie';frag.appendChild(psub);
-  frag.appendChild(buildSubList(c,'paiements','Intitulé (ex. 1er avance plan)',true));
+  finBody.appendChild(buildClientDevisList(c));
+  const psub=document.createElement('div');psub.className='sub-h';psub.textContent='Paiements reçus (se déduisent du montant) — choisissez la catégorie';finBody.appendChild(psub);
+  finBody.appendChild(buildSubList(c,'paiements','Intitulé (ex. 1er avance plan)',true));
   const addP=document.createElement('button');addP.className='add-btn';addP.style.marginTop='6px';addP.textContent='+ Ajouter une ligne';
   addP.addEventListener('click',()=>{(c.paiements=c.paiements||[]).push({id:uid(),categorie:'Architecture',label:'',montant:0});saveClients();renderClients();});
-  frag.appendChild(addP);
+  finBody.appendChild(addP);
 
-  const h2=document.createElement('div');h2.className='cl-block-title';h2.style.marginTop='16px';h2.textContent='Commissions prestataires — cumul';frag.appendChild(h2);
+  const h2=document.createElement('div');h2.className='cl-block-title';h2.style.marginTop='16px';h2.textContent='Commissions prestataires — cumul';finBody.appendChild(h2);
   const commSummary=document.createElement('div');commSummary.className='comm-summary';
   commSummary.innerHTML=`<div><span>Total dû</span><b>${fmt(t.commissions)} ${dv}</b></div><div><span>Total payé</span><b>${fmt(t.commissionsPaye)} ${dv}</b></div><div><span>Reste à recevoir</span><b class="${t.commissionsReste<=0?'ok':'due'}">${fmt(t.commissionsReste)} ${dv}</b></div>`;
-  frag.appendChild(commSummary);
-  frag.appendChild(buildCommissionList(c));
+  finBody.appendChild(commSummary);
+  finBody.appendChild(buildCommissionList(c));
   const addC=document.createElement('button');addC.className='add-btn';addC.style.marginTop='6px';addC.textContent='+ Ajouter une commission';
   addC.addEventListener('click',()=>{(c.commissions=c.commissions||[]).push({id:uid(),label:'',montantDu:0,paye:0});saveClients();renderClients();});
-  frag.appendChild(addC);
+  finBody.appendChild(addC);
+  main.appendChild(cardWrap('💰','Financier',finBody));
 
-  const tt=document.createElement('div');tt.className='doc-section-title';tt.textContent='✅ Tâches liées';frag.appendChild(tt);
-  frag.appendChild(buildClientTasksBox(c));
-
-  const dt=document.createElement('div');dt.className='doc-section-title';dt.textContent='Documents (factures, achats, photos…)';frag.appendChild(dt);
-  frag.appendChild(buildDocGallery(c));
+  main.appendChild(cardWrap('✅','Tâches liées',buildClientTasksBox(c)));
+  main.appendChild(cardWrap('📎','Documents',buildDocGallery(c)));
 
   const actions=document.createElement('div');actions.className='cl-detail-actions';
   actions.innerHTML='<span style="font-size:11px;color:var(--stone)">Reste = montant final − paiements reçus. Fichiers &lt; 4 Mo ; images compressées.</span>';
   const del=document.createElement('button');del.className='mini danger';del.textContent='Supprimer ce client';
   del.addEventListener('click',()=>askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');}));
-  actions.appendChild(del);frag.appendChild(actions);
+  actions.appendChild(del);main.appendChild(actions);
+
+  twoCol.appendChild(main);
+  frag.appendChild(twoCol);
   return frag;
 }
 function buildRelanceBox(c,t,dv){

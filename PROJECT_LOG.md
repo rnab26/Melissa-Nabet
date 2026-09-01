@@ -169,6 +169,18 @@ Pour éviter de saturer le quota `localStorage` (5-10 Mo par origine) avec des f
 - [x] `.cl-table{min-width}` ramené à une valeur cohérente avec les nouvelles largeurs de colonnes (840→680px).
 - [x] Nom de client long : ellipsis au lieu de faire déborder la ligne.
 
+## Clients — fiche détaillée, mise en page (trop fine/plate)
+
+**État** : fiche client refaite en deux colonnes ("Modèle C" — proposé via 3 maquettes comparées sur un canvas Claude Design, choisi par l'utilisatrice). Colonne gauche fixe (`.cl-side`, ~220px) : avatar (initiales), nom, statut, contact/téléphone/email — coordonnées d'identité rapides. Colonne droite (`.cl-main`) : blocs à bandeau plein-ton (`.cl-card`/`.cl-card-bar`) — 📋 Général (ville/début/fin/commentaire), 💰 Financier (montant devis, devis liés, paiements, relance, commissions), ✅ Tâches liées, 📎 Documents. Empile en une colonne sous 760px (mobile).
+
+Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `buildSubList`, `buildCommissionList`, `buildClientTasksBox`, `buildDocGallery`) — uniquement la structure/l'habillage autour, via deux nouveaux petits helpers (`wireMetaInputs`, `cardWrap`). Tous les champs (nom, statut, contact, téléphone, email, ville, début, fin, commentaire, montant/devise, paiements, commissions, tâches, documents) testés réels après la refonte — comportement identique à avant, juste réorganisé visuellement.
+
+**Ne pas casser** : les champs "Contact/Téléphone/Email" sont dans `.cl-side` (colonne gauche) et "Ville/Début/Fin/Commentaire" dans la carte "Général" (colonne droite) — si on ajoute un nouveau champ client, choisir consciemment sa colonne plutôt que de tout mettre au même endroit par défaut.
+
+**Notes / À faire**
+- [x] 3 maquettes proposées (onglets / cartes couleur / deux colonnes), choix de l'utilisatrice : deux colonnes.
+- [x] Implémentation réelle sans régression (toutes les fonctionnalités existantes vérifiées après refonte).
+
 ## Nettoyage de code
 
 **État** : passe de nettoyage effectuée une fois (code mort supprimé — dont des données clients réelles codées en dur —, CSS dupliqué fusionné, `pickImageFile()` factorisé pour les 7 imports d'image).
