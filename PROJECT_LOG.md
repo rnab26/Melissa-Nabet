@@ -196,6 +196,19 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 - [x] Point de couleur (ligne client + fiche détail) et tri par statut migrés sur `library.clientStatuses` (plus de classes CSS fixes `.dot.green/orange/red/blue`, supprimées).
 - [x] Testé réel (Playwright) : ajout d'un statut custom "VIP" propagé partout (puce, légende, point, tri, menu déroulant), suppression d'un statut avec bascule automatique des clients concernés, reset par défaut, autosave, zéro régression sur les 4 statuts d'origine, zéro débordement horizontal.
 
+## Clients — vue mobile réelle (Chrome/Safari/Samsung Internet), contenu tronqué
+
+**État** : sur un vrai téléphone (pas le mode « bureau » du navigateur, ni le toggle interne "Vue mobile"/"Vue bureau" qui ne concerne que l'onglet Devis), la fiche client ouverte affichait du texte coupé net sur toute la largeur (nom, statut, montant, reste…), sans aucun moyen de faire défiler pour le voir. Cause racine réelle (diagnostiquée via mesures `getBoundingClientRect` + captures d'écran à 390px, pas par déduction) : `.cl-table{min-width:680px}` — nécessaire pour la grille de colonnes fixes de la ligne client sur tablette/bureau — s'appliquait aussi à TOUTE la fiche détaillée d'un client ouvert (elle vit dans le même `#cl-table`), et `.cl-group.open{overflow:hidden}` rognait silencieusement tout ce qui dépassait de l'écran au lieu de proposer un défilement. Deuxième cause, indépendante, révélée une fois la première corrigée : `.cl-two-col{align-items:flex-start}` — pensé pour la mise en page en ligne (bureau) — empêchait ses deux colonnes de s'étirer à la largeur du conteneur une fois empilées en colonne (mobile) ; chaque bloc se dimensionnait alors sur son propre contenu (ex. la ligne montant/devise/reste du devis) au lieu d'être contenu par l'écran.
+
+**Ne pas casser** : en dessous de 680px, `.cl-table{min-width:0}` et la ligne client (`.cl-row`) devient une carte flex empilée (nom en haut, montant/reste en dessous, commissions masquées — toujours visibles dans le détail ouvert) au lieu de la grille à 10 colonnes fixes ; au-dessus de 680px, comportement bureau/tablette inchangé (grille, min-width 680px, tout comme avant — revérifié à 768/900px, zéro régression). En dessous de 760px, `.cl-two-col` passe en colonne avec `align-items:stretch` (pas `flex-start`) — sans ce `stretch`, tout contenu interne légèrement trop large fait à nouveau déborder toute la colonne au lieu d'être contenu par elle.
+
+**Notes / À faire**
+- [x] Root cause diagnostiquée par mesure réelle (`getBoundingClientRect` sur toute la chaîne d'ancêtres à 390px), pas par supposition — a révélé 2 causes indépendantes, pas une seule.
+- [x] `.cl-table{min-width:0}` + ligne client en carte flex empilée sous 680px (masque l'en-tête de colonnes triable, devenu inutile en carte).
+- [x] `.cl-two-col{align-items:stretch}` sous 760px (au lieu de `flex-start`) pour que les colonnes empilées se calent sur la largeur d'écran réelle.
+- [x] `.cl-montant` (ligne montant/devise/reste du devis) passée en colonne empilée sous 680px.
+- [x] Testé réel : 390px (iPhone) capture d'écran avant/après (plus aucun texte tronqué), 360px sans débordement, 768/900px bureau/tablette identiques à avant (zéro régression), édition de champ + changement de statut fonctionnels sur mobile après le correctif CSS.
+
 ## Nettoyage de code
 
 **État** : passe de nettoyage effectuée une fois (code mort supprimé — dont des données clients réelles codées en dur —, CSS dupliqué fusionné, `pickImageFile()` factorisé pour les 7 imports d'image).

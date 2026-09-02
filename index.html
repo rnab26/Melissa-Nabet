@@ -386,7 +386,13 @@
   .cl-card-body{padding:14px;}
   .cl-card-body .cl-meta{background:transparent;border:none;padding:0;margin:0;}
   @media (max-width:760px){
-    .cl-two-col{flex-direction:column;}
+    /* align-items:flex-start (règle de base, pensée pour la mise en page en ligne : ne pas
+       étirer les 2 colonnes à la même hauteur) devient un piège une fois empilé en colonne :
+       sans stretch, chaque bloc se dimensionne à la largeur de SON PROPRE contenu au lieu de
+       se caler sur la largeur du conteneur, et un bloc interne un peu trop large (ex. la ligne
+       montant/devise/reste du devis) fait déborder toute la colonne au lieu d'être simplement
+       contenu par elle. */
+    .cl-two-col{flex-direction:column;align-items:stretch;}
     .cl-side{flex:1 1 auto;width:100%;}
   }
   .cl-totals{display:flex;flex-direction:column;gap:8px;padding:14px 16px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);margin-top:14px;border-top:2px solid var(--hair);}
@@ -467,6 +473,34 @@
     .sub-line.with-cat input[data-date]{grid-area:date;}
     .sub-line.with-cat .doc-btn{grid-area:doc;}
     .sub-line.with-cat .rm{grid-area:rm;justify-self:end;}
+  }
+  /* Vue clients sur mobile réel (Chrome/Safari/Samsung Internet, pas le mode « bureau » du
+     navigateur) : .cl-table{min-width:680px} — nécessaire pour empêcher la grille des colonnes
+     de rétrécir sous son contenu sur tablette/bureau — imposait aussi cette largeur de 680px à
+     TOUTE la fiche détaillée d'un client ouvert (elle vit dans le même #cl-table), alors que
+     cette fiche est censée être fluide et tenir sur un écran de téléphone. Résultat : sur un
+     vrai téléphone (<680px), .cl-group.open{overflow:hidden} rognait silencieusement tout ce qui
+     dépassait (nom, statut, montants…) sans aucun moyen de faire défiler pour le voir. En dessous
+     de 680px on annule ce plancher et on transforme la ligne client (grille à colonnes fixes,
+     pensée pour tablette/bureau) en carte empilée qui tient nativement dans la largeur de l'écran. */
+  @media (max-width:680px){
+    .cl-table{min-width:0;}
+    .cl-row.head{display:none;}
+    .cl-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:8px;row-gap:4px;padding:10px 12px;}
+    .cl-row>*{flex:0 0 auto;}
+    .cl-row>*:nth-child(2){order:1;}
+    .cl-row>*:nth-child(3){order:2;flex:1 1 auto;min-width:0;}
+    .cl-row>*:nth-child(8){order:3;}
+    .cl-row>*:nth-child(9){order:4;}
+    .cl-row>*:nth-child(10){order:5;flex-basis:100%;width:0;height:0;margin:0;padding:0;overflow:hidden;}
+    .cl-row>*:nth-child(1){order:6;font-size:11px;color:var(--stone);}
+    .cl-row>*:nth-child(4){order:7;font-size:12px;}
+    .cl-row .col-sep{border-right:none;padding-right:0;margin-right:0;}
+    .cl-row>*:nth-child(5){order:8;font-size:12px;}
+    .cl-row:not(.grand)>*:nth-child(6),.cl-row:not(.grand)>*:nth-child(7){display:none;}
+    .cl-row.grand>*:nth-child(6){order:9;font-size:12px;}
+    .cl-montant{flex-direction:column;align-items:stretch;gap:10px;}
+    .cl-montant label{flex:0 0 auto!important;width:100%;}
   }
   /* Vue bureau forcée : bouton manuel dans la barre d'outils, indépendant du "Version
      ordinateur" du navigateur (peu fiable/absent sur tablette, Samsung Internet, etc.) —
