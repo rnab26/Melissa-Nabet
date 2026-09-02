@@ -311,7 +311,6 @@
   .comm-line .rm{border:none;background:none;color:var(--stone-light);cursor:pointer;font-size:15px;}
   .comm-line .rm:hover{color:#b23;}
   .dot{width:11px;height:11px;border-radius:50%;display:inline-block;}
-  .dot.green{background:#6a9a5a;} .dot.orange{background:#d59a4a;} .dot.red{background:#b6543f;} .dot.blue{background:#6aa6cf;}
   .doc-btn{border:1px solid var(--panel-edge);background:var(--panel);border-radius:4px;cursor:pointer;font-size:12px;padding:4px 5px;}
   .doc-btn:hover{border-color:var(--oxblood);}
   .doc-btn .doc-n{font-size:9.5px;color:#fff;background:var(--oxblood);border-radius:8px;padding:0 4px;margin-left:2px;}
@@ -709,20 +708,16 @@
         <button class="btn btn-onlight" onclick="exportClientsCSV()">⬇ Export CSV</button>
         <button class="btn btn-onlight" onclick="document.getElementById('import-clients-csv').click()">⬆ Import CSV</button>
         <input type="file" id="import-clients-csv" accept=".csv,text/csv" style="display:none">
+        <button class="btn btn-onlight" onclick="openClientStatusesPanel()">⚙ Statuts</button>
         <button class="btn btn-primary" style="color:#fff" onclick="addClient()">+ Nouveau client</button>
       </div>
     </div>
     <div class="cl-filters">
       <input type="text" id="cl-q" placeholder="Rechercher un client…">
-      <div class="cl-statut-multi" id="cl-statut-multi">
-        <button type="button" class="mini cl-statut-chip" data-v="en_cours">En cours</button>
-        <button type="button" class="mini cl-statut-chip" data-v="devis">Devis envoyé</button>
-        <button type="button" class="mini cl-statut-chip" data-v="termine">Terminé</button>
-        <button type="button" class="mini cl-statut-chip" data-v="annule">Annulé</button>
-      </div>
+      <div class="cl-statut-multi" id="cl-statut-multi"></div>
       <span style="font-size:11px;color:var(--stone);font-style:italic;">Cliquez sur un en-tête de colonne pour trier ↑↓</span>
     </div>
-    <div class="cl-legend"><span><span class="dot orange"></span>En cours</span><span><span class="dot blue"></span>Devis envoyé</span><span><span class="dot green"></span>Terminé</span><span><span class="dot red"></span>Annulé</span></div>
+    <div class="cl-legend" id="cl-legend"></div>
     <div class="cl-scroll"><div class="cl-table" id="cl-table"></div></div>
     <div class="cl-totals" id="cl-totals"></div>
   </div>
@@ -886,7 +881,7 @@ function defaultLibrary(){
       mk("Gestion du projet de A à Z",""),
       mk("Travail express",""),
     ]},
-  ],exclus:DEFAULT_EXCLUS.slice(),cgv:DEFAULT_CGV.map(c=>({...c})),chantierCats:DEFAULT_CHANTIER_CATS.map(c=>({...c})),branding:{...DEFAULT_BRANDING},bgLibrary:[],taskCategories:DEFAULT_TASK_CATEGORIES.map(c=>({...c}))};
+  ],exclus:DEFAULT_EXCLUS.slice(),cgv:DEFAULT_CGV.map(c=>({...c})),chantierCats:DEFAULT_CHANTIER_CATS.map(c=>({...c})),branding:{...DEFAULT_BRANDING},bgLibrary:[],taskCategories:DEFAULT_TASK_CATEGORIES.map(c=>({...c})),clientStatuses:DEFAULT_CLIENT_STATUSES.map(c=>({...c}))};
 }
 const DEFAULT_EXCLUS=[
   "Honoraires des prestataires et corps de métier (facturés séparément)",
@@ -1044,6 +1039,15 @@ const DEFAULT_TASK_CATEGORIES=[
   {id:uid(),label:'Fournisseurs',icon:'📦'},
   {id:uid(),label:'Comptabilité',icon:'💶'},
   {id:uid(),label:'Relation client',icon:'👥'},
+];
+/* id fixes volontairement (pas uid()) : 'annule' est référencé ailleurs dans le code
+   (ex. exclusion des relances de paiement) — un statut par défaut doit garder son id
+   stable même après un ↺ Réinitialiser, sinon ces liens silencieux se cassent. */
+const DEFAULT_CLIENT_STATUSES=[
+  {id:'en_cours',label:'En cours',color:'#d59a4a'},
+  {id:'devis',label:'Devis envoyé',color:'#6aa6cf'},
+  {id:'termine',label:'Terminé',color:'#6a9a5a'},
+  {id:'annule',label:'Annulé',color:'#b6543f'},
 ];
 
 /* ============ STOCKAGE PERSISTANT (avec repli mémoire) ============ */
@@ -2407,6 +2411,9 @@ async function cgvSave(){
 function libApplyToCurrent(){askConfirm('Recharger la bibliothèque effacera les lignes du devis en cours. Continuer ?',async()=>{await store.set(K_LIB,library);seedComposerFromLibrary();buildPrest();buildExclu();render();toast('Bibliothèque rechargée');});}
 
 /* ============ CLIENTS / COMPTES ============ */
+function ensureClientStatuses(){if(!Array.isArray(library.clientStatuses)||!library.clientStatuses.length)library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));}
+function clientStatus(c){ensureClientStatuses();return library.clientStatuses.find(s=>s.id===c.statut)||library.clientStatuses[0];}
+function clientStatusOptionsHtml(c){ensureClientStatuses();return library.clientStatuses.map(s=>`<option value="${esc(s.id)}" ${c.statut===s.id?'selected':''}>${esc(s.label)}</option>`).join('');}
 function normalizeClient(c){
   let montantFinal,paiements,commissions;
   if(c.montantFinal!=null||Array.isArray(c.paiements)||Array.isArray(c.commissions)){
@@ -2483,11 +2490,12 @@ function updateClientRow(c){
   const cells=row.children;
   if(cells[0])cells[0].textContent=fmtDate(c.debut);
   const dot=cells[1]&&cells[1].querySelector('.dot');
-  if(dot)dot.className='dot '+(c.statut==='termine'?'green':c.statut==='annule'?'red':c.statut==='devis'?'blue':'orange');
+  if(dot)dot.style.background=clientStatus(c).color;
   const nameCell=row.querySelector('.cl-name');if(nameCell)nameCell.textContent=c.name;
 }
 function renderClients(){
   const tbl=$('cl-table');if(!tbl)return;tbl.innerHTML='';
+  renderClientStatusFilters();
   const head=document.createElement('div');head.className='cl-row head';
   head.innerHTML=`<div class="sortable" data-sort="debut">Début${sortArrow('debut')}</div><div class="sortable" data-sort="statut" style="justify-content:center">Statut${sortArrow('statut')}</div><div class="sortable" data-sort="name">Client${sortArrow('name')}</div><div class="num sortable" data-sort="montant">Montant final (Plans)${sortArrow('montant')}</div><div class="num sortable col-sep" data-sort="reste">Reste dû${sortArrow('reste')}</div><div class="num sortable col-after-sep" data-sort="commissions">Montant commission${sortArrow('commissions')}</div><div class="num sortable" data-sort="commReste">Commission restante${sortArrow('commReste')}</div><div></div><div></div><div></div>`;
   head.querySelectorAll('.sortable').forEach(el=>el.addEventListener('click',()=>setSort(el.dataset.sort)));
@@ -2501,7 +2509,7 @@ function renderClients(){
   list.sort((a,b)=>{
     if(sk==='name')return a.name.localeCompare(b.name)*dir;
     if(sk==='debut')return (a.debut||'').localeCompare(b.debut||'',undefined,{numeric:true})*dir;
-    if(sk==='statut'){const rank=x=>({en_cours:0,devis:1,termine:2,annule:3})[x.statut||'en_cours']??9;return (rank(a)-rank(b))*dir;}
+    if(sk==='statut'){ensureClientStatuses();const rank=x=>{const i=library.clientStatuses.findIndex(s=>s.id===(x.statut||'en_cours'));return i<0?9:i;};return (rank(a)-rank(b))*dir;}
     const ta=clientTotals(a),tb=clientTotals(b);
     const val=k=>k==='montant'?ta.montant:k==='reste'?ta.reste:k==='commissions'?ta.commissions:ta.commissionsReste;
     const valb=k=>k==='montant'?tb.montant:k==='reste'?tb.reste:k==='commissions'?tb.commissions:tb.commissionsReste;
@@ -2512,8 +2520,8 @@ function renderClients(){
     const t=clientTotals(c);
     const grp=document.createElement('div');grp.className='cl-group'+(clientOpen[c.id]?' open':'');grp.dataset.cid=c.id;
     const row=document.createElement('div');row.className='cl-row';
-    const dc=c.statut==='termine'?'green':c.statut==='annule'?'red':c.statut==='devis'?'blue':'orange';const dv=c.devise||'₪';
-    row.innerHTML=`<div style="color:var(--stone)">${esc(fmtDate(c.debut))}</div><div style="text-align:center"><span class="dot ${dc}"></span></div><div class="cl-name">${esc(c.name)}</div><div class="num">${fmt(t.montant)} ${dv}</div><div class="num col-sep ${t.reste>0?'due-txt':'ok-txt'}">${fmt(t.reste)} ${dv}</div><div class="num col-after-sep">${fmt(t.commissions)} ${dv}</div><div class="num ${t.commissionsReste>0?'due-txt':'ok-txt'}">${fmt(t.commissionsReste)} ${dv}</div><button class="cl-del" title="Supprimer ce client">🗑</button><div class="cl-chev">▶</div><div></div>`;
+    const dv=c.devise||'₪';
+    row.innerHTML=`<div style="color:var(--stone)">${esc(fmtDate(c.debut))}</div><div style="text-align:center"><span class="dot" style="background:${esc(clientStatus(c).color)}"></span></div><div class="cl-name">${esc(c.name)}</div><div class="num">${fmt(t.montant)} ${dv}</div><div class="num col-sep ${t.reste>0?'due-txt':'ok-txt'}">${fmt(t.reste)} ${dv}</div><div class="num col-after-sep">${fmt(t.commissions)} ${dv}</div><div class="num ${t.commissionsReste>0?'due-txt':'ok-txt'}">${fmt(t.commissionsReste)} ${dv}</div><button class="cl-del" title="Supprimer ce client">🗑</button><div class="cl-chev">▶</div><div></div>`;
     row.addEventListener('click',()=>{clientOpen[c.id]=!clientOpen[c.id];grp.classList.toggle('open',clientOpen[c.id]);});
     row.querySelector('.cl-del').addEventListener('click',e=>{e.stopPropagation();askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');});});
     grp.appendChild(row);
@@ -2568,10 +2576,7 @@ function buildClientDetail(c){
       <div class="cl-side-avatar">${esc(initials)}</div>
       <input type="text" class="cl-side-name" data-name value="${esc(c.name)}" placeholder="Nom du client">
       <select class="cl-side-statut" data-statut>
-        <option value="en_cours" ${c.statut==='en_cours'?'selected':''}>🟠 En cours</option>
-        <option value="devis" ${c.statut==='devis'?'selected':''}>🔵 Devis envoyé</option>
-        <option value="termine" ${c.statut==='termine'?'selected':''}>🟢 Terminé</option>
-        <option value="annule" ${c.statut==='annule'?'selected':''}>🔴 Annulé</option>
+        ${clientStatusOptionsHtml(c)}
       </select>
     </div>
     <div class="cl-side-body">
@@ -2947,17 +2952,29 @@ function addClient(){
 function wireClientFilters(){
   const q=$('cl-q');
   if(q)q.addEventListener('input',()=>{clientFilters.q=q.value;renderClients();});
-  document.querySelectorAll('#cl-statut-multi .cl-statut-chip').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      const v=btn.dataset.v;
-      const i=clientFilters.statuts.indexOf(v);
-      if(i>=0)clientFilters.statuts.splice(i,1);else clientFilters.statuts.push(v);
-      btn.classList.toggle('active',clientFilters.statuts.includes(v));
-      renderClients();
-    });
-  });
   const cf=$('import-clients-csv');
   if(cf)cf.addEventListener('change',()=>{if(cf.files&&cf.files[0])importClientsCSV(cf.files[0]);cf.value='';});
+}
+/* Puces de filtre par statut + légende : régénérées à chaque rendu (statuts modulables via
+   ⚙ Statuts) — pas de liste figée dans le HTML, sinon un statut renommé/ajouté/supprimé ne
+   s'y refléterait jamais. */
+function renderClientStatusFilters(){
+  ensureClientStatuses();
+  const wrap=$('cl-statut-multi');
+  if(wrap){
+    wrap.innerHTML=library.clientStatuses.map(s=>`<button type="button" class="mini cl-statut-chip${clientFilters.statuts.includes(s.id)?' active':''}" data-v="${s.id}">${esc(s.label)}</button>`).join('');
+    wrap.querySelectorAll('.cl-statut-chip').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const v=btn.dataset.v;
+        const i=clientFilters.statuts.indexOf(v);
+        if(i>=0)clientFilters.statuts.splice(i,1);else clientFilters.statuts.push(v);
+        btn.classList.toggle('active',clientFilters.statuts.includes(v));
+        renderClients();
+      });
+    });
+  }
+  const legend=$('cl-legend');
+  if(legend)legend.innerHTML=library.clientStatuses.map(s=>`<span><span class="dot" style="background:${esc(s.color)}"></span>${esc(s.label)}</span>`).join('');
 }
 function showView(v){
   const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier';
@@ -3327,6 +3344,34 @@ function taskCatDel(i){
 }
 function taskCatReset(){askConfirm('Réinitialiser les catégories de tâches sur la liste par défaut ?',()=>{library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));openTaskCategoriesPanel();saveLibraryDebounced();});}
 async function taskCatSave(){await store.set(K_LIB,library);closeModal();renderTaskList();toast('Catégories enregistrées');}
+function openClientStatusesPanel(){
+  ensureClientStatuses();
+  const rows=library.clientStatuses.map((s,i)=>`<div class="lib-item">
+    <input type="color" value="${esc(s.color)}" oninput="clientStatusEdit(${i},'color',this.value)" style="flex:0 0 40px;padding:0;height:34px;">
+    <input type="text" value="${esc(s.label)}" oninput="clientStatusEdit(${i},'label',this.value)" placeholder="Nom" style="flex:2">
+    <button class="mini danger" onclick="clientStatusDel(${i})">×</button></div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Statuts clients</h3>
+    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables).</p>
+    ${rows}
+    <button class="add-btn" onclick="clientStatusAdd()">+ Ajouter un statut</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="clientStatusReset()">↺ Statuts par défaut</button>
+      <button class="btn btn-primary" onclick="clientStatusSave()">Enregistrer</button></div>`);
+}
+function clientStatusEdit(i,key,val){ensureClientStatuses();library.clientStatuses[i][key]=val;saveLibraryDebounced();renderClients();}
+function clientStatusAdd(){ensureClientStatuses();library.clientStatuses.push({id:uid(),label:'Nouveau statut',color:'#8a8578'});openClientStatusesPanel();saveLibraryDebounced();renderClients();}
+function clientStatusDel(i){
+  ensureClientStatuses();
+  if(library.clientStatuses.length<=1){toast('Il faut garder au moins un statut');return;}
+  askConfirm('Supprimer ce statut ? Les clients concernés basculeront sur le premier statut de la liste.',()=>{
+    const removed=library.clientStatuses[i];
+    library.clientStatuses.splice(i,1);
+    if(removed)clients.forEach(c=>{if(c.statut===removed.id)c.statut=library.clientStatuses[0].id;});
+    saveClients();store.set(K_LIB,library);openClientStatusesPanel();renderClients();
+  });
+}
+function clientStatusReset(){askConfirm('Réinitialiser les statuts clients sur la liste par défaut ?',()=>{library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));openClientStatusesPanel();saveLibraryDebounced();renderClients();});}
+async function clientStatusSave(){await store.set(K_LIB,library);closeModal();renderClients();toast('Statuts enregistrés');}
 function computeTodos(){
   const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
   const brouillons=devisList.filter(d=>d.status==='brouillon').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));

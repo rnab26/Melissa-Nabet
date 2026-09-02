@@ -183,6 +183,19 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 - [x] Ajustements après retour : "Général" fusionné dans la colonne gauche sous Email (ville/début/fin/commentaire, sans titre "Général" — coordonnées de base) ; Relance client déplacée entre Paiements et Commissions ; phrase "choisissez la catégorie" remplacée par des en-têtes de colonnes (Catégorie/Intitulé/Montant/Date) ; phrase "Reste = montant final…" supprimée ; icône 🗑 sur "Supprimer ce client".
 - [x] Devis-montant (🧾) et Commissions prestataires (🤝) passés en vrais bandeaux marron (`cardWrap`, comme Tâches liées/Documents/Financier) — le simple encadré fin (`.cl-subbox`) ne suffisait pas visuellement, demande explicite d'un "vrai" bandeau avec icône. `.cl-subbox` supprimé (plus utilisé).
 
+## Clients — statuts modulables (en cours/devis/terminé/annulé + persos)
+
+**État** : statuts clients passés d'une liste figée (4 valeurs codées en dur, couleurs par classe CSS fixe) à une liste éditable dans `library.clientStatuses`, même pattern que `taskCategories`/`chantierCats`. Panneau `⚙ Statuts` (à côté de "+ Nouveau client") : ajout/renommage/couleur (`<input type="color">`)/suppression/réinitialisation. Toutes les consommations migrées : puces de filtre + légende (régénérées à chaque rendu, plus de liste figée dans le HTML), point de couleur sur la ligne client (`updateClientRow`, `renderClients`), tri par statut (rang = index dans `library.clientStatuses`, plus une map codée en dur), menu déroulant statut dans la fiche client (`clientStatusOptionsHtml`). Suppression d'un statut utilisé par un client : ce client bascule automatiquement sur le premier statut de la liste (`clientStatus(c)` a aussi ce fallback en lecture, donc pas de crash même sans migration explicite).
+
+**Ne pas casser** : `DEFAULT_CLIENT_STATUSES` garde des id fixes (`en_cours`/`devis`/`termine`/`annule`, pas `uid()`) — `computeTodos()` filtre encore explicitement `c.statut!=='annule'` en dur, donc si on retouche les statuts par défaut il faut garder cet id stable ou mettre à jour cette référence.
+
+**Notes / À faire**
+- [x] `library.clientStatuses` (id/label/color), `ensureClientStatuses()`, `clientStatus(c)`, `clientStatusOptionsHtml(c)`.
+- [x] Panneau CRUD `⚙ Statuts` (ajout/édition/couleur/suppression/reset), autosave via `saveLibraryDebounced()`.
+- [x] Puces de filtre + légende régénérées dynamiquement (`renderClientStatusFilters()`, appelé à chaque `renderClients()`).
+- [x] Point de couleur (ligne client + fiche détail) et tri par statut migrés sur `library.clientStatuses` (plus de classes CSS fixes `.dot.green/orange/red/blue`, supprimées).
+- [x] Testé réel (Playwright) : ajout d'un statut custom "VIP" propagé partout (puce, légende, point, tri, menu déroulant), suppression d'un statut avec bascule automatique des clients concernés, reset par défaut, autosave, zéro régression sur les 4 statuts d'origine, zéro débordement horizontal.
+
 ## Nettoyage de code
 
 **État** : passe de nettoyage effectuée une fois (code mort supprimé — dont des données clients réelles codées en dur —, CSS dupliqué fusionné, `pickImageFile()` factorisé pour les 7 imports d'image).
