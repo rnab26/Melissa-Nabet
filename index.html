@@ -155,7 +155,7 @@
   .login-err{color:#b23;font-size:12.5px;min-height:16px;margin-top:10px;}
   #login-offline{display:inline-block;margin-top:16px;font-size:12px;color:var(--stone);text-decoration:underline;cursor:pointer;}
 
-  .viewnav{display:flex;gap:4px;margin-left:6px;}
+  .viewnav{display:flex;gap:4px;margin-left:6px;flex-wrap:wrap;min-width:0;}
   .vnav{font-size:12px;letter-spacing:.06em;padding:8px 14px;border:1px solid var(--stone);color:var(--stone-light);background:transparent;cursor:pointer;border-radius:2px;}
   .vnav.active{background:var(--paper);color:var(--ink);border-color:var(--paper);}
   #clients-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
@@ -543,6 +543,64 @@
     body.devis-active .editor{height:100%;min-height:0;overflow-y:auto;}
     body.devis-active .preview-wrap{height:100%;min-height:0;overflow-y:auto;}
   }
+
+  /* ---- Réalisations (galerie publiable) ---- */
+  .rz-wrap{padding:26px 20px 90px;max-width:1180px;margin:0 auto;}
+  .rz-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+  .rz-top h2{font-family:'Cormorant Garamond',serif;font-size:25px;font-weight:600;}
+  .rz-intro{font-size:12.5px;color:var(--stone);margin:0 0 20px;max-width:70ch;line-height:1.55;}
+  .rz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+  .rz-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;cursor:pointer;text-align:left;padding:0;font-family:'Inter';}
+  .rz-card:hover{border-color:var(--oxblood);}
+  .rz-cover{aspect-ratio:3/2;background:#efe9df;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--stone-light);font-size:11px;}
+  .rz-cover img{width:100%;height:100%;object-fit:cover;display:block;}
+  .rz-cbody{padding:10px 12px 12px;}
+  .rz-ctitle{font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-cmeta{font-size:11.5px;color:var(--stone);margin-top:3px;}
+  .rz-new{border:1px dashed var(--stone-light);border-radius:8px;background:transparent;color:var(--stone);cursor:pointer;font-size:13px;font-family:'Inter';min-height:150px;}
+  .rz-new:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .rz-empty{font-size:13px;color:var(--stone);padding:18px 0;}
+
+  .rz-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .rz-back{background:transparent;border:none;color:var(--stone);font-family:'Inter';font-size:12.5px;cursor:pointer;padding:0 0 8px;}
+  .rz-back:hover{color:var(--oxblood);}
+  .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .rz-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
+  .rz-ph{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:#efe9df;aspect-ratio:3/2;cursor:pointer;}
+  .rz-ph img{width:100%;height:100%;object-fit:cover;display:block;}
+  .rz-ph-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--stone);}
+  .rz-ph-badge{position:absolute;left:6px;bottom:6px;background:rgba(61,57,52,.82);color:#fff;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2px 6px;border-radius:2px;}
+  .rz-ph-del{position:absolute;right:5px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;border-radius:3px;width:24px;height:24px;font-size:13px;cursor:pointer;line-height:1;}
+  .rz-add{border:1px dashed var(--stone-light);border-radius:6px;background:transparent;color:var(--stone);cursor:pointer;font-size:12px;font-family:'Inter';aspect-ratio:3/2;}
+  .rz-add:hover{border-color:var(--oxblood);color:var(--oxblood);}
+
+  /* ---- Éditeur photo ---- */
+  .ed-modal{position:fixed;inset:0;z-index:80;background:var(--ink);display:flex;flex-direction:column;}
+  .ed-body{flex:1;min-height:0;display:flex;flex-direction:column;}
+  .ed-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#2f2c28;color:var(--paper);flex-wrap:nowrap;}
+  .ed-bar .ed-title{font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ed-bar .btn{flex:0 0 auto;}
+  .ed-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px;background:#242220;}
+  .ed-stage canvas{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 4px 24px rgba(0,0,0,.5);}
+  .ed-panel{background:var(--travertine);border-top:1px solid var(--hair);padding:10px 14px 14px;max-height:44vh;overflow-y:auto;}
+  .ed-tabs{display:flex;gap:6px;margin-bottom:12px;}
+  .ed-tab{flex:1;font-family:'Inter';font-size:12.5px;padding:9px 6px;border:1px solid var(--panel-edge);background:var(--panel);color:var(--stone-deep);border-radius:3px;cursor:pointer;}
+  .ed-tab.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;font-weight:600;}
+  .ed-slider{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+  .ed-slider label{flex:0 0 108px;font-size:12px;color:var(--stone-deep);}
+  .ed-slider input[type=range]{flex:1;width:auto;accent-color:var(--oxblood);}
+  .ed-slider .val{flex:0 0 42px;text-align:right;font-size:11.5px;color:var(--stone);font-variant-numeric:tabular-nums;}
+  .ed-ratios{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .ed-ratio{font-family:'Inter';font-size:12px;padding:7px 11px;border:1px solid var(--panel-edge);background:var(--panel);color:var(--stone-deep);border-radius:3px;cursor:pointer;}
+  .ed-ratio.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;font-weight:600;}
+  .ed-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .ed-hint{font-size:11.5px;color:var(--stone);margin:2px 0 10px;line-height:1.5;}
+  .ed-cmp{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;}
+  @media(max-width:680px){.ed-cmp{display:none;}}
+  @media(min-width:900px){
+    .ed-body{flex-direction:row;}
+    .ed-panel{width:340px;flex:0 0 340px;max-height:none;border-top:none;border-left:1px solid var(--hair);}
+  }
 </style>
 </head>
 <body class="show-editor">
@@ -571,6 +629,7 @@
     </div>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
     <button class="vnav" id="vn-chantier" onclick="showView('chantier')">Estimation</button>
+    <button class="vnav" id="vn-real" onclick="showView('realisations')">Réalisations</button>
   </div>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
   <div class="spacer"></div>
@@ -731,6 +790,17 @@
       <select id="ch-cat-select"></select>
       <button class="add-btn" style="flex:0 0 auto" onclick="chCatAdd()">+ Ajouter une catégorie</button>
     </div>
+  </div>
+</div>
+
+<div id="realisations-view">
+  <div class="rz-wrap">
+    <div class="rz-top">
+      <h2>Réalisations</h2>
+      <button class="btn btn-onlight" onclick="openShootingMemo()">📷 Bien photographier</button>
+    </div>
+    <p class="rz-intro">Les photos de chantiers terminés, retouchées et prêtes à publier sur le site. Rien à voir avec les documents d'une fiche client : ici les photos sont gardées en pleine définition et les retouches ne modifient jamais l'original.</p>
+    <div id="rz-body"></div>
   </div>
 </div>
 
@@ -1099,8 +1169,9 @@ const store={
     try{if(typeof window!=='undefined'&&window.storage){await window.storage.delete(k,false);return;}}catch(e){}
     try{if(typeof window!=='undefined'&&window.localStorage){localStorage.removeItem(k);return;}}catch(e){}},
 };
-const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier',K_TASKS='mn_tasks';
+const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier',K_TASKS='mn_tasks',K_REAL='mn_realisations';
 let tasks=[];
+let realisations=[];
 
 /* ============ ÉTAT APPLI ============ */
 let library=defaultLibrary(), clients=[], devisList=[], currentDevisId=null;
@@ -3011,19 +3082,22 @@ function renderClientStatusFilters(){
   if(legend)legend.innerHTML=library.clientStatuses.map(s=>`<span><span class="dot" style="background:${esc(s.color)}"></span>${esc(s.label)}</span>`).join('');
 }
 function showView(v){
-  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier';
+  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier',rz=v==='realisations';
   document.querySelector('.stage').style.display=dev?'flex':'none';
   document.body.classList.toggle('devis-active',dev);
   $('clients-view').style.display=cli?'block':'none';
   $('dashboard-view').style.display=dash?'block':'none';
   $('chantier-view').style.display=ch?'block':'none';
+  $('realisations-view').style.display=rz?'block':'none';
   $('vn-devis').classList.toggle('active',dev);
   $('vn-clients').classList.toggle('active',cli);
   $('vn-dash').classList.toggle('active',dash);
   $('vn-chantier').classList.toggle('active',ch);
+  $('vn-real').classList.toggle('active',rz);
   if(cli)renderClients();
   if(dash)renderDashboard();
   if(ch)renderChantier();
+  if(rz)renderRealisations();
 }
 function gotoClient(id){
   clientOpen[id]=true;
@@ -3461,7 +3535,14 @@ async function exportData(){
   const docs={};
   for(const c of clients){for(const d of (c.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
   for(const t of tasks){for(const d of (t.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
-  const data={app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,docs};
+  /* Les réalisations sont exportées avec leurs retouches et leurs VIGNETTES seulement :
+     inclure les photos en pleine définition ferait un JSON de plusieurs centaines de Mo,
+     impossible à produire depuis un téléphone. Les fichiers pleine définition vivent dans
+     le stockage Supabase (lié au compte, donc insensible à un vidage de cache du navigateur)
+     et se récupèrent via « Exporter pour le site ». */
+  const realThumbs={};
+  for(const r of realisations){for(const p of (r.photos||[])){try{const b=await photoStore.get(thumbKey(p.id));if(b)realThumbs[thumbKey(p.id)]=await blobToDataUri(b);}catch(e){}}}
+  const data={app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,realThumbs,docs};
   try{
     const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
@@ -3480,8 +3561,10 @@ async function importData(file){
       clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
       devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
       if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
+      if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
+      if(data.realThumbs){for(const k in data.realThumbs){try{await photoStore.save(k,dataUriToBlob(data.realThumbs[k]));}catch(e){}}}
       if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
-      render();renderClients();renderTaskList();toast('Données importées');
+      render();renderClients();renderTaskList();renderRealisations();toast('Données importées');
     });
   }catch(e){toast('Échec import : '+e.message);}
 }
@@ -3579,13 +3662,700 @@ function applySplitView(on){
 function toggleSplitView(){applySplitView(!document.body.classList.contains('force-split'));}
 try{if(localStorage.getItem('mn_split_view')==='1')applySplitView(true);}catch(e){}
 
+
+/* ============ RÉALISATIONS — galerie publiable ============ */
+/* Circuit VOLONTAIREMENT SÉPARÉ des documents client. Les photos de fin de chantier sont
+   destinées à sortir de l'appli (site web) : elles sont donc gardées en définition de
+   publication (2560 px, JPEG 0,92). Les documents client (`readFileAsDoc`) restent, eux,
+   compressés à 1400 px / 0,82 — c'est adapté à LEUR usage de pièce jointe de dossier.
+   Ne jamais fusionner les deux circuits ni aligner l'un sur l'autre.
+   Les retouches sont NON DESTRUCTIVES : on ne stocke que des paramètres (`photo.edit`),
+   l'original importé n'est jamais réécrit. */
+const REAL_MAX=2560, REAL_Q=0.92, REAL_THUMB=440, REAL_THUMB_Q=0.78, REAL_MAX_FILE=25*1024*1024;
+const REAL_RATIOS=[
+  {id:'libre',label:'Libre',v:0},
+  {id:'3:2',label:'3:2',v:3/2},
+  {id:'4:3',label:'4:3',v:4/3},
+  {id:'16:9',label:'16:9',v:16/9},
+  {id:'1:1',label:'1:1',v:1},
+];
+function blankEdit(){return {persp:0,rot:0,expo:0,contrast:0,temp:0,tint:0,sat:0,ratio:'libre',pan:0};}
+function normalizeRealisation(r){
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',w:0,h:0,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
+  return o;
+}
+function ensureRealisations(){if(!Array.isArray(realisations))realisations=[];}
+function saveRealisations(){realisations.forEach(r=>{r.updatedAt=r.updatedAt||Date.now();});store.set(K_REAL,realisations);}
+let _rzSaveT=null;
+function saveRealisationsDebounced(){clearTimeout(_rzSaveT);_rzSaveT=setTimeout(saveRealisations,500);}
+function findRealisation(id){return realisations.find(r=>r.id===id)||null;}
+function isEditingRealisations(){
+  if(typeof _ed!=='undefined'&&_ed)return true; /* éditeur photo ouvert : ses objets sont vivants */
+  const a=document.activeElement;
+  return !!(a&&a.closest&&a.closest('#realisations-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));
+}
+/* Fusion EN PLACE : l'identité des objets `realisation` et `photo` est préservée, sinon les
+   champs en cours d'édition (et `_ed.p` dans l'éditeur) pointeraient vers des orphelins. */
+function mergeRealisations(list){
+  const incoming=(list||[]).map(normalizeRealisation);
+  const seen=new Set();
+  incoming.forEach(nr=>{
+    seen.add(nr.id);
+    const cur=realisations.find(x=>x.id===nr.id);
+    if(!cur){realisations.push(nr);return;}
+    const photos=nr.photos.map(np=>{
+      const cp=(cur.photos||[]).find(x=>x.id===np.id);
+      if(!cp)return np;
+      Object.assign(cp.edit,np.edit);Object.assign(cp,np,{edit:cp.edit});
+      return cp;
+    });
+    Object.assign(cur,nr,{photos});
+  });
+  realisations=realisations.filter(r=>seen.has(r.id));
+}
+
+/* ---- Stockage des fichiers photo ----
+   Même bucket que les documents (`client-docs`) et surtout MÊME FORME DE CHEMIN
+   (`ownerId/<id>`) : la politique d'accès Supabase en place autorise déjà exactement cette
+   forme. Ne pas introduire de sous-dossier ici sans avoir vérifié la policy d'abord.
+   Rien n'est mis en localStorage : une photo de publication pèse ~1 Mo, le cache local
+   sature (cf. DOC_LOCAL_CACHE_LIMIT). Mémoire + cloud uniquement. */
+const PHOTO_MEM_MAX=40;
+const photoStore={
+  mem:{},
+  _keep(key,blob){
+    delete this.mem[key];this.mem[key]=blob;
+    const keys=Object.keys(this.mem);
+    while(keys.length>PHOTO_MEM_MAX)delete this.mem[keys.shift()];
+  },
+  async save(key,blob){
+    this._keep(key,blob);
+    if(!(sb&&sbUser&&ownerId))throw new Error('hors ligne');
+    const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+key,blob,{contentType:'image/jpeg',upsert:true});
+    if(error)throw error;
+  },
+  async get(key){
+    if(this.mem[key])return this.mem[key];
+    if(!(sb&&sbUser&&ownerId))return null;
+    try{
+      const {data,error}=await sb.storage.from(DOC_BUCKET).download(ownerId+'/'+key);
+      if(error||!data)return null;
+      this._keep(key,data);return data;
+    }catch(e){return null;}
+  },
+  async del(key){
+    delete this.mem[key];
+    if(sb&&sbUser&&ownerId){try{await sb.storage.from(DOC_BUCKET).remove([ownerId+'/'+key]);}catch(e){}}
+  },
+};
+function fullKey(pid){return 'rp_'+pid;}
+function thumbKey(pid){return 'rt_'+pid;}
+
+/* Cache d'images décodées (objets Image prêts pour le rendu). Plafonné : une photo 2560 px
+   décodée occupe ~26 Mo en mémoire vive, on ne peut pas toutes les garder. */
+const _imgCache=new Map();
+function cacheImg(key,img){
+  _imgCache.delete(key);_imgCache.set(key,img);
+  while(_imgCache.size>2){const k=_imgCache.keys().next().value;_imgCache.delete(k);}
+}
+function blobToImage(blob){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(url);res(img);};
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('image illisible'));};
+    img.src=url;
+  });
+}
+async function loadPhotoImage(pid,{thumb=false}={}){
+  const key=thumb?thumbKey(pid):fullKey(pid);
+  if(!thumb&&_imgCache.has(key))return _imgCache.get(key);
+  const blob=await photoStore.get(key);
+  if(!blob)return null;
+  const img=await blobToImage(blob);
+  if(!thumb)cacheImg(key,img);
+  return img;
+}
+
+/* ---- Import : décodage orienté (EXIF) puis deux rendus, publication + vignette ---- */
+async function decodeOriented(file){
+  if(typeof createImageBitmap==='function'){
+    try{return await createImageBitmap(file,{imageOrientation:'from-image'});}catch(e){}
+  }
+  return await blobToImage(file);
+}
+function drawScaled(src,maxSide){
+  const sw=src.width||src.videoWidth,sh=src.height||src.videoHeight;
+  let w=sw,h=sh;
+  if(w>maxSide||h>maxSide){const s=Math.min(maxSide/w,maxSide/h);w=Math.round(w*s);h=Math.round(h*s);}
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  cv.getContext('2d').drawImage(src,0,0,w,h);
+  return cv;
+}
+function canvasToBlob(cv,q){
+  return new Promise(res=>cv.toBlob(b=>res(b),'image/jpeg',q));
+}
+async function addPhotosToRealisation(r,files){
+  const list=Array.from(files||[]);
+  if(!list.length)return;
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise pour ajouter des photos');return;}
+  let n=0,fail=0;
+  toast('Import de '+list.length+' photo(s)…');
+  for(const file of list){
+    if(!/^image\//.test(file.type||'')){fail++;continue;}
+    if(file.size>REAL_MAX_FILE){toast(file.name+' : trop lourd (>25 Mo), ignoré');fail++;continue;}
+    try{
+      const src=await decodeOriented(file);
+      const full=drawScaled(src,REAL_MAX);
+      const thumb=drawScaled(src,REAL_THUMB);
+      const pid=uid();
+      const [fb,tb]=await Promise.all([canvasToBlob(full,REAL_Q),canvasToBlob(thumb,REAL_THUMB_Q)]);
+      await photoStore.save(fullKey(pid),fb);
+      await photoStore.save(thumbKey(pid),tb);
+      if(src.close)src.close();
+      r.photos.push({id:pid,name:file.name||'photo',w:full.width,h:full.height,edit:blankEdit(),createdAt:Date.now()});
+      if(!r.cover)r.cover=pid;
+      n++;
+    }catch(e){console.error('import photo',e);fail++;}
+  }
+  r.updatedAt=Date.now();
+  saveRealisations();renderRealisations();
+  toast(n+' photo(s) ajoutée(s)'+(fail?' · '+fail+' échec(s)':''));
+}
+function rzPickPhotos(r){
+  const inp=document.createElement('input');
+  inp.type='file';inp.multiple=true;inp.accept='image/*';
+  inp.onchange=()=>addPhotosToRealisation(r,inp.files);
+  inp.click();
+}
+
+/* ============ MOTEUR DE RENDU (WebGL) ============
+   Un seul passage : homographie (redressement des verticales) + rotation + recadrage +
+   étalonnage couleur. Tout est calculé à la volée depuis `photo.edit` — rien n'est écrit
+   dans le fichier d'origine. */
+let _gl=null,_glCv=null,_glProg=null,_glTex=null,_glTexKey='';
+const GL_VS='attribute vec2 a;varying vec2 v;void main(){v=a;gl_Position=vec4(a.x*2.0-1.0,1.0-a.y*2.0,0.0,1.0);}';
+const GL_FS=[
+'precision highp float;','varying vec2 v;','uniform sampler2D tex;',
+'uniform mat3 H;','uniform vec2 c0;','uniform vec2 c1;',
+'uniform float rotc;','uniform float rots;','uniform float rotk;','uniform float asp;',
+'uniform float expo;','uniform float contrast;','uniform float temp;','uniform float tint;','uniform float sat;',
+'void main(){',
+'  vec2 d = c0 + v*(c1-c0);',
+'  vec2 e = vec2((d.x-0.5)*asp, d.y-0.5);',
+'  e = vec2(e.x*rotc - e.y*rots, e.x*rots + e.y*rotc) * rotk;',
+'  d = vec2(e.x/asp + 0.5, e.y + 0.5);',
+'  vec3 p = H * vec3(d, 1.0);',
+'  vec2 uv = p.xy / p.z;',
+'  uv = clamp(uv, 0.0, 1.0);',
+'  vec3 c = texture2D(tex, uv).rgb;',
+'  c *= pow(2.0, expo);',
+'  c = (c - 0.5) * contrast + 0.5;',
+'  c.r *= 1.0 + temp;',
+'  c.b *= 1.0 - temp;',
+'  c.g *= 1.0 + tint;',
+'  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));',
+'  c = mix(vec3(l), c, sat);',
+'  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);',
+'}'].join('\n');
+function glSetup(){
+  if(_gl!==null)return _gl;
+  _glCv=document.createElement('canvas');
+  const opts={preserveDrawingBuffer:true,antialias:false,premultipliedAlpha:false};
+  _gl=_glCv.getContext('webgl',opts)||_glCv.getContext('experimental-webgl',opts)||false;
+  if(!_gl)return false;
+  const g=_gl;
+  const mk=(t,src)=>{const sh=g.createShader(t);g.shaderSource(sh,src);g.compileShader(sh);
+    if(!g.getShaderParameter(sh,g.COMPILE_STATUS)){console.error('shader',g.getShaderInfoLog(sh));return null;}return sh;};
+  const vs=mk(g.VERTEX_SHADER,GL_VS),fs=mk(g.FRAGMENT_SHADER,GL_FS);
+  if(!vs||!fs){_gl=false;return false;}
+  _glProg=g.createProgram();g.attachShader(_glProg,vs);g.attachShader(_glProg,fs);g.linkProgram(_glProg);
+  if(!g.getProgramParameter(_glProg,g.LINK_STATUS)){console.error('link',g.getProgramInfoLog(_glProg));_gl=false;return false;}
+  g.useProgram(_glProg);
+  const buf=g.createBuffer();
+  g.bindBuffer(g.ARRAY_BUFFER,buf);
+  g.bufferData(g.ARRAY_BUFFER,new Float32Array([0,0, 1,0, 0,1, 0,1, 1,0, 1,1]),g.STATIC_DRAW);
+  const loc=g.getAttribLocation(_glProg,'a');
+  g.enableVertexAttribArray(loc);g.vertexAttribPointer(loc,2,g.FLOAT,false,0,0);
+  _glTex=g.createTexture();
+  g.bindTexture(g.TEXTURE_2D,_glTex);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
+  g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,false);
+  return _gl;
+}
+/* Homographie carré unité -> quadrilatère source (Heckbert). Sert au redressement :
+   on échantillonne un quadrilatère plus étroit du côté qui fuit, ce qui redresse les
+   verticales convergentes sans jamais produire de coin vide. */
+function quadHomography(q){
+  const [x0,y0,x1,y1,x2,y2,x3,y3]=q;
+  const sx=x0-x1+x2-x3, sy=y0-y1+y2-y3;
+  if(Math.abs(sx)<1e-9&&Math.abs(sy)<1e-9){
+    return [x1-x0, x2-x1, x0, y1-y0, y2-y1, y0, 0, 0, 1];
+  }
+  const dx1=x1-x2, dx2=x3-x2, dy1=y1-y2, dy2=y3-y2;
+  const den=dx1*dy2-dy1*dx2;
+  const g=(sx*dy2-sy*dx2)/den, h=(dx1*sy-dy1*sx)/den;
+  return [x1-x0+g*x1, x3-x0+h*x3, x0, y1-y0+g*y1, y3-y0+h*y3, y0, g, h, 1];
+}
+function perspectiveQuad(persp){
+  const p=Math.max(-1,Math.min(1,(persp||0)/100));
+  const a=1-0.45*Math.abs(p);
+  /* compensation verticale : sans elle, une forte correction écrase visuellement l'image */
+  const vk=1-0.12*Math.abs(p), vy=y=>0.5+(y-0.5)*vk;
+  if(p>0)  return [0.5-a/2,vy(0), 0.5+a/2,vy(0), 1,vy(1), 0,vy(1)];
+  if(p<0)  return [0,vy(0), 1,vy(0), 0.5+a/2,vy(1), 0.5-a/2,vy(1)];
+  return [0,0, 1,0, 1,1, 0,1];
+}
+/* Facteur de zoom qui garantit qu'une rotation ne laisse aucun coin vide. */
+function rotZoom(deg,asp){
+  const t=Math.abs(deg||0)*Math.PI/180;
+  if(t<1e-6)return 1;
+  const c=Math.cos(t),s=Math.sin(t);
+  return Math.min(asp/(asp*c+s), 1/(asp*s+c));
+}
+/* Fenêtre de recadrage, dans l'espace de destination [0,1]², pour un ratio donné. */
+function cropWindow(edit,srcW,srcH){
+  const asp=srcW/srcH;
+  const def=REAL_RATIOS.find(r=>r.id===(edit.ratio||'libre'));
+  const target=def?def.v:0;
+  if(!target)return {c0:[0,0],c1:[1,1],outAsp:asp};
+  let fw=1,fh=1;
+  if(target<=asp)fw=target/asp; else fh=asp/target;
+  const pan=Math.max(-1,Math.min(1,edit.pan||0));
+  const slackX=1-fw, slackY=1-fh;
+  const x=(slackX/2)+(slackX/2)*(slackX>0?pan:0);
+  const y=(slackY/2)+(slackY/2)*(slackY>0?pan:0);
+  return {c0:[x,y],c1:[x+fw,y+fh],outAsp:target};
+}
+function glRenderTo(img,edit,maxSide,texKey){
+  const g=glSetup();
+  if(!g)return null;
+  const srcW=img.width,srcH=img.height;
+  const cw=cropWindow(edit,srcW,srcH);
+  let outW,outH;
+  const cropPxW=srcW*(cw.c1[0]-cw.c0[0]), cropPxH=srcH*(cw.c1[1]-cw.c0[1]);
+  const s=Math.min(1,maxSide/Math.max(cropPxW,cropPxH));
+  outW=Math.max(2,Math.round(cropPxW*s));outH=Math.max(2,Math.round(cropPxH*s));
+  _glCv.width=outW;_glCv.height=outH;
+  g.viewport(0,0,outW,outH);
+  if(_glTexKey!==texKey){
+    g.bindTexture(g.TEXTURE_2D,_glTex);
+    g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,img);
+    _glTexKey=texKey;
+  }
+  const H=quadHomography(perspectiveQuad(edit.persp));
+  const u=n=>g.getUniformLocation(_glProg,n);
+  /* WebGL attend les matrices en colonne-major ; H est écrite en ligne-major. */
+  g.uniformMatrix3fv(u('H'),false,new Float32Array([H[0],H[3],H[6], H[1],H[4],H[7], H[2],H[5],H[8]]));
+  g.uniform2f(u('c0'),cw.c0[0],cw.c0[1]);
+  g.uniform2f(u('c1'),cw.c1[0],cw.c1[1]);
+  const rad=(edit.rot||0)*Math.PI/180, asp=srcW/srcH;
+  g.uniform1f(u('rotc'),Math.cos(rad));
+  g.uniform1f(u('rots'),Math.sin(rad));
+  g.uniform1f(u('rotk'),rotZoom(edit.rot,asp));
+  g.uniform1f(u('asp'),asp);
+  g.uniform1f(u('expo'),edit.expo||0);
+  g.uniform1f(u('contrast'),1+(edit.contrast||0));
+  g.uniform1f(u('temp'),edit.temp||0);
+  g.uniform1f(u('tint'),edit.tint||0);
+  g.uniform1f(u('sat'),1+(edit.sat||0));
+  g.uniform1i(u('tex'),0);
+  g.activeTexture(g.TEXTURE0);
+  g.bindTexture(g.TEXTURE_2D,_glTex);
+  g.drawArrays(g.TRIANGLES,0,6);
+  return _glCv;
+}
+
+/* ---- Réglage automatique : gris-moyen + étalement d'histogramme sur un échantillon ---- */
+function sampleStats(img){
+  const cv=document.createElement('canvas');cv.width=64;cv.height=64;
+  const ctx=cv.getContext('2d');ctx.drawImage(img,0,0,64,64);
+  const d=ctx.getImageData(0,0,64,64).data;
+  let r=0,g=0,b=0;const lum=[];
+  for(let i=0;i<d.length;i+=4){
+    r+=d[i];g+=d[i+1];b+=d[i+2];
+    lum.push(0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]);
+  }
+  const n=d.length/4;
+  lum.sort((a,b2)=>a-b2);
+  const q=f=>lum[Math.max(0,Math.min(lum.length-1,Math.round(f*(lum.length-1))))]/255;
+  return {r:r/n/255,g:g/n/255,b:b/n/255,mean:lum.reduce((a,x)=>a+x,0)/n/255,p05:q(0.05),p95:q(0.95)};
+}
+const AUTO_TARGET=0.46;
+function autoEdit(img,edit){
+  const st=sampleStats(img);
+  const clamp=(v,m)=>Math.max(-m,Math.min(m,v));
+  const temp=clamp((st.b-st.r)/Math.max(0.02,st.b+st.r),0.28);
+  const rc=st.r*(1+temp), bc=st.b*(1-temp);
+  const tint=clamp(((rc+bc)/2)/Math.max(0.02,st.g)-1,0.16);
+  const spread=Math.max(0.05,st.p95-st.p05);
+  const contrast=Math.max(0,Math.min(0.35,(0.78/spread)-1));
+  /* L'exposition se calcule sur la luminance APRÈS balance des blancs et en tenant compte
+     du contraste : sur une photo à dominante chaude, neutraliser la dominante fait chuter
+     la luminance (le rouge est réduit), et le contraste assombrit encore une image sous
+     0,5. Calculée sur la luminance d'origine, la correction laissait l'image trop sombre. */
+  const lumWb=0.2126*rc+0.7152*st.g*(1+tint)+0.0722*bc;
+  const k=1+contrast;
+  const needed=(AUTO_TARGET-0.5)/k+0.5;
+  const expo=clamp(Math.log2(Math.max(0.05,needed)/Math.max(0.03,lumWb)),1.2);
+  return Object.assign({},edit,{temp:+temp.toFixed(3),tint:+tint.toFixed(3),expo:+expo.toFixed(3),contrast:+contrast.toFixed(3),sat:0.06});
+}
+
+/* ============ VUE RÉALISATIONS ============ */
+let _rzOpenId=null;
+function renderRealisations(){
+  const host=$('rz-body');if(!host)return;
+  ensureRealisations();
+  if(_rzOpenId&&!findRealisation(_rzOpenId))_rzOpenId=null;
+  host.innerHTML='';
+  if(_rzOpenId)renderRealisationDetail(host,findRealisation(_rzOpenId));
+  else renderRealisationList(host);
+}
+function renderRealisationList(host){
+  const grid=document.createElement('div');grid.className='rz-grid';
+  realisations.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(r=>{
+    const card=document.createElement('button');card.className='rz-card';
+    const cover=(r.cover&&(r.photos||[]).some(p=>p.id===r.cover))?r.cover:((r.photos||[])[0]||{}).id;
+    card.innerHTML=`<div class="rz-cover">${cover?'<img alt="">':'Aucune photo'}</div>
+      <div class="rz-cbody">
+        <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
+        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}</div>
+      </div>`;
+    if(cover){const im=card.querySelector('img');loadPhotoImage(cover,{thumb:true}).then(i=>{if(i&&im)im.src=i.src;});}
+    card.addEventListener('click',()=>{_rzOpenId=r.id;renderRealisations();window.scrollTo(0,0);});
+    grid.appendChild(card);
+  });
+  const add=document.createElement('button');add.className='rz-new';
+  add.innerHTML='＋<br>Nouvelle réalisation';
+  add.addEventListener('click',newRealisation);
+  grid.appendChild(add);
+  host.appendChild(grid);
+  if(!realisations.length){
+    const e=document.createElement('div');e.className='rz-empty';
+    e.textContent='Aucune réalisation pour l’instant. Créez-en une par chantier terminé, puis ajoutez-y les photos à publier.';
+    host.appendChild(e);
+  }
+}
+function renderRealisationDetail(host,r){
+  if(!r)return;
+  const head=document.createElement('div');
+  const back=document.createElement('button');back.className='rz-back';back.textContent='← Toutes les réalisations';
+  back.addEventListener('click',()=>{_rzOpenId=null;renderRealisations();});
+  head.appendChild(back);
+  const bar=document.createElement('div');bar.className='rz-detail-head';
+  bar.innerHTML=`<h2 style="font-family:'Cormorant Garamond',serif;font-size:23px;font-weight:600;">${esc(r.title||'Réalisation sans titre')}</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-onlight" data-export>⬇ Exporter pour le site</button>
+      <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
+    </div>`;
+  bar.querySelector('[data-export]').addEventListener('click',()=>openExportPanel(r));
+  bar.querySelector('[data-del]').addEventListener('click',()=>delRealisation(r.id));
+  head.appendChild(bar);
+
+  const meta=document.createElement('div');meta.className='rz-meta';
+  meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Client (optionnel)</span><select data-f="clientId"></select></label>
+    <label class="fld" style="flex:0 0 140px"><span class="lbl">Date</span><input type="text" data-f="date" placeholder="ex. 2026" value="${esc(r.date)}"></label>`;
+  const sel=meta.querySelector('[data-f="clientId"]');
+  sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
+  meta.querySelectorAll('[data-f]').forEach(el=>{
+    el.addEventListener('input',()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();});
+    el.addEventListener('change',()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();});
+  });
+  head.appendChild(meta);
+  host.appendChild(head);
+
+  const grid=document.createElement('div');grid.className='rz-photos';
+  (r.photos||[]).forEach(p=>{
+    const tile=document.createElement('div');tile.className='rz-ph';
+    const edited=JSON.stringify(p.edit)!==JSON.stringify(blankEdit());
+    tile.innerHTML=`<div class="rz-ph-load">…</div><img alt="" style="display:none">
+      ${edited?'<span class="rz-ph-badge">retouchée</span>':''}
+      ${r.cover===p.id?'<span class="rz-ph-badge" style="left:auto;right:6px;bottom:6px;background:rgba(154,133,116,.92)">couverture</span>':''}
+      <button class="rz-ph-del" title="Retirer">×</button>`;
+    const im=tile.querySelector('img'),ld=tile.querySelector('.rz-ph-load');
+    renderThumbInto(p,im,ld);
+    tile.querySelector('.rz-ph-del').addEventListener('click',e=>{e.stopPropagation();delPhoto(r,p.id);});
+    tile.addEventListener('click',()=>openPhotoEditor(r.id,p.id));
+    grid.appendChild(tile);
+  });
+  const add=document.createElement('button');add.className='rz-add';
+  add.innerHTML='＋<br>Ajouter des photos';
+  add.addEventListener('click',()=>rzPickPhotos(r));
+  grid.appendChild(add);
+  host.appendChild(grid);
+}
+/* La vignette montre la photo AVEC ses retouches : la galerie doit refléter ce qui sera
+   publié, pas l'original. Rendu à la volée depuis la vignette stockée (rapide). */
+async function renderThumbInto(p,im,ld){
+  try{
+    const img=await loadPhotoImage(p.id,{thumb:true});
+    if(!img){if(ld)ld.textContent='indisponible';return;}
+    const edit=p.edit||blankEdit();
+    if(JSON.stringify(edit)===JSON.stringify(blankEdit())){im.src=img.src;}
+    else{
+      const cv=glRenderTo(img,edit,REAL_THUMB,'t_'+p.id);
+      im.src=cv?cv.toDataURL('image/jpeg',0.8):img.src;
+    }
+    im.style.display='block';if(ld)ld.remove();
+  }catch(e){if(ld)ld.textContent='erreur';}
+}
+function newRealisation(){
+  const r=normalizeRealisation({title:'',date:String(new Date().getFullYear())});
+  realisations.push(r);saveRealisations();
+  _rzOpenId=r.id;renderRealisations();
+  setTimeout(()=>{const i=document.querySelector('#rz-body [data-f="title"]');if(i)i.focus();},60);
+}
+function delRealisation(id){
+  const r=findRealisation(id);if(!r)return;
+  askConfirm('Supprimer « '+(r.title||'cette réalisation')+' » et ses '+(r.photos||[]).length+' photo(s) ? C’est définitif.',async()=>{
+    for(const p of (r.photos||[])){await photoStore.del(fullKey(p.id));await photoStore.del(thumbKey(p.id));}
+    realisations=realisations.filter(x=>x.id!==id);
+    _rzOpenId=null;saveRealisations();renderRealisations();toast('Réalisation supprimée');
+  });
+}
+function delPhoto(r,pid){
+  askConfirm('Retirer cette photo de la réalisation ?',async()=>{
+    await photoStore.del(fullKey(pid));await photoStore.del(thumbKey(pid));
+    r.photos=(r.photos||[]).filter(p=>p.id!==pid);
+    if(r.cover===pid)r.cover=(r.photos[0]||{}).id||'';
+    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+  });
+}
+
+/* ============ ÉDITEUR PHOTO ============ */
+let _ed=null;
+const ED_SLIDERS={
+  geometrie:[
+    {k:'persp',label:'Verticales',min:-100,max:100,step:1,fmt:v=>Math.round(v)},
+    {k:'rot',label:'Rotation',min:-12,max:12,step:0.2,fmt:v=>v.toFixed(1)+'°'},
+  ],
+  lumiere:[
+    {k:'expo',label:'Exposition',min:-1.5,max:1.5,step:0.02,fmt:v=>v.toFixed(2)},
+    {k:'contrast',label:'Contraste',min:-0.4,max:0.6,step:0.01,fmt:v=>v.toFixed(2)},
+    {k:'temp',label:'Température',min:-0.35,max:0.35,step:0.01,fmt:v=>v.toFixed(2)},
+    {k:'tint',label:'Teinte',min:-0.2,max:0.2,step:0.01,fmt:v=>v.toFixed(2)},
+    {k:'sat',label:'Saturation',min:-0.5,max:0.5,step:0.01,fmt:v=>v.toFixed(2)},
+  ],
+};
+async function openPhotoEditor(rid,pid){
+  const r=findRealisation(rid);if(!r)return;
+  const p=(r.photos||[]).find(x=>x.id===pid);if(!p)return;
+  if(!glSetup()){toast('Votre navigateur ne gère pas WebGL : édition indisponible');return;}
+  const host=document.createElement('div');host.className='ed-modal';host.id='ed-modal';
+  host.innerHTML=`<div class="ed-bar">
+      <button class="btn" data-close>← Retour</button>
+      <span class="ed-title">${esc(p.name||'photo')}</span>
+      <span class="ed-cmp" data-cmp>maintenir pour voir l’original</span>
+      <button class="btn btn-primary" data-done>Terminer</button>
+    </div>
+    <div class="ed-body">
+      <div class="ed-stage"><canvas id="ed-canvas"></canvas></div>
+      <div class="ed-panel">
+        <p class="ed-hint" style="margin-top:0">Appui long sur la photo : comparer avec l’original.</p>
+        <div class="ed-tabs">
+          <button class="ed-tab active" data-tab="geometrie">Géométrie</button>
+          <button class="ed-tab" data-tab="lumiere">Lumière</button>
+          <button class="ed-tab" data-tab="cadrage">Cadrage</button>
+        </div>
+        <div id="ed-controls"></div>
+        <div class="ed-acts">
+          <button class="btn btn-onlight" data-auto>✨ Réglage auto</button>
+          <button class="btn btn-onlight" data-reset>↺ Réinitialiser</button>
+        </div>
+        <div class="ed-acts" style="margin-top:8px">
+          <button class="btn btn-onlight" data-series>Appliquer la lumière à toute la série</button>
+          <button class="btn btn-onlight" data-cover>Photo de couverture</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(host);
+  _ed={r,p,tab:'geometrie',img:null,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
+  host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
+  host.querySelector('[data-done]').addEventListener('click',closePhotoEditor);
+  host.querySelector('[data-auto]').addEventListener('click',()=>{
+    if(!_ed.img)return;
+    Object.assign(_ed.p.edit,autoEdit(_ed.img,_ed.p.edit));
+    _ed.tab='lumiere';paintEditorTabs();buildEditorControls();edPaint();edTouch();
+    toast('Réglage automatique appliqué');
+  });
+  host.querySelector('[data-reset]').addEventListener('click',()=>{
+    Object.assign(_ed.p.edit,blankEdit());buildEditorControls();edPaint();edTouch();
+  });
+  host.querySelector('[data-series]').addEventListener('click',applyLightToSeries);
+  host.querySelector('[data-cover]').addEventListener('click',()=>{
+    _ed.r.cover=_ed.p.id;edTouch();toast('Photo de couverture définie');
+  });
+  host.querySelectorAll('.ed-tab').forEach(b=>b.addEventListener('click',()=>{
+    _ed.tab=b.dataset.tab;paintEditorTabs();buildEditorControls();
+  }));
+  const cmp=host.querySelector('[data-cmp]'),stage=host.querySelector('.ed-stage');
+  const showOrig=on=>{_ed.showOrig=on;edPaint();};
+  ['mousedown','touchstart'].forEach(ev=>{cmp.addEventListener(ev,e=>{e.preventDefault();showOrig(true);});stage.addEventListener(ev,()=>showOrig(true));});
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>{cmp.addEventListener(ev,()=>showOrig(false));stage.addEventListener(ev,()=>showOrig(false));});
+  buildEditorControls();
+  const cv=$('ed-canvas');
+  const ctx=cv.getContext('2d');cv.width=600;cv.height=400;
+  ctx.fillStyle='#2f2c28';ctx.fillRect(0,0,600,400);
+  ctx.fillStyle='#b4aa9b';ctx.font='14px Inter, sans-serif';ctx.textAlign='center';
+  ctx.fillText('Chargement de la photo…',300,200);
+  const img=await loadPhotoImage(p.id,{thumb:false});
+  if(!_ed)return;
+  if(!img){toast('Photo introuvable dans le cloud');closePhotoEditor();return;}
+  _ed.img=img;edPaint();
+}
+function paintEditorTabs(){
+  document.querySelectorAll('#ed-modal .ed-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===_ed.tab));
+}
+function buildEditorControls(){
+  const host=$('ed-controls');if(!host||!_ed)return;
+  host.innerHTML='';
+  const e=_ed.p.edit;
+  if(_ed.tab==='cadrage'){
+    const hint=document.createElement('p');hint.className='ed-hint';
+    hint.textContent='Un format identique sur toutes les photos d’une réalisation, c’est ce qui donne une galerie propre. Le curseur déplace le cadrage dans la photo.';
+    host.appendChild(hint);
+    const rats=document.createElement('div');rats.className='ed-ratios';
+    REAL_RATIOS.forEach(rt=>{
+      const b=document.createElement('button');b.className='ed-ratio'+(e.ratio===rt.id?' active':'');b.textContent=rt.label;
+      b.addEventListener('click',()=>{e.ratio=rt.id;buildEditorControls();edPaint();edTouch();});
+      rats.appendChild(b);
+    });
+    host.appendChild(rats);
+    if(e.ratio!=='libre')host.appendChild(sliderRow({k:'pan',label:'Position',min:-1,max:1,step:0.02,fmt:v=>Math.round(v*100)+'%'}));
+    const all=document.createElement('button');all.className='btn btn-onlight';all.textContent='Appliquer ce format à toute la série';
+    all.addEventListener('click',()=>{
+      const n=(_ed.r.photos||[]).length;
+      (_ed.r.photos||[]).forEach(ph=>{ph.edit.ratio=e.ratio;});
+      edTouch();toast('Format appliqué à '+n+' photo(s)');
+    });
+    host.appendChild(all);
+    return;
+  }
+  if(_ed.tab==='geometrie'){
+    const hint=document.createElement('p');hint.className='ed-hint';
+    hint.textContent='« Verticales » redresse un bâtiment qui part en pyramide parce que le téléphone était incliné vers le haut. C’est le défaut qui trahit le plus une photo amateur.';
+    host.appendChild(hint);
+  }
+  (ED_SLIDERS[_ed.tab]||[]).forEach(cfg=>host.appendChild(sliderRow(cfg)));
+}
+function sliderRow(cfg){
+  const e=_ed.p.edit;
+  const row=document.createElement('div');row.className='ed-slider';
+  row.innerHTML=`<label>${esc(cfg.label)}</label><input type="range" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${e[cfg.k]||0}"><span class="val"></span>`;
+  const inp=row.querySelector('input'),val=row.querySelector('.val');
+  const show=()=>{val.textContent=cfg.fmt(parseFloat(inp.value));};
+  show();
+  inp.addEventListener('input',()=>{e[cfg.k]=parseFloat(inp.value);show();edPaint();});
+  inp.addEventListener('change',edTouch);
+  return row;
+}
+function edPaint(){
+  if(!_ed||!_ed.img)return;
+  cancelAnimationFrame(_ed.raf);
+  _ed.raf=requestAnimationFrame(()=>{
+    const cv=$('ed-canvas');if(!cv)return;
+    const edit=_ed.showOrig?blankEdit():_ed.p.edit;
+    const out=glRenderTo(_ed.img,edit,1400,'f_'+_ed.p.id);
+    if(!out)return;
+    cv.width=out.width;cv.height=out.height;
+    cv.getContext('2d').drawImage(out,0,0);
+  });
+}
+function edTouch(){
+  if(!_ed)return;
+  _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
+}
+function applyLightToSeries(){
+  if(!_ed)return;
+  const src=_ed.p.edit;
+  const others=(_ed.r.photos||[]).filter(p=>p.id!==_ed.p.id);
+  if(!others.length){toast('Cette réalisation n’a qu’une photo');return;}
+  askConfirm('Appliquer exposition, contraste, température, teinte et saturation de cette photo aux '+others.length+' autre(s) ? La géométrie de chaque photo reste la sienne.',()=>{
+    others.forEach(p=>{['expo','contrast','temp','tint','sat'].forEach(k=>{p.edit[k]=src[k];});});
+    edTouch();toast('Lumière appliquée à '+others.length+' photo(s)');
+  });
+}
+function closePhotoEditor(){
+  const host=$('ed-modal');if(host)host.remove();
+  _ed=null;_glTexKey='';
+  saveRealisations();renderRealisations();
+}
+
+/* ============ EXPORT VERS LE SITE ============ */
+const EXPORT_SIZES=[{id:2560,label:'2560 px — grand écran'},{id:1920,label:'1920 px — usage courant'},{id:1280,label:'1280 px — vignettes / mobile'}];
+function openExportPanel(r){
+  const n=(r.photos||[]).length;
+  if(!n){toast('Aucune photo à exporter');return;}
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Exporter « ${esc(r.title||'réalisation')} »</h3>
+    <p class="msub">${n} photo(s) seront téléchargées en JPEG, retouches appliquées. Les originaux restent intacts dans l’appli.</p>
+    <label class="fld" style="margin-bottom:12px"><span class="lbl">Largeur maximale</span>
+      <select id="exp-size">${EXPORT_SIZES.map(s=>`<option value="${s.id}"${s.id===1920?' selected':''}>${s.label}</option>`).join('')}</select></label>
+    <div id="exp-progress" style="font-size:13px;color:var(--stone);margin-bottom:10px"></div>
+    <button class="btn btn-primary" id="exp-go" onclick="runExport('${r.id}')">Télécharger les ${n} photo(s)</button>`);
+}
+function slugify(s){
+  return (s||'photo').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50)||'photo';
+}
+async function runExport(rid){
+  const r=findRealisation(rid);if(!r)return;
+  const size=parseInt(($('exp-size')||{}).value||1920,10);
+  const prog=$('exp-progress'),btn=$('exp-go');
+  if(btn)btn.disabled=true;
+  const base=slugify(r.title||'realisation');
+  let done=0,fail=0;
+  for(const p of (r.photos||[])){
+    if(prog)prog.textContent='Rendu '+(done+fail+1)+' / '+r.photos.length+'…';
+    try{
+      const img=await loadPhotoImage(p.id,{thumb:false});
+      if(!img)throw new Error('photo absente');
+      const out=glRenderTo(img,p.edit||blankEdit(),size,'x_'+p.id);
+      if(!out)throw new Error('rendu impossible');
+      const blob=await canvasToBlob(out,0.9);
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download=base+'-'+String(done+1).padStart(2,'0')+'.jpg';
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),4000);
+      done++;
+      await new Promise(res=>setTimeout(res,350));
+    }catch(e){console.error('export',e);fail++;}
+  }
+  _glTexKey='';
+  if(prog)prog.textContent=done+' photo(s) téléchargée(s)'+(fail?' · '+fail+' échec(s)':'');
+  if(btn)btn.disabled=false;
+  toast(done+' photo(s) exportée(s)');
+}
+
+/* ============ MÉMO DE PRISE DE VUE ============ */
+function openShootingMemo(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Bien photographier un chantier terminé</h3>
+    <p class="msub">Ce qui se joue à la prise de vue ne se rattrape pas en retouche. Cinq minutes ici valent une heure d’édition.</p>
+    <div style="font-size:13.5px;line-height:1.65;color:var(--ink)">
+      <p style="margin:0 0 10px"><b>1. Téléphone bien droit.</b> Dès qu’il penche vers le haut, le bâtiment part en pyramide. Activez la grille et le niveau dans l’appareil photo, et tenez l’écran vertical.</p>
+      <p style="margin:0 0 10px"><b>2. Jamais le 0,5×.</b> L’ultra grand-angle déforme les bords et étire les volumes — aucune retouche ne le rattrape. Reculez plutôt que d’élargir.</p>
+      <p style="margin:0 0 10px"><b>3. HDR activé.</b> C’est ce qui garde le détail dans une fenêtre lumineuse sans noyer la pièce dans le noir. Une fenêtre cramée est une donnée perdue, définitivement.</p>
+      <p style="margin:0 0 10px"><b>4. Toutes les lumières allumées.</b> Y compris en plein jour : ça équilibre l’intérieur avec la fenêtre et donne de la profondeur.</p>
+      <p style="margin:0 0 10px"><b>5. Hauteur d’yeux, depuis un angle.</b> Environ 1,50 m, dos à un coin de la pièce : c’est ce qui montre le volume réel.</p>
+      <p style="margin:0 0 10px"><b>6. Rangez le cadre.</b> Câbles, poubelle, cartons, votre reflet dans un miroir ou une vitre. Trente secondes de rangement évitent une retouche payante.</p>
+      <p style="margin:0"><b>7. Plusieurs cadrages du même point.</b> Une large, une serrée sur un détail soigné. La galerie a besoin des deux.</p>
+    </div>`);
+}
+
 /* ============ SYNCHRONISATION SUPABASE (granulaire) ============ */
 const SB_URL='https://njaamykxnvohoesrtpvv.supabase.co';
 const SB_KEY='sb_publishable_h7zdNqYow8o3jdofbWKIlg_IaEEcjj0';
 const APP_VERSION='v14 · 2026-08-03 (Supabase)';
-const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS]);
+const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL]);
 let sb=null,sbUser=null,ownerId=null,sbChannel=null,applyingRemote=false,offlineMode=false,lastSyncError='',cloudReady=false,loggedIn=false;
-let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',pushT=null;
+let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRealJson='',pushT=null;
 function setSyncStatus(s){const b=document.getElementById('sync-badge');if(!b)return;b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 /* Id du client dont une fiche est en cours de saisie (champ actif dans .cl-group[data-cid]).
@@ -3643,14 +4413,15 @@ async function loadAll(){
       else if(r.kind==='devis'){const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
       else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
       else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=r.data;remoteTasksJson=JSON.stringify(tasks);}}
+      else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=JSON.stringify(realisations);}}
     });
     clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
     devisList=devisList.filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));
     Object.keys(remoteClients).forEach(id=>{if(!cloudIds.has(id))delete remoteClients[id];});
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);
     applyingRemote=false;cloudReady=true;
-    try{renderClients();render();}catch(e){}
+    try{renderClients();render();if(!isEditingRealisations())renderRealisations();}catch(e){}
     setSyncStatus('ok');
     scheduleSyncPush();
   }catch(e){lastSyncError=(e&&(e.message||e.code))||'lecture impossible';setSyncStatus('err');}
@@ -3682,12 +4453,18 @@ function handleRealtime(payload){
         else if(row.kind==='devis'){const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);}
         else if(row.kind==='library'){if(row.data&&row.data.sections){library=row.data;remoteLibJson=JSON.stringify(library);}}
         else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=row.data;remoteTasksJson=JSON.stringify(tasks);}}
+        else if(row.kind==='realisations'&&isEditingRealisations()){
+          /* Saisie ou retouche en cours : on ignore la mise à jour distante et on ne marque
+             PAS `remoteRealJson`, pour que le prochain cloudPush renvoie notre version. */
+        }
+        else if(row.kind==='realisations'){if(Array.isArray(row.data)){mergeRealisations(row.data);remoteRealJson=JSON.stringify(realisations);}}
       }
     }
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);
   }catch(e){}
   applyingRemote=false;
   try{if(!isEditingClients())renderClients();}catch(e){}
+  try{if(!isEditingRealisations())renderRealisations();}catch(e){}
   setSyncStatus('ok');
 }
 async function cloudPush(){
@@ -3697,12 +4474,13 @@ async function cloudPush(){
      appliqué qu'APRÈS confirmation d'écriture réussie — sinon un push qui échoue (hors ligne,
      erreur réseau) était marqué à tort comme envoyé, et la modification locale ne repartait
      plus jamais en synchro (silencieusement perdue au prochain rechargement/loadAll). */
-  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null;
+  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null,pendingReal=null;
   const pendingDelC=[],pendingDelD=[];
   clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){pendingC[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
   devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){pendingD[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
   const lj=JSON.stringify(library);if(lj!==remoteLibJson){pendingLib=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
   const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){pendingTasks=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
+  const rj=JSON.stringify(realisations);if(rj!==remoteRealJson){pendingReal=rj;rows.push({id:'realisations',owner:ownerId,kind:'realisations',data:realisations,updated_at:new Date().toISOString()});}
   Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id))pendingDelC.push(id);});
   Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id))pendingDelD.push(id);});
   delIds.push(...pendingDelC,...pendingDelD);
@@ -3712,6 +4490,7 @@ async function cloudPush(){
     Object.assign(remoteClients,pendingC);Object.assign(remoteDevis,pendingD);
     if(pendingLib!==null)remoteLibJson=pendingLib;
     if(pendingTasks!==null)remoteTasksJson=pendingTasks;
+    if(pendingReal!==null)remoteRealJson=pendingReal;
     pendingDelC.forEach(id=>delete remoteClients[id]);
     pendingDelD.forEach(id=>delete remoteDevis[id]);
     lastSyncError='';setSyncStatus('ok');
@@ -3776,6 +4555,7 @@ async function init(){
   clients=Array.isArray(cs)?cs.map(normalizeClient):[];
   devisList=(await store.get(K_DEVIS))||[];
   tasks=(await store.get(K_TASKS))||[];
+  realisations=((await store.get(K_REAL))||[]).map(normalizeRealisation);
   chantierList=(await store.get(K_CHANTIER))||[];
   const chDraft=await store.get('mn_chantier_draft');
   if(chDraft&&Array.isArray(chDraft.cats))chantier=chDraft;
