@@ -3716,9 +3716,10 @@ function mergeRealisations(list){
 }
 
 /* ---- Stockage des fichiers photo ----
-   Même bucket que les documents (`client-docs`) et surtout MÊME FORME DE CHEMIN
-   (`ownerId/<id>`) : la politique d'accès Supabase en place autorise déjà exactement cette
-   forme. Ne pas introduire de sous-dossier ici sans avoir vérifié la policy d'abord.
+   Même bucket que les documents (`client-docs`), chemin `ownerId/<clé>`. La policy réelle
+   (vérifiée en base) est `(storage.foldername(name))[1] = auth.uid()::text` : c'est le
+   PREMIER segment qui compte, donc un sous-dossier resterait autorisé. On garde malgré
+   tout un chemin plat, avec les préfixes `rp_`/`rt_` pour distinguer les usages.
    Rien n'est mis en localStorage : une photo de publication pèse ~1 Mo, le cache local
    sature (cf. DOC_LOCAL_CACHE_LIMIT). Mémoire + cloud uniquement. */
 const PHOTO_MEM_MAX=40;
@@ -4020,12 +4021,16 @@ function renderRealisationList(host){
   realisations.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(r=>{
     const card=document.createElement('button');card.className='rz-card';
     const cover=(r.cover&&(r.photos||[]).some(p=>p.id===r.cover))?r.cover:((r.photos||[])[0]||{}).id;
-    card.innerHTML=`<div class="rz-cover">${cover?'<img alt="">':'Aucune photo'}</div>
+    card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
       <div class="rz-cbody">
         <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
         <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}</div>
       </div>`;
-    if(cover){const im=card.querySelector('img');loadPhotoImage(cover,{thumb:true}).then(i=>{if(i&&im)im.src=i.src;});}
+    if(cover){
+      const im=card.querySelector('img');
+      const ph=(r.photos||[]).find(p=>p.id===cover);
+      if(im&&ph)renderThumbInto(ph,im,null);
+    }
     card.addEventListener('click',()=>{_rzOpenId=r.id;renderRealisations();window.scrollTo(0,0);});
     grid.appendChild(card);
   });
@@ -4090,17 +4095,28 @@ function renderRealisationDetail(host,r){
   host.appendChild(grid);
 }
 /* La vignette montre la photo AVEC ses retouches : la galerie doit refléter ce qui sera
-   publié, pas l'original. Rendu à la volée depuis la vignette stockée (rapide). */
+   publié, pas l'original. Rendu à la volée depuis la vignette stockée (rapide).
+   ATTENTION : ne jamais réutiliser le `src` d'un objet Image déjà chargé pour alimenter
+   une AUTRE balise <img>. `blobToImage` libère l'URL d'objet dès le chargement (l'Image
+   garde ses pixels décodés, ce qui suffit pour WebGL) — mais l'URL, elle, est morte, et
+   une balise qui la reçoit affiche une image cassée. On crée donc une URL fraîche par
+   balise, libérée une fois que CETTE balise a chargé. */
+function showBlobIn(blob,im,ld){
+  const u=URL.createObjectURL(blob);
+  im.onload=()=>{URL.revokeObjectURL(u);im.style.display='block';if(ld)ld.remove();};
+  im.onerror=()=>{URL.revokeObjectURL(u);if(ld)ld.textContent='illisible';};
+  im.src=u;
+}
 async function renderThumbInto(p,im,ld){
   try{
-    const img=await loadPhotoImage(p.id,{thumb:true});
-    if(!img){if(ld)ld.textContent='indisponible';return;}
+    const blob=await photoStore.get(thumbKey(p.id));
+    if(!blob){if(ld)ld.textContent='indisponible';return;}
     const edit=p.edit||blankEdit();
-    if(JSON.stringify(edit)===JSON.stringify(blankEdit())){im.src=img.src;}
-    else{
-      const cv=glRenderTo(img,edit,REAL_THUMB,'t_'+p.id);
-      im.src=cv?cv.toDataURL('image/jpeg',0.8):img.src;
-    }
+    if(JSON.stringify(edit)===JSON.stringify(blankEdit())){showBlobIn(blob,im,ld);return;}
+    const img=await blobToImage(blob);
+    const cv=glRenderTo(img,edit,REAL_THUMB,'t_'+p.id);
+    if(!cv){showBlobIn(blob,im,ld);return;}
+    im.src=cv.toDataURL('image/jpeg',0.8);
     im.style.display='block';if(ld)ld.remove();
   }catch(e){if(ld)ld.textContent='erreur';}
 }

@@ -140,10 +140,38 @@ const docBehaviour = await page.evaluate(async () => {
 });
 check('Documents client toujours réduits à 1400 px (circuit inchangé)', docBehaviour.w === 1400, docBehaviour.w + '×' + docBehaviour.h);
 
-// --- Vignettes affichées dans la galerie
-await page.waitForTimeout(800);
-const thumbsShown = await page.evaluate(() => [...document.querySelectorAll('.rz-ph img')].filter(i => i.src && i.src.length > 40).length);
-check('Vignettes affichées dans la galerie', thumbsShown === 2, thumbsShown + ' vignette(s)');
+// --- Vignettes affichées dans la galerie.
+//     On vérifie `naturalWidth > 0`, c'est-à-dire que le navigateur a VRAIMENT décodé
+//     l'image. Contrôler seulement que `src` est rempli laisse passer une URL d'objet déjà
+//     libérée : la balise affiche alors l'icône « image cassée » avec un src d'apparence
+//     valide. C'est exactement le bug qui est passé en production.
+await page.waitForTimeout(1200);
+const thumbs = await page.evaluate(() => ({
+  ok: [...document.querySelectorAll('.rz-ph img')].filter(i => i.naturalWidth > 0).length,
+  ko: [...document.querySelectorAll('.rz-ph img')].filter(i => i.src && i.naturalWidth === 0).length,
+}));
+check('Vignettes réellement affichées dans la galerie', thumbs.ok === 2 && thumbs.ko === 0, thumbs.ok + ' affichée(s), ' + thumbs.ko + ' cassée(s)');
+
+// --- Et la couverture en vue liste (même piège)
+const coverOk = await page.evaluate(async () => {
+  _rzOpenId = null; renderRealisations();
+  await new Promise(r => setTimeout(r, 1000));
+  return {
+    ok: [...document.querySelectorAll('.rz-cover img')].filter(i => i.naturalWidth > 0).length,
+    ko: [...document.querySelectorAll('.rz-cover img')].filter(i => i.src && i.naturalWidth === 0).length,
+  };
+});
+check('Photo de couverture réellement affichée (vue liste)', coverOk.ok === 1 && coverOk.ko === 0, coverOk.ok + ' affichée(s), ' + coverOk.ko + ' cassée(s)');
+await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
+await page.waitForTimeout(600);
+
+// --- Une seule photo de couverture, jamais deux
+const covers = await page.evaluate(() => [...document.querySelectorAll('.rz-ph-badge')].filter(b => b.textContent.trim() === 'couverture').length);
+check('Une seule photo marquée « couverture »', covers === 1, covers + ' badge(s)');
+
+// --- Autant de tuiles que de photos en données (pas de doublon à l'affichage)
+const tiles = await page.evaluate(() => ({ tuiles: document.querySelectorAll('.rz-ph').length, photos: realisations[0].photos.length }));
+check('Autant de tuiles que de photos', tiles.tuiles === tiles.photos, tiles.tuiles + ' tuiles / ' + tiles.photos + ' photos');
 
 // --- Éditeur : ouverture et rendu
 await page.evaluate(() => openPhotoEditor(realisations[0].id, realisations[0].photos[0].id));
