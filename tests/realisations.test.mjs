@@ -45,6 +45,7 @@ await page.evaluate(() => {
     },
     from: chain,
   };
+  sb.auth = { getSession: async () => ({ data: { session: { access_token: 'jeton-de-test' } } }) };
   sbUser = { id: 'test-user', email: 'test@test' };
   ownerId = 'test-user';
 });
@@ -445,6 +446,81 @@ const del = await page.evaluate(async () => {
 check('Suppression en lot : deux photos retirées en une confirmation', del.apres === del.avant - 2, del.avant + ' → ' + del.apres);
 check('Suppression en lot : les fichiers partent du stockage', del.fichiersApres === del.fichiersAvant - 4, del.fichiersAvant + ' → ' + del.fichiersApres);
 check('Suppression en lot : le mode sélection se referme', del.modeQuitte);
+
+// --- Retouche IA : le pont, la sécurité et la non-destruction
+const iaCalls = [];
+await page.evaluate(() => { window.__iaCalls = []; });
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  const auth = route.request().headers()['authorization'] || '';
+  iaCalls.push({ body: { action: body.action, model: body.model, prompt: body.prompt, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
+  // Une image renvoyée par le « modèle » : un JPEG vert, reconnaissable à l'œil et à la mesure.
+  const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: jpeg, model: body.model, provider: 'fal' }) });
+});
+
+const iaOnglet = await page.evaluate(async () => {
+  await openPhotoEditor(realisations[0].id, realisations[0].photos[0].id);
+  await new Promise(r => setTimeout(r, 900));
+  return document.querySelectorAll('.ed-tab').length;
+});
+check('Onglet IA présent dans l’éditeur', iaOnglet === 4, iaOnglet + ' onglet(s)');
+
+const panneau = await page.evaluate(() => {
+  _ed.tab = 'ia'; paintEditorTabs(); buildEditorControls();
+  return {
+    consigne: !!document.querySelector('.ia-prompt'),
+    modeles: !!document.querySelector('#ed-controls select'),
+    bouton: [...document.querySelectorAll('#ed-controls .btn')].some(b => b.textContent.includes('Appliquer la consigne')),
+  };
+});
+check('Panneau IA : champ de consigne, choix du modèle, bouton', panneau.consigne && panneau.modeles && panneau.bouton, JSON.stringify(panneau));
+
+const applique = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  const avant = window.__files.size;
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    document.querySelector('.ia-prompt').value = 'équilibre la lumière';
+    [...document.querySelectorAll('#ed-controls .btn')].find(b => b.textContent.includes('Appliquer la consigne')).click();
+  });
+  await new Promise(r2 => setTimeout(r2, 700));
+  return {
+    aVersionIa: !!p.ia, useIa: p.useIa === true,
+    prompt: p.ia && p.ia.prompt,
+    originalIntact: window.__files.has('test-user/' + fullKey(p.id)),
+    fichierIa: window.__files.has('test-user/' + iaKey(p.id)),
+    nouveauxFichiers: window.__files.size - avant,
+  };
+});
+check('Retouche IA : version enregistrée à côté de l’original', applique.aVersionIa && applique.fichierIa, JSON.stringify(applique));
+check('Retouche IA : l’original n’est PAS écrasé', applique.originalIntact && applique.nouveauxFichiers === 1);
+check('Retouche IA : la consigne est mémorisée sur la photo', applique.prompt === 'équilibre la lumière', applique.prompt);
+
+check('Pont IA : appelé avec le modèle, la consigne et une image', iaCalls.length === 1
+  && iaCalls[0].body.model === 'fal-ai/nano-banana-pro/edit'
+  && iaCalls[0].body.prompt === 'équilibre la lumière'
+  && iaCalls[0].body.imgPrefix === 'data:image/', JSON.stringify(iaCalls[0] && iaCalls[0].body));
+check('Pont IA : le jeton envoyé est celui de la SESSION, pas la clé publique de la page',
+  iaCalls.length === 1 && iaCalls[0].auth === 'Bearer jeton-de-test' && !iaCalls[0].auth.includes('sb_publishable'),
+  iaCalls[0] && iaCalls[0].auth);
+
+const bascule = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  p.useIa = false;
+  const orig = await loadPhotoImage(p.id, { thumb: false });
+  p.useIa = true;
+  const ia = await loadPhotoImage(p.id, { thumb: false });
+  const force = await loadPhotoImage(p.id, { thumb: false, original: true });
+  return { differentes: orig !== ia, originalForce: force === orig };
+});
+check('Bascule original / version IA effective', bascule.differentes);
+check('« original:true » ramène bien la photo d’origine (pas de réinjection de l’IA dans l’IA)', bascule.originalForce);
+
+await page.evaluate(() => { _ed.tab = 'geometrie'; closePhotoEditor(); });
+await page.waitForTimeout(500);
+await page.unroute('**/functions/v1/photo-ia');
 
 // --- Publication vers le site public
 const realisationPhotoCount = await page.evaluate(() => realisations[0].photos.length);

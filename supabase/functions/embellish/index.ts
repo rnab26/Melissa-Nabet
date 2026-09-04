@@ -1,5 +1,10 @@
 // Proxy sécurisé vers l'API Anthropic pour le bouton "Embellir avec l'IA".
 // La clé Anthropic reste côté serveur (secret Supabase), jamais exposée au navigateur.
+//
+// La fonction exige un utilisateur RÉELLEMENT CONNECTÉ. Auparavant elle acceptait la clé
+// publiable de l'application comme jeton — or cette clé est lisible dans le code de la page,
+// qui est publique : n'importe qui pouvait appeler la fonction et consommer les crédits
+// Anthropic du compte. Ne jamais revenir en arrière là-dessus.
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -12,9 +17,34 @@ const LENGTH_CONFIG: Record<string, { instruction: string; maxTokens: number }> 
   long: { instruction: "DEUX à TROIS phrases", maxTokens: 260 },
 };
 
+/** Vérifie que l'appelant est un utilisateur réellement connecté. */
+async function requireUser(req: Request): Promise<string> {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (!token) throw new Error("authentification requise");
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !anon) throw new Error("environnement Supabase incomplet côté serveur");
+  const res = await fetch(url + "/auth/v1/user", {
+    headers: { apikey: anon, Authorization: "Bearer " + token },
+  });
+  if (!res.ok) throw new Error("session invalide ou expirée");
+  const user = await res.json();
+  if (!user || !user.id || user.role !== "authenticated") throw new Error("session invalide");
+  return user.id as string;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: CORS_HEADERS });
+  }
+
+  try {
+    await requireUser(req);
+  } catch (e) {
+    return new Response(JSON.stringify({ error: String((e as Error).message) }), {
+      status: 401,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+    });
   }
 
   try {

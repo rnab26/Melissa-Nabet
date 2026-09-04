@@ -618,6 +618,16 @@
   .ed-ratio.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;font-weight:600;}
   .ed-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
   .ed-hint{font-size:11.5px;color:var(--stone);margin:2px 0 10px;line-height:1.5;}
+  .ia-prompt{display:block;width:100%;margin:10px 0 0;font-family:'Inter';font-size:13.5px;
+    padding:9px 10px;border:1px solid var(--panel-edge);border-radius:3px;background:var(--panel);
+    color:var(--ink);line-height:1.5;resize:vertical;}
+  .ia-recent{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+  .ia-recent .mini{font-size:11.5px;}
+  .ia-state{margin-top:14px;padding:11px 13px;border-left:3px solid var(--oxblood);
+    background:var(--panel);border-radius:0 5px 5px 0;border-top:1px solid var(--panel-edge);
+    border-right:1px solid var(--panel-edge);border-bottom:1px solid var(--panel-edge);}
+  .ia-state p{margin:0;font-size:12.5px;}
+  .ia-prompt-echo{color:var(--stone);font-style:italic;margin-top:4px!important;}
   .ed-cmp{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;}
   @media(max-width:680px){.ed-cmp{display:none;}}
   @media(min-width:900px){
@@ -2156,9 +2166,11 @@ async function embellish(sv,btn,textarea){
   if(!sv.title||!sv.title.trim()){toast('Ajoutez un intitulé avant d\'embellir');return;}
   btn.disabled=true;const old=btn.textContent;btn.textContent='…';
   try{
+    const token=await sessionToken();
+    if(!token){toast('Reconnectez-vous : session expirée');btn.disabled=false;btn.textContent=old;return;}
     const res=await fetch(SB_URL+'/functions/v1/embellish',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SB_KEY,'apikey':SB_KEY},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
       body:JSON.stringify({title:sv.title,desc:sv.desc,proj:current.proj,surf:current.surf,length:getEmbellishLength()})
     });
     const data=await res.json();
@@ -3708,7 +3720,7 @@ const REAL_RATIOS=[
 function blankEdit(){return {persp:0,rot:0,expo:0,contrast:0,temp:0,tint:0,sat:0,ratio:'libre',pan:0};}
 function normalizeRealisation(r){
   const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
-  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',w:0,h:0,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
+  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',w:0,h:0,useIa:false,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
   return o;
 }
 function ensureRealisations(){if(!Array.isArray(realisations))realisations=[];}
@@ -3716,6 +3728,10 @@ function saveRealisations(){realisations.forEach(r=>{r.updatedAt=r.updatedAt||Da
 let _rzSaveT=null;
 function saveRealisationsDebounced(){clearTimeout(_rzSaveT);_rzSaveT=setTimeout(saveRealisations,500);}
 function findRealisation(id){return realisations.find(r=>r.id===id)||null;}
+function findPhoto(pid){
+  for(const r of realisations){const p=(r.photos||[]).find(x=>x.id===pid);if(p)return p;}
+  return null;
+}
 function isEditingRealisations(){
   if(typeof _ed!=='undefined'&&_ed)return true; /* éditeur photo ouvert : ses objets sont vivants */
   const a=document.activeElement;
@@ -3795,8 +3811,12 @@ function blobToImage(blob){
     img.src=url;
   });
 }
-async function loadPhotoImage(pid,{thumb=false}={}){
-  const key=thumb?thumbKey(pid):fullKey(pid);
+/* `original:true` force la photo d'origine même quand une version IA est active — sert au
+   comparatif et à l'envoi vers le modèle (on ne réinjecte pas une sortie IA dans l'IA). */
+async function loadPhotoImage(pid,{thumb=false,original=false}={}){
+  const ph=findPhoto(pid);
+  const useIa=!original&&ph&&ph.ia&&ph.useIa;
+  const key=thumb?(useIa?iaKey(pid):thumbKey(pid)):(useIa?iaKey(pid):fullKey(pid));
   if(!thumb&&_imgCache.has(key))return _imgCache.get(key);
   const blob=await photoStore.get(key);
   if(!blob)return null;
@@ -4158,7 +4178,9 @@ function showBlobIn(blob,im,ld){
 }
 async function renderThumbInto(p,im,ld){
   try{
-    const blob=await photoStore.get(thumbKey(p.id));
+    /* Quand une version IA est active, la vignette doit la montrer : la galerie reflète
+       ce qui sera publié. Pas de vignette IA stockée, on rend depuis la pleine taille. */
+    const blob=(p.ia&&p.useIa)?await photoStore.get(iaKey(p.id)):await photoStore.get(thumbKey(p.id));
     if(!blob){if(ld)ld.textContent='indisponible';return;}
     const edit=p.edit||blankEdit();
     if(JSON.stringify(edit)===JSON.stringify(blankEdit())){showBlobIn(blob,im,ld);return;}
@@ -4178,7 +4200,7 @@ function newRealisation(){
 function delRealisation(id){
   const r=findRealisation(id);if(!r)return;
   askConfirm('Supprimer « '+(r.title||'cette réalisation')+' » et ses '+(r.photos||[]).length+' photo(s) ? C’est définitif.',async()=>{
-    for(const p of (r.photos||[])){await photoStore.del(fullKey(p.id));await photoStore.del(thumbKey(p.id));}
+    for(const p of (r.photos||[])){await photoStore.del(fullKey(p.id));await photoStore.del(thumbKey(p.id));if(p.ia)await photoStore.del(iaKey(p.id));}
     realisations=realisations.filter(x=>x.id!==id);
     _rzOpenId=null;saveRealisations();renderRealisations();toast('Réalisation supprimée');
   });
@@ -4186,6 +4208,8 @@ function delRealisation(id){
 function delPhoto(r,pid){
   askConfirm('Retirer cette photo de la réalisation ?',async()=>{
     await photoStore.del(fullKey(pid));await photoStore.del(thumbKey(pid));
+    const gone=(r.photos||[]).find(p=>p.id===pid);
+    if(gone&&gone.ia)await photoStore.del(iaKey(pid));
     r.photos=(r.photos||[]).filter(p=>p.id!==pid);
     if(r.cover===pid)r.cover=(r.photos[0]||{}).id||'';
     r.updatedAt=Date.now();saveRealisations();renderRealisations();
@@ -4226,6 +4250,7 @@ async function openPhotoEditor(rid,pid){
           <button class="ed-tab active" data-tab="geometrie">Géométrie</button>
           <button class="ed-tab" data-tab="lumiere">Lumière</button>
           <button class="ed-tab" data-tab="cadrage">Cadrage</button>
+          <button class="ed-tab" data-tab="ia">✨ IA</button>
         </div>
         <div id="ed-controls"></div>
         <div class="ed-acts">
@@ -4280,6 +4305,7 @@ function buildEditorControls(){
   const host=$('ed-controls');if(!host||!_ed)return;
   host.innerHTML='';
   const e=_ed.p.edit;
+  if(_ed.tab==='ia'){ buildIaPanel(host); return; }
   if(_ed.tab==='cadrage'){
     const hint=document.createElement('p');hint.className='ed-hint';
     hint.textContent='Un format identique sur toutes les photos d’une réalisation, c’est ce qui donne une galerie propre. Le curseur déplace le cadrage dans la photo.';
@@ -4518,6 +4544,7 @@ function rzDeleteSelected(r){
     for(const p of photos){
       await photoStore.del(fullKey(p.id));
       await photoStore.del(thumbKey(p.id));
+      if(p.ia)await photoStore.del(iaKey(p.id));
     }
     const ids=new Set(photos.map(p=>p.id));
     r.photos=(r.photos||[]).filter(p=>!ids.has(p.id));
@@ -4561,6 +4588,216 @@ function openShootingMemo(){
     </div>`);
 }
 
+
+
+/* ============ RETOUCHE IA (via un agrégateur de modèles) ============
+   Le CRM n'est lié à aucun modèle en particulier : il envoie un identifiant de modèle et
+   une consigne à une fonction serveur qui route vers le fournisseur. Ajouter un modèle =
+   coller son identifiant dans le panneau « Modèles », rien à recoder.
+
+   La clé du fournisseur ne transite JAMAIS par le navigateur : la page du CRM est publique,
+   une clé posée là serait lisible par n'importe qui et les crédits videraient en quelques
+   minutes. Elle vit dans les secrets Supabase, côté serveur.
+
+   Le résultat de l'IA est stocké À CÔTÉ de l'original, jamais à sa place : on peut toujours
+   revenir en arrière, et l'export comme la publication suivent le choix courant. */
+
+const DEFAULT_IA_MODELS=[
+  {id:'fal-ai/nano-banana-pro/edit',label:'Nano Banana Pro (Google)',note:'Le plus fin pour comprendre une consigne écrite. ~0,13 $ l’image.'},
+];
+function ensureIaModels(){
+  if(!Array.isArray(library.iaModels)||!library.iaModels.length)library.iaModels=DEFAULT_IA_MODELS.map(m=>({...m}));
+  if(!library.iaPrompts)library.iaPrompts=[];
+}
+function iaKey(pid){return 'ra_'+pid;}
+
+/* Jeton de la session en cours. Les fonctions serveur exigent un utilisateur réellement
+   connecté : la clé publiable de l'application ne suffit pas (et ne doit pas suffire). */
+async function sessionToken(){
+  if(!sb)return null;
+  try{
+    const {data}=await sb.auth.getSession();
+    return (data&&data.session&&data.session.access_token)||null;
+  }catch(e){return null;}
+}
+
+/* Suivi de dépense : chaque appel coûte de l'argent réel, il faut pouvoir le voir. */
+function iaSpendKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function iaSpend(){
+  ensureIaModels();
+  library.iaUsage=library.iaUsage||{};
+  return library.iaUsage[iaSpendKey()]||0;
+}
+function iaCountCall(){
+  library.iaUsage=library.iaUsage||{};
+  const k=iaSpendKey();
+  library.iaUsage[k]=(library.iaUsage[k]||0)+1;
+  saveLibraryDebounced();
+}
+
+async function runIaEdit(photo,consigne,modelId){
+  const token=await sessionToken();
+  if(!token){toast('Reconnectez-vous : session expirée');return null;}
+  const img=await loadPhotoImage(photo.id,{thumb:false,original:true});
+  if(!img)throw new Error('photo introuvable');
+  /* On envoie la photo AVEC les corrections déjà faites (verticales, lumière, cadrage) :
+     l'IA travaille sur ce qu'on veut publier, pas sur le brut. Taille réduite à 1600 px —
+     au-delà, la requête devient trop lourde pour la fonction serveur, et les modèles
+     ressortent de toute façon dans leur propre définition. */
+  const cv=glRenderTo(img,photo.edit||blankEdit(),1600,'ia_'+photo.id);
+  if(!cv)throw new Error('rendu impossible');
+  _glTexKey='';
+  const dataUri=cv.toDataURL('image/jpeg',0.9);
+  const res=await fetch(SB_URL+'/functions/v1/photo-ia',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+    body:JSON.stringify({action:'edit',provider:'fal',model:modelId,prompt:consigne,imageDataUri:dataUri})
+  });
+  const data=await res.json().catch(()=>({error:'réponse illisible'}));
+  if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+  if(!data.imageDataUri)throw new Error('aucune image renvoyée');
+  iaCountCall();
+  return data.imageDataUri;
+}
+
+async function applyIaToPhoto(r,photo,consigne,modelId,btn){
+  const setBtn=t=>{if(btn){btn.disabled=t!==null;btn.textContent=t||'✨ Appliquer la consigne';}};
+  setBtn('Envoi au modèle…');
+  try{
+    const out=await runIaEdit(photo,consigne,modelId);
+    if(!out)return;
+    const blob=dataUriToBlob(out);
+    await photoStore.save(iaKey(photo.id),blob);
+    _imgCache.delete(iaKey(photo.id));
+    photo.ia={model:modelId,prompt:consigne,createdAt:Date.now()};
+    photo.useIa=true;
+    /* La consigne est mémorisée : on réutilise souvent la même d'une photo à l'autre. */
+    ensureIaModels();
+    if(consigne&&library.iaPrompts.indexOf(consigne)<0){
+      library.iaPrompts.unshift(consigne);
+      library.iaPrompts=library.iaPrompts.slice(0,8);
+      saveLibraryDebounced();
+    }
+    r.updatedAt=Date.now();saveRealisations();
+    if(_ed&&_ed.p===photo){_ed.img=null;await reloadEditorImage();}
+    toast('Retouche appliquée — l’original reste disponible');
+  }catch(e){
+    console.error('retouche IA',e);
+    toast('Échec : '+((e&&e.message)||'erreur'));
+  }finally{ setBtn(null); buildEditorControls(); }
+}
+
+async function reloadEditorImage(){
+  if(!_ed)return;
+  const img=await loadPhotoImage(_ed.p.id,{thumb:false});
+  if(!_ed)return;
+  _ed.img=img;_glTexKey='';edPaint();
+}
+
+function buildIaPanel(host){
+  const p=_ed.p, r=_ed.r;
+  ensureIaModels();
+  const hint=document.createElement('p');hint.className='ed-hint';
+  hint.textContent='Décrivez ce que vous voulez obtenir. Le modèle travaille sur la photo telle qu’elle est réglée ici — vos corrections de verticales et de lumière sont déjà prises en compte.';
+  host.appendChild(hint);
+
+  const modelRow=document.createElement('label');modelRow.className='fld';
+  modelRow.innerHTML='<span class="lbl">Modèle</span><select></select>';
+  const sel=modelRow.querySelector('select');
+  sel.innerHTML=library.iaModels.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('');
+  if(library.iaLastModel)sel.value=library.iaLastModel;
+  if(!sel.value&&library.iaModels[0])sel.value=library.iaModels[0].id;
+  sel.addEventListener('change',()=>{library.iaLastModel=sel.value;saveLibraryDebounced();paintModelNote();});
+  host.appendChild(modelRow);
+  const note=document.createElement('p');note.className='ed-hint';note.style.marginTop='4px';
+  host.appendChild(note);
+  function paintModelNote(){
+    const m=library.iaModels.find(x=>x.id===sel.value);
+    note.textContent=m&&m.note?m.note:'';
+  }
+  paintModelNote();
+
+  const ta=document.createElement('textarea');
+  ta.className='ia-prompt';ta.rows=3;
+  ta.placeholder='ex. : équilibre la lumière, adoucis la dominante jaune, garde les matériaux tels quels';
+  ta.value=(p.ia&&p.ia.prompt)||'';
+  host.appendChild(ta);
+
+  if(library.iaPrompts.length){
+    const recent=document.createElement('div');recent.className='ia-recent';
+    library.iaPrompts.forEach(txt=>{
+      const b=document.createElement('button');b.className='mini';b.type='button';
+      b.textContent=txt.length>38?txt.slice(0,36)+'…':txt;
+      b.title=txt;
+      b.addEventListener('click',()=>{ta.value=txt;ta.focus();});
+      recent.appendChild(b);
+    });
+    host.appendChild(recent);
+  }
+
+  const acts=document.createElement('div');acts.className='ed-acts';
+  const go=document.createElement('button');go.className='btn btn-primary';go.textContent='✨ Appliquer la consigne';
+  go.addEventListener('click',()=>{
+    const c=(ta.value||'').trim();
+    if(!c){toast('Écrivez d’abord ce que vous voulez');return;}
+    askConfirm('Envoyer cette photo au modèle « '+(sel.options[sel.selectedIndex]||{}).text+' » ? Cet appel est facturé par le fournisseur.',()=>{
+      applyIaToPhoto(r,p,c,sel.value,go);
+    });
+  });
+  acts.appendChild(go);
+  const models=document.createElement('button');models.className='btn btn-onlight';models.textContent='⚙ Modèles';
+  models.addEventListener('click',openIaModelsPanel);
+  acts.appendChild(models);
+  host.appendChild(acts);
+
+  if(p.ia){
+    const box=document.createElement('div');box.className='ia-state';
+    box.innerHTML=`<p><b>Version IA disponible</b> — ${esc((library.iaModels.find(m=>m.id===p.ia.model)||{}).label||p.ia.model)}</p>
+      <p class="ia-prompt-echo">« ${esc(p.ia.prompt)} »</p>`;
+    const sw=document.createElement('div');sw.className='ed-acts';sw.style.marginTop='8px';
+    const bOrig=document.createElement('button');bOrig.className='btn '+(p.useIa?'btn-onlight':'btn-primary');bOrig.textContent='Photo d’origine';
+    const bIa=document.createElement('button');bIa.className='btn '+(p.useIa?'btn-primary':'btn-onlight');bIa.textContent='Version IA';
+    bOrig.addEventListener('click',async()=>{p.useIa=false;edTouch();buildEditorControls();await reloadEditorImage();});
+    bIa.addEventListener('click',async()=>{p.useIa=true;edTouch();buildEditorControls();await reloadEditorImage();});
+    sw.appendChild(bOrig);sw.appendChild(bIa);
+    box.appendChild(sw);
+    const del=document.createElement('button');del.className='mini';del.textContent='🗑 Supprimer la version IA';del.style.marginTop='8px';
+    del.addEventListener('click',()=>askConfirm('Supprimer la version IA de cette photo ? L’original n’est pas touché.',async()=>{
+      await photoStore.del(iaKey(p.id));_imgCache.delete(iaKey(p.id));
+      delete p.ia;p.useIa=false;edTouch();buildEditorControls();await reloadEditorImage();
+      toast('Version IA supprimée');
+    }));
+    box.appendChild(del);
+    host.appendChild(box);
+  }
+
+  const spend=document.createElement('p');spend.className='ed-hint';spend.style.marginTop='12px';
+  spend.textContent='Ce mois-ci : '+iaSpend()+' retouche(s) IA facturée(s).';
+  host.appendChild(spend);
+}
+
+function openIaModelsPanel(){
+  ensureIaModels();
+  const rows=library.iaModels.map((m,i)=>`<div class="lib-item">
+      <input type="text" value="${esc(m.label||'')}" placeholder="Nom affiché" oninput="iaModelEdit(${i},'label',this.value)">
+      <input type="text" value="${esc(m.id||'')}" placeholder="identifiant du modèle" oninput="iaModelEdit(${i},'id',this.value)">
+      <input type="text" value="${esc(m.note||'')}" placeholder="note (prix, usage)" oninput="iaModelEdit(${i},'note',this.value)">
+      <button class="mini" onclick="iaModelDel(${i})">✕</button>
+    </div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Modèles de retouche</h3>
+    <p class="msub">L’identifiant vient du catalogue du fournisseur (fal.ai). Coller un identifiant suffit : rien à recoder. Exemple : <code>fal-ai/nano-banana-pro/edit</code>.</p>
+    <div id="ia-model-rows">${rows}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="mini" onclick="iaModelAdd()">+ Ajouter un modèle</button>
+      <button class="mini" onclick="iaModelReset()">↺ Réinitialiser</button>
+      <button class="btn btn-primary" onclick="closeModal()">Terminer</button>
+    </div>`);
+}
+function iaModelEdit(i,k,v){ensureIaModels();library.iaModels[i][k]=v;saveLibraryDebounced();}
+function iaModelAdd(){ensureIaModels();library.iaModels.push({id:'',label:'Nouveau modèle',note:''});saveLibraryDebounced();openIaModelsPanel();}
+function iaModelDel(i){ensureIaModels();library.iaModels.splice(i,1);saveLibraryDebounced();openIaModelsPanel();}
+function iaModelReset(){library.iaModels=DEFAULT_IA_MODELS.map(m=>({...m}));saveLibraryDebounced();openIaModelsPanel();}
 
 /* ============ PUBLICATION VERS LE SITE PUBLIC ============
    Le site vitrine est un dépôt SÉPARÉ (rnab26/melissa-nabet-site), servi sur son propre
