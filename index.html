@@ -628,6 +628,22 @@
     border-right:1px solid var(--panel-edge);border-bottom:1px solid var(--panel-edge);}
   .ia-state p{margin:0;font-size:12.5px;}
   .ia-prompt-echo{color:var(--stone);font-style:italic;margin-top:4px!important;}
+  .ia-solde{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    background:var(--panel);border:1px solid var(--panel-edge);border-radius:4px;
+    padding:8px 11px;margin:0 0 12px;font-size:12.5px;color:var(--stone-deep);}
+  .ia-solde b{color:var(--ink);font-variant-numeric:tabular-nums;}
+  .ia-solde.bas b{color:#b6543f;}
+  .ia-params{margin-top:14px;border:1px solid var(--panel-edge);border-radius:4px;background:var(--panel);}
+  .ia-params>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:600;color:var(--stone-deep);}
+  .ia-params-body{padding:4px 12px 12px;font-size:12.5px;color:var(--stone);}
+  .ia-field{margin-bottom:11px;}
+  .ia-field>label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--stone);font-weight:600;margin-bottom:4px;}
+  .ia-input{width:100%;font-family:'Inter';font-size:13px;padding:7px 9px;border:1px solid var(--panel-edge);
+    border-radius:3px;background:var(--paper);color:var(--ink);}
+  input.ia-input[type=checkbox]{width:auto;}
+  .ia-field-desc{margin:4px 0 0;font-size:11px;color:var(--stone-light);line-height:1.45;}
+  .ia-field-skip{margin:0;font-size:11px;color:var(--stone-light);font-style:italic;}
   .ed-cmp{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;}
   @media(max-width:680px){.ed-cmp{display:none;}}
   /* La condition d'aspect compte autant que la largeur : un téléphone en « site pour
@@ -4608,24 +4624,29 @@ function openShootingMemo(){
 
 
 
-/* ============ RETOUCHE IA (via un agrégateur de modèles) ============
-   Le CRM n'est lié à aucun modèle en particulier : il envoie un identifiant de modèle et
-   une consigne à une fonction serveur qui route vers le fournisseur. Ajouter un modèle =
-   coller son identifiant dans le panneau « Modèles », rien à recoder.
+/* ============ RETOUCHE IA (fal.ai) ============
+   Le CRM n'est lié à aucun modèle en particulier. Les réglages proposés ne sont pas choisis
+   à la main : ils sont LUS DANS LE SCHÉMA du modèle (son OpenAPI, public), donc on retrouve
+   exactement les paramètres que fal.ai propose sur son propre site — y compris ceux ajoutés
+   après l'écriture de ce code, et pour n'importe quel modèle du catalogue.
 
    La clé du fournisseur ne transite JAMAIS par le navigateur : la page du CRM est publique,
-   une clé posée là serait lisible par n'importe qui et les crédits videraient en quelques
-   minutes. Elle vit dans les secrets Supabase, côté serveur.
+   une clé posée là serait lisible par n'importe qui. Elle vit dans les secrets Supabase.
 
-   Le résultat de l'IA est stocké À CÔTÉ de l'original, jamais à sa place : on peut toujours
-   revenir en arrière, et l'export comme la publication suivent le choix courant. */
+   Le résultat est stocké À CÔTÉ de l'original, jamais à sa place. */
 
 const DEFAULT_IA_MODELS=[
-  {id:'fal-ai/nano-banana-pro/edit',label:'Nano Banana Pro (Google)',note:'Le plus fin pour comprendre une consigne écrite. ~0,13 $ l’image.'},
+  {id:'fal-ai/nano-banana-pro/edit',label:'Nano Banana Pro (Google)',note:'Comprend le mieux une consigne écrite. ~0,13 $ en 1K/2K, ~0,24 $ en 4K.'},
+  {id:'fal-ai/flux-pro/kontext',label:'FLUX.1 Kontext Pro',note:'Retouche dirigée, moins cher.'},
+  {id:'fal-ai/qwen-image-edit',label:'Qwen Image Edit',note:'Alternative économique.'},
 ];
+/* Réglages pilotés par le CRM lui-même : inutile de les montrer deux fois. */
+const IA_HIDDEN_PARAMS=['image_urls','image_url','sync_mode','prompt'];
+
 function ensureIaModels(){
   if(!Array.isArray(library.iaModels)||!library.iaModels.length)library.iaModels=DEFAULT_IA_MODELS.map(m=>({...m}));
   if(!library.iaPrompts)library.iaPrompts=[];
+  if(!library.iaParams)library.iaParams={};
 }
 function iaKey(pid){return 'ra_'+pid;}
 
@@ -4638,14 +4659,67 @@ async function sessionToken(){
     return (data&&data.session&&data.session.access_token)||null;
   }catch(e){return null;}
 }
-
-/* Suivi de dépense : chaque appel coûte de l'argent réel, il faut pouvoir le voir. */
-function iaSpendKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
-function iaSpend(){
-  ensureIaModels();
-  library.iaUsage=library.iaUsage||{};
-  return library.iaUsage[iaSpendKey()]||0;
+async function iaCall(payload){
+  const token=await sessionToken();
+  if(!token)throw new Error('session expirée — reconnectez-vous');
+  const res=await fetch(SB_URL+'/functions/v1/photo-ia',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+    body:JSON.stringify(payload)
+  });
+  const data=await res.json().catch(()=>({error:'réponse illisible du serveur'}));
+  if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+  return data;
 }
+
+/* ---- Solde du compte fournisseur, pour ne pas avoir à aller le consulter ailleurs ---- */
+let _iaBalance=null;
+async function iaLoadBalance(force){
+  if(_iaBalance&&!force&&Date.now()-_iaBalance.at<60000)return _iaBalance;
+  const d=await iaCall({action:'balance'});
+  _iaBalance={balance:d.balance,currency:d.currency,username:d.username,at:Date.now()};
+  return _iaBalance;
+}
+
+/* ---- Schéma d'entrée du modèle : c'est lui qui décide des réglages affichés ---- */
+const _iaSchemas={};
+async function iaSchema(model){
+  if(_iaSchemas[model])return _iaSchemas[model];
+  const d=await iaCall({action:'schema',model});
+  _iaSchemas[model]=d;
+  return d;
+}
+/* Un paramètre peut être décrit par `type` ou par `anyOf` (souvent « ce type ou null »). */
+function iaFieldType(spec){
+  if(spec.enum)return 'enum';
+  if(spec.type)return spec.type;
+  const any=(spec.anyOf||[]).filter(x=>x.type&&x.type!=='null');
+  if(any.length){
+    if(any[0].enum)return 'enum';
+    return any[0].type;
+  }
+  return 'inconnu';
+}
+function iaFieldEnum(spec){
+  if(spec.enum)return spec.enum;
+  const any=(spec.anyOf||[]).find(x=>x.enum);
+  return any?any.enum:null;
+}
+
+function iaParamsFor(model){
+  ensureIaModels();
+  if(!library.iaParams[model])library.iaParams[model]={};
+  return library.iaParams[model];
+}
+/* Valeur effective : ce que l'utilisateur a choisi, sinon le défaut du modèle. */
+function iaValue(model,name,spec){
+  const saved=iaParamsFor(model);
+  if(Object.prototype.hasOwnProperty.call(saved,name))return saved[name];
+  return spec.default;
+}
+
+function iaSpendKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function iaSpend(){library.iaUsage=library.iaUsage||{};return library.iaUsage[iaSpendKey()]||0;}
 function iaCountCall(){
   library.iaUsage=library.iaUsage||{};
   const k=iaSpendKey();
@@ -4654,43 +4728,30 @@ function iaCountCall(){
 }
 
 async function runIaEdit(photo,consigne,modelId){
-  const token=await sessionToken();
-  if(!token){toast('Reconnectez-vous : session expirée');return null;}
   const img=await loadPhotoImage(photo.id,{thumb:false,original:true});
   if(!img)throw new Error('photo introuvable');
   /* On envoie la photo AVEC les corrections déjà faites (verticales, lumière, cadrage) :
-     l'IA travaille sur ce qu'on veut publier, pas sur le brut. Taille réduite à 1600 px —
-     au-delà, la requête devient trop lourde pour la fonction serveur, et les modèles
-     ressortent de toute façon dans leur propre définition. */
+     l'IA travaille sur ce qu'on veut publier, pas sur le brut. Toujours depuis l'original,
+     jamais depuis une sortie IA — sinon l'image dérive à chaque passage. */
   const cv=glRenderTo(img,photo.edit||blankEdit(),1600,'ia_'+photo.id);
   if(!cv)throw new Error('rendu impossible');
   _glTexKey='';
-  const dataUri=cv.toDataURL('image/jpeg',0.9);
-  const res=await fetch(SB_URL+'/functions/v1/photo-ia',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
-    body:JSON.stringify({action:'edit',provider:'fal',model:modelId,prompt:consigne,imageDataUri:dataUri})
-  });
-  const data=await res.json().catch(()=>({error:'réponse illisible'}));
-  if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+  const input=Object.assign({},iaParamsFor(modelId),{prompt:consigne});
+  const data=await iaCall({action:'edit',model:modelId,input,imageDataUri:cv.toDataURL('image/jpeg',0.9)});
   if(!data.imageDataUri)throw new Error('aucune image renvoyée');
   iaCountCall();
-  return data.imageDataUri;
+  return data;
 }
 
 async function applyIaToPhoto(r,photo,consigne,modelId,btn){
   const setBtn=t=>{if(btn){btn.disabled=t!==null;btn.textContent=t||'✨ Appliquer la consigne';}};
   setBtn('Envoi au modèle…');
   try{
-    const out=await runIaEdit(photo,consigne,modelId);
-    if(!out)return;
-    const blob=dataUriToBlob(out);
-    await photoStore.save(iaKey(photo.id),blob);
+    const data=await runIaEdit(photo,consigne,modelId);
+    await photoStore.save(iaKey(photo.id),dataUriToBlob(data.imageDataUri));
     _imgCache.delete(iaKey(photo.id));
-    photo.ia={model:modelId,prompt:consigne,createdAt:Date.now()};
+    photo.ia={model:modelId,prompt:consigne,params:Object.assign({},iaParamsFor(modelId)),createdAt:Date.now()};
     photo.useIa=true;
-    /* La consigne est mémorisée : on réutilise souvent la même d'une photo à l'autre. */
-    ensureIaModels();
     if(consigne&&library.iaPrompts.indexOf(consigne)<0){
       library.iaPrompts.unshift(consigne);
       library.iaPrompts=library.iaPrompts.slice(0,8);
@@ -4698,6 +4759,7 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
     }
     r.updatedAt=Date.now();saveRealisations();
     if(_ed&&_ed.p===photo){_ed.img=null;await reloadEditorImage();}
+    _iaBalance=null; /* une retouche vient d'être facturée : le solde affiché n'est plus bon */
     toast('Retouche appliquée — l’original reste disponible');
   }catch(e){
     console.error('retouche IA',e);
@@ -4712,9 +4774,26 @@ async function reloadEditorImage(){
   _ed.img=img;_glTexKey='';edPaint();
 }
 
+/* ---- Panneau ---- */
 function buildIaPanel(host){
   const p=_ed.p, r=_ed.r;
   ensureIaModels();
+
+  const solde=document.createElement('div');solde.className='ia-solde';
+  solde.innerHTML='<span>Solde fal.ai : <b>…</b></span><button class="mini" type="button">↻</button>';
+  const soldeVal=solde.querySelector('b'), soldeBtn=solde.querySelector('button');
+  const paintSolde=async(force)=>{
+    soldeVal.textContent='…';
+    try{
+      const b=await iaLoadBalance(force);
+      soldeVal.textContent=(b.balance==null?'—':(Math.round(b.balance*100)/100)+' '+(b.currency||''));
+      solde.classList.toggle('bas',typeof b.balance==='number'&&b.balance<1);
+    }catch(e){soldeVal.textContent='indisponible';soldeVal.title=(e&&e.message)||'';}
+  };
+  soldeBtn.addEventListener('click',()=>paintSolde(true));
+  host.appendChild(solde);
+  paintSolde(false);
+
   const hint=document.createElement('p');hint.className='ed-hint';
   hint.textContent='Décrivez ce que vous voulez obtenir. Le modèle travaille sur la photo telle qu’elle est réglée ici — vos corrections de verticales et de lumière sont déjà prises en compte.';
   host.appendChild(hint);
@@ -4723,21 +4802,15 @@ function buildIaPanel(host){
   modelRow.innerHTML='<span class="lbl">Modèle</span><select></select>';
   const sel=modelRow.querySelector('select');
   sel.innerHTML=library.iaModels.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('');
-  if(library.iaLastModel)sel.value=library.iaLastModel;
+  if(library.iaLastModel&&library.iaModels.some(m=>m.id===library.iaLastModel))sel.value=library.iaLastModel;
   if(!sel.value&&library.iaModels[0])sel.value=library.iaModels[0].id;
-  sel.addEventListener('change',()=>{library.iaLastModel=sel.value;saveLibraryDebounced();paintModelNote();});
   host.appendChild(modelRow);
   const note=document.createElement('p');note.className='ed-hint';note.style.marginTop='4px';
   host.appendChild(note);
-  function paintModelNote(){
-    const m=library.iaModels.find(x=>x.id===sel.value);
-    note.textContent=m&&m.note?m.note:'';
-  }
-  paintModelNote();
 
   const ta=document.createElement('textarea');
   ta.className='ia-prompt';ta.rows=3;
-  ta.placeholder='ex. : équilibre la lumière, adoucis la dominante jaune, garde les matériaux tels quels';
+  ta.placeholder='ex. : équilibre la lumière, adoucis la dominante jaune, garde les matériaux et le mobilier tels quels';
   ta.value=(p.ia&&p.ia.prompt)||'';
   host.appendChild(ta);
 
@@ -4745,13 +4818,89 @@ function buildIaPanel(host){
     const recent=document.createElement('div');recent.className='ia-recent';
     library.iaPrompts.forEach(txt=>{
       const b=document.createElement('button');b.className='mini';b.type='button';
-      b.textContent=txt.length>38?txt.slice(0,36)+'…':txt;
-      b.title=txt;
+      b.textContent=txt.length>38?txt.slice(0,36)+'…':txt;b.title=txt;
       b.addEventListener('click',()=>{ta.value=txt;ta.focus();});
       recent.appendChild(b);
     });
     host.appendChild(recent);
   }
+
+  /* Réglages du modèle, générés depuis son schéma. Repliés : la consigne suffit dans la
+     plupart des cas, mais tout ce que fal.ai propose est là pour qui veut y aller. */
+  const det=document.createElement('details');det.className='ia-params';
+  det.innerHTML='<summary>Réglages du modèle</summary><div class="ia-params-body">Chargement…</div>';
+  host.appendChild(det);
+  const body=det.querySelector('.ia-params-body');
+
+  const paintModel=async()=>{
+    const m=library.iaModels.find(x=>x.id===sel.value);
+    note.textContent=(m&&m.note)?m.note:'';
+    body.textContent='Lecture des réglages proposés par le modèle…';
+    try{
+      const sc=await iaSchema(sel.value);
+      body.innerHTML='';
+      const saved=iaParamsFor(sel.value);
+      const noms=Object.keys(sc.properties||{}).filter(n=>IA_HIDDEN_PARAMS.indexOf(n)<0);
+      if(!noms.length){body.textContent='Ce modèle n’expose aucun réglage supplémentaire.';return;}
+      noms.forEach(nom=>{
+        const spec=sc.properties[nom];
+        const t=iaFieldType(spec), enums=iaFieldEnum(spec);
+        const val=iaValue(sel.value,nom,spec);
+        const row=document.createElement('div');row.className='ia-field';
+        const lab=document.createElement('label');
+        lab.textContent=spec.title||nom;
+        row.appendChild(lab);
+        let input;
+        if(t==='enum'&&enums){
+          input=document.createElement('select');
+          input.innerHTML=enums.map(v=>`<option value="${esc(String(v))}"${String(v)===String(val)?' selected':''}>${esc(String(v))}</option>`).join('');
+        }else if(t==='boolean'){
+          input=document.createElement('input');input.type='checkbox';input.checked=!!val;
+        }else if(t==='integer'||t==='number'){
+          input=document.createElement('input');input.type='number';
+          if(spec.minimum!=null)input.min=spec.minimum;
+          if(spec.maximum!=null)input.max=spec.maximum;
+          if(t==='integer')input.step=1;
+          input.value=(val==null?'':val);
+        }else if(t==='string'){
+          const long=(spec.maxLength||0)>500;
+          input=document.createElement(long?'textarea':'input');
+          if(long)input.rows=2; else input.type='text';
+          input.value=(val==null?'':val);
+        }else{
+          const skip=document.createElement('p');skip.className='ia-field-skip';
+          skip.textContent='(réglage « '+nom+' » non géré par le CRM)';
+          row.appendChild(skip);body.appendChild(row);return;
+        }
+        input.className='ia-input';
+        const record=()=>{
+          let v;
+          if(t==='boolean')v=input.checked;
+          else if(t==='integer')v=input.value===''?null:parseInt(input.value,10);
+          else if(t==='number')v=input.value===''?null:parseFloat(input.value);
+          else v=input.value;
+          if(v===null||v===''||v===spec.default)delete saved[nom]; else saved[nom]=v;
+          saveLibraryDebounced();
+        };
+        input.addEventListener('change',record);
+        row.appendChild(input);
+        if(spec.description){
+          const d=document.createElement('p');d.className='ia-field-desc';
+          d.textContent=spec.description.length>150?spec.description.slice(0,148)+'…':spec.description;
+          row.appendChild(d);
+        }
+        body.appendChild(row);
+      });
+      const reset=document.createElement('button');reset.className='mini';reset.type='button';
+      reset.textContent='↺ Valeurs par défaut du modèle';
+      reset.addEventListener('click',()=>{library.iaParams[sel.value]={};saveLibraryDebounced();paintModel();});
+      body.appendChild(reset);
+    }catch(e){
+      body.textContent='Réglages indisponibles : '+((e&&e.message)||'erreur');
+    }
+  };
+  sel.addEventListener('change',()=>{library.iaLastModel=sel.value;saveLibraryDebounced();paintModel();});
+  paintModel();
 
   const acts=document.createElement('div');acts.className='ed-acts';
   const go=document.createElement('button');go.className='btn btn-primary';go.textContent='✨ Appliquer la consigne';
@@ -4804,7 +4953,7 @@ function openIaModelsPanel(){
     </div>`).join('');
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
     <h3>Modèles de retouche</h3>
-    <p class="msub">L’identifiant vient du catalogue du fournisseur (fal.ai). Coller un identifiant suffit : rien à recoder. Exemple : <code>fal-ai/nano-banana-pro/edit</code>.</p>
+    <p class="msub">L’identifiant vient du catalogue fal.ai (<b>fal.ai/models</b>). Coller un identifiant suffit : le CRM lit tout seul les réglages que ce modèle propose. Exemple : <code>fal-ai/nano-banana-pro/edit</code>.</p>
     <div id="ia-model-rows">${rows}</div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       <button class="mini" onclick="iaModelAdd()">+ Ajouter un modèle</button>

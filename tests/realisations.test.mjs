@@ -450,13 +450,41 @@ check('Suppression en lot : le mode sélection se referme', del.modeQuitte);
 // --- Retouche IA : le pont, la sécurité et la non-destruction
 const iaCalls = [];
 await page.evaluate(() => { window.__iaCalls = []; });
+// Le pont expose plusieurs actions : solde, schéma du modèle, exécution. Le faux pont
+// reproduit les trois, avec le schéma RÉEL de Nano Banana Pro relevé sur fal.ai — c'est ce
+// qui permet de vérifier que le formulaire est bien généré à partir du modèle.
+const SCHEMA_REEL = {
+  model: 'fal-ai/nano-banana-pro/edit',
+  title: 'Queue OpenAPI for fal-ai/nano-banana-pro/edit',
+  required: ['prompt', 'image_urls'],
+  properties: {
+    prompt: { type: 'string', title: 'Prompt' },
+    image_urls: { type: 'array', title: 'Image URLs' },
+    sync_mode: { type: 'boolean', title: 'Sync Mode' },
+    resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K', title: 'Resolution', description: 'The resolution of the image to generate.' },
+    aspect_ratio: { anyOf: [{ type: 'string', enum: ['auto', '16:9', '4:3', '1:1'] }, { type: 'null' }], default: 'auto', title: 'Aspect Ratio' },
+    seed: { anyOf: [{ type: 'integer' }, { type: 'null' }], title: 'Seed' },
+    num_images: { type: 'integer', minimum: 1, maximum: 4, default: 1, title: 'Number of Images' },
+    output_format: { type: 'string', enum: ['jpeg', 'png', 'webp'], default: 'png', title: 'Output Format' },
+    system_prompt: { type: 'string', maxLength: 50000, default: '', title: 'System Prompt' },
+    enable_web_search: { type: 'boolean', default: false, title: 'Enable Web Search' },
+    safety_tolerance: { type: 'string', enum: ['1', '2', '3', '4', '5', '6'], default: '4', title: 'Safety Tolerance' },
+  },
+};
 await page.route('**/functions/v1/photo-ia', async (route) => {
   const body = JSON.parse(route.request().postData() || '{}');
   const auth = route.request().headers()['authorization'] || '';
-  iaCalls.push({ body: { action: body.action, model: body.model, prompt: body.prompt, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
-  // Une image renvoyée par le « modèle » : un JPEG vert, reconnaissable à l'œil et à la mesure.
+  iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
+  if (body.action === 'balance') {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ username: 'melissa', balance: 9.87, currency: 'USD' }) });
+    return;
+  }
+  if (body.action === 'schema') {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SCHEMA_REEL) });
+    return;
+  }
   const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: jpeg, model: body.model, provider: 'fal' }) });
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: jpeg, model: body.model, raw: { seed: 42 } }) });
 });
 
 const iaOnglet = await page.evaluate(async () => {
@@ -475,6 +503,46 @@ const panneau = await page.evaluate(() => {
   };
 });
 check('Panneau IA : champ de consigne, choix du modèle, bouton', panneau.consigne && panneau.modeles && panneau.bouton, JSON.stringify(panneau));
+
+// --- Le solde du fournisseur s'affiche dans le CRM
+await page.waitForTimeout(700);
+const solde = await page.evaluate(() => (document.querySelector('.ia-solde b') || {}).textContent);
+check('Solde du compte fal.ai affiché dans le CRM', /9[.,]87/.test(solde || ''), solde);
+
+// --- Les réglages sont LUS DANS LE SCHÉMA du modèle, pas codés en dur.
+//     C'est ce qui garantit qu'on retrouve ce que fal.ai propose sur son propre site,
+//     y compris pour un modèle ajouté plus tard.
+await page.evaluate(() => { document.querySelector('.ia-params').open = true; });
+await page.waitForTimeout(800);
+const champs = await page.evaluate(() => {
+  const out = [];
+  document.querySelectorAll('.ia-field').forEach(f => {
+    const l = f.querySelector('label'); const i = f.querySelector('.ia-input');
+    out.push({ nom: l ? l.textContent : '?', balise: i ? i.tagName.toLowerCase() : null, type: i ? (i.type || '') : null, options: i && i.tagName === 'SELECT' ? [...i.options].map(o => o.value) : null });
+  });
+  return out;
+});
+const parNom = n => champs.find(c => c.nom === n);
+check('Réglages générés depuis le schéma du modèle', champs.length >= 8, champs.length + ' réglages : ' + champs.map(c => c.nom).join(', '));
+check('Résolution rendue en liste de choix (1K / 2K / 4K)',
+  parNom('Resolution') && parNom('Resolution').balise === 'select' && JSON.stringify(parNom('Resolution').options) === JSON.stringify(['1K', '2K', '4K']),
+  JSON.stringify(parNom('Resolution')));
+check('Nombre entier rendu en champ numérique borné', parNom('Number of Images') && parNom('Number of Images').type === 'number', JSON.stringify(parNom('Number of Images')));
+check('Booléen rendu en case à cocher', parNom('Enable Web Search') && parNom('Enable Web Search').type === 'checkbox', JSON.stringify(parNom('Enable Web Search')));
+check('Type « anyOf » (chaîne ou nul) correctement interprété en liste',
+  parNom('Aspect Ratio') && parNom('Aspect Ratio').balise === 'select', JSON.stringify(parNom('Aspect Ratio')));
+check('Texte long rendu en zone de saisie multiligne', parNom('System Prompt') && parNom('System Prompt').balise === 'textarea', JSON.stringify(parNom('System Prompt')));
+check('Les champs pilotés par le CRM ne sont pas proposés deux fois',
+  !parNom('Image URLs') && !parNom('Sync Mode') && !parNom('Prompt'), champs.map(c => c.nom).join(', '));
+
+// --- Un réglage modifié doit repartir dans l'appel
+await page.evaluate(() => {
+  const f = [...document.querySelectorAll('.ia-field')].find(x => x.querySelector('label').textContent === 'Resolution');
+  const s = f.querySelector('select'); s.value = '4K'; s.dispatchEvent(new Event('change'));
+});
+await page.waitForTimeout(300);
+const memorise = await page.evaluate(() => JSON.parse(JSON.stringify(library.iaParams['fal-ai/nano-banana-pro/edit'] || {})));
+check('Réglage choisi mémorisé par modèle', memorise.resolution === '4K', JSON.stringify(memorise));
 
 const applique = await page.evaluate(async () => {
   const r = realisations[0], p = r.photos[0];
@@ -498,12 +566,15 @@ check('Retouche IA : version enregistrée à côté de l’original', applique.a
 check('Retouche IA : l’original n’est PAS écrasé', applique.originalIntact && applique.nouveauxFichiers === 1);
 check('Retouche IA : la consigne est mémorisée sur la photo', applique.prompt === 'équilibre la lumière', applique.prompt);
 
-check('Pont IA : appelé avec le modèle, la consigne et une image', iaCalls.length === 1
-  && iaCalls[0].body.model === 'fal-ai/nano-banana-pro/edit'
-  && iaCalls[0].body.prompt === 'équilibre la lumière'
-  && iaCalls[0].body.imgPrefix === 'data:image/', JSON.stringify(iaCalls[0] && iaCalls[0].body));
+const appelEdit = iaCalls.filter(c => c.body.action === 'edit').pop();
+check('Pont IA : appelé avec le modèle, la consigne et une image',
+  !!appelEdit && appelEdit.body.model === 'fal-ai/nano-banana-pro/edit'
+  && appelEdit.body.input && appelEdit.body.input.prompt === 'équilibre la lumière'
+  && appelEdit.body.imgPrefix === 'data:image/', JSON.stringify(appelEdit && appelEdit.body));
+check('Pont IA : les réglages du modèle partent avec la consigne',
+  !!appelEdit && appelEdit.body.input.resolution === '4K', JSON.stringify(appelEdit && appelEdit.body.input));
 check('Pont IA : le jeton envoyé est celui de la SESSION, pas la clé publique de la page',
-  iaCalls.length === 1 && iaCalls[0].auth === 'Bearer jeton-de-test' && !iaCalls[0].auth.includes('sb_publishable'),
+  iaCalls.every(c => c.auth === 'Bearer jeton-de-test' && !c.auth.includes('sb_publishable')),
   iaCalls[0] && iaCalls[0].auth);
 
 const bascule = await page.evaluate(async () => {
