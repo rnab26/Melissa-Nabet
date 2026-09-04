@@ -25,10 +25,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      # Le site vitrine est destiné à un dépôt séparé : il ne doit surtout pas être servi
-      # sur le domaine du CRM. On le retire de l'artefact publié.
-      - name: Exclure les sources du site vitrine
-        run: rm -rf site-vitrine
+        with:
+          # Active GitHub Pages tout seul au premier déploiement : aucune case à cocher
+          # à aller chercher dans les réglages du dépôt.
+          enablement: true
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

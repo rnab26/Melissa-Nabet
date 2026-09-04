@@ -36,7 +36,7 @@ await page.evaluate(() => {
     storage: {
       from: () => ({
         upload: async (path, blob) => { files.set(path, blob); return { error: null }; },
-        download: async (path) => files.has(path) ? { data: files.get(path), error: null } : { data: null, error: { message: 'not found' } },
+        download: async (path) => files.has(path) ? { data: files.get(path), error: null } : { data: null, error: { message: 'Object not found', statusCode: '404' } },
         remove: async (paths) => { paths.forEach(p => files.delete(p)); return { error: null }; },
         list: async () => ({ data: [], error: null }),
       }),
@@ -364,6 +364,76 @@ check('Saisie protégée : édition détectée', guarded.editing === true, JSON.
 check('Saisie protégée : la frappe locale n’est pas écrasée', guarded.kept === 'frappe en cours', guarded.kept);
 check('Saisie protégée : la version locale repartira en synchro', guarded.remoteNotMarked === true);
 
+// --- Publication vers le site public
+const realisationPhotoCount = await page.evaluate(() => realisations[0].photos.length);
+const pub = await page.evaluate(async () => {
+  // Le manifeste est lu par fetch sur une URL publique : indisponible en test, on part
+  // donc d'un manifeste vide, ce qui est justement le cas d'une première publication.
+  const r = realisations[0];
+  r.title = 'Bureau Sébastien';
+  const before = new Set(window.__files.keys());
+  await publishRealisation(r);
+  const nouveaux = [...window.__files.keys()].filter(k => !before.has(k));
+  const manifBlob = window.__files.get('u/manifest.json') || window.__files.get('test-user/manifest.json');
+  const manif = manifBlob ? JSON.parse(await manifBlob.text()) : null;
+  return { nouveaux, manif, publie: r.published === true };
+});
+check('Publication : la réalisation est marquée en ligne', pub.publie);
+check('Publication : un fichier pleine taille + une vignette par photo',
+  pub.nouveaux.filter(k => /\/p\d+\.jpg$/.test(k)).length === realisationPhotoCount &&
+  pub.nouveaux.filter(k => /\/t\d+\.jpg$/.test(k)).length === realisationPhotoCount,
+  pub.nouveaux.join(', '));
+check('Publication : un manifeste est écrit', !!pub.manif && Array.isArray(pub.manif.realisations), JSON.stringify(pub.manif && pub.manif.site));
+check('Publication : le manifeste décrit bien la réalisation',
+  !!pub.manif && pub.manif.realisations.length === 1 && pub.manif.realisations[0].title === 'Bureau Sébastien'
+  && pub.manif.realisations[0].photos.length === realisationPhotoCount);
+check('Publication : le manifeste ne contient aucune clé ni jeton',
+  !!pub.manif && !/eyJ|sb_secret|service_role|apikey/i.test(JSON.stringify(pub.manif)));
+check('Publication : les fichiers publiés sont bien dans le bucket galerie, pas dans les documents',
+  pub.nouveaux.every(k => !k.includes('rp_') && !k.includes('rt_')), pub.nouveaux.join(', '));
+
+// --- Retrait du site
+const unpub = await page.evaluate(async () => {
+  const r = realisations[0];
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    unpublishRealisation(r);
+  });
+  const manifBlob = window.__files.get('u/manifest.json') || window.__files.get('test-user/manifest.json');
+  const manif = manifBlob ? JSON.parse(await manifBlob.text()) : null;
+  return { publie: r.published === true, restant: manif ? manif.realisations.length : -1 };
+});
+check('Retrait du site : la réalisation n’est plus marquée en ligne', unpub.publie === false);
+check('Retrait du site : elle disparaît du manifeste', unpub.restant === 0, unpub.restant + ' restante(s)');
+
+// --- Garde-fou : une lecture de manifeste qui échoue ne doit JAMAIS écraser le site.
+//     Avant correction, une simple coupure réseau (ou un manifeste servi périmé par le
+//     CDN) faisait repartir d'un manifeste vide et dépubliait silencieusement tout le reste.
+const guard = await page.evaluate(async () => {
+  const r = realisations[0];
+  r.title = 'Bureau Sébastien';
+  await publishRealisation(r);                    // le site contient maintenant une réalisation
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const avant = JSON.parse(await window.__files.get(key).text()).realisations.length;
+
+  // panne réseau sur la lecture du manifeste
+  const realFrom = sb.storage.from;
+  sb.storage.from = (b) => {
+    const o = realFrom(b);
+    return Object.assign({}, o, { download: async () => ({ data: null, error: { message: 'network error', statusCode: '500' } }) });
+  };
+  const r2 = normalizeRealisation({ title: 'Autre chantier', photos: r.photos.map(p => ({ ...p })) });
+  realisations.push(r2);
+  await publishRealisation(r2);
+  sb.storage.from = realFrom;
+
+  const apres = JSON.parse(await window.__files.get(key).text()).realisations.length;
+  return { avant, apres, deuxiemePubliee: r2.published === true };
+});
+check('Panne de lecture du manifeste : la publication est abandonnée, pas forcée', guard.deuxiemePubliee === false);
+check('Panne de lecture du manifeste : le site déjà publié est intact', guard.apres === guard.avant, guard.avant + ' → ' + guard.apres);
+
 // --- Responsive : pas de débordement horizontal sur mobile
 for (const w of [375, 768]) {
   await page.setViewportSize({ width: w, height: 800 });
@@ -386,7 +456,9 @@ for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
 await page.evaluate(() => showView('realisations'));
 check('Navigation entre toutes les vues sans erreur', true);
 
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS/i.test(e));
+// La panne de manifeste ci-dessus est provoquée volontairement : l'erreur qu'elle
+// journalise est le comportement attendu, pas un défaut.
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

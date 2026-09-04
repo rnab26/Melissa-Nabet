@@ -560,6 +560,9 @@
   .rz-new{border:1px dashed var(--stone-light);border-radius:8px;background:transparent;color:var(--stone);cursor:pointer;font-size:13px;font-family:'Inter';min-height:150px;}
   .rz-new:hover{border-color:var(--oxblood);color:var(--oxblood);}
   .rz-empty{font-size:13px;color:var(--stone);padding:18px 0;}
+  .rz-live{color:#6a9a5a;font-weight:600;}
+  .rz-site{font-size:12px;color:var(--stone);margin:0 0 16px;line-height:1.5;}
+  .rz-site a{color:var(--oxblood);}
 
   .rz-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
   .rz-back{background:transparent;border:none;color:var(--stone);font-family:'Inter';font-size:12.5px;cursor:pointer;padding:0 0 8px;}
@@ -797,7 +800,10 @@
   <div class="rz-wrap">
     <div class="rz-top">
       <h2>Réalisations</h2>
-      <button class="btn btn-onlight" onclick="openShootingMemo()">📷 Bien photographier</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-onlight" onclick="openShootingMemo()">📷 Bien photographier</button>
+        <button class="btn btn-onlight" onclick="window.open(SITE_URL,'_blank')">🌐 Voir le site</button>
+      </div>
     </div>
     <p class="rz-intro">Les photos de chantiers terminés, retouchées et prêtes à publier sur le site. Rien à voir avec les documents d'une fiche client : ici les photos sont gardées en pleine définition et les retouches ne modifient jamais l'original.</p>
     <div id="rz-body"></div>
@@ -3681,7 +3687,7 @@ const REAL_RATIOS=[
 ];
 function blankEdit(){return {persp:0,rot:0,expo:0,contrast:0,temp:0,tint:0,sat:0,ratio:'libre',pan:0};}
 function normalizeRealisation(r){
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',w:0,h:0,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
   return o;
 }
@@ -4024,7 +4030,7 @@ function renderRealisationList(host){
     card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
       <div class="rz-cbody">
         <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
-        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}</div>
+        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.published?' · <span class="rz-live">● en ligne</span>':''}</div>
       </div>`;
     if(cover){
       const im=card.querySelector('img');
@@ -4054,12 +4060,23 @@ function renderRealisationDetail(host,r){
   const bar=document.createElement('div');bar.className='rz-detail-head';
   bar.innerHTML=`<h2 style="font-family:'Cormorant Garamond',serif;font-size:23px;font-weight:600;">${esc(r.title||'Réalisation sans titre')}</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-onlight" data-export>⬇ Exporter pour le site</button>
+      <button class="btn ${r.published?'btn-onlight':'btn-primary'}" data-publish>${r.published?'✓ En ligne — republier':'🌐 Publier sur le site'}</button>
+      ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
+      <button class="btn btn-onlight" data-export>⬇ Télécharger les photos</button>
       <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
     </div>`;
+  bar.querySelector('[data-publish]').addEventListener('click',()=>publishRealisation(r));
+  const unpub=bar.querySelector('[data-unpublish]');
+  if(unpub)unpub.addEventListener('click',()=>unpublishRealisation(r));
   bar.querySelector('[data-export]').addEventListener('click',()=>openExportPanel(r));
   bar.querySelector('[data-del]').addEventListener('click',()=>delRealisation(r.id));
   head.appendChild(bar);
+  const site=document.createElement('p');
+  site.className='rz-site';
+  site.innerHTML=r.published
+    ? 'Visible sur le site : <a href="'+SITE_URL+'" target="_blank" rel="noopener">'+esc(SITE_URL)+'</a>. Republiez après une retouche pour mettre le site à jour.'
+    : 'Pas encore sur le site. Rien ne part en ligne tant que vous ne cliquez pas sur « Publier ».';
+  head.appendChild(site);
 
   const meta=document.createElement('div');meta.className='rz-meta';
   meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
@@ -4365,8 +4382,137 @@ function openShootingMemo(){
     </div>`);
 }
 
+
+/* ============ PUBLICATION VERS LE SITE PUBLIC ============
+   Le site vitrine est un dépôt SÉPARÉ (rnab26/melissa-nabet-site), servi sur son propre
+   domaine GitHub Pages. Aucun visiteur du site ne passe par le CRM.
+
+   Le seul point de contact est le bucket Supabase `galerie`, public en lecture et qui ne
+   contient QUE ce qui a été explicitement publié depuis ici. Le site ne porte aucune clé
+   d'accès : il lit des URLs publiques, rien d'autre. Le bucket `client-docs` (documents,
+   photos non publiées) reste privé et hors de portée.
+
+   Publier écrit des copies redimensionnées, retouches appliquées. Les originaux ne
+   quittent jamais le stockage privé. */
+const GALLERY_BUCKET='galerie';
+const PUB_FULL=1600, PUB_FULL_Q=0.85, PUB_THUMB=700, PUB_THUMB_Q=0.8;
+function galleryPublicUrl(path){return SB_URL+'/storage/v1/object/public/'+GALLERY_BUCKET+'/'+path;}
+function manifestPath(){return ownerId+'/manifest.json';}
+
+/* Lecture du manifeste par l'API authentifiée, PAS par l'URL publique. Deux raisons, et
+   les deux sont des pertes de données silencieuses :
+   - l'URL publique passe par un CDN qui peut renvoyer une version périmée ; on
+     réécrirait alors le manifeste à partir d'un état ancien, effaçant du site les
+     réalisations publiées entre-temps ;
+   - une simple coupure réseau renverrait "pas de manifeste", et repartir d'un manifeste
+     vide dépublierait tout le reste.
+   Un manifeste absent (première publication) est le SEUL cas où l'on part de zéro ;
+   toute autre erreur interrompt la publication au lieu d'écraser. */
+async function readManifest(){
+  const {data,error}=await sb.storage.from(GALLERY_BUCKET).download(manifestPath());
+  if(error){
+    const msg=((error&&(error.message||error.error))||'').toLowerCase();
+    const code=(error&&(error.statusCode||error.status))||0;
+    if(String(code)==='404'||msg.includes('not found')||msg.includes('does not exist'))return emptyManifest();
+    throw new Error('manifeste illisible : '+((error&&error.message)||'erreur'));
+  }
+  if(!data)return emptyManifest();
+  let m=null;
+  try{m=JSON.parse(await data.text());}catch(e){throw new Error('manifeste illisible (format)');}
+  if(!m||!Array.isArray(m.realisations))throw new Error('manifeste illisible (contenu)');
+  return m;
+}
+async function writeManifest(man){
+  const blob=new Blob([JSON.stringify(man)],{type:'application/json'});
+  /* cacheControl court : le site doit refléter une republication en une minute, pas
+     après l'heure de cache par défaut du CDN. */
+  const {error}=await sb.storage.from(GALLERY_BUCKET).upload(manifestPath(),blob,{contentType:'application/json',cacheControl:'60',upsert:true});
+  if(error)throw error;
+}
+function emptyManifest(){
+  return {version:1,updatedAt:new Date().toISOString(),
+    site:{title:(library.branding&&library.branding.name)||'Melissa Nabet',subtitle:'Architecture d’intérieur'},
+    realisations:[]};
+}
+
+async function publishRealisation(r){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
+  if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
+  const btn=document.querySelector('#rz-body [data-publish]');
+  if(btn){btn.disabled=true;btn.textContent='Publication…';}
+  try{
+    const folder=ownerId+'/'+r.id;
+    const entries=[];
+    for(let i=0;i<r.photos.length;i++){
+      const p=r.photos[i];
+      if(btn)btn.textContent='Publication '+(i+1)+'/'+r.photos.length+'…';
+      const img=await loadPhotoImage(p.id,{thumb:false});
+      if(!img)continue;
+      const edit=p.edit||blankEdit();
+      const big=glRenderTo(img,edit,PUB_FULL,'pub_'+p.id);
+      if(!big)throw new Error('rendu impossible');
+      const bigBlob=await canvasToBlob(big,PUB_FULL_Q);
+      const bw=big.width,bh=big.height;
+      const small=glRenderTo(img,edit,PUB_THUMB,'pub_'+p.id);
+      const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+      const fullName=r.id+'/p'+i+'.jpg', thumbName=r.id+'/t'+i+'.jpg';
+      const up=async (name,blob)=>{
+        const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
+        if(error)throw error;
+      };
+      await up(fullName,bigBlob);await up(thumbName,smallBlob);
+      entries.push({full:ownerId+'/'+fullName,thumb:ownerId+'/'+thumbName,w:bw,h:bh,cover:r.cover===p.id});
+    }
+    _glTexKey='';
+    /* Republication avec moins de photos qu'avant : on retire les fichiers devenus orphelins,
+       sinon ils resteraient publiquement accessibles alors qu'ils ne sont plus dans la galerie. */
+    try{
+      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+      const keep=new Set(entries.flatMap(e=>[e.full.split('/').pop(),e.thumb.split('/').pop()]));
+      const stale=(existing||[]).map(f=>f.name).filter(n=>!keep.has(n));
+      if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
+    }catch(e){}
+
+    const man=await readManifest();
+    man.site=emptyManifest().site;
+    man.updatedAt=new Date().toISOString();
+    man.realisations=man.realisations.filter(x=>x.id!==r.id);
+    man.realisations.unshift({id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()});
+    await writeManifest(man);
+
+    r.published=true;r.publishedAt=Date.now();r.updatedAt=Date.now();
+    saveRealisations();renderRealisations();
+    toast('Publié sur le site');
+  }catch(e){
+    console.error('publication',e);
+    toast('Échec de la publication : '+((e&&e.message)||'erreur'));
+    if(btn){btn.disabled=false;btn.textContent='🌐 Publier sur le site';}
+  }
+}
+
+async function unpublishRealisation(r){
+  askConfirm('Retirer « '+(r.title||'cette réalisation')+' » du site public ? Les photos restent dans l’appli.',async()=>{
+    try{
+      const folder=ownerId+'/'+r.id;
+      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+      if(existing&&existing.length)await sb.storage.from(GALLERY_BUCKET).remove(existing.map(f=>folder+'/'+f.name));
+      const man=await readManifest();
+      man.realisations=man.realisations.filter(x=>x.id!==r.id);
+      man.updatedAt=new Date().toISOString();
+      await writeManifest(man);
+      r.published=false;delete r.publishedAt;r.updatedAt=Date.now();
+      saveRealisations();renderRealisations();
+      toast('Retiré du site');
+    }catch(e){toast('Échec du retrait : '+((e&&e.message)||'erreur'));}
+  });
+}
+
 /* ============ SYNCHRONISATION SUPABASE (granulaire) ============ */
 const SB_URL='https://njaamykxnvohoesrtpvv.supabase.co';
+/* Site vitrine public : dépôt SÉPARÉ du CRM, sur son propre GitHub Pages.
+   Les visiteurs n'atterrissent jamais sur le CRM. */
+const SITE_URL='https://rnab26.github.io/melissa-nabet-site/';
 const SB_KEY='sb_publishable_h7zdNqYow8o3jdofbWKIlg_IaEEcjj0';
 const APP_VERSION='v14 · 2026-08-03 (Supabase)';
 const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL]);

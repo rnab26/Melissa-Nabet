@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Melissa Nabet — Architecture d'intérieur</title>
+<meta name="description" content="Réalisations d'architecture d'intérieur : chantiers livrés, photographiés et présentés projet par projet.">
+<meta property="og:title" content="Melissa Nabet — Architecture d'intérieur">
+<meta property="og:description" content="Réalisations d'architecture d'intérieur.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --ink:#3d3934;
+    --stone:#8a8074;
+    --stone-light:#b4aa9b;
+    --travertine:#e8e2d7;
+    --paper:#f4efe6;
+    --hair:#d3cabb;
+    --oxblood:#9a8574;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  header{
+    padding:clamp(38px,9vw,86px) 22px clamp(26px,5vw,44px);
+    text-align:center;border-bottom:1px solid var(--hair);
+  }
+  .name{
+    font-family:'Cormorant Garamond',Georgia,serif;
+    font-weight:500;font-size:clamp(29px,7vw,52px);
+    letter-spacing:.16em;text-transform:uppercase;margin:0;line-height:1.1;
+  }
+  .tagline{
+    margin:16px 0 0;font-size:10.5px;letter-spacing:.28em;text-transform:uppercase;
+    color:var(--stone);font-weight:500;
+  }
+
+  main{max-width:1240px;margin:0 auto;padding:clamp(30px,6vw,64px) 22px 90px;}
+
+  .eyebrow{
+    display:flex;align-items:center;gap:14px;margin:0 0 26px;
+    font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--stone);font-weight:600;
+  }
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--hair);}
+
+  .projects{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:clamp(18px,3vw,34px);}
+  .project{
+    border:none;background:none;padding:0;margin:0;text-align:left;cursor:pointer;
+    font-family:inherit;color:inherit;display:block;
+  }
+  .project-img{
+    aspect-ratio:4/3;overflow:hidden;background:var(--travertine);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .project-img img{
+    width:100%;height:100%;object-fit:cover;display:block;
+    transition:transform .6s cubic-bezier(.2,.7,.3,1);
+  }
+  .project:hover .project-img img,.project:focus-visible .project-img img{transform:scale(1.035);}
+  .project-name{
+    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
+    font-size:22px;margin:15px 0 0;line-height:1.25;
+  }
+  .project-meta{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone);margin:6px 0 0;}
+  .project:focus-visible{outline:2px solid var(--oxblood);outline-offset:6px;}
+
+  .state{padding:70px 0;text-align:center;color:var(--stone);}
+  .state h2{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;font-size:25px;color:var(--ink);margin:0 0 10px;}
+  .state p{margin:0 auto;max-width:46ch;font-size:14px;}
+
+  /* --- Vue projet --- */
+  .detail{display:none;}
+  body.viewing .projects,body.viewing .index-head{display:none;}
+  body.viewing .detail{display:block;}
+  .back{
+    background:none;border:none;padding:0 0 24px;cursor:pointer;font-family:inherit;
+    font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone);font-weight:600;
+  }
+  .back:hover{color:var(--oxblood);}
+  .detail h2{
+    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
+    font-size:clamp(28px,5vw,40px);margin:0;line-height:1.15;
+  }
+  .detail .project-meta{margin:8px 0 34px;}
+  .shots{display:flex;flex-direction:column;gap:clamp(14px,2.5vw,26px);}
+  .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;}
+  .shot img{width:100%;height:auto;display:block;}
+
+  /* --- Plein écran --- */
+  .lightbox{
+    position:fixed;inset:0;z-index:50;background:rgba(30,28,25,.96);
+    display:none;align-items:center;justify-content:center;padding:18px;
+  }
+  .lightbox.open{display:flex;}
+  .lightbox img{max-width:100%;max-height:100%;object-fit:contain;}
+  .lightbox button{
+    position:absolute;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);
+    color:var(--paper);width:46px;height:46px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;
+  }
+  .lb-close{top:16px;right:16px;}
+  .lb-prev{left:14px;top:50%;transform:translateY(-50%);}
+  .lb-next{right:14px;top:50%;transform:translateY(-50%);}
+  .lightbox button:hover{background:rgba(255,255,255,.2);}
+
+  footer{
+    border-top:1px solid var(--hair);padding:34px 22px 46px;text-align:center;
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-light);
+  }
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto;}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1 class="name" id="site-name">Melissa Nabet</h1>
+  <p class="tagline" id="site-tagline">Architecture d’intérieur</p>
+</header>
+
+<main>
+  <p class="eyebrow index-head">Réalisations</p>
+  <div class="projects" id="projects"></div>
+  <div class="state" id="state" hidden></div>
+
+  <section class="detail" id="detail">
+    <button class="back" id="back">← Toutes les réalisations</button>
+    <h2 id="d-title"></h2>
+    <p class="project-meta" id="d-meta"></p>
+    <div class="shots" id="d-shots"></div>
+  </section>
+</main>
+
+<footer id="footer">Melissa Nabet — Architecture d’intérieur</footer>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo en plein écran">
+  <img id="lb-img" alt="">
+  <button class="lb-close" id="lb-close" aria-label="Fermer">✕</button>
+  <button class="lb-prev" id="lb-prev" aria-label="Photo précédente">‹</button>
+  <button class="lb-next" id="lb-next" aria-label="Photo suivante">›</button>
+</div>
+
+<script>
+/* Le site ne porte AUCUNE clé d'accès. Il lit un fichier public et des images publiques,
+   déposés par le CRM au moment de la publication. Il ne peut, par construction, atteindre
+   aucune donnée de l'application de gestion. */
+var STORAGE = 'https://njaamykxnvohoesrtpvv.supabase.co/storage/v1/object/public/galerie/';
+var OWNER = '797ad2e5-a27a-45c3-a987-d4897d1cadbf';
+
+var el = function (id) { return document.getElementById(id); };
+var projects = [], current = null, lbIndex = 0;
+
+function url(p) { return STORAGE + p; }
+
+function showState(title, text) {
+  var s = el('state');
+  s.hidden = false;
+  s.innerHTML = '<h2></h2><p></p>';
+  s.querySelector('h2').textContent = title;
+  s.querySelector('p').textContent = text;
+}
+
+function renderIndex() {
+  var host = el('projects');
+  host.innerHTML = '';
+  projects.forEach(function (p, i) {
+    var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
+    if (!cover) return;
+    var b = document.createElement('button');
+    b.className = 'project';
+    b.type = 'button';
+    b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
+      + '<p class="project-name"></p><p class="project-meta"></p>';
+    b.querySelector('img').src = url(cover.thumb);
+    b.querySelector('.project-name').textContent = p.title;
+    b.querySelector('.project-meta').textContent = [p.date, p.photos.length + ' photos'].filter(Boolean).join(' · ');
+    b.addEventListener('click', function () { openProject(i); });
+    host.appendChild(b);
+  });
+}
+
+function openProject(i) {
+  current = projects[i];
+  el('d-title').textContent = current.title;
+  el('d-meta').textContent = [current.date, current.photos.length + ' photos'].filter(Boolean).join(' · ');
+  var host = el('d-shots');
+  host.innerHTML = '';
+  current.photos.forEach(function (ph, k) {
+    var b = document.createElement('button');
+    b.className = 'shot';
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Agrandir la photo ' + (k + 1));
+    var im = document.createElement('img');
+    im.src = url(ph.full);
+    im.loading = k < 2 ? 'eager' : 'lazy';
+    if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
+    im.alt = current.title + ' — photo ' + (k + 1);
+    b.appendChild(im);
+    b.addEventListener('click', function () { openLightbox(k); });
+    host.appendChild(b);
+  });
+  document.body.classList.add('viewing');
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  location.hash = 'p-' + current.id;
+}
+
+function closeProject() {
+  document.body.classList.remove('viewing');
+  current = null;
+  if (location.hash) history.replaceState(null, '', location.pathname);
+}
+
+function openLightbox(k) {
+  if (!current) return;
+  lbIndex = k;
+  el('lb-img').src = url(current.photos[k].full);
+  el('lb-img').alt = current.title + ' — photo ' + (k + 1);
+  el('lightbox').classList.add('open');
+}
+function stepLightbox(d) {
+  if (!current) return;
+  lbIndex = (lbIndex + d + current.photos.length) % current.photos.length;
+  openLightbox(lbIndex);
+}
+function closeLightbox() { el('lightbox').classList.remove('open'); }
+
+el('back').addEventListener('click', closeProject);
+el('lb-close').addEventListener('click', closeLightbox);
+el('lb-prev').addEventListener('click', function (e) { e.stopPropagation(); stepLightbox(-1); });
+el('lb-next').addEventListener('click', function (e) { e.stopPropagation(); stepLightbox(1); });
+el('lightbox').addEventListener('click', function (e) { if (e.target === el('lightbox')) closeLightbox(); });
+document.addEventListener('keydown', function (e) {
+  if (!el('lightbox').classList.contains('open')) {
+    if (e.key === 'Escape' && current) closeProject();
+    return;
+  }
+  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'ArrowLeft') stepLightbox(-1);
+  if (e.key === 'ArrowRight') stepLightbox(1);
+});
+
+fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
+  .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
+  .then(function (m) {
+    if (m.site) {
+      if (m.site.title) { el('site-name').textContent = m.site.title; el('footer').textContent = m.site.title + ' — ' + (m.site.subtitle || ''); }
+      if (m.site.subtitle) el('site-tagline').textContent = m.site.subtitle;
+    }
+    projects = (m.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
+    if (!projects.length) {
+      showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
+      return;
+    }
+    renderIndex();
+    var h = location.hash.replace('#p-', '');
+    if (h) {
+      for (var i = 0; i < projects.length; i++) if (projects[i].id === h) { openProject(i); break; }
+    }
+  })
+  .catch(function () {
+    showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
+  });
+</script>
+</body>
+</html>
