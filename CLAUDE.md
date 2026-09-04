@@ -31,6 +31,12 @@ Consignes de travail pour Claude sur ce dépôt. À lire avant toute interventio
 
 Toujours rendre compte en français, de façon concise et directe. Pas de remplissage, pas de tournures commerciales.
 
+## Adresses du projet
+
+- **CRM** (privé, connexion obligatoire) : https://rnab26.github.io/Melissa-Nabet/ — dépôt `rnab26/Melissa-Nabet`.
+- **Site vitrine** (public) : https://rnab26.github.io/melissa-nabet-site/ — dépôt **séparé** `rnab26/melissa-nabet-site`.
+  Alimenté depuis le CRM (onglet Réalisations → « Publier sur le site »). La page publique ne contient **aucune clé d'accès** : ne jamais en ajouter, elle n'en a pas besoin.
+
 ## Fiches de décision (artefacts)
 
 Questions ouvertes posées à l'utilisateur sous forme d'artefact cliquable plutôt qu'en mur de texte. Les réponses sont stockées dans la base de l'artefact (`read_db` / `write_db` sur son URL) — **les relire avant de reprendre le chantier concerné**, elles ne sont pas dans la conversation.

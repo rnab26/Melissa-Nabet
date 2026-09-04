@@ -263,8 +263,20 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 
 ## Site vitrine public (dépôt séparé)
 
-**État** : sources prêtes et testées dans `site-vitrine/`, **pas encore déployées** — le
-dépôt `rnab26/melissa-nabet-site` reste à créer à la main (voir ci-dessus).
+**État** : **en ligne** — https://rnab26.github.io/melissa-nabet-site/ (dépôt
+`rnab26/melissa-nabet-site`). Aucune réalisation publiée pour l'instant : la page affiche
+son état « Bientôt en ligne », c'est normal.
+
+**Vérifié en conditions réelles** (pas déduit) :
+- La page servie ne contient aucune clé (`grep` sur les octets téléchargés).
+- Le stockage public répond avec `access-control-allow-origin: *`, donc la page peut lire
+  le manifeste depuis un autre domaine.
+- Un objet absent renvoie `HTTP 400` avec un corps
+  `{"statusCode":"404","error":"not_found","message":"Object not found","code":"NoSuchKey"}`.
+  C'est le cas de la **première publication** : `readManifest()` doit le reconnaître comme
+  « pas encore de manifeste » et repartir d'un manifeste vide, sinon la toute première
+  publication échouerait. Le stub du test reproduit exactement cette réponse — ne pas le
+  « simplifier ».
 
 **Décision de l'utilisateur** : le site public ne doit PAS partager son adresse avec le
 CRM. « Sinon les gens vont consulter des choses qu'ils ne devraient pas voir. » Le CRM est
@@ -333,12 +345,12 @@ appareil) ou **avec les retouches**.
 - [x] Étapes 1 à 7 (gratuites) : livrées, testées, mergées sur `main`, déployées.
 - [x] Étape 8 : publication vers le site. Bouton « Publier sur le site » par réalisation.
 - [x] Dépôt `rnab26/melissa-nabet-site` créé par l'utilisateur, site poussé dessus.
-- [ ] **Une manip attend l'utilisateur** : activer GitHub Pages sur ce dépôt
-      (Settings → Pages → Source : « GitHub Actions »). `enablement: true` sur
-      `configure-pages` échoue — le jeton du workflow n'a pas le droit de créer le site
-      Pages (« Create Pages site failed. Error: Resource not accessible by integration »).
-      Le connecteur GitHub de la session ne peut pas le faire non plus. Une fois activé,
-      relancer le workflow suffit.
+- [x] GitHub Pages activé par l'utilisateur (Settings → Pages → Source : « GitHub Actions »).
+      `enablement: true` sur `configure-pages` ne suffit pas : le jeton du workflow n'a pas
+      le droit de créer le site Pages (« Resource not accessible by integration »), ni le
+      connecteur GitHub de la session. **Sur un futur dépôt, c'est une manip inévitable.**
+- [x] Site en ligne : https://rnab26.github.io/melissa-nabet-site/ (HTTP 200, 17 contrôles
+      rejoués sur les octets réellement servis, aucune clé dans la page).
 - [x] Sélection multiple de photos : téléchargement en lot (.zip) et suppression en lot.
 - [ ] Étape 9 (service externe payant) — bloquée sur la décision 2 et sur un test sur ses vraies photos.
 - [ ] Obtenir 3 à 5 photos réelles typiques : rien n'a encore été mesuré sur de vraies photos de téléphone, uniquement sur une image de synthèse.
