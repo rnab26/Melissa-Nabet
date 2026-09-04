@@ -605,10 +605,18 @@
   .ed-bar .btn{flex:0 0 auto;}
   .ed-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px;background:#242220;}
   .ed-stage canvas{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 4px 24px rgba(0,0,0,.5);}
-  .ed-panel{background:var(--travertine);border-top:1px solid var(--hair);padding:10px 14px 14px;max-height:44vh;overflow-y:auto;}
-  .ed-tabs{display:flex;gap:6px;margin-bottom:12px;}
-  .ed-tab{flex:1;font-family:'Inter';font-size:12.5px;padding:9px 6px;border:1px solid var(--panel-edge);background:var(--panel);color:var(--stone-deep);border-radius:3px;cursor:pointer;}
-  .ed-tab.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;font-weight:600;}
+  .ed-panel{background:var(--travertine);border-top:1px solid var(--hair);padding:12px 14px 18px;max-height:44vh;overflow-y:auto;}
+  /* Onglets en « segment » (une piste, une pastille qui glisse) plutôt que quatre boutons
+     séparés : c'est la présentation que tout le monde connaît des applications récentes, et
+     elle dit clairement qu'on choisit UN mode parmi quatre. L'onglet IA garde la couleur de
+     marque quand il est actif : c'est le mode principal, il doit se voir. */
+  .ed-tabs{display:flex;gap:2px;margin:0 0 14px;padding:3px;background:#ded7ca;
+    border:1px solid var(--panel-edge);border-radius:11px;}
+  .ed-tab{flex:1 1 auto;font-family:'Inter';font-size:12.5px;font-weight:600;padding:9px 6px;border:0;
+    white-space:nowrap;background:transparent;color:var(--stone-deep);border-radius:8px;cursor:pointer;transition:.15s;}
+  .ed-tab:hover{color:var(--ink);}
+  .ed-tab.active{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(61,57,52,.18);}
+  .ed-tab[data-tab="ia"].active{background:var(--oxblood);color:#fff;}
   .ed-slider{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
   .ed-slider label{flex:0 0 108px;font-size:12px;color:var(--stone-deep);}
   .ed-slider input[type=range]{flex:1;width:auto;accent-color:var(--oxblood);}
@@ -618,25 +626,59 @@
   .ed-ratio.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;font-weight:600;}
   .ed-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
   .ed-hint{font-size:11.5px;color:var(--stone);margin:2px 0 10px;line-height:1.5;}
-  .ia-prompt{display:block;width:100%;margin:10px 0 0;font-family:'Inter';font-size:13.5px;
-    padding:9px 10px;border:1px solid var(--panel-edge);border-radius:3px;background:var(--panel);
-    color:var(--ink);line-height:1.5;resize:vertical;}
-  .ia-recent{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
-  .ia-recent .mini{font-size:11.5px;}
-  .ia-state{margin-top:14px;padding:11px 13px;border-left:3px solid var(--oxblood);
-    background:var(--panel);border-radius:0 5px 5px 0;border-top:1px solid var(--panel-edge);
-    border-right:1px solid var(--panel-edge);border-bottom:1px solid var(--panel-edge);}
+  /* Le panneau IA est découpé en cartes : « ce que je veux » d'abord, « avec quel modèle »
+     ensuite, « ce qui existe déjà » à la fin. Une carte = une question, dans l'ordre où on
+     se la pose. C'est ce découpage, plus que la couleur, qui fait la différence entre un
+     formulaire et un outil. */
+  .ia-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:12px;
+    padding:13px 14px 14px;margin-bottom:11px;box-shadow:0 1px 2px rgba(61,57,52,.055);}
+  .ia-card-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+    margin:0 0 9px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--stone);font-weight:700;}
+  .ia-card-h .ttl{flex:1 1 auto;}
+  .ia-card-h .ttl{display:flex;align-items:center;gap:6px;}
+  .ia-prompt{display:block;width:100%;margin:0;font-family:'Inter';font-size:14px;
+    padding:11px 12px;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);
+    color:var(--ink);line-height:1.5;resize:vertical;transition:.15s;}
+  .ia-prompt:focus{outline:0;border-color:var(--oxblood);box-shadow:0 0 0 3px rgba(154,133,116,.18);background:#fff;}
+  .ia-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
+  .ia-chip{font-family:'Inter';font-size:11.5px;padding:6px 11px;border-radius:999px;
+    border:1px solid var(--panel-edge);background:var(--paper);color:var(--stone-deep);
+    cursor:pointer;transition:.15s;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+  .ia-chip:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .ia-chip.recent{background:transparent;font-style:italic;}
+  .ia-chips-lbl{margin:11px 0 0;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--stone-light);font-weight:700;}
+  /* Un seul geste principal, pleine largeur, en bas de la carte : sur un téléphone on ne
+     cherche pas le bouton, il est là où le pouce tombe. */
+  .ia-go{display:block;width:100%;margin-top:13px;font-family:'Inter';font-size:14px;font-weight:600;
+    padding:13px 14px;border:0;border-radius:9px;background:var(--oxblood);color:#fff;cursor:pointer;
+    box-shadow:0 2px 8px rgba(154,133,116,.35);transition:.15s;}
+  .ia-go:hover:not([disabled]){filter:brightness(.92);}
+  .ia-go[disabled]{opacity:.6;cursor:default;box-shadow:none;}
+  .ia-sub{margin:9px 0 0;font-size:11.5px;color:var(--stone-light);line-height:1.5;text-align:center;}
   .ia-state p{margin:0;font-size:12.5px;}
   .ia-prompt-echo{color:var(--stone);font-style:italic;margin-top:4px!important;}
-  .ia-solde{display:flex;align-items:center;justify-content:space-between;gap:8px;
-    background:var(--panel);border:1px solid var(--panel-edge);border-radius:4px;
-    padding:8px 11px;margin:0 0 12px;font-size:12.5px;color:var(--stone-deep);}
+  /* Solde : une pastille discrète dans l'en-tête de carte, pas un bandeau. L'information est
+     utile, elle n'est pas le sujet. */
+  .ia-solde{display:inline-flex;align-items:center;gap:6px;background:var(--travertine);
+    border:1px solid var(--panel-edge);border-radius:999px;padding:3px 4px 3px 10px;
+    font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--stone-deep);
+    white-space:nowrap;flex:0 0 auto;}
   .ia-solde b{color:var(--ink);font-variant-numeric:tabular-nums;}
   .ia-solde.bas b{color:#b6543f;}
-  .ia-params{margin-top:14px;border:1px solid var(--panel-edge);border-radius:4px;background:var(--panel);}
-  .ia-params>summary{cursor:pointer;padding:9px 12px;font-size:12.5px;font-weight:600;color:var(--stone-deep);}
+  .ia-solde button{border:0;background:transparent;color:var(--stone);cursor:pointer;
+    font-size:12px;line-height:1;padding:4px 6px;border-radius:999px;}
+  .ia-solde button:hover{background:var(--panel-edge);color:var(--ink);}
+  .ia-warn{margin:9px 0 0;font-size:11px;color:var(--stone);line-height:1.5;
+    background:var(--travertine);border-radius:7px;padding:8px 10px;}
+  .ia-params{margin-top:11px;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);}
+  .ia-params>summary{cursor:pointer;padding:10px 12px;font-size:12.5px;font-weight:600;color:var(--stone-deep);}
   .ia-params-body{padding:4px 12px 12px;font-size:12.5px;color:var(--stone);}
   .ia-field{margin-bottom:11px;}
+  .ia-model-row{display:flex;align-items:center;gap:9px;}
+  .ia-model-row select{flex:1;min-width:0;font-family:'Inter';font-size:13px;padding:9px 10px;
+    border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);color:var(--ink);}
+  .ia-model-note{margin:8px 0 0;font-size:11.5px;color:var(--stone);line-height:1.5;}
   .ia-field>label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
     color:var(--stone);font-weight:600;margin-bottom:4px;}
   .ia-input{width:100%;font-family:'Inter';font-size:13px;padding:7px 9px;border:1px solid var(--panel-edge);
@@ -4272,12 +4314,11 @@ async function openPhotoEditor(rid,pid){
     <div class="ed-body">
       <div class="ed-stage"><canvas id="ed-canvas"></canvas></div>
       <div class="ed-panel">
-        <p class="ed-hint" style="margin-top:0">Appui long sur la photo : comparer avec l’original.</p>
         <div class="ed-tabs">
-          <button class="ed-tab active" data-tab="geometrie">Géométrie</button>
+          <button class="ed-tab active" data-tab="ia">✨ Retouche</button>
+          <button class="ed-tab" data-tab="geometrie">Géométrie</button>
           <button class="ed-tab" data-tab="lumiere">Lumière</button>
           <button class="ed-tab" data-tab="cadrage">Cadrage</button>
-          <button class="ed-tab" data-tab="ia">✨ IA</button>
         </div>
         <div id="ed-controls"></div>
         <div id="ed-photo-acts">
@@ -4293,7 +4334,9 @@ async function openPhotoEditor(rid,pid){
       </div>
     </div>`;
   document.body.appendChild(host);
-  _ed={r,p,tab:'geometrie',img:null,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
+  /* La retouche par consigne écrite est le mode d'entrée : c'est elle qui fait passer une
+     photo de téléphone à une photo publiable. Les réglages manuels restent à un doigt. */
+  _ed={r,p,tab:'ia',img:null,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
   host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
   host.querySelector('[data-done]').addEventListener('click',closePhotoEditor);
   host.querySelector('[data-auto]').addEventListener('click',()=>{
@@ -4316,7 +4359,7 @@ async function openPhotoEditor(rid,pid){
   const showOrig=on=>{_ed.showOrig=on;edPaint();};
   ['mousedown','touchstart'].forEach(ev=>{cmp.addEventListener(ev,e=>{e.preventDefault();showOrig(true);});stage.addEventListener(ev,()=>showOrig(true));});
   ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>{cmp.addEventListener(ev,()=>showOrig(false));stage.addEventListener(ev,()=>showOrig(false));});
-  buildEditorControls();
+  paintEditorTabs();buildEditorControls();
   const cv=$('ed-canvas');
   const ctx=cv.getContext('2d');cv.width=600;cv.height=400;
   ctx.fillStyle='#2f2c28';ctx.fillRect(0,0,600,400);
@@ -4367,6 +4410,9 @@ function buildEditorControls(){
     host.appendChild(hint);
   }
   (ED_SLIDERS[_ed.tab]||[]).forEach(cfg=>host.appendChild(sliderRow(cfg)));
+  const cmp=document.createElement('p');cmp.className='ed-hint';cmp.style.margin='12px 0 0';
+  cmp.textContent='Appui long sur la photo : comparer avec l’original.';
+  host.appendChild(cmp);
 }
 function sliderRow(cfg){
   const e=_ed.p.edit;
@@ -4675,10 +4721,20 @@ async function iaCall(payload){
 /* ---- Solde du compte fournisseur, pour ne pas avoir à aller le consulter ailleurs ---- */
 let _iaBalance=null;
 async function iaLoadBalance(force){
-  if(_iaBalance&&!force&&Date.now()-_iaBalance.at<60000)return _iaBalance;
-  const d=await iaCall({action:'balance'});
-  _iaBalance={balance:d.balance,currency:d.currency,username:d.username,at:Date.now()};
-  return _iaBalance;
+  /* L'échec est mémorisé comme le succès : la lecture du solde n'est pas indispensable au
+     travail, et sans ça on rappellerait le serveur à chaque ouverture de l'éditeur. */
+  if(_iaBalance&&!force&&Date.now()-_iaBalance.at<60000){
+    if(_iaBalance.err)throw new Error(_iaBalance.err);
+    return _iaBalance;
+  }
+  try{
+    const d=await iaCall({action:'balance'});
+    _iaBalance={balance:d.balance,currency:d.currency,username:d.username,at:Date.now()};
+    return _iaBalance;
+  }catch(e){
+    _iaBalance={err:(e&&e.message)||'erreur',at:Date.now()};
+    throw e;
+  }
 }
 
 /* ---- Schéma d'entrée du modèle : c'est lui qui décide des réglages affichés ---- */
@@ -4744,7 +4800,7 @@ async function runIaEdit(photo,consigne,modelId){
 }
 
 async function applyIaToPhoto(r,photo,consigne,modelId,btn){
-  const setBtn=t=>{if(btn){btn.disabled=t!==null;btn.textContent=t||'✨ Appliquer la consigne';}};
+  const setBtn=t=>{if(btn){btn.disabled=t!==null;btn.textContent=t||'✨ Retoucher cette photo';}};
   setBtn('Envoi au modèle…');
   try{
     const data=await runIaEdit(photo,consigne,modelId);
@@ -4774,67 +4830,123 @@ async function reloadEditorImage(){
   _ed.img=img;_glTexKey='';edPaint();
 }
 
-/* ---- Panneau ---- */
+/* ---- Panneau ----
+   Trois cartes, dans l'ordre où on se pose les questions : ce que je veux obtenir, avec
+   quel modèle, et ce qui existe déjà pour cette photo. Le geste principal — envoyer la
+   consigne — est un bouton pleine largeur en bas de la première carte : sur téléphone, il
+   tombe sous le pouce sans qu'on ait à le chercher. */
+
+/* Consignes toutes prêtes : sur un téléphone, taper trois lignes de français est le vrai
+   frein. Ce sont les cinq défauts qu'on retrouve sur presque toutes les photos de chantier
+   prises au téléphone. */
+const IA_PRESETS=[
+  {t:'Lumière équilibrée',v:'Équilibre la lumière de la pièce : éclaircis les zones sombres, retiens les hautes lumières près des fenêtres, garde une ambiance naturelle. Ne modifie ni les matériaux, ni le mobilier, ni l’architecture.'},
+  {t:'Couleurs fidèles',v:'Corrige la dominante de couleur due à l’éclairage artificiel : blancs neutres, bois et textiles rendus fidèlement. Aucun autre changement.'},
+  {t:'Désencombrer',v:'Retire les objets du quotidien qui traînent (câbles, produits ménagers, papiers, poubelle, chiffons) sans toucher au mobilier ni à l’architecture.'},
+  {t:'Fenêtres dégagées',v:'Rends la vue par les fenêtres lisible : extérieur clair et légèrement nuageux, sans surexposition, en gardant une lumière cohérente avec celle de la pièce.'},
+  {t:'Netteté et matières',v:'Accentue légèrement la netteté des arêtes et le grain des matières (bois, pierre, textile), sans effet artificiel ni halo.'},
+];
+
 function buildIaPanel(host){
   const p=_ed.p, r=_ed.r;
   ensureIaModels();
 
-  const solde=document.createElement('div');solde.className='ia-solde';
-  solde.innerHTML='<span>Solde fal.ai : <b>…</b></span><button class="mini" type="button">↻</button>';
+  /* ---------- Carte 1 : la consigne ---------- */
+  const card=document.createElement('div');card.className='ia-card';
+  const head=document.createElement('div');head.className='ia-card-h';
+  head.innerHTML='<span class="ttl">✨ Votre consigne</span>';
+  const solde=document.createElement('span');solde.className='ia-solde';
+  solde.innerHTML='<span>Solde <b>…</b></span><button type="button" title="Rafraîchir le solde">↻</button>';
   const soldeVal=solde.querySelector('b'), soldeBtn=solde.querySelector('button');
+  head.appendChild(solde);
+  card.appendChild(head);
+
+  const ta=document.createElement('textarea');
+  ta.className='ia-prompt';ta.rows=3;
+  ta.placeholder='Décrivez ce que vous voulez obtenir — ou touchez une consigne toute prête ci-dessous.';
+  ta.value=(p.ia&&p.ia.prompt)||'';
+  card.appendChild(ta);
+
+  const chips=document.createElement('div');chips.className='ia-chips';
+  IA_PRESETS.forEach(pr=>{
+    const b=document.createElement('button');b.className='ia-chip';b.type='button';
+    b.textContent=pr.t;b.title=pr.v;
+    b.addEventListener('click',()=>{ta.value=pr.v;ta.focus();});
+    chips.appendChild(b);
+  });
+  card.appendChild(chips);
+
+  if(library.iaPrompts.length){
+    const lbl=document.createElement('p');lbl.className='ia-chips-lbl';lbl.textContent='Déjà utilisées';
+    card.appendChild(lbl);
+    const recent=document.createElement('div');recent.className='ia-chips';
+    library.iaPrompts.forEach(txt=>{
+      const b=document.createElement('button');b.className='ia-chip recent mini';b.type='button';
+      b.textContent=txt.length>34?txt.slice(0,32)+'…':txt;b.title=txt;
+      b.addEventListener('click',()=>{ta.value=txt;ta.focus();});
+      recent.appendChild(b);
+    });
+    card.appendChild(recent);
+  }
+
+  const go=document.createElement('button');go.className='ia-go btn-primary';
+  go.textContent='✨ Retoucher cette photo';
+  card.appendChild(go);
+
+  const sub=document.createElement('p');sub.className='ia-sub';
+  card.appendChild(sub);
+
+  /* Le solde n'est qu'une commodité : quand sa lecture échoue, on le dit sans laisser croire
+     que la retouche est cassée — ce sont deux droits différents sur la clé du fournisseur. */
+  const warn=document.createElement('p');warn.className='ia-warn';warn.style.display='none';
+  card.appendChild(warn);
   const paintSolde=async(force)=>{
-    soldeVal.textContent='…';
+    soldeVal.textContent='…';warn.style.display='none';
     try{
       const b=await iaLoadBalance(force);
       soldeVal.textContent=(b.balance==null?'—':(Math.round(b.balance*100)/100)+' '+(b.currency||''));
       solde.classList.toggle('bas',typeof b.balance==='number'&&b.balance<1);
-    }catch(e){soldeVal.textContent='indisponible';soldeVal.title=(e&&e.message)||'';}
+    }catch(e){
+      soldeVal.textContent='n/c';
+      warn.style.display='';
+      warn.textContent='Solde non lisible : la consultation du solde fal.ai exige une clé de portée ADMIN, alors que la retouche fonctionne avec une clé de portée API. La retouche n’est pas concernée — vous pouvez lancer. Détail : '+((e&&e.message)||'erreur');
+    }
   };
   soldeBtn.addEventListener('click',()=>paintSolde(true));
-  host.appendChild(solde);
+  host.appendChild(card);
   paintSolde(false);
 
-  const hint=document.createElement('p');hint.className='ed-hint';
-  hint.textContent='Décrivez ce que vous voulez obtenir. Le modèle travaille sur la photo telle qu’elle est réglée ici — vos corrections de verticales et de lumière sont déjà prises en compte.';
-  host.appendChild(hint);
+  /* ---------- Carte 2 : le modèle et ses réglages ---------- */
+  const cardM=document.createElement('div');cardM.className='ia-card';
+  const headM=document.createElement('div');headM.className='ia-card-h';
+  headM.innerHTML='<span class="ttl">Modèle</span>';
+  const gear=document.createElement('button');gear.className='mini';gear.type='button';gear.textContent='⚙ Gérer';
+  gear.addEventListener('click',openIaModelsPanel);
+  headM.appendChild(gear);
+  cardM.appendChild(headM);
 
-  const modelRow=document.createElement('label');modelRow.className='fld';
-  modelRow.innerHTML='<span class="lbl">Modèle</span><select></select>';
+  const modelRow=document.createElement('div');modelRow.className='ia-model-row';
+  modelRow.innerHTML='<select></select>';
   const sel=modelRow.querySelector('select');
   sel.innerHTML=library.iaModels.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('');
   if(library.iaLastModel&&library.iaModels.some(m=>m.id===library.iaLastModel))sel.value=library.iaLastModel;
   if(!sel.value&&library.iaModels[0])sel.value=library.iaModels[0].id;
-  host.appendChild(modelRow);
-  const note=document.createElement('p');note.className='ed-hint';note.style.marginTop='4px';
-  host.appendChild(note);
-
-  const ta=document.createElement('textarea');
-  ta.className='ia-prompt';ta.rows=3;
-  ta.placeholder='ex. : équilibre la lumière, adoucis la dominante jaune, garde les matériaux et le mobilier tels quels';
-  ta.value=(p.ia&&p.ia.prompt)||'';
-  host.appendChild(ta);
-
-  if(library.iaPrompts.length){
-    const recent=document.createElement('div');recent.className='ia-recent';
-    library.iaPrompts.forEach(txt=>{
-      const b=document.createElement('button');b.className='mini';b.type='button';
-      b.textContent=txt.length>38?txt.slice(0,36)+'…':txt;b.title=txt;
-      b.addEventListener('click',()=>{ta.value=txt;ta.focus();});
-      recent.appendChild(b);
-    });
-    host.appendChild(recent);
-  }
+  cardM.appendChild(modelRow);
+  const note=document.createElement('p');note.className='ia-model-note';
+  cardM.appendChild(note);
 
   /* Réglages du modèle, générés depuis son schéma. Repliés : la consigne suffit dans la
      plupart des cas, mais tout ce que fal.ai propose est là pour qui veut y aller. */
   const det=document.createElement('details');det.className='ia-params';
-  det.innerHTML='<summary>Réglages du modèle</summary><div class="ia-params-body">Chargement…</div>';
-  host.appendChild(det);
+  det.innerHTML='<summary>Réglages avancés du modèle</summary><div class="ia-params-body">Chargement…</div>';
+  cardM.appendChild(det);
   const body=det.querySelector('.ia-params-body');
+  host.appendChild(cardM);
 
   const paintModel=async()=>{
     const m=library.iaModels.find(x=>x.id===sel.value);
     note.textContent=(m&&m.note)?m.note:'';
+    sub.textContent='Appel facturé par fal.ai · l’original est conservé, la retouche s’ajoute à côté.';
     body.textContent='Lecture des réglages proposés par le modèle…';
     try{
       const sc=await iaSchema(sel.value);
@@ -4902,33 +5014,34 @@ function buildIaPanel(host){
   sel.addEventListener('change',()=>{library.iaLastModel=sel.value;saveLibraryDebounced();paintModel();});
   paintModel();
 
-  const acts=document.createElement('div');acts.className='ed-acts';
-  const go=document.createElement('button');go.className='btn btn-primary';go.textContent='✨ Appliquer la consigne';
   go.addEventListener('click',()=>{
     const c=(ta.value||'').trim();
-    if(!c){toast('Écrivez d’abord ce que vous voulez');return;}
-    askConfirm('Envoyer cette photo au modèle « '+(sel.options[sel.selectedIndex]||{}).text+' » ? Cet appel est facturé par le fournisseur.',()=>{
+    if(!c){toast('Écrivez d’abord ce que vous voulez, ou touchez une consigne toute prête');ta.focus();return;}
+    askConfirm('Envoyer cette photo au modèle « '+((sel.options[sel.selectedIndex]||{}).text||'')+' » ? Cet appel est facturé par le fournisseur.',()=>{
       applyIaToPhoto(r,p,c,sel.value,go);
     });
   });
-  acts.appendChild(go);
-  const models=document.createElement('button');models.className='btn btn-onlight';models.textContent='⚙ Modèles';
-  models.addEventListener('click',openIaModelsPanel);
-  acts.appendChild(models);
-  host.appendChild(acts);
 
+  /* ---------- Carte 3 : la version IA déjà produite ---------- */
   if(p.ia){
-    const box=document.createElement('div');box.className='ia-state';
-    box.innerHTML=`<p><b>Version IA disponible</b> — ${esc((library.iaModels.find(m=>m.id===p.ia.model)||{}).label||p.ia.model)}</p>
-      <p class="ia-prompt-echo">« ${esc(p.ia.prompt)} »</p>`;
-    const sw=document.createElement('div');sw.className='ed-acts';sw.style.marginTop='8px';
+    const box=document.createElement('div');box.className='ia-card ia-state';
+    const h=document.createElement('div');h.className='ia-card-h';
+    h.innerHTML='<span class="ttl">Version IA de cette photo</span>';
+    box.appendChild(h);
+    const meta=document.createElement('p');
+    meta.innerHTML=`<b>${esc((library.iaModels.find(m=>m.id===p.ia.model)||{}).label||p.ia.model)}</b>`;
+    box.appendChild(meta);
+    const echo=document.createElement('p');echo.className='ia-prompt-echo';
+    echo.textContent='« '+p.ia.prompt+' »';
+    box.appendChild(echo);
+    const sw=document.createElement('div');sw.className='ed-acts';sw.style.marginTop='10px';
     const bOrig=document.createElement('button');bOrig.className='btn '+(p.useIa?'btn-onlight':'btn-primary');bOrig.textContent='Photo d’origine';
     const bIa=document.createElement('button');bIa.className='btn '+(p.useIa?'btn-primary':'btn-onlight');bIa.textContent='Version IA';
     bOrig.addEventListener('click',async()=>{p.useIa=false;edTouch();buildEditorControls();await reloadEditorImage();});
     bIa.addEventListener('click',async()=>{p.useIa=true;edTouch();buildEditorControls();await reloadEditorImage();});
     sw.appendChild(bOrig);sw.appendChild(bIa);
     box.appendChild(sw);
-    const del=document.createElement('button');del.className='mini';del.textContent='🗑 Supprimer la version IA';del.style.marginTop='8px';
+    const del=document.createElement('button');del.className='mini';del.textContent='🗑 Supprimer la version IA';del.style.marginTop='10px';
     del.addEventListener('click',()=>askConfirm('Supprimer la version IA de cette photo ? L’original n’est pas touché.',async()=>{
       await photoStore.del(iaKey(p.id));_imgCache.delete(iaKey(p.id));
       delete p.ia;p.useIa=false;edTouch();buildEditorControls();await reloadEditorImage();
@@ -4938,7 +5051,7 @@ function buildIaPanel(host){
     host.appendChild(box);
   }
 
-  const spend=document.createElement('p');spend.className='ed-hint';spend.style.marginTop='12px';
+  const spend=document.createElement('p');spend.className='ed-hint';spend.style.margin='2px 0 0';
   spend.textContent='Ce mois-ci : '+iaSpend()+' retouche(s) IA facturée(s).';
   host.appendChild(spend);
 }

@@ -67,13 +67,27 @@ async function toDataUri(src: string): Promise<string> {
   return "data:" + type + ";base64," + btoa(bin);
 }
 
-/** Solde du compte fal.ai, pour l'afficher dans le CRM sans aller sur leur site. */
+/** Solde du compte fal.ai, pour l'afficher dans le CRM sans aller sur leur site.
+ *  ATTENTION — ce point d'entrée n'a pas les mêmes exigences que l'exécution d'un modèle :
+ *  fal distingue deux portées de clé, API (consommer les modèles) et ADMIN (API de
+ *  plateforme, dont la facturation). Une clé de portée API fait tourner les modèles mais se
+ *  fait refuser ici. Un échec de solde ne dit donc RIEN sur la retouche : c'est une
+ *  commodité d'affichage, jamais un pré-requis. */
 async function getBalance() {
   const res = await fetch("https://api.fal.ai/v1/account/billing?expand=credits", {
     headers: { Authorization: "Key " + falKey() },
   });
   const text = await res.text();
-  if (!res.ok) throw new Error("solde indisponible (HTTP " + res.status + ") : " + text.slice(0, 300));
+  if (!res.ok) {
+    console.error("balance: HTTP " + res.status + " " + text.slice(0, 300));
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        "la clé fal.ai en place n'a pas le droit de lire la facturation (HTTP " + res.status +
+          "). Ce droit demande une clé de portée ADMIN ; la retouche, elle, fonctionne avec la clé actuelle.",
+      );
+    }
+    throw new Error("solde indisponible (HTTP " + res.status + ") : " + text.slice(0, 300));
+  }
   const d = JSON.parse(text);
   return {
     username: d.username ?? null,
@@ -88,7 +102,10 @@ async function getSchema(model: string) {
   const res = await fetch(
     "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=" + encodeURIComponent(model),
   );
-  if (!res.ok) throw new Error("modèle inconnu ou schéma indisponible (HTTP " + res.status + ")");
+  if (!res.ok) {
+    console.error("schema " + model + ": HTTP " + res.status);
+    throw new Error("modèle inconnu ou schéma indisponible (HTTP " + res.status + ")");
+  }
   const spec = await res.json();
   const schemas = spec?.components?.schemas || {};
   const inputName = Object.keys(schemas).find((n) => /Input$/.test(n));
@@ -111,7 +128,10 @@ async function runModel(model: string, input: Record<string, unknown>) {
     body: JSON.stringify(input),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error("fal.ai a refusé (HTTP " + res.status + ") : " + text.slice(0, 500));
+  if (!res.ok) {
+    console.error("run " + model + ": HTTP " + res.status + " " + text.slice(0, 500));
+    throw new Error("fal.ai a refusé (HTTP " + res.status + ") : " + text.slice(0, 500));
+  }
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(text);
@@ -130,6 +150,7 @@ Deno.serve(async (req) => {
   try {
     await requireUser(req);
   } catch (e) {
+    console.error("photo-ia auth:", (e as Error).message);
     return json({ error: String((e as Error).message) }, 401);
   }
 
@@ -164,6 +185,7 @@ Deno.serve(async (req) => {
 
     return json({ error: "action inconnue : " + action }, 400);
   } catch (e) {
+    console.error("photo-ia:", (e as Error).message || e);
     return json({ error: String((e as Error).message || e) }, 502);
   }
 });

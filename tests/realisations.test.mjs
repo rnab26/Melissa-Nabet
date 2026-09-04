@@ -471,11 +471,16 @@ const SCHEMA_REEL = {
     safety_tolerance: { type: 'string', enum: ['1', '2', '3', '4', '5', '6'], default: '4', title: 'Safety Tolerance' },
   },
 };
+let soldeKo = false; // pour rejouer le cas « le solde ne se lit pas »
 await page.route('**/functions/v1/photo-ia', async (route) => {
   const body = JSON.parse(route.request().postData() || '{}');
   const auth = route.request().headers()['authorization'] || '';
   iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
   if (body.action === 'balance') {
+    if (soldeKo) {
+      await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: "la clé fal.ai en place n'a pas le droit de lire la facturation (HTTP 403). Ce droit demande une clé de portée ADMIN ; la retouche, elle, fonctionne avec la clé actuelle." }) });
+      return;
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ username: 'melissa', balance: 9.87, currency: 'USD' }) });
     return;
   }
@@ -490,24 +495,63 @@ await page.route('**/functions/v1/photo-ia', async (route) => {
 const iaOnglet = await page.evaluate(async () => {
   await openPhotoEditor(realisations[0].id, realisations[0].photos[0].id);
   await new Promise(r => setTimeout(r, 900));
-  return document.querySelectorAll('.ed-tab').length;
+  const tabs = [...document.querySelectorAll('.ed-tab')];
+  return {
+    n: tabs.length,
+    premier: (tabs[0] || {}).dataset && tabs[0].dataset.tab,
+    ouvert: _ed.tab,
+    actif: (tabs.find(t => t.classList.contains('active')) || {}).dataset.tab,
+    consigneVisible: !!document.querySelector('.ia-prompt'),
+  };
 });
-check('Onglet IA présent dans l’éditeur', iaOnglet === 4, iaOnglet + ' onglet(s)');
+check('Onglet IA présent dans l’éditeur', iaOnglet.n === 4, iaOnglet.n + ' onglet(s)');
+// La retouche est le mode d'entrée : c'est ce qu'on veut voir en ouvrant une photo, pas les
+// curseurs. Vérifié à l'ouverture réelle de l'éditeur, pas en forçant l'onglet.
+check('La retouche IA est le PREMIER onglet', iaOnglet.premier === 'ia', String(iaOnglet.premier));
+check('La retouche IA est l’onglet ouvert par défaut',
+  iaOnglet.ouvert === 'ia' && iaOnglet.actif === 'ia' && iaOnglet.consigneVisible, JSON.stringify(iaOnglet));
 
 const panneau = await page.evaluate(() => {
   _ed.tab = 'ia'; paintEditorTabs(); buildEditorControls();
   return {
     consigne: !!document.querySelector('.ia-prompt'),
     modeles: !!document.querySelector('#ed-controls select'),
-    bouton: [...document.querySelectorAll('#ed-controls .btn')].some(b => b.textContent.includes('Appliquer la consigne')),
+    bouton: [...document.querySelectorAll('#ed-controls .ia-go')].some(b => b.textContent.includes('Retoucher cette photo')),
+    consignesPretes: document.querySelectorAll('#ed-controls .ia-chip').length,
   };
 });
 check('Panneau IA : champ de consigne, choix du modèle, bouton', panneau.consigne && panneau.modeles && panneau.bouton, JSON.stringify(panneau));
+// Taper trois lignes de français sur un téléphone est le vrai frein : les consignes toutes
+// prêtes doivent exister ET remplir réellement le champ.
+const presets = await page.evaluate(() => {
+  const c = document.querySelector('#ed-controls .ia-chip');
+  if (!c) return null;
+  c.click();
+  return { titre: c.textContent.trim(), rempli: (document.querySelector('.ia-prompt').value || '').length };
+});
+check('Consignes toutes prêtes : un appui remplit le champ',
+  !!presets && presets.rempli > 40, presets ? presets.titre + ' → ' + presets.rempli + ' caractères' : 'aucune');
 
 // --- Le solde du fournisseur s'affiche dans le CRM
 await page.waitForTimeout(700);
 const solde = await page.evaluate(() => (document.querySelector('.ia-solde b') || {}).textContent);
 check('Solde du compte fal.ai affiché dans le CRM', /9[.,]87/.test(solde || ''), solde);
+
+// --- Le solde est une COMMODITÉ, pas un pré-requis : quand sa lecture échoue, la raison doit
+//     être lisible à l'écran (elle était dans une infobulle, inatteignable sur téléphone) et
+//     dire clairement que la retouche, elle, n'est pas concernée.
+soldeKo = true;
+const soldeEchec = await page.evaluate(async () => {
+  _iaBalance = null; buildEditorControls();
+  await new Promise(r => setTimeout(r, 700));
+  const w = document.querySelector('#ed-controls .ia-warn');
+  return { visible: !!w && w.offsetParent !== null, texte: (w ? w.textContent : '') };
+});
+check('Échec du solde : la raison est lisible à l’écran, pas cachée dans une infobulle',
+  soldeEchec.visible && /ADMIN/.test(soldeEchec.texte) && /retouche/i.test(soldeEchec.texte),
+  soldeEchec.texte.slice(0, 90));
+soldeKo = false;
+await page.evaluate(async () => { _iaBalance = null; buildEditorControls(); await new Promise(r => setTimeout(r, 700)); });
 
 // --- Les réglages sont LUS DANS LE SCHÉMA du modèle, pas codés en dur.
 //     C'est ce qui garantit qu'on retrouve ce que fal.ai propose sur son propre site,
@@ -551,7 +595,7 @@ const applique = await page.evaluate(async () => {
     const orig = window.askConfirm;
     window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
     document.querySelector('.ia-prompt').value = 'équilibre la lumière';
-    [...document.querySelectorAll('#ed-controls .btn')].find(b => b.textContent.includes('Appliquer la consigne')).click();
+    document.querySelector('#ed-controls .ia-go').click();
   });
   await new Promise(r2 => setTimeout(r2, 700));
   return {
@@ -696,10 +740,23 @@ for (const [w, h, nom, minPart, enLigneAttendu] of [
     m.enLigne === enLigneAttendu, m.enLigne ? 'deux colonnes' : 'empilé');
 }
 
+// --- Les onglets ne débordent pas sur un téléphone étroit (libellés non coupés)
+await page.setViewportSize({ width: 375, height: 800 });
+await page.evaluate(() => { if (!document.getElementById('ed-modal')) openPhotoEditor(realisations[0].id, realisations[0].photos[0].id); });
+await page.waitForTimeout(800);
+const ongletsEtroit = await page.evaluate(() => {
+  const t = document.querySelector('.ed-tabs');
+  return { debord: t.scrollWidth - t.clientWidth, hauteur: t.getBoundingClientRect().height, panneau: document.querySelector('.ed-panel').scrollWidth - document.querySelector('.ed-panel').clientWidth };
+});
+check('Onglets de l’éditeur tenus sur une ligne à 375px',
+  ongletsEtroit.debord <= 1 && ongletsEtroit.hauteur < 52 && ongletsEtroit.panneau <= 1, JSON.stringify(ongletsEtroit));
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.waitForTimeout(300);
+
 // --- L'onglet IA ne montre que ce qui concerne l'IA
 const boutonsIa = await page.evaluate(() => {
   _ed.tab = 'ia'; paintEditorTabs(); buildEditorControls();
-  return [...document.querySelectorAll('.ed-panel .btn, .ed-panel .mini')].filter(b => b.offsetParent !== null).map(b => b.textContent.trim());
+  return [...document.querySelectorAll('.ed-panel .btn, .ed-panel .mini, .ed-panel .ia-go')].filter(b => b.offsetParent !== null).map(b => b.textContent.trim());
 });
 check('Onglet IA : pas de bouton de réglage photo qui traîne',
   !boutonsIa.some(b => /Réglage auto|Réinitialiser|lumière à toute la série|couverture/i.test(b)),
