@@ -37,6 +37,19 @@ Toujours rendre compte en français, de façon concise et directe. Pas de rempli
 - **Site vitrine** (public) : https://rnab26.github.io/melissa-nabet-site/ — dépôt **séparé** `rnab26/melissa-nabet-site`.
   Alimenté depuis le CRM (onglet Réalisations → « Publier sur le site »). La page publique ne contient **aucune clé d'accès** : ne jamais en ajouter, elle n'en a pas besoin.
 
+## Tableau de bord des chantiers
+
+**https://claude.ai/code/artifact/c7ead2fa-509a-4bf4-a2c5-ac18a5063d84**
+
+Tous les chantiers du CRM et du site, par section, avec statut, priorité, effort et branche.
+C'est la **source de vérité de ce qui reste à faire** — le lire avant de proposer quoi que ce
+soit, et y passer un chantier à « livré » quand il l'est. Les données vivent dans la base de
+l'artefact (`read_db` / `write_db`, collection `chantiers`, un document par chantier).
+
+Chaque chantier a un bouton « Prompt » qui produit de quoi démarrer une session dédiée.
+Une session qui prend un chantier le passe d'abord en « en cours », pour qu'une autre ne le
+reprenne pas en parallèle.
+
 ## Fiches de décision (artefacts)
 
 Questions ouvertes posées à l'utilisateur sous forme d'artefact cliquable plutôt qu'en mur de texte. Les réponses sont stockées dans la base de l'artefact (`read_db` / `write_db` sur son URL) — **les relire avant de reprendre le chantier concerné**, elles ne sont pas dans la conversation.
