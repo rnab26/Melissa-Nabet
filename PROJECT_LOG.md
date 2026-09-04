@@ -601,3 +601,41 @@ change vraiment les octets stockés, et chaque message de refus d'import.
 `tests/site.test.mjs` : **22 contrôles**, dont l'affichage de la légende sous la photo et en
 plein écran. Son banc d'essai est désormais construit par `tests/sitetest-build.mjs` — il
 n'existait nulle part et le test ne pouvait plus être lancé sans le refabriquer à la main.
+
+## Retouche IA — la série (septembre 2026)
+
+**État** : livré, testé, fusionné. Chantier `ph05`.
+
+Une consigne, écrite une fois, passée sur toutes les photos d'un chantier. Le pont
+`photo-ia` et `runIaEdit` sont réutilisés tels quels ; ce chantier n'ajoute que la boucle,
+les garde-fous de coût et l'interface.
+
+**Points de conception**
+
+- **`iaStoreResult(r,photo,data,consigne,modelId)`** : la pose du résultat sur une photo est
+  désormais écrite une seule fois, partagée par `applyIaToPhoto` (photo seule) et
+  `runIaSerie`. C'est la règle qui décide `photo.ia`, `editOrig`/`editIa`, `useIa` et
+  l'historique — deux copies auraient dérivé en silence.
+- **Le coût est annoncé avant, pas après.** `iaSerieCandidats` + le récapitulatif donnent le
+  nombre d'appels, le coût estimé (`coutUnitaire` des réglages) et le cumul du mois. Si le
+  plafond doit tomber au milieu, c'est dit avant de lancer.
+- **L'interruption s'arrête APRÈS la photo en cours.** On ne peut pas rappeler un appel déjà
+  parti : il sera facturé quoi qu'il arrive, autant en garder l'image. Le bouton l'écrit
+  (« Arrêt après la photo en cours… ») au lieu de laisser croire à un arrêt immédiat.
+- **La portée par défaut est « sans version IA »** : relancer une photo déjà retouchée coûte
+  un appel de plus pour un résultat qu'on a déjà. « Toutes » reste à un clic.
+- **Un échec n'arrête pas la série.** Chaque photo est indépendante ; le bilan de fin nomme
+  les échecs avec la raison exacte du fournisseur et reste affiché.
+
+**Ne pas casser**
+
+- Le bilan de série porte `rz-bilan-serie` en plus de `.ia-erreur` (le bilan d'import a la
+  même apparence) : les deux doivent rester distinguables.
+- `console.error('retouche IA série', …)` est volontaire (diagnostic) ; le filtre de bruit
+  du test le connaît.
+- Le mode reste synchrone : voir le chantier `ph14` (file d'attente de fal). La série
+  multiplie les appels longs et rend ce chantier plus urgent qu'avant. Ne pas passer la
+  résolution demandée à 4K tant qu'il n'est pas fait.
+
+**Vérification** : 24 contrôles ajoutés dans `tests/realisations.test.mjs` (207 au total),
+avec le pont intercepté — les tests ne dépensent aucun crédit.

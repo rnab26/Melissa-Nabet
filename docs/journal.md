@@ -79,3 +79,49 @@ menu, dialogue de légende, éditeur) : aucun débordement horizontal, rien d'il
 
 **Rien.** Tout est en ligne : CRM (déploiement Pages réussi, run 99) et site public.
 
+---
+
+## 4 septembre 2026 — Une consigne IA pour toute une série
+
+**Branche** `claude/photo-ia-serie` → fusionnée sur `main`. **Chantier** `ph05` (haute).
+
+**Le problème** : écrire trois lignes de consigne puis les retaper photo par photo. Un
+chantier fait dix à vingt photos ; c'était le vrai frein à l'usage de la retouche.
+
+**Ce qui est livré** : bouton « ✨ Retoucher plusieurs photos » dans la fiche d'une
+réalisation, et « ✨ Retoucher (n) » dans la barre de sélection.
+
+- **Portée au choix** : la sélection en cours, les photos qui n'ont pas encore de version IA
+  (par défaut — on ne repaie pas ce qui est déjà fait), ou toutes.
+- **Avant de lancer** : nombre de photos, **coût estimé**, cumul du mois. Le chiffre se met
+  à jour quand on change de portée.
+- **Plafond mensuel** : bloque le lancement (rien n'est envoyé, donc rien n'est facturé), et
+  prévient à l'avance s'il doit tomber au milieu de la série.
+- **Interrompre** : l'arrêt se fait après la photo en cours, et le bouton le dit — un appel
+  déjà parti est facturé de toute façon, autant en garder le résultat.
+- **Une photo refusée n'arrête pas les suivantes** : le bilan de fin nomme chaque échec avec
+  sa raison et reste à l'écran (vert quand tout est passé, rouge sinon).
+
+**Vérification** : 207 contrôles au navigateur (24 nouveaux), pont intercepté — **aucun
+crédit dépensé par les tests**. Parcours réel en 390 px : dialogue, progression, bilan.
+
+### Ce qu'il ne faut pas casser
+
+- `iaStoreResult` est **la** règle de pose du résultat sur une photo, partagée par la
+  retouche d'une photo seule et par la série. Ne pas la redupliquer : les deux chemins
+  finiraient par diverger sans que rien ne le signale.
+- Le bilan de série porte la classe `rz-bilan-serie` en plus de `.ia-erreur` : le bilan
+  d'import utilise la même apparence, et les tests doivent pouvoir les distinguer.
+- Le mode d'appel reste **synchrone** (`fal.run`). Chantier `ph14` toujours ouvert : sur une
+  image lourde ou une file chargée, la fonction serveur peut expirer et l'appel est perdu
+  tout en étant facturé. **Rester en 2K, ne pas passer en 4K** tant que la file d'attente
+  n'est pas branchée. La série multiplie les appels longs : c'est elle qui rend ph14 urgent.
+
+### Remarque d'usage (pas encore traitée)
+
+La barre d'actions d'une réalisation porte maintenant six boutons (Publier, Retoucher
+plusieurs photos, Réordonner, Sélectionner, Tout télécharger, Supprimer). Ça tient sur
+téléphone (quatre lignes, aucun débordement mesuré) mais ça commence à faire beaucoup.
+Piste : passer « Tout télécharger » et « Supprimer » dans un menu ⋯ au niveau de la
+réalisation, comme ce qui a été fait pour les vignettes. À décider avec Raphaël.
+
