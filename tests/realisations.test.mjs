@@ -1122,6 +1122,280 @@ const guard = await page.evaluate(async () => {
 check('Panne de lecture du manifeste : la publication est abandonnée, pas forcée', guard.deuxiemePubliee === false);
 check('Panne de lecture du manifeste : le site déjà publié est intact', guard.apres === guard.avant, guard.avant + ' → ' + guard.apres);
 
+// ============================================================================
+//  GALERIE : ordre, titres et légendes, remplacement, import lisible
+//  Tout se passe dans une réalisation dédiée, pour ne pas déranger l'état sur
+//  lequel s'appuient les mesures d'éditeur qui suivent.
+// ============================================================================
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(() => {
+  window.__mkImg = async (name, w, h, teinte) => {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const x = cv.getContext('2d');
+    x.fillStyle = teinte || '#8899aa'; x.fillRect(0, 0, w, h);
+    x.fillStyle = '#332211'; x.fillRect(w * 0.2, h * 0.2, w * 0.3, h * 0.5);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+    return new File([blob], name, { type: 'image/jpeg' });
+  };
+});
+
+// --- Import : progression visible pendant l'envoi
+const gal = await page.evaluate(async () => {
+  const r = normalizeRealisation({ title: 'Villa Test', date: '2026' });
+  realisations.push(r); _rzOpenId = r.id; renderRealisations();
+  const files = [await window.__mkImg('salon.jpg', 1200, 900, '#9aa7b4'),
+                 await window.__mkImg('cuisine.jpg', 1000, 750, '#b4a79a'),
+                 await window.__mkImg('chambre.jpg', 900, 600, '#a7b49a')];
+  const p = addPhotosToRealisation(r, files);   // volontairement pas attendu
+  await new Promise(res => setTimeout(res, 60));
+  const box = document.getElementById('rz-import');
+  const vu = box ? box.querySelector('.rz-import-txt').textContent : '';
+  const barre = box ? !!box.querySelector('.rz-bar i') : false;
+  await p;
+  return { rid: r.id, vu, barre, n: r.photos.length, noms: r.photos.map(x => x.name) };
+});
+check('Import : la progression s’affiche pendant l’envoi', /Import de 3 photo\(s\) — \d \/ 3 · /.test(gal.vu), gal.vu);
+check('Import : barre de progression présente', gal.barre);
+check('Import : les 3 photos sont entrées', gal.n === 3, gal.noms.join(', '));
+check('Import : le nom du fichier devient le titre de la photo', gal.noms[0] === 'salon.jpg', gal.noms[0]);
+
+// --- Import : chaque fichier refusé dit POURQUOI, et ça reste à l'écran
+const refus = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const gros = new File([new ArrayBuffer(26 * 1024 * 1024)], 'enorme.jpg', { type: 'image/jpeg' });
+  const pdf = new File([new Blob(['%PDF-1.4 faux'])], 'devis.pdf', { type: 'application/pdf' });
+  const heic = new File([new Blob(['xx'])], 'IMG_2201.heic', { type: 'image/heic' });
+  const casse = new File([new Blob(['ceci n est pas une image'])], 'casse.jpg', { type: 'image/jpeg' });
+  const bonne = await window.__mkImg('terrasse.jpg', 800, 600, '#c0b8a8');
+  await addPhotosToRealisation(r, [gros, pdf, heic, casse, bonne]);
+  const lignes = [...document.querySelectorAll('.rz-refus li')].map(li => li.textContent);
+  return { lignes, photos: r.photos.length, encore: !!document.querySelector('.rz-refus') };
+});
+check('Import : le fichier trop lourd est refusé avec son poids',
+  refus.lignes.some(l => /enorme\.jpg.*trop lourd : 26 Mo — maximum 25 Mo/.test(l)), refus.lignes[0]);
+check('Import : un fichier qui n’est pas une image est refusé en clair',
+  refus.lignes.some(l => /devis\.pdf.*ce n’est pas une image \(application\/pdf\)/.test(l)));
+check('Import : le HEIC d’iPhone explique quoi faire',
+  refus.lignes.some(l => /IMG_2201\.heic.*HEIC.*Le plus compatible|IMG_2201\.heic.*HEIC.*JPEG/.test(l)),
+  (refus.lignes.find(l => /heic/i.test(l)) || '').slice(0, 90));
+check('Import : un fichier illisible le dit', refus.lignes.some(l => /casse\.jpg.*illisible/.test(l)));
+check('Import : les bonnes photos passent quand même', refus.photos === 4, refus.photos + ' photo(s)');
+check('Import : le bilan des refus reste affiché (pas un toast de 3 s)', refus.encore);
+
+// --- Titre et légende par photo
+const txt = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId), p = r.photos[1];
+  openPhotoTextDialog(r, p);
+  document.getElementById('ph-name').value = 'Cuisine ouverte';
+  document.getElementById('ph-cap').value = 'Plan de travail en chêne massif, verrière sur mesure.';
+  document.getElementById('ph-cap').dispatchEvent(new Event('input'));
+  const compteur = document.getElementById('ph-cap-n').textContent;
+  document.getElementById('ph-txt-ok').click();
+  await new Promise(res => setTimeout(res, 150));
+  const tuile = document.querySelectorAll('.rz-ph')[1];
+  return {
+    nom: p.name, legende: p.caption, compteur,
+    surTuile: tuile.querySelector('.rz-ph-name').textContent + ' / ' + tuile.querySelector('.rz-ph-cap').textContent,
+    hist: (p.hist || []).map(h => h.k),
+    touche: !!p.touchedAt,
+    videAilleurs: document.querySelectorAll('.rz-ph-cap.vide').length,
+  };
+});
+check('Légende : titre enregistré', txt.nom === 'Cuisine ouverte', txt.nom);
+check('Légende : texte enregistré', /chêne massif/.test(txt.legende), txt.legende);
+check('Légende : compteur de caractères affiché', /\d+ \/ 200 caractères/.test(txt.compteur), txt.compteur);
+check('Légende : titre et légende visibles sur la vignette', /Cuisine ouverte \/ Plan de travail/.test(txt.surTuile), txt.surTuile);
+check('Légende : la photo est marquée comme modifiée', txt.touche && txt.hist.includes('texte'), txt.hist.join(','));
+check('Légende : les photos sans légende affichent l’invitation à en mettre une', txt.videAilleurs === 3, txt.videAilleurs + ' vignette(s)');
+
+// --- Réordonner : flèches, bornes, numéros
+const ordre1 = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  rzToggleOrderMode(true);
+  const nums = [...document.querySelectorAll('.rz-ph-num')].map(n => n.textContent.replace('★', '').trim());
+  const etoile = [...document.querySelectorAll('.rz-ph-num')].filter(n => n.textContent.includes('★')).length;
+  const premierRecul = document.querySelector('.rz-ph [data-up]').disabled;
+  const tuiles = [...document.querySelectorAll('.rz-ph')];
+  const dernierAvance = tuiles[tuiles.length - 1].querySelector('[data-down]').disabled;
+  const avant = r.photos.map(p => p.name);
+  rzMovePhoto(r, r.photos[3].id, -1);           // la 4e recule d'une place
+  return { nums, etoile, premierRecul, dernierAvance, avant, apres: r.photos.map(p => p.name),
+           ajoutMasque: document.querySelectorAll('.rz-add').length,
+           barre: !!document.querySelector('.rz-selbar [data-done]') };
+});
+check('Réordonner : chaque vignette porte son rang', ordre1.nums.join('') === '1234', ordre1.nums.join(','));
+check('Réordonner : la 1re ne peut pas reculer, la dernière ne peut pas avancer', ordre1.premierRecul && ordre1.dernierAvance);
+check('Réordonner : la couverture reste repérable pendant qu’on range (★)', ordre1.etoile === 1, ordre1.etoile + ' étoile(s)');
+check('Réordonner : ◀ déplace vraiment la photo',
+  ordre1.apres[2] === ordre1.avant[3] && ordre1.apres[3] === ordre1.avant[2], ordre1.apres.join(' | '));
+check('Réordonner : « Ajouter des photos » masqué pendant qu’on range (une étape à la fois)', ordre1.ajoutMasque === 0);
+check('Réordonner : barre d’aide avec « Terminer »', ordre1.barre);
+
+// --- Réordonner au glisser-déposer (souris)
+const dnd = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  const avant = r.photos.map(p => p.name);
+  const tuiles = [...document.querySelectorAll('.rz-ph')];
+  const dt = new DataTransfer();
+  const src = tuiles[3], cible = tuiles[0];
+  src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+  const b = cible.getBoundingClientRect();
+  const opts = { bubbles: true, dataTransfer: dt, clientX: b.left + 4, clientY: b.top + 4 };
+  cible.dispatchEvent(new DragEvent('dragover', opts));
+  const marque = cible.className.includes('rz-drop-a');
+  cible.dispatchEvent(new DragEvent('drop', opts));
+  return { avant, apres: r.photos.map(p => p.name), marque };
+});
+check('Glisser-déposer : la place visée est signalée avant de lâcher', dnd.marque);
+check('Glisser-déposer : la photo lâchée passe bien devant la cible',
+  dnd.apres[0] === dnd.avant[3], dnd.avant.join(' | ') + '  →  ' + dnd.apres.join(' | '));
+
+// --- Réordonner marque TOUTE la réalisation à republier (les adresses publiques changent)
+const ordrePub = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.published = true;
+  const t = Date.now() - 5000;
+  r.photos.forEach(p => { p.publishedAt = t; p.touchedAt = t - 1000; });
+  rzMovePhoto(r, r.photos[2].id, -1);
+  return r.photos.map(p => photoPubState(r, p));
+});
+check('Réordonner : toutes les photos passent « à republier », pas seulement la déplacée',
+  ordrePub.every(e => e === 'modifiee'), ordrePub.join(','));
+
+// --- Tri par date d'ajout
+const tri = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const attendu = r.photos.slice().sort((a, b) => a.createdAt - b.createdAt).map(p => p.name);
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    document.querySelector('.rz-selbar [data-date]').click();
+  });
+  return { attendu, obtenu: r.photos.map(p => p.name) };
+});
+check('Réordonner : « Trier par date d’ajout » remet la série dans l’ordre d’import',
+  tri.attendu.join('|') === tri.obtenu.join('|'), tri.obtenu.join(' | '));
+
+// --- Aucun débordement horizontal pendant qu'on range, sur un téléphone
+await page.setViewportSize({ width: 375, height: 800 });
+await page.waitForTimeout(300);
+const debordOrdre = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+check('Réordonner : aucun débordement horizontal à 375px', debordOrdre <= 1, debordOrdre + 'px');
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(() => rzToggleOrderMode(false));
+await page.waitForTimeout(200);
+
+// --- Menu d'actions de la vignette
+const menu = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId), p = r.photos[1];
+  openPhotoMenu(r, p);
+  const libelles = [...document.querySelectorAll('#modal .ph-menu button')].map(b => b.textContent.trim());
+  const couvAvant = r.cover;
+  document.querySelector('#modal [data-cover]').click();
+  await new Promise(res => setTimeout(res, 150));
+  openPhotoMenu(r, p);
+  const dejaCouv = document.querySelector('#modal [data-cover]').disabled;
+  closeModal();
+  return { libelles, couvAvant, couvApres: r.cover, cible: p.id, dejaCouv,
+           badge: [...document.querySelectorAll('.rz-ph-badge')].filter(b => /couverture/.test(b.textContent)).length };
+});
+check('Menu photo : les cinq actions attendues sont là',
+  ['Ouvrir', 'Titre et légende', 'couverture', 'Remplacer', 'Télécharger'].every(m => menu.libelles.some(l => l.includes(m))),
+  menu.libelles.join(' | '));
+check('Menu photo : « Mettre en couverture » change la couverture',
+  menu.couvApres === menu.cible && menu.couvApres !== menu.couvAvant);
+check('Menu photo : une seule couverture, et elle est signalée sur la vignette', menu.badge === 1, menu.badge + ' badge(s)');
+check('Menu photo : la photo déjà en couverture ne propose pas de le refaire', menu.dejaCouv);
+
+// --- Remplacer une photo : la place, le titre et la légende restent
+const repl = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId), p = r.photos[1];
+  p.ia = { model: 'test/modele', prompt: 'essai' };
+  p.useIa = true;
+  await photoStore.save(iaKey(p.id), new Blob(['ia'], { type: 'image/jpeg' }));
+  p.edit.persp = 40;
+  const avant = { id: p.id, rang: 1, nom: p.name, legende: p.caption, largeur: p.w,
+                  octets: (await photoStore.get(fullKey(p.id))).size };
+  const fichier = await window.__mkImg('cuisine-refaite.jpg', 640, 480, '#556677');
+  const why = await replaceOnePhoto(r, p, fichier);
+  const apres = { id: r.photos[1].id, nom: p.name, legende: p.caption, largeur: p.w,
+                  octets: (await photoStore.get(fullKey(p.id))).size,
+                  ia: !!p.ia, useIa: !!p.useIa, persp: p.edit.persp,
+                  iaEnStock: !!(await photoStore.get(iaKey(p.id))),
+                  hist: (p.hist || []).map(h => h.k) };
+  return { why, avant, apres };
+});
+check('Remplacer : aucun refus sur un fichier valide', repl.why === '', repl.why);
+check('Remplacer : la photo garde son identifiant et sa place', repl.apres.id === repl.avant.id);
+check('Remplacer : le titre et la légende sont conservés',
+  repl.apres.nom === repl.avant.nom && repl.apres.legende === repl.avant.legende, repl.apres.nom + ' / ' + repl.apres.legende);
+check('Remplacer : le fichier stocké a réellement changé',
+  repl.apres.octets !== repl.avant.octets && repl.apres.largeur === 640, repl.avant.octets + ' → ' + repl.apres.octets + ' octets, ' + repl.apres.largeur + 'px');
+check('Remplacer : la version IA de l’ancienne image est supprimée',
+  !repl.apres.ia && !repl.apres.useIa && !repl.apres.iaEnStock);
+check('Remplacer : les réglages de l’ancienne image sont remis à zéro', repl.apres.persp === 0, String(repl.apres.persp));
+check('Remplacer : l’historique de la photo en garde la trace', repl.apres.hist.includes('remplacee'), repl.apres.hist.join(','));
+
+const replKo = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId), p = r.photos[0];
+  const octets = (await photoStore.get(fullKey(p.id))).size;
+  const why = await replaceOnePhoto(r, p, new File([new Blob(['x'])], 'note.txt', { type: 'text/plain' }));
+  return { why, intact: (await photoStore.get(fullKey(p.id))).size === octets };
+});
+check('Remplacer : un fichier refusé dit pourquoi', /ce n’est pas une image/.test(replKo.why), replKo.why);
+check('Remplacer : un refus ne touche pas la photo en place', replKo.intact);
+
+// --- La légende part sur le site, le titre interne n'en sort pas
+const pubLeg = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.photos[1].caption = 'Plan de travail en chêne massif.';
+  r.photos[1].name = 'IMG_4821.jpg';
+  await publishRealisation(r);
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const man = JSON.parse(await window.__files.get(key).text());
+  const entree = man.realisations.find(x => x.id === r.id);
+  return { legendes: entree.photos.map(p => p.caption || ''), json: JSON.stringify(entree),
+           ordreOk: entree.photos.length === r.photos.length,
+           couv: entree.photos.findIndex(p => p.cover) === r.photos.findIndex(p => p.id === r.cover) };
+});
+check('Publication : la légende de la photo part dans le manifeste',
+  pubLeg.legendes[1] === 'Plan de travail en chêne massif.', pubLeg.legendes.join(' | '));
+check('Publication : une photo sans légende n’en invente pas', pubLeg.legendes[0] === '' && pubLeg.legendes[2] === '');
+check('Publication : le titre interne (nom de fichier) ne part PAS sur le site',
+  !pubLeg.json.includes('IMG_4821'), pubLeg.json.slice(0, 120));
+check('Publication : l’ordre et la couverture du CRM sont ceux du manifeste', pubLeg.ordreOk && pubLeg.couv);
+
+// --- Éditeur : passer d'une photo à l'autre sans repasser par la grille
+await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  await openPhotoEditor(r.id, r.photos[1].id);
+});
+await page.waitForTimeout(900);
+const nav = await page.evaluate(() => ({
+  pos: document.querySelector('.ed-pos').textContent,
+  metaVisible: !!document.querySelector('#ed-photo-meta [data-text]'),
+  metaSousIa: (() => { _ed.tab = 'ia'; paintEditorTabs(); buildEditorControls();
+    return document.getElementById('ed-photo-meta').offsetParent !== null; })(),
+}));
+check('Éditeur : le rang de la photo est affiché', nav.pos.trim() === '2 / 4', nav.pos);
+check('Éditeur : « Titre et légende » et « Remplacer » sont dans le panneau', nav.metaVisible);
+check('Éditeur : ces deux actions restent atteignables depuis l’onglet Retouche', nav.metaSousIa);
+await page.evaluate(() => document.querySelector('#ed-modal [data-prev]').click());
+await page.waitForTimeout(1000);
+const nav2 = await page.evaluate(() => ({
+  pos: document.querySelector('.ed-pos').textContent,
+  memePhoto: _ed.p.id === findRealisation(_rzOpenId).photos[0].id,
+  reculBloque: document.querySelector('#ed-modal [data-prev]').disabled,
+}));
+check('Éditeur : ◀ passe à la photo précédente', nav2.pos.trim() === '1 / 4' && nav2.memePhoto, nav2.pos);
+check('Éditeur : sur la première photo, ◀ est désactivé', nav2.reculBloque);
+await page.evaluate(() => closePhotoEditor());
+await page.waitForTimeout(300);
+
+// --- On rend la vue à la réalisation utilisée par les mesures suivantes
+await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
+await page.waitForTimeout(300);
+
 // --- Place réellement donnée à la photo dans l'éditeur, selon la forme de l'écran.
 //     Un téléphone en « site pour ordinateur » fait ~980 px de large tout en restant en
 //     PORTRAIT : ne regarder que la largeur envoyait l'éditeur en deux colonnes et la photo
@@ -1202,10 +1476,12 @@ for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
 await page.evaluate(() => showView('realisations'));
 check('Navigation entre toutes les vues sans erreur', true);
 
-// Trois pannes sont provoquées VOLONTAIREMENT plus haut — manifeste illisible, retouche
-// refusée par le fournisseur, envoi de fichier coupé : les erreurs qu'elles journalisent
-// sont le comportement attendu, pas un défaut. Tout le reste doit rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible/i.test(e));
+// Des pannes sont provoquées VOLONTAIREMENT plus haut — manifeste illisible, retouche
+// refusée par le fournisseur, envoi de fichier coupé, fichiers d'import illisibles (HEIC
+// et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
+// un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
+// rester vide.
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

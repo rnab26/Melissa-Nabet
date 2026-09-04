@@ -94,6 +94,10 @@
   .shots{display:flex;flex-direction:column;gap:clamp(14px,2.5vw,26px);}
   .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;}
   .shot img{width:100%;height:auto;display:block;}
+  /* Légende écrite depuis le CRM. Absente, rien ne s'affiche : une photo sans légende ne
+     doit pas laisser un blanc sous elle. */
+  .shot-cap{display:block;padding:9px 2px 0;text-align:left;font-size:13px;line-height:1.55;
+    color:var(--stone);font-style:italic;}
 
   /* --- Plein écran --- */
   .lightbox{
@@ -101,7 +105,10 @@
     display:none;align-items:center;justify-content:center;padding:18px;
   }
   .lightbox.open{display:flex;}
-  .lightbox img{max-width:100%;max-height:100%;object-fit:contain;}
+  .lightbox img{max-width:100%;max-height:calc(100% - 54px);object-fit:contain;}
+  .lb-cap{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
+    max-width:min(720px,86vw);margin:0;text-align:center;font-style:italic;
+    font-size:13.5px;line-height:1.5;color:var(--paper);}
   .lightbox button{
     position:absolute;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);
     color:var(--paper);width:46px;height:46px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;
@@ -143,6 +150,7 @@
 
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo en plein écran">
   <img id="lb-img" alt="">
+  <p class="lb-cap" id="lb-cap" hidden></p>
   <button class="lb-close" id="lb-close" aria-label="Fermer">✕</button>
   <button class="lb-prev" id="lb-prev" aria-label="Photo précédente">‹</button>
   <button class="lb-next" id="lb-next" aria-label="Photo suivante">›</button>
@@ -202,8 +210,14 @@ function openProject(i) {
     im.src = url(ph.full);
     im.loading = k < 2 ? 'eager' : 'lazy';
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
-    im.alt = current.title + ' — photo ' + (k + 1);
+    im.alt = ph.caption || (current.title + ' — photo ' + (k + 1));
     b.appendChild(im);
+    if (ph.caption) {
+      var cap = document.createElement('span');
+      cap.className = 'shot-cap';
+      cap.textContent = ph.caption;
+      b.appendChild(cap);
+    }
     b.addEventListener('click', function () { openLightbox(k); });
     host.appendChild(b);
   });
@@ -221,8 +235,11 @@ function closeProject() {
 function openLightbox(k) {
   if (!current) return;
   lbIndex = k;
-  el('lb-img').src = url(current.photos[k].full);
-  el('lb-img').alt = current.title + ' — photo ' + (k + 1);
+  var ph = current.photos[k];
+  el('lb-img').src = url(ph.full);
+  el('lb-img').alt = ph.caption || (current.title + ' — photo ' + (k + 1));
+  el('lb-cap').textContent = ph.caption || '';
+  el('lb-cap').hidden = !ph.caption;
   el('lightbox').classList.add('open');
 }
 function stepLightbox(d) {

@@ -1,0 +1,6 @@
+# Dépendances de test uniquement (Playwright), installées à la demande :
+#   npm i playwright@1.49.1
+# Elles n'ont pas à être versionnées : le CRM lui-même n'a aucune dépendance.
+node_modules/
+package.json
+package-lock.json

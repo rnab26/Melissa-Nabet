@@ -537,3 +537,67 @@ rustique — et passe le mode IA en premier choix plutôt que les réglages manu
   d'onglet : sans ça les boutons de réglage photo restaient visibles sous l'onglet IA.
 - Le libellé du bouton principal (« ✨ Retoucher cette photo ») est répété dans `setBtn` de
   `applyIaToPhoto` : changer l'un sans l'autre laisse un libellé faux après un envoi.
+
+## Galerie — ordre, titres et légendes, remplacement, import lisible (septembre 2026)
+
+**État** : livré, testé, fusionné sur `main`. Chantier `ph09` du tableau des chantiers, plus
+ce qui manquait autour pour que la galerie se suffise sans rien demander.
+
+**Constat de départ** : la galerie savait importer, retoucher, sélectionner, télécharger et
+publier — mais pas **ranger**, pas **nommer**, pas **remplacer**, et un import ne disait ni
+où il en était ni pourquoi un fichier n'était pas entré.
+
+### Ce qui a été ajouté
+
+- **Ordre des photos** (`rzToggleOrderMode`, `rzMovePhoto`, `rzMovePhotoBefore`,
+  `makeTileDraggable`). Glisser-déposer à la souris **et** ◀ ▶ au doigt : le HTML5
+  drag-and-drop ne fonctionne pas au tactile, et la moitié de l'usage se fait au téléphone.
+  Rang affiché sur chaque vignette, ★ sur la couverture, « Trier par date d'ajout » avec
+  confirmation.
+- **`p.caption`** (nouveau champ) et `p.name` devenu éditable — `openPhotoTextDialog`.
+- **`replaceOnePhoto` / `rzReplacePhoto`** : remplacer le fichier d'une photo en gardant son
+  identité (id, rang, titre, légende).
+- **Import** : `importOnePhoto`, `photoFileRefus`, `photoFileRaison`, `paintImportProgress`,
+  `buildImportPanel`. Progression pendant l'envoi, bilan des refus qui reste à l'écran.
+- **`openPhotoMenu`** : les actions qui ne tiennent pas sur une vignette de 160 px.
+- **Éditeur** : `edGoto(±1)`, rang affiché, bloc `#ed-photo-meta` visible quel que soit
+  l'onglet.
+
+### Décisions, et pourquoi
+
+- **La légende part sur le site, le titre non.** Le titre est le nom du fichier de
+  l'appareil photo dans l'immense majorité des cas (`IMG_4821.jpg`) : le publier serait une
+  fuite d'information sans intérêt. Un test vérifie qu'il n'apparaît pas dans le manifeste.
+- **Réordonner marque TOUTE la réalisation « à republier ».** La publication écrit
+  `p0.jpg`, `p1.jpg`… dans l'ordre du tableau : déplacer une photo change l'adresse publique
+  de toutes celles qui suivent. Ne marquer que la photo déplacée mentirait sur l'état du site.
+- **Le remplacement supprime la version IA et les réglages.** Ils ont été calculés sur
+  l'ancienne image ; les garder afficherait l'ancienne photo sous un nouveau nom, ou
+  appliquerait un redressement calculé pour une autre géométrie. C'est écrit dans la
+  confirmation, pas fait en douce.
+- **Le format 3/2 est descendu de `.rz-ph` à `.rz-ph-vue`.** La tuile porte maintenant un
+  pied de texte (titre + légende) ; laisser l'aspect sur la tuile aurait écrasé la photo.
+- **Refus d'import : un message par fichier, avec la raison.** Le cas HEIC (photos d'iPhone)
+  donne la manip exacte : c'est le refus le plus probable et le plus incompréhensible.
+
+### Ne pas casser
+
+- `_glTexKey=''` dans `replaceOnePhoto` : la texture WebGL est mise en cache sous une clé
+  dérivée de l'identifiant de la photo, qui ne change pas au remplacement. Sans cette remise
+  à zéro, l'ancienne image reste affichée.
+- `_imgCache.delete(fullKey/thumbKey/iaKey)` au remplacement, pour la même raison côté
+  images décodées.
+- Le rang (`.rz-ph-num`) et le bandeau « couverture » occupent le même coin : en mode
+  « ranger », c'est l'étoile du rang qui porte l'information, le bandeau est masqué. Les
+  réafficher ensemble les fait se chevaucher à 160 px.
+- `console.error('import photo', …)` sur un fichier illisible est **voulu** (diagnostic à
+  distance) ; le filtre de bruit du test le connaît.
+
+### Vérification
+
+`tests/realisations.test.mjs` : **183 contrôles** (45 ajoutés ici), dont l'ordre réellement
+publié dans le manifeste, la légende publiée / le titre non publié, le remplacement qui
+change vraiment les octets stockés, et chaque message de refus d'import.
+`tests/site.test.mjs` : **22 contrôles**, dont l'affichage de la légende sous la photo et en
+plein écran. Son banc d'essai est désormais construit par `tests/sitetest-build.mjs` — il
+n'existait nulle part et le test ne pouvait plus être lancé sans le refabriquer à la main.

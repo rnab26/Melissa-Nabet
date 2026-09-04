@@ -572,8 +572,45 @@
   .rz-back:hover{color:var(--oxblood);}
   .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
   .rz-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
-  .rz-ph{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:#efe9df;aspect-ratio:3/2;cursor:pointer;}
+  .rz-ph{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:var(--panel);cursor:pointer;}
+  /* Le format 3/2 s'applique à la zone image, pas à la tuile : celle-ci porte en plus le
+     titre et la légende, qui doivent rester lisibles au lieu de flotter sur la photo. */
+  .rz-ph-vue{position:relative;aspect-ratio:3/2;overflow:hidden;background:#efe9df;}
   .rz-ph img{width:100%;height:100%;object-fit:cover;display:block;}
+  .rz-ph-txt{display:block;width:100%;text-align:left;background:var(--panel);border:none;
+    border-top:1px solid var(--panel-edge);padding:6px 8px 7px;cursor:pointer;font-family:'Inter';}
+  .rz-ph-txt:hover{background:var(--travertine);}
+  .rz-ph-name{display:block;font-size:11.5px;font-weight:600;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-ph-cap{display:block;font-size:11px;color:var(--stone);font-style:italic;margin-top:1px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-ph-cap.vide{color:var(--stone-light);font-style:normal;}
+  .rz-ph-menu{position:absolute;right:33px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;
+    border-radius:3px;width:24px;height:24px;font-size:14px;cursor:pointer;line-height:1;}
+  /* Mode « ranger » : le rang est écrit sur la vignette, sinon on ne sait pas ce qu'on
+     déplace ni où l'on en est. */
+  .rz-ph-num{position:absolute;left:6px;top:6px;background:var(--oxblood);color:#fff;font-size:11px;
+    font-weight:700;min-width:21px;height:21px;border-radius:11px;display:flex;align-items:center;
+    justify-content:center;padding:0 6px;}
+  .rz-ph-move{position:absolute;right:5px;top:5px;display:flex;gap:4px;}
+  .rz-ph-move button{background:rgba(61,57,52,.82);color:#fff;border:none;border-radius:3px;
+    width:30px;height:28px;font-size:13px;cursor:pointer;line-height:1;}
+  .rz-ph-move button[disabled]{opacity:.35;cursor:default;}
+  .rz-ordering .rz-ph{cursor:grab;}
+  .rz-ph.rz-dragging{opacity:.45;}
+  .rz-ph.rz-drop-a{box-shadow:inset 4px 0 0 var(--oxblood);}
+  .rz-ph.rz-drop-b{box-shadow:inset -4px 0 0 var(--oxblood);}
+  .rz-selhint{color:var(--stone-light);font-size:11.5px;line-height:1.4;flex:1 1 200px;}
+  /* Import : une barre de progression et, à la fin, la liste de ce qui a été refusé. */
+  .rz-import{margin:0 0 14px;padding:10px 12px;border-radius:7px;background:var(--travertine);
+    border-left:3px solid var(--oxblood);}
+  .rz-import-txt{font-size:12.5px;color:var(--stone-deep);margin-bottom:7px;}
+  .rz-bar{height:6px;border-radius:3px;background:rgba(61,57,52,.14);overflow:hidden;}
+  .rz-bar i{display:block;height:100%;background:var(--oxblood);width:0;transition:width .2s;}
+  .rz-refus{list-style:none;margin:8px 0 10px;padding:0;font-size:12px;line-height:1.5;}
+  .rz-refus li{padding:5px 0;border-top:1px solid rgba(61,57,52,.12);}
+  .ph-menu{display:flex;flex-direction:column;gap:7px;margin-top:14px;}
+  .ph-menu .mini{text-align:left;padding:10px 12px;font-size:13px;}
   .rz-ph-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--stone);}
   /* Pastilles d'état sur la vignette : « en ligne », « modifiée depuis », « version IA ».
      Sans elles, une photo ajoutée après publication est indiscernable d'une photo publiée. */
@@ -731,6 +768,9 @@
   .ia-field-desc{margin:4px 0 0;font-size:11px;color:var(--stone-light);line-height:1.45;}
   .ia-field-skip{margin:0;font-size:11px;color:var(--stone-light);font-style:italic;}
   .ed-cmp{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;}
+  .ed-bar .ed-pos{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;white-space:nowrap;}
+  .ed-bar .btn[disabled]{opacity:.35;cursor:default;}
+  #ed-photo-meta{margin-top:10px;}
   @media(max-width:680px){.ed-cmp{display:none;}}
   /* La condition d'aspect compte autant que la largeur : un téléphone en « site pour
      ordinateur » fait ~980 px de large tout en restant en portrait. En deux colonnes, la
@@ -3870,10 +3910,13 @@ function photoPubState(r,p){
   return 'enligne';
 }
 const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:''};
-const HIST_LABEL={import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site'};
+const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée'};
 function normalizeRealisation(r){
   const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
-  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',w:0,h:0,useIa:false,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
+  /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
+     `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
+     manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
+  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',caption:'',w:0,h:0,useIa:false,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
   return o;
 }
 function ensureRealisations(){if(!Array.isArray(realisations))realisations=[];}
@@ -3999,39 +4042,173 @@ function drawScaled(src,maxSide){
 function canvasToBlob(cv,q){
   return new Promise(res=>cv.toBlob(b=>res(b),'image/jpeg',q));
 }
+/* Un import de vingt photos depuis un téléphone dure une minute : sans progression, on
+   croit que rien ne se passe. Et un fichier refusé doit dire LEQUEL et POURQUOI — un
+   `toast` de trois secondes se rate, surtout quand plusieurs fichiers échouent d'affilée. */
+let _rzImport=null;        /* import en cours : {total,done,name} */
+let _rzImportReport=null;  /* bilan du dernier import : {n,refus:[{name,why}]} */
+function moTxt(o){return (o/1048576).toFixed(o<10485760?1:0)+' Mo';}
+/* Refus décidable AVANT décodage : ce n'est pas une image, ou c'est trop lourd. */
+function photoFileRefus(file){
+  const type=(file.type||'').toLowerCase();
+  if(type&&!/^image\//.test(type))return 'ce n’est pas une image (' + type + ')';
+  if(file.size>REAL_MAX_FILE)return 'trop lourd : '+moTxt(file.size)+' — maximum '+moTxt(REAL_MAX_FILE);
+  return '';
+}
+/* Refus constaté au décodage. Le cas HEIC est le plus fréquent (photos d'iPhone) et le
+   message doit dire quoi faire, pas seulement que ça a raté. */
+function photoFileRaison(file,e){
+  const msg=(e&&e.message)||'';
+  if(/hors ligne/i.test(msg))return 'envoi interrompu : connexion perdue. Réessayez une fois reconnectée.';
+  if(/hei[cf]/i.test((file.type||'')+' '+(file.name||'')))
+    return 'format HEIC : le navigateur ne sait pas l’ouvrir. Sur iPhone : Réglages → Appareil photo → Formats → « Le plus compatible », ou exportez la photo en JPEG.';
+  return 'fichier illisible'+(msg?' ('+msg+')':'');
+}
+/* Décodage + les deux rendus stockés (publication et vignette). Partagé par l'import et
+   par le remplacement d'une photo : une seule chaîne, donc un seul comportement. */
+async function decodePhotoFile(file){
+  const src=await decodeOriented(file);
+  const full=drawScaled(src,REAL_MAX);
+  const thumb=drawScaled(src,REAL_THUMB);
+  const [fb,tb]=await Promise.all([canvasToBlob(full,REAL_Q),canvasToBlob(thumb,REAL_THUMB_Q)]);
+  if(src.close)src.close();
+  return {fb,tb,w:full.width,h:full.height};
+}
+/* Renvoie '' si la photo est entrée, sinon la raison du refus, en français. */
+async function importOnePhoto(r,file){
+  const refus=photoFileRefus(file);
+  if(refus)return refus;
+  try{
+    const d=await decodePhotoFile(file);
+    const pid=uid();
+    await photoStore.save(fullKey(pid),d.fb);
+    await photoStore.save(thumbKey(pid),d.tb);
+    const nouvelle={id:pid,name:file.name||'photo',caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
+    photoLog(nouvelle,'import',file.name||'');
+    r.photos.push(nouvelle);
+    if(!r.cover)r.cover=pid;
+    return '';
+  }catch(e){console.error('import photo',e);return photoFileRaison(file,e);}
+}
 async function addPhotosToRealisation(r,files){
   const list=Array.from(files||[]);
   if(!list.length)return;
-  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise pour ajouter des photos');return;}
-  let n=0,fail=0;
-  toast('Import de '+list.length+' photo(s)…');
-  for(const file of list){
-    if(!/^image\//.test(file.type||'')){fail++;continue;}
-    if(file.size>REAL_MAX_FILE){toast(file.name+' : trop lourd (>25 Mo), ignoré');fail++;continue;}
-    try{
-      const src=await decodeOriented(file);
-      const full=drawScaled(src,REAL_MAX);
-      const thumb=drawScaled(src,REAL_THUMB);
-      const pid=uid();
-      const [fb,tb]=await Promise.all([canvasToBlob(full,REAL_Q),canvasToBlob(thumb,REAL_THUMB_Q)]);
-      await photoStore.save(fullKey(pid),fb);
-      await photoStore.save(thumbKey(pid),tb);
-      if(src.close)src.close();
-      const nouvelle={id:pid,name:file.name||'photo',w:full.width,h:full.height,edit:blankEdit(),createdAt:Date.now()};
-      photoLog(nouvelle,'import',file.name||'');
-      r.photos.push(nouvelle);
-      if(!r.cover)r.cover=pid;
-      n++;
-    }catch(e){console.error('import photo',e);fail++;}
+  if(!(sb&&sbUser&&ownerId)){
+    _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'photo',why:'connexion requise : les photos sont enregistrées dans le cloud, pas sur l’appareil'}))};
+    renderRealisations();return;
   }
+  const refus=[];let n=0;
+  _rzImportReport=null;
+  _rzImport={total:list.length,done:0,name:(list[0].name||'')};
+  renderRealisations();
+  for(const file of list){
+    _rzImport.name=file.name||'photo';paintImportProgress();
+    const why=await importOnePhoto(r,file);
+    if(why)refus.push({name:file.name||'photo',why});else n++;
+    _rzImport.done++;paintImportProgress();
+  }
+  _rzImport=null;
+  _rzImportReport=refus.length?{n,refus}:null;
   r.updatedAt=Date.now();
   saveRealisations();renderRealisations();
-  toast(n+' photo(s) ajoutée(s)'+(fail?' · '+fail+' échec(s)':''));
+  if(n)toast(n+' photo(s) ajoutée(s)');
+}
+/* Mise à jour en place : re-rendre toute la grille à chaque fichier relancerait le rendu
+   WebGL de toutes les vignettes déjà présentes, ce qui ralentit l'import qu'on affiche. */
+function paintImportProgress(){
+  const box=document.getElementById('rz-import');
+  if(!box||!_rzImport)return;
+  const {total,done,name}=_rzImport;
+  const t=box.querySelector('.rz-import-txt');
+  if(t)t.textContent='Import de '+total+' photo(s) — '+Math.min(done+1,total)+' / '+total+' · '+name;
+  const b=box.querySelector('.rz-bar i');
+  if(b)b.style.width=Math.round(done/total*100)+'%';
+}
+/* Bandeau de progression, puis bilan des refus. Le bilan reste à l'écran jusqu'à ce qu'on
+   le masque : c'est la seule trace de la photo qui n'est PAS entrée. */
+function buildImportPanel(){
+  if(_rzImport){
+    const box=document.createElement('div');box.className='rz-import';box.id='rz-import';
+    box.innerHTML='<div class="rz-import-txt"></div><div class="rz-bar"><i style="width:0%"></i></div>';
+    setTimeout(paintImportProgress,0);
+    return box;
+  }
+  if(_rzImportReport){
+    const {n,refus}=_rzImportReport;
+    const box=document.createElement('div');box.className='ia-erreur';
+    const t=document.createElement('p');
+    t.textContent=(n?n+' photo(s) ajoutée(s), ':'')+refus.length+' fichier(s) refusé(s) :';
+    box.appendChild(t);
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    refus.forEach(x=>{
+      const li=document.createElement('li');
+      li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;
+      li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+    f.addEventListener('click',()=>{_rzImportReport=null;renderRealisations();});
+    box.appendChild(f);
+    return box;
+  }
+  return null;
 }
 function rzPickPhotos(r){
   const inp=document.createElement('input');
   inp.type='file';inp.multiple=true;inp.accept='image/*';
   inp.onchange=()=>addPhotosToRealisation(r,inp.files);
+  inp.click();
+}
+/* ---- Remplacer une photo sans perdre sa place ----
+   Une photo refaite (mieux cadrée, mieux éclairée) doit garder son rang, son titre et sa
+   légende : la remplacer en supprimant puis réimportant les perdrait toutes les trois, et
+   la remettrait en fin de galerie. */
+async function replaceOnePhoto(r,p,file){
+  const refus=photoFileRefus(file);
+  if(refus)return refus;
+  try{
+    const d=await decodePhotoFile(file);
+    await photoStore.save(fullKey(p.id),d.fb);
+    await photoStore.save(thumbKey(p.id),d.tb);
+    _imgCache.delete(fullKey(p.id));_imgCache.delete(thumbKey(p.id));
+    /* La texture WebGL est mise en cache sous une clé dérivée de l'id de la photo, qui ne
+       change pas : sans cette remise à zéro, l'écran continuerait d'afficher l'ancienne
+       image alors que le fichier, lui, a bien changé. */
+    _glTexKey='';
+    if(p.ia){
+      /* La version IA a été calculée à partir de l'ancienne image : la garder afficherait
+         l'ancienne photo sous un nouveau nom. */
+      await photoStore.del(iaKey(p.id));_imgCache.delete(iaKey(p.id));
+      iaUseVersion(p,false);delete p.ia;delete p.editIa;
+    }
+    p.w=d.w;p.h=d.h;
+    /* Les corrections visaient l'ancienne image (verticales, recadrage) : les garder sur
+       une autre photo n'a aucun sens. */
+    Object.assign(p.edit,blankEdit());
+    if(p.editOrig)Object.assign(p.editOrig,blankEdit());
+    photoTouch(p,'remplacee',file.name||'');
+    return '';
+  }catch(e){console.error('remplacement photo',e);return photoFileRaison(file,e);}
+}
+function rzReplacePhoto(r,p){
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='image/*';
+  inp.onchange=()=>{
+    const file=(inp.files||[])[0];if(!file)return;
+    const pertes=[];
+    if(p.ia)pertes.push('la version IA de cette photo sera supprimée');
+    if(JSON.stringify(p.edit)!==JSON.stringify(blankEdit()))pertes.push('ses réglages seront remis à zéro');
+    askConfirm('Remplacer cette photo par « '+(file.name||'le fichier choisi')+' » ? Son titre, sa légende et sa place sont conservés'
+      +(pertes.length?', mais '+pertes.join(' et ')+'.':'.'),async()=>{
+      const why=await replaceOnePhoto(r,p,file);
+      if(why){_rzImportReport={n:0,refus:[{name:file.name||'photo',why}]};renderRealisations();return;}
+      r.updatedAt=Date.now();saveRealisations();
+      if(_ed&&_ed.p===p){await reloadEditorImage();buildEditorControls();}
+      renderRealisations();toast('Photo remplacée');
+    });
+  };
   inp.click();
 }
 
@@ -4217,6 +4394,7 @@ function renderRealisations(){
   ensureRealisations();
   if(_rzOpenId&&!findRealisation(_rzOpenId))_rzOpenId=null;
   if(!_rzOpenId&&_rzSelMode){_rzSelMode=false;_rzSel.clear();}
+  if(!_rzOpenId)_rzOrderMode=false;
   host.innerHTML='';
   if(_rzOpenId)renderRealisationDetail(host,findRealisation(_rzOpenId));
   else renderRealisationList(host);
@@ -4261,6 +4439,7 @@ function renderRealisationDetail(host,r){
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ${r.published?'btn-onlight':'btn-primary'}" data-publish>${r.published?'✓ En ligne — republier':'🌐 Publier sur le site'}</button>
       ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
+      <button class="btn btn-onlight" data-order>⇅ Réordonner</button>
       <button class="btn btn-onlight" data-select>☑ Sélectionner</button>
       <button class="btn btn-onlight" data-export>⬇ Tout télécharger</button>
       <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
@@ -4268,6 +4447,7 @@ function renderRealisationDetail(host,r){
   bar.querySelector('[data-publish]').addEventListener('click',()=>publishRealisation(r));
   const unpub=bar.querySelector('[data-unpublish]');
   if(unpub)unpub.addEventListener('click',()=>unpublishRealisation(r));
+  bar.querySelector('[data-order]').addEventListener('click',()=>rzToggleOrderMode(!_rzOrderMode));
   bar.querySelector('[data-select]').addEventListener('click',()=>rzToggleSelectMode(true));
   bar.querySelector('[data-export]').addEventListener('click',()=>rzAskDownload(r,r.photos||[]));
   bar.querySelector('[data-del]').addEventListener('click',()=>delRealisation(r.id));
@@ -4294,6 +4474,9 @@ function renderRealisationDetail(host,r){
     head.appendChild(err);
   }
 
+  const imp=buildImportPanel();
+  if(imp)head.appendChild(imp);
+
   const meta=document.createElement('div');meta.className='rz-meta';
   meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
     <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Client (optionnel)</span><select data-f="clientId"></select></label>
@@ -4307,29 +4490,57 @@ function renderRealisationDetail(host,r){
   head.appendChild(meta);
   host.appendChild(head);
 
-  const grid=document.createElement('div');grid.className='rz-photos';
-  (r.photos||[]).forEach(p=>{
+  const grid=document.createElement('div');grid.className='rz-photos'+(_rzOrderMode?' rz-ordering':'');
+  (r.photos||[]).forEach((p,idx)=>{
     const tile=document.createElement('div');
     const picked=_rzSel.has(p.id);
     tile.className='rz-ph'+(_rzSelMode?' rz-selectable':'')+(picked?' rz-picked':'');
+    tile.dataset.pid=p.id;
     const edited=JSON.stringify(p.edit)!==JSON.stringify(blankEdit());
     const etat=photoPubState(r,p);
-    tile.innerHTML=`<div class="rz-ph-load">…</div><img alt="" style="display:none">
-      <div class="rz-ph-tags">
-        ${etat!=='hors'?`<span class="rz-tag t-${etat}">${esc(PHOTO_PUB_LABEL[etat])}</span>`:''}
-        ${p.ia?`<span class="rz-tag t-ia">${p.useIa?'✨ version IA':'✨ IA disponible'}</span>`:''}
-        ${edited&&!p.ia?'<span class="rz-tag t-reg">réglée</span>':''}
+    const coins=_rzSelMode?`<span class="rz-check">${picked?'✓':''}</span>`
+      :_rzOrderMode?`<span class="rz-ph-num">${r.cover===p.id?'★ ':''}${idx+1}</span>
+        <div class="rz-ph-move">
+          <button type="button" data-up title="Reculer d’une place"${idx===0?' disabled':''}>◀</button>
+          <button type="button" data-down title="Avancer d’une place"${idx===(r.photos.length-1)?' disabled':''}>▶</button>
+        </div>`
+      :`<button class="rz-ph-del" title="Retirer cette photo">×</button>
+        <button class="rz-ph-menu" title="Actions sur cette photo">⋯</button>`;
+    tile.innerHTML=`<div class="rz-ph-vue">
+        <div class="rz-ph-load">…</div><img alt="" style="display:none">
+        <div class="rz-ph-tags">
+          ${etat!=='hors'?`<span class="rz-tag t-${etat}">${esc(PHOTO_PUB_LABEL[etat])}</span>`:''}
+          ${p.ia?`<span class="rz-tag t-ia">${p.useIa?'✨ version IA':'✨ IA disponible'}</span>`:''}
+          ${edited&&!p.ia?'<span class="rz-tag t-reg">réglée</span>':''}
+        </div>
+        ${(r.cover===p.id&&!_rzOrderMode)?'<span class="rz-ph-badge" style="top:6px;bottom:auto;background:rgba(154,133,116,.92)">couverture</span>':''}
+        ${coins}
       </div>
-      ${r.cover===p.id?'<span class="rz-ph-badge" style="top:6px;bottom:auto;background:rgba(154,133,116,.92)">couverture</span>':''}
-      ${_rzSelMode?`<span class="rz-check">${picked?'✓':''}</span>`:'<button class="rz-ph-del" title="Retirer">×</button>'}`;
+      <button type="button" class="rz-ph-txt" title="Renommer ou légender">
+        <span class="rz-ph-name">${esc(p.name||'Sans titre')}</span>
+        <span class="rz-ph-cap${p.caption?'':' vide'}">${esc(p.caption||'＋ légende')}</span>
+      </button>`;
     const im=tile.querySelector('img'),ld=tile.querySelector('.rz-ph-load');
     renderThumbInto(p,im,ld);
     const del=tile.querySelector('.rz-ph-del');
     if(del)del.addEventListener('click',e=>{e.stopPropagation();delPhoto(r,p.id);});
-    tile.addEventListener('click',()=>{
-      if(_rzSelMode)rzToggleSel(p.id);
-      else openPhotoEditor(r.id,p.id);
+    const menu=tile.querySelector('.rz-ph-menu');
+    if(menu)menu.addEventListener('click',e=>{e.stopPropagation();openPhotoMenu(r,p);});
+    const up=tile.querySelector('[data-up]'),dn=tile.querySelector('[data-down]');
+    if(up)up.addEventListener('click',e=>{e.stopPropagation();rzMovePhoto(r,p.id,-1);});
+    if(dn)dn.addEventListener('click',e=>{e.stopPropagation();rzMovePhoto(r,p.id,1);});
+    tile.querySelector('.rz-ph-txt').addEventListener('click',e=>{
+      e.stopPropagation();
+      if(_rzSelMode){rzToggleSel(p.id);return;}
+      if(_rzOrderMode)return;
+      openPhotoTextDialog(r,p);
     });
+    tile.querySelector('.rz-ph-vue').addEventListener('click',()=>{
+      if(_rzSelMode){rzToggleSel(p.id);return;}
+      if(_rzOrderMode)return;   /* on range : ouvrir l'éditeur ici serait un faux pas */
+      openPhotoEditor(r.id,p.id);
+    });
+    if(_rzOrderMode)makeTileDraggable(r,tile,p.id);
     grid.appendChild(tile);
   });
   if(!(r.photos||[]).length){
@@ -4337,7 +4548,7 @@ function renderRealisationDetail(host,r){
     vide.textContent='Aucune photo dans cette réalisation. Ajoutez les photos du chantier terminé : elles restent privées tant que vous ne publiez pas.';
     grid.appendChild(vide);
   }
-  if(!_rzSelMode){
+  if(!_rzSelMode&&!_rzOrderMode){
     const add=document.createElement('button');add.className='rz-add';
     add.innerHTML='＋<br>Ajouter des photos';
     add.addEventListener('click',()=>rzPickPhotos(r));
@@ -4345,6 +4556,160 @@ function renderRealisationDetail(host,r){
   }
   host.appendChild(grid);
   if(_rzSelMode)host.appendChild(buildSelectionBar(r));
+  else if(_rzOrderMode)host.appendChild(buildOrderBar(r));
+}
+
+/* ============ ORDRE DES PHOTOS ============
+   L'ordre de `r.photos` est celui de la publication (p0, p1, …) donc celui du site : le
+   ranger ici, c'est ranger la page publique. Deux gestes pour un même résultat, parce
+   qu'aucun ne marche partout : glisser-déposer à la souris, ◀ ▶ au doigt. */
+function rzToggleOrderMode(on){
+  _rzOrderMode=!!on;
+  if(_rzOrderMode){_rzSelMode=false;_rzSel.clear();}
+  renderRealisations();
+}
+/* Réordonner change l'adresse publique de TOUTES les photos qui suivent (p2 devient p3) :
+   c'est la réalisation entière qui n'est plus à jour en ligne, pas seulement la déplacée. */
+function rzOrderChanged(r,p,detail){
+  const t=Date.now();
+  (r.photos||[]).forEach(x=>{x.touchedAt=t;});
+  if(p)photoLog(p,'ordre',detail||'');
+  r.updatedAt=t;saveRealisations();renderRealisations();
+}
+function rzMovePhoto(r,pid,delta){
+  const list=r.photos||[];
+  const i=list.findIndex(x=>x.id===pid);
+  if(i<0)return;
+  const j=Math.max(0,Math.min(list.length-1,i+delta));
+  if(i===j)return;
+  const [p]=list.splice(i,1);list.splice(j,0,p);
+  rzOrderChanged(r,p,'place '+(j+1)+' sur '+list.length);
+}
+function rzMovePhotoBefore(r,pid,cible,apres){
+  const list=r.photos||[];
+  if(pid===cible)return;
+  const i=list.findIndex(x=>x.id===pid);
+  if(i<0)return;
+  const [p]=list.splice(i,1);
+  let j=list.findIndex(x=>x.id===cible);
+  if(j<0){list.splice(i,0,p);return;}
+  if(apres)j++;
+  list.splice(j,0,p);
+  rzOrderChanged(r,p,'place '+(j+1)+' sur '+list.length);
+}
+let _rzDragId=null;
+function makeTileDraggable(r,tile,pid){
+  tile.draggable=true;
+  tile.addEventListener('dragstart',e=>{
+    _rzDragId=pid;tile.classList.add('rz-dragging');
+    try{e.dataTransfer.setData('text/plain',pid);e.dataTransfer.effectAllowed='move';}catch(err){}
+  });
+  tile.addEventListener('dragend',()=>{
+    _rzDragId=null;tile.classList.remove('rz-dragging');
+    document.querySelectorAll('.rz-drop-a,.rz-drop-b').forEach(el=>el.classList.remove('rz-drop-a','rz-drop-b'));
+  });
+  tile.addEventListener('dragover',e=>{
+    if(!_rzDragId||_rzDragId===pid)return;
+    e.preventDefault();
+    const box=tile.getBoundingClientRect();
+    const apres=(e.clientX-box.left)>box.width/2;
+    tile.classList.toggle('rz-drop-b',apres);
+    tile.classList.toggle('rz-drop-a',!apres);
+  });
+  tile.addEventListener('dragleave',()=>tile.classList.remove('rz-drop-a','rz-drop-b'));
+  tile.addEventListener('drop',e=>{
+    e.preventDefault();
+    const src=_rzDragId||(e.dataTransfer&&e.dataTransfer.getData('text/plain'));
+    const box=tile.getBoundingClientRect();
+    const apres=(e.clientX-box.left)>box.width/2;
+    tile.classList.remove('rz-drop-a','rz-drop-b');
+    _rzDragId=null;
+    if(src&&src!==pid)rzMovePhotoBefore(r,src,pid,apres);
+  });
+}
+function buildOrderBar(r){
+  const bar=document.createElement('div');bar.className='rz-selbar';
+  bar.innerHTML=`<span class="rz-selcount">Ranger les photos</span>
+    <span class="rz-selhint">Glissez une photo à sa place, ou utilisez ◀ ▶. C’est cet ordre qui sera publié sur le site. ★ marque la photo de couverture.</span>
+    <button class="mini" data-date>Trier par date d’ajout</button>
+    <button class="btn btn-primary" data-done>✓ Terminer</button>`;
+  bar.querySelector('[data-date]').addEventListener('click',()=>{
+    askConfirm('Remettre les photos dans leur ordre d’ajout ? L’ordre que vous avez composé sera perdu.',()=>{
+      (r.photos||[]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+      rzOrderChanged(r,null,'');
+      toast('Photos triées par date d’ajout');
+    });
+  });
+  bar.querySelector('[data-done]').addEventListener('click',()=>rzToggleOrderMode(false));
+  return bar;
+}
+function rzSetCover(r,pid){
+  if(r.cover===pid)return;
+  r.cover=pid;
+  const p=(r.photos||[]).find(x=>x.id===pid);
+  /* La couverture part dans le manifeste (`cover:true`) : c'est la vignette du site. */
+  if(p)photoTouch(p,'couverture','');
+  r.updatedAt=Date.now();saveRealisations();renderRealisations();
+  toast('Photo de couverture définie');
+}
+
+/* ============ TITRE ET LÉGENDE D'UNE PHOTO ============ */
+function openPhotoTextDialog(r,p){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Titre et légende</h3>
+    <p class="msub">Le titre sert à vous repérer dans le CRM et n’apparaît pas sur le site. La légende, elle, s’affiche sous la photo pour les visiteurs — laissez-la vide si la photo se suffit.</p>
+    <label class="fld"><span class="lbl">Titre de la photo</span>
+      <input type="text" id="ph-name" maxlength="80" value="${esc(p.name||'')}" placeholder="ex. Salon vu de l’entrée"></label>
+    <label class="fld"><span class="lbl">Légende publiée sur le site</span>
+      <textarea id="ph-cap" rows="3" maxlength="200" placeholder="ex. Cuisine ouverte, plan de travail en chêne massif">${esc(p.caption||'')}</textarea></label>
+    <p class="msub" id="ph-cap-n" style="margin-top:-6px"></p>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
+      <button class="mini" id="ph-txt-clear">Effacer la légende</button>
+      <span style="flex:1"></span>
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="ph-txt-ok">Enregistrer</button>
+    </div>`);
+  const nom=$('ph-name'),cap=$('ph-cap'),cpt=$('ph-cap-n');
+  const compte=()=>{cpt.textContent=(cap.value.length||0)+' / 200 caractères'+(cap.value.trim()?'':' — sans légende, rien ne s’affiche sous la photo');};
+  cap.addEventListener('input',compte);compte();
+  $('ph-txt-clear').addEventListener('click',()=>{cap.value='';compte();cap.focus();});
+  $('ph-txt-ok').addEventListener('click',()=>{
+    const n=nom.value.trim(),c=cap.value.trim();
+    const change=(n!==(p.name||''))||(c!==(p.caption||''));
+    p.name=n;p.caption=c;
+    /* La légende part sur le site : la changer, c'est changer ce qui est publié. */
+    if(change)photoTouch(p,'texte',n?(n+(c?' · '+c:'')):c);
+    r.updatedAt=Date.now();saveRealisations();
+    closeModal();
+    const t=document.querySelector('#ed-modal .ed-title');
+    if(t&&_ed&&_ed.p===p)t.textContent=p.name||'photo';
+    renderRealisations();
+    if(change)toast('Titre et légende enregistrés');
+  });
+  setTimeout(()=>{if(nom)nom.focus();},60);
+}
+
+/* ============ ACTIONS SUR UNE PHOTO ============
+   Une vignette de 160 px ne peut pas porter six boutons : tout ce qui n'est pas « ouvrir »
+   ou « supprimer » passe par ce menu, comme dans n'importe quelle galerie. */
+function openPhotoMenu(r,p){
+  const estCouv=r.cover===p.id;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3 style="font-size:19px">${esc(p.name||'Photo')}</h3>
+    <p class="msub">${p.caption?esc(p.caption):'Aucune légende. Elle s’affiche sous la photo sur le site.'}</p>
+    <div class="ph-menu">
+      <button class="mini" data-edit>🖼 Ouvrir l’éditeur</button>
+      <button class="mini" data-text>✎ Titre et légende</button>
+      <button class="mini" data-cover ${estCouv?'disabled':''}>★ ${estCouv?'Déjà en couverture':'Mettre en couverture'}</button>
+      <button class="mini" data-repl>⇄ Remplacer la photo</button>
+      <button class="mini" data-dl>⬇ Télécharger</button>
+    </div>`);
+  const go=(sel,fn)=>{const b=document.querySelector('#modal [data-'+sel+']');if(b)b.addEventListener('click',()=>{closeModal();fn();});};
+  go('edit',()=>openPhotoEditor(r.id,p.id));
+  go('text',()=>openPhotoTextDialog(r,p));
+  if(!estCouv)go('cover',()=>rzSetCover(r,p.id));
+  go('repl',()=>rzReplacePhoto(r,p));
+  go('dl',()=>rzAskDownload(r,[p]));
 }
 /* La vignette montre la photo AVEC ses retouches : la galerie doit refléter ce qui sera
    publié, pas l'original. Rendu à la volée depuis la vignette stockée (rapide).
@@ -4422,8 +4787,12 @@ async function openPhotoEditor(rid,pid){
   /* Un seul bouton pour sortir : « Retour » et « Terminer » faisaient exactement la même
      chose (tout est enregistré au fur et à mesure), et deux façons de faire un même geste,
      c'est une hésitation de plus. */
+  const rang=(r.photos||[]).findIndex(x=>x.id===p.id), nbPh=(r.photos||[]).length;
   host.innerHTML=`<div class="ed-bar">
       <button class="btn btn-primary" data-close>✓ Terminer</button>
+      <button class="btn" data-prev title="Photo précédente"${rang<=0?' disabled':''}>◀</button>
+      <span class="ed-pos">${rang+1} / ${nbPh}</span>
+      <button class="btn" data-next title="Photo suivante"${rang>=nbPh-1?' disabled':''}>▶</button>
       <span class="ed-title">${esc(p.name||'photo')}</span>
       <span class="ed-cmp" data-cmp>maintenir pour voir l’original</span>
       <button class="btn" data-hist title="Historique de cette photo">🕘</button>
@@ -4438,6 +4807,10 @@ async function openPhotoEditor(rid,pid){
           <button class="ed-tab" data-tab="cadrage">Cadrage</button>
         </div>
         <div id="ed-controls"></div>
+        <div class="ed-acts" id="ed-photo-meta">
+          <button class="btn btn-onlight" data-text>✎ Titre et légende</button>
+          <button class="btn btn-onlight" data-replace>⇄ Remplacer la photo</button>
+        </div>
         <div id="ed-photo-acts">
           <div class="ed-acts">
             <button class="btn btn-onlight" data-auto>✨ Réglage auto</button>
@@ -4456,6 +4829,10 @@ async function openPhotoEditor(rid,pid){
   _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
   host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
   host.querySelector('[data-hist]').addEventListener('click',()=>openPhotoHistory(_ed.r,_ed.p));
+  host.querySelector('[data-prev]').addEventListener('click',()=>edGoto(-1));
+  host.querySelector('[data-next]').addEventListener('click',()=>edGoto(1));
+  host.querySelector('[data-text]').addEventListener('click',()=>openPhotoTextDialog(_ed.r,_ed.p));
+  host.querySelector('[data-replace]').addEventListener('click',()=>rzReplacePhoto(_ed.r,_ed.p));
   host.querySelector('[data-auto]').addEventListener('click',()=>{
     if(!_ed.img)return;
     Object.assign(_ed.p.edit,autoEdit(_ed.img,_ed.p.edit));
@@ -4709,6 +5086,18 @@ function clearPhotoHistory(pid){
   });
 }
 
+/* Passer à la photo suivante sans repasser par la grille : c'est ce qu'on fait quand on
+   traite une série, et c'est aussi la prévisualisation en grand de chaque photo. */
+async function edGoto(delta){
+  if(!_ed)return;
+  const r=_ed.r,list=r.photos||[];
+  const i=list.findIndex(x=>x.id===_ed.p.id);
+  const j=i+delta;
+  if(i<0||j<0||j>=list.length)return;
+  const id=list[j].id;
+  closePhotoEditor();
+  await openPhotoEditor(r.id,id);
+}
 function closePhotoEditor(){
   const host=$('ed-modal');if(host)host.remove();
   _ed=null;_glTexKey='';
@@ -4801,7 +5190,7 @@ function downloadBlob(blob,filename){
    Plusieurs personnes alimentent la même galerie depuis des téléphones différents :
    il faut pouvoir récupérer sur son propre appareil des photos ajoutées depuis un autre,
    et faire le ménage à plusieurs sans supprimer une par une. */
-let _rzSel=new Set(), _rzSelMode=false;
+let _rzSel=new Set(), _rzSelMode=false, _rzOrderMode=false;
 function rzToggleSelectMode(on){
   _rzSelMode=(on===undefined)?!_rzSelMode:!!on;
   if(!_rzSelMode)_rzSel.clear();
@@ -5752,7 +6141,11 @@ async function publishRealisation(r){
         if(error)throw error;
       };
       await up(fullName,bigBlob);await up(thumbName,smallBlob);
-      entries.push({full:ownerId+'/'+fullName,thumb:ownerId+'/'+thumbName,w:bw,h:bh,cover:r.cover===p.id});
+      const entry={full:ownerId+'/'+fullName,thumb:ownerId+'/'+thumbName,w:bw,h:bh,cover:r.cover===p.id};
+      /* Seule la LÉGENDE part sur le site. Le titre reste interne : c'est souvent le nom du
+         fichier de l'appareil photo, qui n'a rien à faire sur une page publique. */
+      if((p.caption||'').trim())entry.caption=p.caption.trim();
+      entries.push(entry);
       /* Daté photo par photo : une photo ajoutée après cette publication n'est pas en ligne,
          et doit le dire. */
       p.publishedAt=Date.now();photoLog(p,'publie','');

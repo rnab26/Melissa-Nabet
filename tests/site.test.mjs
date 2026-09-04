@@ -1,7 +1,9 @@
 import { chromium } from 'playwright';
 import { writeFileSync } from 'fs';
 
-const DIR = '/tmp/claude-0/-home-user-Melissa-Nabet/f549cd4b-ca78-5130-8003-14ff5b55232f/scratchpad/sitetest';
+/* Le banc d'essai (page locale + manifeste + dossier d'images) est construit par
+   `node tests/sitetest-build.mjs`, puis servi sur le port 8902. */
+const DIR = process.env.SITE_DIR || '/tmp/mn-sitetest';
 const ok = [], ko = [];
 const check = (n, p, d = '') => { (p ? ok : ko).push(n); console.log((p ? '  OK   ' : '  ECHEC') + ' ' + n + (d ? ' — ' + d : '')); };
 
@@ -50,6 +52,29 @@ check('Titre du projet affiché', (await page.textContent('#d-title')).trim() ==
 const shots = await page.evaluate(() => [...document.querySelectorAll('.shot img')].filter(i => i.naturalWidth > 0).length);
 check('Les 3 photos du projet se chargent', shots === 3, shots + ' photo(s)');
 check('URL partageable (ancre du projet)', (await page.evaluate(() => location.hash)) === '#p-r1');
+
+// --- Légendes écrites depuis le CRM
+const legendes = await page.evaluate(() => ({
+  visibles: [...document.querySelectorAll('.shot-cap')].map(c => c.textContent.trim()),
+  total: document.querySelectorAll('.shot').length,
+}));
+check('Légende affichée sous la photo qui en a une',
+  legendes.visibles.length === 1 && /chêne massif/.test(legendes.visibles[0]), legendes.visibles.join(' | '));
+check('Aucune légende inventée sous les autres photos', legendes.total === 3 && legendes.visibles.length === 1);
+
+await page.locator('.shot').nth(1).click();
+await page.waitForTimeout(400);
+const capPlein = await page.evaluate(() => ({
+  texte: (document.getElementById('lb-cap').textContent || '').trim(),
+  masque: document.getElementById('lb-cap').hidden,
+  alt: document.getElementById('lb-img').alt,
+}));
+check('Légende reprise en plein écran', !capPlein.masque && /chêne massif/.test(capPlein.texte), capPlein.texte);
+check('La légende sert aussi de texte alternatif', /chêne massif/.test(capPlein.alt), capPlein.alt);
+await page.click('#lb-next'); await page.waitForTimeout(300);
+const capSuivante = await page.evaluate(() => document.getElementById('lb-cap').hidden);
+check('Photo sans légende : rien ne reste affiché de la précédente', capSuivante === true);
+await page.keyboard.press('Escape'); await page.waitForTimeout(250);
 
 await page.locator('.shot').first().click();
 await page.waitForTimeout(400);

@@ -27,8 +27,18 @@ python3 -m http.server 8899      # depuis la racine du dépôt, dans un autre te
 node tests/realisations.test.mjs
 ```
 
-Pour la suite du site vitrine, servir `sitetest/` (voir en tête du fichier) sur le port
-8902, puis `node tests/site.test.mjs`.
+Pour la suite du site vitrine, construire d'abord son banc d'essai (page locale +
+manifeste + dossier d'images), le servir sur le port 8902, puis lancer le test :
+
+```sh
+node tests/sitetest-build.mjs                    # construit /tmp/mn-sitetest
+python3 -m http.server 8902 -d /tmp/mn-sitetest  # dans un autre terminal
+node tests/site.test.mjs
+```
+
+`sitetest-build.mjs` recopie le VRAI `site-vitrine/index.html` en ne changeant que
+l'adresse du stockage : le test porte donc bien sur la page publiée, pas sur une copie
+qui aurait dérivé. Le manifeste de test contient une photo légendée et deux sans légende.
 
 Le test suppose Chromium fourni par l'environnement (`/opt/pw-browsers/chromium`).
 Sur une autre machine, retirer la ligne `executablePath` et lancer `npx playwright install chromium`.
