@@ -426,6 +426,47 @@ jeton réellement envoyé au pont, la non-destruction de l'original, la bascule 
 versions, et le message d'échec du solde. Le test intercepte le pont : il ne dépense aucun
 crédit.
 
+### Quatre défauts corrigés après le premier essai réel (septembre 2026)
+
+Signalés par l'utilisateur : « le bouton Gérer ne fonctionne pas », « le bouton pour lancer
+la retouche ne fonctionne pas », « je n'ai accès qu'à 3 modèles ».
+
+1. **Les deux boutons n'étaient pas morts : les fenêtres s'ouvraient DERRIÈRE l'éditeur.**
+   L'éditeur photo occupe tout l'écran à `z-index:80`, la fenêtre modale était à `40`.
+   Confirmation d'envoi et panneau des modèles existaient, invisibles et inatteignables.
+   `.overlay` passe à 90, `.toast` à 100, `#login-overlay` à 110.
+   **Ne jamais redescendre `.overlay` sous 80** : toute fenêtre ouverte depuis l'éditeur
+   redeviendrait invisible, et le bouton qui l'ouvre paraîtrait mort.
+
+2. **Le pont envoyait l'image sous le mauvais champ pour la moitié du catalogue.**
+   Chez fal, certains modèles attendent `image_urls` (tableau : Nano Banana, FLUX.2,
+   Seedream, Qwen Plus), d'autres `image_url` (chaîne : FLUX.1 Kontext, Qwen, les
+   agrandisseurs). Le pont envoyait toujours `image_urls` — **deux des trois modèles
+   proposés d'origine ne pouvaient donc pas fonctionner**. `buildPayload` lit maintenant le
+   schéma du modèle et place l'image sous le nom qu'il déclare. Dans la foulée : la consigne
+   n'est exigée que si le modèle la déclare obligatoire, et tout réglage inconnu du modèle
+   est retiré (un réglage mémorisé pour un modèle faisait échouer le suivant).
+   **Ne jamais revenir à un nom de champ écrit en dur.**
+
+3. **Les corrections manuelles étaient appliquées deux fois.** Ce qui part au modèle, ce
+   sont les corrections déjà appliquées : elles sont cuites dans l'image renvoyée. Elles
+   restaient actives dans `photo.edit` et étaient donc réappliquées par-dessus, à l'écran,
+   à l'export et à la publication. Chaque version porte maintenant ses propres réglages
+   (`photo.editOrig` / `photo.editIa`, bascule par `iaUseVersion`).
+
+4. **La sortie était demandée en 1K** (défaut du modèle) alors que la publication écrit en
+   1600 px : l'image publiée était un agrandissement. Le CRM demande 2K quand le modèle
+   l'accepte (`IA_PREFS`, vérifié contre son schéma avant l'envoi).
+
+**Catalogue** : 14 modèles rangés par usage (retouche par consigne, retouche ciblée,
+agrandissement), **chaque identifiant vérifié un par un** contre le catalogue réel de fal
+(son `openapi.json` répond 200). Ajout en un geste depuis « ⚙ Gérer ». Le champ libre reste
+là pour n'importe quel identifiant de `fal.ai/models` : le pont lit le schéma et s'adapte.
+
+**Nouvelle suite de test** : `tests/pont-ia.test.mjs` (`bun tests/pont-ia.test.mjs`) vérifie
+`buildPayload` sur des schémas relevés sur l'API réelle. C'est la seule partie que le test
+navigateur ne peut pas voir : il intercepte le pont, il ne l'exécute pas.
+
 ### Panneau de retouche — refonte (septembre 2026)
 
 **Demande** : « rends ça plus ergonomique, plus agréable, style site pro connu, la c'est trop
