@@ -426,6 +426,50 @@ jeton réellement envoyé au pont, la non-destruction de l'original, la bascule 
 versions, et le message d'échec du solde. Le test intercepte le pont : il ne dépense aucun
 crédit.
 
+### Ce qui manquait pour que ce soit utilisable, pas seulement fonctionnel (septembre 2026)
+
+Remarque de l'utilisateur, et elle est juste : « il manque systématiquement la suppression,
+la modification, le réglage, le message d'erreur, l'état vide ». Règle de livraison désormais :
+**une fiche d'usage AVANT le code** (ce qu'on pourra faire, ce qui sera réglable et où, ce
+qu'on voit quand c'est vide / en chargement / en erreur, ce qui n'est volontairement pas
+couvert), puis parcours à l'écran sur un format téléphone avant de déployer.
+
+**Comparateur avant / après** — après une retouche il n'y avait qu'une image à l'écran et
+rien ne disait ce qui avait changé. Le curseur coupe la photo en deux (AVANT / APRÈS) et se
+déplace au doigt. Deux gestes qui ne coexistent jamais : curseur s'il existe une version IA,
+appui long sinon. **Piège** : `glRenderTo` dessine toujours dans le MÊME canevas WebGL — le
+premier rendu doit être recopié avant le second, sinon les deux « versions » sont la même
+image. Si la seconde version ne se charge pas, l'écran le dit au lieu de disparaître.
+
+**Historique par photo** (bouton 🕘) — import, réglages, retouche IA avec son modèle et sa
+consigne, publication, retrait. Effaçable, avec confirmation. Longueur réglable.
+
+**État de publication PHOTO PAR PHOTO** — pastille sur chaque vignette (en ligne / modifiée ·
+à republier / pas encore en ligne) et décompte dans la fiche. `r.published` ne disait rien de
+la photo ajoutée après coup. Repose sur `p.publishedAt` (posé à la publication) comparé à
+`p.touchedAt` (posé par `photoTouch` à chaque modification visible).
+
+**Réglages — Photos & retouche IA** (`library.iaSettings`, panneau Réglages ou pied de
+l'onglet Retouche) : résolution demandée, **plafond mensuel qui BLOQUE** l'envoi (rien n'est
+facturé au-delà), coût unitaire estimé, longueur d'historique, modèle par défaut,
+confirmation avant envoi. Toute valeur invalide est refusée à l'écran avec sa raison.
+**Ne plus jamais coder en dur une valeur de ce genre.**
+
+**Erreurs qui restent à l'écran** — un `toast` s'efface en trois secondes, trop court pour
+lire pourquoi un appel a échoué. L'échec d'une retouche (`_iaLastError`) et l'échec d'une
+publication (`_pubLastError`) restent affichés, avec le détail exact du fournisseur, jusqu'à
+la prochaine tentative ou jusqu'à ce qu'on les masque.
+
+**Suppressions confirmées** — retirer un modèle, vider un historique : confirmation comme
+partout ailleurs dans le CRM.
+
+**Modèles** — les 14 du catalogue sont dans la liste déroulante, rangés par usage. Le panneau
+« Mes modèles » ne sert plus qu'aux ajouts manuels : y recopier le catalogue n'avait aucun
+effet visible, c'était une redondance. `library.iaModels` ne contient QUE des ajouts manuels
+et les entrées héritées qui doublonnent le catalogue sont retirées au chargement.
+
+**États vides** — réalisation sans photo, historique vide : l'écran explique quoi faire.
+
 ### Quatre défauts corrigés après le premier essai réel (septembre 2026)
 
 Signalés par l'utilisateur : « le bouton Gérer ne fonctionne pas », « le bouton pour lancer

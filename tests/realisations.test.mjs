@@ -585,7 +585,7 @@ const dessus = await page.evaluate(async () => {
   openIaModelsPanel();
   await new Promise(r => setTimeout(r, 250));
   out.modeles = vu('#modal');
-  out.catalogue = document.querySelectorAll('#modal .ia-cat-row').length;
+  out.texteModeles = document.querySelector('#modal').textContent;
   closeModal();
   return out;
 });
@@ -593,7 +593,9 @@ check('Confirmation d’envoi réellement visible par-dessus l’éditeur',
   dessus.confirmation && dessus.confirmation.visible && dessus.confirmation.auDessus, JSON.stringify(dessus.confirmation));
 check('Panneau « Modèles » réellement visible par-dessus l’éditeur',
   dessus.modeles.visible && dessus.modeles.auDessus, JSON.stringify(dessus.modeles));
-check('Catalogue de modèles proposé dans le panneau', dessus.catalogue >= 10, dessus.catalogue + ' modèle(s)');
+check('Le panneau « Mes modèles » ne double pas le catalogue et explique où il est',
+  /catalogue sont déjà proposés/.test(dessus.texteModeles) && /Aucun modèle ajouté/.test(dessus.texteModeles),
+  dessus.texteModeles.slice(0, 110));
 
 // --- Un modèle sans consigne (agrandisseur) ne doit pas exiger de texte
 const sansPrompt = await page.evaluate(async () => {
@@ -805,6 +807,182 @@ const sortie = await page.evaluate(() => ({
 check('Éditeur : un seul bouton pour sortir, et un accès à l’historique',
   sortie.ferme === 1 && sortie.done === 0 && sortie.hist === 1, JSON.stringify(sortie));
 
+// =================== FINITION : erreurs visibles, plafond, suppressions, réglages ========
+
+// --- Un échec doit RESTER à l'écran. Un message fugace ne se lit pas, et le panneau est
+//     reconstruit à chaque changement : le message doit survivre à cette reconstruction.
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  if (body.action === 'edit') {
+    await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'fal.ai a refusé (HTTP 422) : image trop lourde' }) });
+    return;
+  }
+  await route.fallback();
+});
+const echec = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  _ed.tab = 'ia'; buildEditorControls();
+  await applyIaToPhoto(r, p, 'essai qui échoue', 'fal-ai/nano-banana-pro/edit', null);
+  await new Promise(x => setTimeout(x, 400));
+  const lire = () => {
+    const e = document.querySelector('#ed-controls .ia-erreur');
+    return e && e.offsetParent !== null ? e.textContent : '';
+  };
+  const affiche = lire();
+  buildEditorControls();                       // le panneau est reconstruit : ça doit tenir
+  await new Promise(x => setTimeout(x, 300));
+  const apresReconstruction = lire();
+  [...document.querySelectorAll('#ed-controls .ia-erreur .mini')].forEach(b => b.click());
+  await new Promise(x => setTimeout(x, 300));
+  return { affiche, apresReconstruction, apresMasquage: lire() };
+});
+check('Échec d’une retouche : le détail exact reste affiché à l’écran',
+  /422/.test(echec.affiche) && /trop lourde/.test(echec.affiche), echec.affiche.slice(0, 90));
+check('Le message d’échec survit à la reconstruction du panneau',
+  /422/.test(echec.apresReconstruction));
+check('Le message d’échec peut être masqué', echec.apresMasquage === '');
+await page.unroute('**/functions/v1/photo-ia');
+
+// --- Le plafond mensuel BLOQUE : aucun appel n'est émis, donc rien n'est facturé.
+const avantPlafond = iaCalls.length;
+const plafond = await page.evaluate(async () => {
+  const st = iaSettings();
+  st.plafondMois = 1;
+  library.iaUsage = { [iaSpendKey()]: 5 };     // déjà 5 retouches ce mois-ci
+  buildEditorControls();
+  await new Promise(x => setTimeout(x, 400));
+  const bouton = document.querySelector('#ed-controls .ia-go');
+  const etatBouton = { texte: bouton.textContent, desactive: bouton.disabled };
+  await applyIaToPhoto(realisations[0], realisations[0].photos[0], 'ne doit pas partir', 'fal-ai/nano-banana-pro/edit', null);
+  await new Promise(x => setTimeout(x, 400));
+  const msg = (document.querySelector('#ed-controls .ia-erreur') || {}).textContent || '';
+  const pied = (document.querySelector('#ed-controls .ia-pied') || {}).textContent || '';
+  st.plafondMois = 0; library.iaUsage = {}; _iaLastError = null; buildEditorControls();
+  return { etatBouton, msg, pied };
+});
+check('Plafond atteint : aucun appel n’est envoyé au fournisseur',
+  iaCalls.filter(c => c.body.action === 'edit').length === iaCalls.filter((c, i) => i < avantPlafond && c.body.action === 'edit').length,
+  'appels avant ' + avantPlafond + ', après ' + iaCalls.length);
+check('Plafond atteint : le bouton le dit et refuse de partir',
+  /Plafond/.test(plafond.etatBouton.texte) && plafond.etatBouton.desactive === true, JSON.stringify(plafond.etatBouton));
+check('Plafond atteint : le message dit que rien n’a été facturé et où le régler',
+  /rien n’a été facturé/.test(plafond.msg) && /Réglages/.test(plafond.msg), plafond.msg.slice(0, 90));
+check('Le compteur du mois est affiché avec son plafond', /Ce mois-ci/.test(plafond.pied), plafond.pied.slice(0, 70));
+
+// --- Toute suppression se confirme, et l'annulation ne supprime rien.
+const suppr = await page.evaluate(async () => {
+  ensureIaModels();
+  library.iaModels.push({ id: 'test/a-supprimer', label: 'Modèle jetable', note: '' });
+  const avant = library.iaModels.length;
+  let question = '';
+  const orig = window.askConfirm;
+  window.askConfirm = (m) => { question = m; };       // on ne confirme PAS
+  iaModelDel('test/a-supprimer');
+  const apresAnnulation = library.iaModels.length;
+  window.askConfirm = (m, cb) => cb();                 // cette fois on confirme
+  iaModelDel('test/a-supprimer');
+  const apresConfirmation = library.iaModels.length;
+  window.askConfirm = orig;
+  return { question, avant, apresAnnulation, apresConfirmation };
+});
+check('Retirer un modèle demande confirmation, et annuler ne retire rien',
+  /Retirer/.test(suppr.question) && suppr.apresAnnulation === suppr.avant, JSON.stringify(suppr));
+check('Confirmer retire bien le modèle', suppr.apresConfirmation === suppr.avant - 1);
+
+// --- Vider l'historique : confirmation, puis état vide expliqué
+const videHist = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  openPhotoHistory(r, p);
+  const avant = document.querySelectorAll('#modal .hist li').length;
+  const orig = window.askConfirm;
+  let question = '';
+  window.askConfirm = (m) => { question = m; };
+  clearPhotoHistory(p.id);
+  const apresAnnulation = (p.hist || []).length;
+  window.askConfirm = (m, cb) => cb();
+  clearPhotoHistory(p.id);
+  window.askConfirm = orig;
+  const vide = document.querySelector('#modal .hist').textContent;
+  closeModal();
+  return { question, avant, apresAnnulation, restant: (p.hist || []).length, vide };
+});
+check('Vider l’historique demande confirmation, et annuler ne l’efface pas',
+  /Vider/.test(videHist.question) && videHist.apresAnnulation === videHist.avant, JSON.stringify({ q: videHist.question.slice(0, 40), avant: videHist.avant, apres: videHist.apresAnnulation }));
+check('Historique vidé : la liste est vide et l’écran l’explique',
+  videHist.restant === 0 && /Aucun événement/.test(videHist.vide), videHist.vide.slice(0, 80));
+
+// --- Les réglages : valeur invalide refusée À L'ÉCRAN, valeur valide appliquée pour de vrai
+const reglages = await page.evaluate(async () => {
+  openIaSettingsPanel();
+  document.getElementById('ias-plafond').value = '-4';
+  document.getElementById('ias-save').click();
+  const refus = document.getElementById('ias-msg').textContent;
+  const encoreOuvert = !!document.getElementById('ias-save');
+  document.getElementById('ias-plafond').value = '50';
+  document.getElementById('ias-reso').value = '1K';
+  document.getElementById('ias-cout').value = '0.2';
+  document.getElementById('ias-confirm').checked = false;
+  document.getElementById('ias-save').click();
+  await new Promise(x => setTimeout(x, 300));
+  return { refus, encoreOuvert, enregistre: JSON.parse(JSON.stringify(iaSettings())) };
+});
+check('Réglages : une valeur invalide est refusée et expliquée, la fenêtre reste ouverte',
+  /nombre positif/.test(reglages.refus) && reglages.encoreOuvert, reglages.refus);
+check('Réglages : les valeurs valides sont enregistrées',
+  reglages.enregistre.plafondMois === 50 && reglages.enregistre.resolution === '1K'
+  && reglages.enregistre.coutUnitaire === 0.2 && reglages.enregistre.confirmer === false,
+  JSON.stringify(reglages.enregistre));
+
+// La résolution réglée doit PARTIR au modèle, pas seulement s'afficher.
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  const auth = route.request().headers()['authorization'] || '';
+  iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
+  if (body.action === 'schema') { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SCHEMA_REEL) }); return; }
+  if (body.action === 'balance') { await route.fulfill({ status: 200, contentType: 'application/json', body: '{"balance":9.87,"currency":"USD"}' }); return; }
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', model: body.model }) });
+});
+await page.evaluate(async () => {
+  library.iaParams['fal-ai/nano-banana-pro/edit'] = {};
+  await runIaEdit(realisations[0].photos[0], 'test réglage', 'fal-ai/nano-banana-pro/edit');
+});
+const appelRegle = iaCalls.filter(c => c.body.action === 'edit').pop();
+check('Réglages : la résolution choisie part réellement au modèle',
+  !!appelRegle && appelRegle.body.input.resolution === '1K', JSON.stringify(appelRegle && appelRegle.body.input));
+
+// --- Rétablir les valeurs par défaut
+const defauts = await page.evaluate(async () => {
+  const orig = window.askConfirm;
+  window.askConfirm = (m, cb) => cb();
+  iaSettingsReset();
+  window.askConfirm = orig;
+  await new Promise(x => setTimeout(x, 200));
+  const st = JSON.parse(JSON.stringify(iaSettings()));
+  closeModal();
+  return st;
+});
+check('Réglages : « valeurs par défaut » remet tout en place',
+  defauts.resolution === '2K' && defauts.plafondMois === 100 && defauts.confirmer === true, JSON.stringify(defauts));
+
+// --- Le comparateur explique quand il ne peut pas charger la seconde version
+const cmpKo = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  const vrai = photoStore.get;
+  photoStore.get = async (k) => (/^rp_/.test(k) ? null : vrai(k));
+  _imgCache.clear();
+  p.useIa = true;
+  await edLoadAlt();
+  buildEditorControls();
+  await new Promise(x => setTimeout(x, 300));
+  const msg = [...document.querySelectorAll('#ed-controls .ia-warn')].map(e => e.textContent).join(' ');
+  photoStore.get = vrai; _imgCache.clear();
+  await edLoadAlt();
+  return { msg, compareApresRetour: edHasCompare() };
+});
+check('Comparateur impossible : l’écran dit pourquoi au lieu de disparaître',
+  /n’a pas pu être chargée/.test(cmpKo.msg), cmpKo.msg.slice(0, 100));
+check('Comparateur : il revient dès que l’image est de nouveau lisible', cmpKo.compareApresRetour);
+
 await page.evaluate(() => { _ed.tab = 'geometrie'; closePhotoEditor(); });
 await page.waitForTimeout(500);
 await page.unroute('**/functions/v1/photo-ia');
@@ -866,6 +1044,41 @@ check('Publication : le manifeste ne contient aucune clé ni jeton',
   !!pub.manif && !/eyJ|sb_secret|service_role|apikey/i.test(JSON.stringify(pub.manif)));
 check('Publication : les fichiers publiés sont bien dans le bucket galerie, pas dans les documents',
   pub.nouveaux.every(k => !k.includes('rp_') && !k.includes('rt_')), pub.nouveaux.join(', '));
+
+// --- Une publication qui échoue doit laisser un message lisible, pas un toast fugace,
+//     et NE PAS marquer la réalisation en ligne.
+const pubKo = await page.evaluate(async () => {
+  const r = realisations[0];
+  const vrai = sb.storage.from;
+  sb.storage.from = (b) => {
+    const o = vrai(b);
+    return Object.assign({}, o, { upload: async () => { throw new Error('réseau indisponible'); } });
+  };
+  const etaitEnLigne = r.published;
+  await publishRealisation(r);
+  sb.storage.from = vrai;
+  await new Promise(x => setTimeout(x, 400));
+  const msg = (document.querySelector('#rz-body .ia-erreur, .ia-erreur') || {}).textContent || '';
+  const encoreEnLigne = r.published;
+  _pubLastError = null; renderRealisations();
+  return { msg, etaitEnLigne, encoreEnLigne };
+});
+check('Publication en échec : le détail reste affiché à l’écran',
+  /Publication interrompue/.test(pubKo.msg) && /réessayer/.test(pubKo.msg), pubKo.msg.slice(0, 90));
+
+// --- Réalisation sans photo : l'écran dit quoi faire au lieu de rester vide
+const videPhotos = await page.evaluate(async () => {
+  const r = { id: 'vide-test', title: 'Chantier vide', photos: [], edit: null, published: false, createdAt: Date.now() };
+  realisations.push(normalizeRealisation(r));
+  _rzOpenId = 'vide-test'; renderRealisations();
+  await new Promise(x => setTimeout(x, 300));
+  const txt = (document.querySelector('.rz-photos .rz-empty') || {}).textContent || '';
+  realisations = realisations.filter(x => x.id !== 'vide-test');
+  _rzOpenId = realisations[0].id; renderRealisations();
+  return txt;
+});
+check('Réalisation sans photo : l’écran explique quoi faire',
+  /Aucune photo dans cette réalisation/.test(videPhotos), videPhotos.slice(0, 80));
 
 // --- Retrait du site
 const unpub = await page.evaluate(async () => {
@@ -989,9 +1202,10 @@ for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
 await page.evaluate(() => showView('realisations'));
 check('Navigation entre toutes les vues sans erreur', true);
 
-// La panne de manifeste ci-dessus est provoquée volontairement : l'erreur qu'elle
-// journalise est le comportement attendu, pas un défaut.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error/i.test(e));
+// Trois pannes sont provoquées VOLONTAIREMENT plus haut — manifeste illisible, retouche
+// refusée par le fournisseur, envoi de fichier coupé : les erreurs qu'elles journalisent
+// sont le comportement attendu, pas un défaut. Tout le reste doit rester vide.
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

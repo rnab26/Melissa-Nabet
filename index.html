@@ -695,6 +695,17 @@
   .ia-solde button:hover{background:var(--panel-edge);color:var(--ink);}
   .ia-warn{margin:9px 0 0;font-size:11px;color:var(--stone);line-height:1.5;
     background:var(--travertine);border-radius:7px;padding:8px 10px;}
+  .ia-erreur{background:#fbeee9;border:1px solid #e8c9bd;border-left:3px solid #b6543f;
+    border-radius:9px;padding:11px 13px;margin:0 0 11px;}
+  .ia-erreur p{margin:0 0 8px;font-size:12.5px;color:#8c3f2d;line-height:1.5;}
+  .ia-pied{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    margin:2px 0 0;font-size:11.5px;color:var(--stone);}
+  .ias-note{margin:0 0 14px;font-size:11.5px;color:var(--stone);line-height:1.5;}
+  .ias-check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);margin:6px 0 4px;}
+  .ias-check input{width:auto;}
+  .ias-msg{margin:10px 0 0;font-size:12.5px;color:#b6543f;line-height:1.5;}
+  .ia-model-id{font-size:11px;color:var(--stone);background:var(--travertine);
+    padding:4px 7px;border-radius:4px;word-break:break-all;}
   .ia-cat{margin-top:14px;}
   .ia-cat-t{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);
     font-weight:700;margin-bottom:6px;}
@@ -1323,6 +1334,9 @@ let pendingClientId=null; /* client cible quand on crée un devis depuis une fic
    ne doit jamais faire perdre une saisie. */
 let _libSaveT=null;
 function saveLibraryDebounced(){clearTimeout(_libSaveT);_libSaveT=setTimeout(()=>store.set(K_LIB,library),500);}
+/* Enregistrement immédiat : après un « Enregistrer » explicite, la valeur doit être posée
+   avant que la fenêtre ne se referme, pas 500 ms plus tard. */
+function saveLibrary(){clearTimeout(_libSaveT);return store.set(K_LIB,library);}
 const current={
   num:'0077',date:new Date().toLocaleDateString('fr-FR'),
   raison:'',contact:'',cphone:'',cemail:'',caddr:'',ville:'',cp:'',siret:'',
@@ -2147,6 +2161,7 @@ function openSettingsPanel(){
       <button class="mini" onclick="closeModal();openLibraryPanel();">Bibliothèque & Hors prestation</button>
       <button class="mini" onclick="closeModal();openCgvPanel();">Conditions générales</button>
       <button class="mini" onclick="closeModal();openChantierCatsPanel();">Catégories de chantier</button>
+      <button class="mini" onclick="closeModal();openIaSettingsPanel();">Photos & retouche IA</button>
     </div>
 
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
@@ -3825,7 +3840,10 @@ function blankEdit(){return {persp:0,rot:0,expo:0,contrast:0,temp:0,tint:0,sat:0
    Deux questions revenaient sans réponse : « qu'est-ce qui est en ligne ? » et « qu'est-ce
    qui a été fait sur cette photo ? ». Le CRM ne gardait ni l'un ni l'autre : une photo
    ajoutée après une publication ressemblait en tout point à une photo déjà en ligne. */
-const PHOTO_HIST_MAX=30;
+function photoHistMax(){
+  const n=parseInt((library&&library.iaSettings&&library.iaSettings.histMax),10);
+  return (isFinite(n)&&n>0)?n:30;
+}
 function photoLog(p,kind,detail){
   if(!p)return;
   p.hist=p.hist||[];
@@ -3834,7 +3852,7 @@ function photoLog(p,kind,detail){
      qu'on reste sur le même geste à moins de 10 minutes, on met à jour au lieu d'empiler. */
   if(last&&last.k===kind&&kind==='reglages'&&Date.now()-last.t<600000){last.t=Date.now();return;}
   p.hist.unshift({t:Date.now(),k:kind,d:detail||''});
-  p.hist=p.hist.slice(0,PHOTO_HIST_MAX);
+  p.hist=p.hist.slice(0,photoHistMax());
 }
 /* Toute modification visible de la photo. C'est ce qui permet de dire « modifiée depuis sa
    mise en ligne » plutôt que de laisser croire que le site est à jour. */
@@ -4267,6 +4285,14 @@ function renderRealisationDetail(host,r){
       +(aRepublier?', <b class="rz-warn">'+aRepublier+' en attente</b> (ajoutée ou modifiée depuis la dernière publication) — republiez pour mettre le site à jour.':'.')
     : 'Pas encore sur le site. Rien ne part en ligne tant que vous ne cliquez pas sur « Publier ».';
   head.appendChild(site);
+  if(_pubLastError){
+    const err=document.createElement('div');err.className='ia-erreur';
+    const t=document.createElement('p');t.textContent=_pubLastError;err.appendChild(t);
+    const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+    f.addEventListener('click',()=>{_pubLastError=null;renderRealisations();});
+    err.appendChild(f);
+    head.appendChild(err);
+  }
 
   const meta=document.createElement('div');meta.className='rz-meta';
   meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
@@ -4306,6 +4332,11 @@ function renderRealisationDetail(host,r){
     });
     grid.appendChild(tile);
   });
+  if(!(r.photos||[]).length){
+    const vide=document.createElement('p');vide.className='rz-empty';vide.style.gridColumn='1/-1';
+    vide.textContent='Aucune photo dans cette réalisation. Ajoutez les photos du chantier terminé : elles restent privées tant que vous ne publiez pas.';
+    grid.appendChild(vide);
+  }
   if(!_rzSelMode){
     const add=document.createElement('button');add.className='rz-add';
     add.innerHTML='＋<br>Ajouter des photos';
@@ -4554,12 +4585,18 @@ function edHasCompare(){return !!(_ed&&_ed.imgAlt);}
 async function edLoadAlt(){
   if(!_ed)return;
   const p=_ed.p;
+  _ed.altErr=null;
   if(!p.ia){_ed.imgAlt=null;_ed.altEdit=null;return;}
   /* L'autre version : l'original quand on regarde l'IA, l'IA quand on regarde l'original. */
-  const alt=await loadPhotoImage(p.id,p.useIa?{thumb:false,original:true}:{thumb:false,useIaForce:true});
+  let alt=null;
+  try{
+    alt=await loadPhotoImage(p.id,p.useIa?{thumb:false,original:true}:{thumb:false,useIaForce:true});
+  }catch(e){alt=null;}
   if(!_ed||_ed.p!==p)return;
   _ed.imgAlt=alt;
   _ed.altEdit=JSON.parse(JSON.stringify((p.useIa?p.editOrig:p.editIa)||blankEdit()));
+  /* Sans ce message, le comparateur disparaîtrait sans un mot et on croirait à un oubli. */
+  if(!alt)_ed.altErr=(p.useIa?'La photo d’origine':'La version IA')+' n’a pas pu être chargée depuis le cloud : la comparaison avant/après est indisponible. Vérifiez votre connexion, puis rouvrez la photo.';
 }
 function edPaint(){
   if(!_ed||!_ed.img)return;
@@ -4652,8 +4689,24 @@ function openPhotoHistory(r,p){
       : etat==='modifiee' ? 'Cette photo est en ligne, mais elle a été modifiée depuis : republiez pour mettre le site à jour.'
       : 'Cette photo n’est pas encore en ligne : elle a été ajoutée après la dernière publication.'}</p>
     ${p.ia?`<p class="msub">Version affichée : <b>${p.useIa?'la retouche IA':'la photo d’origine'}</b> — c’est elle qui part à l’export et sur le site.</p>`:''}
-    <ul class="hist">${lignes||'<li><span class="hist-k">Aucun événement enregistré</span></li>'}</ul>
-    <div style="margin-top:12px"><button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+    <ul class="hist">${lignes||'<li><span class="hist-k">Aucun événement enregistré pour l’instant. L’import, les réglages, les retouches IA et les publications s’inscriront ici.</span></li>'}</ul>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
+      ${(p.hist||[]).length?`<button class="mini" onclick="clearPhotoHistory('${esc(p.id)}')">🗑 Vider l’historique</button>`:'<span></span>'}
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button>
+    </div>`);
+}
+
+/* Vider l'historique : c'est une suppression, donc elle se confirme comme les autres. Elle
+   n'efface que le journal — ni la photo, ni sa retouche, ni son état de publication. */
+function clearPhotoHistory(pid){
+  const p=findPhoto(pid);if(!p)return;
+  const r=(realisations||[]).find(x=>(x.photos||[]).some(y=>y.id===pid));
+  askConfirm('Vider l’historique de cette photo ? La photo, sa retouche et son état de publication ne sont pas touchés. C’est définitif.',()=>{
+    p.hist=[];
+    saveRealisations();
+    if(r)openPhotoHistory(r,p);else closeModal();
+    toast('Historique vidé');
+  });
 }
 
 function closePhotoEditor(){
@@ -4907,18 +4960,37 @@ const IA_CATALOGUE=[
   {cat:'Agrandir / rendre plus net',id:'fal-ai/clarity-upscaler',label:'Clarity Upscaler',note:'Agrandissement net, très utilisé en immobilier.'},
   {cat:'Agrandir / rendre plus net',id:'fal-ai/aura-sr',label:'Aura SR',note:'Agrandissement rapide ×4. Sans consigne.'},
 ];
-/* Ce que le CRM propose au premier lancement. Le reste du catalogue s'ajoute en un geste. */
-const DEFAULT_IA_MODELS=IA_CATALOGUE.filter(m=>[
-  'fal-ai/nano-banana-pro/edit','fal-ai/flux-2-pro/edit','fal-ai/bytedance/seedream/v4/edit',
-  'fal-ai/object-removal','fal-ai/recraft/upscale/creative',
-].indexOf(m.id)>=0).map(m=>({id:m.id,label:m.label,note:m.note}));
+/* `library.iaModels` ne contient QUE les modèles ajoutés à la main. Tout le catalogue est
+   proposé d'office dans la liste de l'onglet Retouche : y recopier des entrées ne servirait
+   qu'à les afficher deux fois. */
 /* Réglages pilotés par le CRM lui-même : inutile de les montrer deux fois.
    `image_url` autant que `image_urls` : selon le modèle, l'image se transmet sous l'un ou
    sous l'autre, et c'est le pont qui choisit d'après le schéma. */
 const IA_HIDDEN_PARAMS=['image_urls','image_url','sync_mode','prompt'];
 
+/* ---- Réglages de la retouche ----
+   Toute valeur qui décide de quelque chose vit ici, pas dans le code : la résolution
+   demandée, le plafond mensuel qui BLOQUE, le coût unitaire servant à estimer la dépense,
+   la longueur de l'historique gardé et le modèle proposé par défaut. Réglable dans
+   « ⚙ Réglages » (panneau Réglages du CRM, ou depuis l'onglet Retouche). */
+const IA_DEFAULTS={
+  resolution:'2K',      /* 'modele' = laisser le défaut du modèle */
+  plafondMois:100,      /* 0 = pas de plafond */
+  coutUnitaire:0.13,    /* $ par retouche, sert à estimer la dépense du mois */
+  histMax:30,
+  modeleDefaut:'fal-ai/nano-banana-pro/edit',
+  confirmer:true,       /* demander confirmation avant chaque envoi facturé */
+};
+function iaSettings(){
+  library.iaSettings=Object.assign({},IA_DEFAULTS,library.iaSettings||{});
+  return library.iaSettings;
+}
+
 function ensureIaModels(){
-  if(!Array.isArray(library.iaModels)||!library.iaModels.length)library.iaModels=DEFAULT_IA_MODELS.map(m=>({...m}));
+  if(!Array.isArray(library.iaModels))library.iaModels=[];
+  /* Les anciennes versions recopiaient des modèles du catalogue dans cette liste : on les
+     retire, sinon ils apparaîtraient deux fois dans le menu. */
+  library.iaModels=library.iaModels.filter(m=>m&&m.id&&!IA_CATALOGUE.some(c=>c.id===m.id));
   if(!library.iaPrompts)library.iaPrompts=[];
   if(!library.iaParams)library.iaParams={};
 }
@@ -5000,17 +5072,16 @@ function iaParamsFor(model){
   if(!library.iaParams[model])library.iaParams[model]={};
   return library.iaParams[model];
 }
-/* Valeur effective : ce que l'utilisateur a choisi, sinon la préférence du CRM, sinon le
-   défaut du modèle.
-   Une seule préférence, et elle a une raison : les photos sont publiées en 1600 px de côté.
-   Une sortie en 1K (1024 px) y serait agrandie, donc molle — le contraire du but. Quand le
-   modèle sait sortir en 2K, on prend 2K. Chez Nano Banana Pro, 1K et 2K sont au même prix.
-   L'utilisateur reste libre de changer dans « Réglages avancés ». */
-const IA_PREFS={resolution:'2K'};
+/* Valeur effective : ce que l'utilisateur a choisi pour CE modèle, sinon la préférence
+   générale (réglages), sinon le défaut du modèle. */
+function iaPrefs(){
+  const st=iaSettings();
+  return st.resolution==='modele'?{}:{resolution:st.resolution};
+}
 function iaValue(model,name,spec){
   const saved=iaParamsFor(model);
   if(Object.prototype.hasOwnProperty.call(saved,name))return saved[name];
-  const pref=IA_PREFS[name];
+  const pref=iaPrefs()[name];
   if(pref!==undefined){
     const enums=iaFieldEnum(spec)||[];
     if(enums.indexOf(pref)>=0)return pref;
@@ -5040,13 +5111,14 @@ async function runIaEdit(photo,consigne,modelId){
      seulement là où le modèle les accepte. Envoyer « 2K » à un modèle qui nomme ses
      résolutions autrement le ferait échouer. On lit son schéma avant. */
   const prefs={};
+  const voulu=iaPrefs();
   try{
     const sc=await iaSchema(modelId);
-    Object.keys(IA_PREFS).forEach(k=>{
+    Object.keys(voulu).forEach(k=>{
       const spec=sc.properties&&sc.properties[k];
       if(!spec)return;
       const enums=iaFieldEnum(spec)||[];
-      if(enums.indexOf(IA_PREFS[k])>=0)prefs[k]=IA_PREFS[k];
+      if(enums.indexOf(voulu[k])>=0)prefs[k]=voulu[k];
     });
   }catch(e){ /* schéma illisible : on part sans préférence, le modèle prendra ses défauts */ }
   const input=Object.assign(prefs,iaParamsFor(modelId),{prompt:consigne});
@@ -5073,8 +5145,21 @@ function iaUseVersion(photo,useIa){
   photoTouch(photo,'version',useIa?'version IA':'photo d’origine');
 }
 
+/* Dernière erreur de retouche, gardée hors du panneau : le panneau est reconstruit à chaque
+   changement, un message posé dedans disparaîtrait aussitôt. Un toast s'efface en trois
+   secondes — trop court pour lire pourquoi un appel a échoué. */
+let _iaLastError=null;
 async function applyIaToPhoto(r,photo,consigne,modelId,btn){
   const setBtn=t=>{if(btn){btn.disabled=t!==null;btn.textContent=t||'✨ Retoucher cette photo';}};
+  /* Le plafond bloque AVANT tout appel : rien n'est envoyé, donc rien n'est facturé. */
+  if(iaPlafondAtteint()){
+    const st=iaSettings();
+    _iaLastError='Plafond du mois atteint ('+iaSpend()+' / '+st.plafondMois+' retouches). Aucun appel n’a été envoyé, rien n’a été facturé. Relevez le plafond dans ⚙ Réglages, ou attendez le mois prochain.';
+    buildEditorControls();
+    toast('Plafond du mois atteint — rien n’a été envoyé');
+    return;
+  }
+  _iaLastError=null;
   setBtn('Envoi au modèle…');
   try{
     const data=await runIaEdit(photo,consigne,modelId);
@@ -5099,7 +5184,8 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
     toast('Retouche appliquée — l’original reste disponible');
   }catch(e){
     console.error('retouche IA',e);
-    toast('Échec : '+((e&&e.message)||'erreur'));
+    _iaLastError=(e&&e.message)||'erreur inconnue';
+    toast('Échec de la retouche — le détail reste affiché');
   }finally{ setBtn(null); buildEditorControls(); }
 }
 
@@ -5136,6 +5222,7 @@ function buildIaPanel(host){
 
   /* ---------- Carte 1 : la consigne ---------- */
   const card=document.createElement('div');card.className='ia-card';
+  const erreurHost=document.createElement('div');host.appendChild(erreurHost);
   const head=document.createElement('div');head.className='ia-card-h';
   head.innerHTML='<span class="ttl">✨ Votre consigne</span>';
   const solde=document.createElement('span');solde.className='ia-solde';
@@ -5143,6 +5230,23 @@ function buildIaPanel(host){
   const soldeVal=solde.querySelector('b'), soldeBtn=solde.querySelector('button');
   head.appendChild(solde);
   card.appendChild(head);
+
+  /* Ce qui a raté reste écrit, jusqu'au prochain essai. Avec le détail exact renvoyé par le
+     fournisseur, pas un « échec » vague. */
+  if(_iaLastError){
+    const err=document.createElement('div');err.className='ia-erreur';
+    const txt=document.createElement('p');txt.textContent=_iaLastError;
+    err.appendChild(txt);
+    const ferme=document.createElement('button');ferme.className='mini';ferme.type='button';
+    ferme.textContent='Masquer ce message';
+    ferme.addEventListener('click',()=>{_iaLastError=null;buildEditorControls();});
+    err.appendChild(ferme);
+    erreurHost.appendChild(err);
+  }
+  if(_ed.altErr){
+    const w=document.createElement('p');w.className='ia-warn';w.textContent=_ed.altErr;
+    card.appendChild(w);
+  }
 
   const ta=document.createElement('textarea');
   ta.className='ia-prompt';ta.rows=3;
@@ -5173,7 +5277,9 @@ function buildIaPanel(host){
   }
 
   const go=document.createElement('button');go.className='ia-go btn-primary';
-  go.textContent='✨ Retoucher cette photo';
+  const bloque=iaPlafondAtteint();
+  go.textContent=bloque?'Plafond du mois atteint':'✨ Retoucher cette photo';
+  go.disabled=bloque;
   card.appendChild(go);
 
   const sub=document.createElement('p');sub.className='ia-sub';
@@ -5203,7 +5309,7 @@ function buildIaPanel(host){
   const cardM=document.createElement('div');cardM.className='ia-card';
   const headM=document.createElement('div');headM.className='ia-card-h';
   headM.innerHTML='<span class="ttl">Modèle</span>';
-  const gear=document.createElement('button');gear.className='mini';gear.type='button';gear.textContent='⚙ Gérer';
+  const gear=document.createElement('button');gear.className='mini';gear.type='button';gear.textContent='⚙ Mes modèles';
   gear.addEventListener('click',openIaModelsPanel);
   headM.appendChild(gear);
   cardM.appendChild(headM);
@@ -5215,7 +5321,7 @@ function buildIaPanel(host){
      modèles derrière un panneau de réglages : c'est le choix principal de cet écran.
      Les modèles ajoutés à la main apparaissent à part, et la dernière ligne permet de
      coller n'importe quel identifiant de fal.ai/models. */
-  const perso=library.iaModels.filter(m=>m.id&&!IA_CATALOGUE.some(c=>c.id===m.id));
+  const perso=iaCustomModels();
   const cats=[];
   IA_CATALOGUE.forEach(m=>{if(cats.indexOf(m.cat)<0)cats.push(m.cat);});
   sel.innerHTML=cats.map(c=>`<optgroup label="${esc(c)}">`+
@@ -5225,6 +5331,7 @@ function buildIaPanel(host){
     +'<optgroup label="Autre"><option value="__coller">＋ Coller un identifiant fal.ai…</option></optgroup>';
   const connu=id=>IA_CATALOGUE.some(m=>m.id===id)||perso.some(m=>m.id===id);
   if(library.iaLastModel&&connu(library.iaLastModel))sel.value=library.iaLastModel;
+  if(!sel.value&&connu(iaSettings().modeleDefaut))sel.value=iaSettings().modeleDefaut;
   if(!sel.value)sel.value=IA_CATALOGUE[0].id;
   cardM.appendChild(modelRow);
   const note=document.createElement('p');note.className='ia-model-note';
@@ -5329,9 +5436,10 @@ function buildIaPanel(host){
   go.addEventListener('click',()=>{
     const c=(ta.value||'').trim();
     if(prendPrompt&&!c){toast('Écrivez d’abord ce que vous voulez, ou touchez une consigne toute prête');ta.focus();return;}
-    askConfirm('Envoyer cette photo au modèle « '+iaModelLabel(sel.value)+' » ? Cet appel est facturé par le fournisseur.',()=>{
-      applyIaToPhoto(r,p,c,sel.value,go);
-    });
+    const lancer=()=>applyIaToPhoto(r,p,c,sel.value,go);
+    if(iaSettings().confirmer){
+      askConfirm('Envoyer cette photo au modèle « '+iaModelLabel(sel.value)+' » ? Cet appel est facturé par le fournisseur.',lancer);
+    }else lancer();
   });
 
   /* ---------- Carte 3 : la version IA déjà produite ---------- */
@@ -5368,15 +5476,107 @@ function buildIaPanel(host){
     host.appendChild(box);
   }
 
-  const spend=document.createElement('p');spend.className='ed-hint';spend.style.margin='2px 0 0';
-  spend.textContent='Ce mois-ci : '+iaSpend()+' retouche(s) IA facturée(s).';
-  host.appendChild(spend);
+  /* Ce qu'on a dépensé, et par où le régler : au même endroit, sinon le plafond est une
+     règle invisible. */
+  const pied=document.createElement('div');pied.className='ia-pied';
+  const res=iaMoisResume();
+  const compteur=document.createElement('span');
+  compteur.textContent=res.texte+(iaPlafondAtteint()?' — plafond atteint':'');
+  if(iaPlafondAtteint())compteur.className='rz-warn';
+  pied.appendChild(compteur);
+  const reg=document.createElement('button');reg.className='mini';reg.type='button';
+  reg.textContent='⚙ Réglages';
+  reg.addEventListener('click',openIaSettingsPanel);
+  pied.appendChild(reg);
+  host.appendChild(pied);
 }
 
-/* Panneau « Modèles ». Deux parties : le catalogue (ajout en un geste, identifiants vérifiés
-   contre le catalogue réel de fal.ai) et la liste personnelle, où l'on peut coller
-   n'importe quel identifiant de fal.ai/models. Le CRM n'est donc jamais limité à ce qui a
-   été prévu ici : le pont lit le schéma du modèle et s'adapte. */
+/* Dépense du mois : le nombre d'appels est compté pour de vrai ; le montant est une
+   ESTIMATION à partir du coût unitaire que vous réglez — le fournisseur ne nous donne pas
+   le prix réel appel par appel. Le plafond bloque sur le NOMBRE, qui lui est exact. */
+function iaMoisResume(){
+  const st=iaSettings(), n=iaSpend();
+  const cout=(n*(parseFloat(st.coutUnitaire)||0));
+  return {n,plafond:st.plafondMois|0,cout,
+    texte:'Ce mois-ci : '+n+(st.plafondMois?' / '+st.plafondMois:'')+' retouche(s)'
+      +(cout?' · environ '+cout.toFixed(2).replace('.',',')+' $':'')};
+}
+function iaPlafondAtteint(){
+  const st=iaSettings();
+  return st.plafondMois>0&&iaSpend()>=st.plafondMois;
+}
+
+function openIaSettingsPanel(){
+  const st=iaSettings();
+  const opt=(v,t)=>`<option value="${v}"${st.resolution===v?' selected':''}>${t}</option>`;
+  const modeles=IA_CATALOGUE.concat(iaCustomModels());
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Réglages — Photos & retouche IA</h3>
+    <p class="msub">Ces valeurs s’appliquent à toutes les photos. Les réglages propres à un modèle restent dans « Réglages avancés », dans l’onglet Retouche.</p>
+
+    <div class="ed-eyebrow">Qualité demandée au modèle</div>
+    <label class="fld"><span class="lbl">Résolution de sortie</span>
+      <select id="ias-reso">
+        ${opt('modele','Laisser le modèle décider')}
+        ${opt('1K','1K — la plus rapide et la moins chère')}
+        ${opt('2K','2K — recommandé (les photos sont publiées en 1600 px)')}
+        ${opt('4K','4K — la plus lourde, parfois plus chère')}
+      </select></label>
+    <p class="ias-note">Une sortie 1K republiée en 1600 px est agrandie, donc molle. Si le modèle choisi ne propose pas cette résolution, il garde la sienne.</p>
+
+    <div class="ed-eyebrow">Dépense</div>
+    <div class="row3">
+      <label class="fld"><span class="lbl">Plafond du mois (retouches)</span>
+        <input type="number" min="0" step="1" id="ias-plafond" value="${st.plafondMois}"></label>
+      <label class="fld"><span class="lbl">Coût estimé par retouche ($)</span>
+        <input type="number" min="0" step="0.01" id="ias-cout" value="${st.coutUnitaire}"></label>
+    </div>
+    <p class="ias-note">0 = pas de plafond. Au-delà du plafond, l’envoi est <b>bloqué</b> : rien n’est facturé. Le montant affiché est une estimation à partir du coût unitaire ci-dessus, pas le prix réel facturé par fal.ai.</p>
+    <p class="ias-note"><b>${esc(iaMoisResume().texte)}</b></p>
+
+    <div class="ed-eyebrow">Confort</div>
+    <label class="fld"><span class="lbl">Modèle proposé par défaut</span>
+      <select id="ias-modele">${modeles.map(m=>`<option value="${esc(m.id)}"${st.modeleDefaut===m.id?' selected':''}>${esc(m.label||m.id)}</option>`).join('')}</select></label>
+    <label class="fld"><span class="lbl">Événements gardés dans l’historique d’une photo</span>
+      <input type="number" min="1" max="200" step="1" id="ias-hist" value="${st.histMax}"></label>
+    <label class="ias-check"><input type="checkbox" id="ias-confirm" ${st.confirmer?'checked':''}>
+      <span>Demander confirmation avant chaque envoi facturé</span></label>
+
+    <p id="ias-msg" class="ias-msg"></p>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap">
+      <button class="mini" onclick="iaSettingsReset()">↺ Valeurs par défaut</button>
+      <button class="btn btn-primary" id="ias-save">Enregistrer</button>
+    </div>`);
+  $('ias-save').addEventListener('click',()=>{
+    const msg=$('ias-msg');
+    const plafond=parseInt($('ias-plafond').value,10);
+    const cout=parseFloat($('ias-cout').value);
+    const hist=parseInt($('ias-hist').value,10);
+    /* Une valeur invalide est refusée À L'ÉCRAN : sans ça on enregistrerait NaN et le
+       plafond ne bloquerait plus rien, sans que personne ne le voie. */
+    if(!isFinite(plafond)||plafond<0){msg.textContent='Le plafond doit être un nombre positif (0 = pas de plafond).';return;}
+    if(!isFinite(cout)||cout<0){msg.textContent='Le coût par retouche doit être un nombre positif.';return;}
+    if(!isFinite(hist)||hist<1||hist>200){msg.textContent='Le nombre d’événements gardés doit être entre 1 et 200.';return;}
+    const s2=iaSettings();
+    s2.resolution=$('ias-reso').value;
+    s2.plafondMois=plafond;s2.coutUnitaire=cout;s2.histMax=hist;
+    s2.modeleDefaut=$('ias-modele').value;
+    s2.confirmer=$('ias-confirm').checked;
+    saveLibrary();
+    closeModal();
+    if(_ed)buildEditorControls();
+    toast('Réglages de la retouche enregistrés');
+  });
+}
+function iaSettingsReset(){
+  askConfirm('Rétablir les réglages de la retouche sur leurs valeurs par défaut ?',()=>{
+    library.iaSettings=Object.assign({},IA_DEFAULTS);
+    saveLibrary();openIaSettingsPanel();
+    if(_ed)buildEditorControls();
+    toast('Réglages rétablis');
+  });
+}
+
 /* Coller un identifiant. On le VÉRIFIE avant de l'ajouter : le schéma du modèle est public,
    s'il ne répond pas, l'identifiant est faux — autant le dire tout de suite plutôt qu'au
    moment de lancer une retouche facturée. */
@@ -5420,52 +5620,57 @@ function iaAskCustomModel(){
   });
 }
 
-function openIaModelsPanel(){
+/* Panneau « Mes modèles ».
+   Le catalogue vit dans la liste déroulante de l'onglet Retouche : l'y ajouter depuis ici
+   n'aurait aucun effet visible. Ce panneau ne sert donc qu'à UNE chose : gérer les modèles
+   que vous ajoutez vous-même depuis fal.ai/models. */
+function iaCustomModels(){
   ensureIaModels();
-  const dejaLa=id=>library.iaModels.some(m=>m.id===id);
-  const cats=[];
-  IA_CATALOGUE.forEach(m=>{ if(cats.indexOf(m.cat)<0)cats.push(m.cat); });
-  const catalogue=cats.map(c=>`<div class="ia-cat">
-      <div class="ia-cat-t">${esc(c)}</div>
-      ${IA_CATALOGUE.filter(m=>m.cat===c).map(m=>`<div class="ia-cat-row">
-        <div class="ia-cat-txt"><b>${esc(m.label)}</b><span>${esc(m.note||'')}</span></div>
-        ${dejaLa(m.id)
-          ? '<span class="ia-cat-in">déjà dans la liste</span>'
-          : `<button class="mini" onclick="iaModelAddFromCat('${esc(m.id)}')">+ Ajouter</button>`}
-      </div>`).join('')}
+  return library.iaModels.filter(m=>m.id&&!IA_CATALOGUE.some(c=>c.id===m.id));
+}
+function openIaModelsPanel(){
+  const perso=iaCustomModels();
+  const rows=perso.map(m=>`<div class="lib-item">
+      <input type="text" value="${esc(m.label||'')}" placeholder="Nom affiché" oninput="iaModelEdit('${esc(m.id)}','label',this.value)">
+      <input type="text" value="${esc(m.note||'')}" placeholder="note (prix, usage)" oninput="iaModelEdit('${esc(m.id)}','note',this.value)">
+      <code class="ia-model-id">${esc(m.id)}</code>
+      <button class="mini" onclick="iaModelDel('${esc(m.id)}')">✕</button>
     </div>`).join('');
-
-  const rows=library.iaModels.map((m,i)=>`<div class="lib-item">
-      <input type="text" value="${esc(m.label||'')}" placeholder="Nom affiché" oninput="iaModelEdit(${i},'label',this.value)">
-      <input type="text" value="${esc(m.id||'')}" placeholder="identifiant du modèle" oninput="iaModelEdit(${i},'id',this.value)">
-      <input type="text" value="${esc(m.note||'')}" placeholder="note (prix, usage)" oninput="iaModelEdit(${i},'note',this.value)">
-      <button class="mini" onclick="iaModelDel(${i})">✕</button>
-    </div>`).join('');
-
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
-    <h3>Modèles de retouche</h3>
-    <p class="msub">Ajoutez ce que vous voulez utiliser depuis le catalogue ci-dessous. Pour un modèle qui n’y figure pas : copiez son identifiant depuis <b>fal.ai/models</b> et collez-le dans « Ma liste ». Le CRM lit tout seul les réglages que ce modèle propose — rien à recoder.</p>
-    ${catalogue}
-    <div class="ia-cat-t" style="margin-top:16px">Ma liste (ce qui apparaît dans l’éditeur)</div>
-    <div id="ia-model-rows">${rows}</div>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <button class="mini" onclick="iaModelAdd()">+ Identifiant personnalisé</button>
-      <button class="mini" onclick="iaModelReset()">↺ Réinitialiser</button>
+    <h3>Mes modèles</h3>
+    <p class="msub">Les ${IA_CATALOGUE.length} modèles du catalogue sont déjà proposés dans la liste de l’onglet Retouche — rien à faire pour les utiliser. Ce panneau sert aux modèles que vous ajoutez vous-même : ouvrez <b>fal.ai/models</b>, copiez l’identifiant d’un modèle d’édition d’image et collez-le ici.</p>
+    <div id="ia-model-rows">${rows||'<p class="rz-empty">Aucun modèle ajouté à la main pour l’instant.</p>'}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="mini" onclick="closeModal();iaAskCustomModel();">＋ Ajouter un modèle de fal.ai</button>
+      ${perso.length?'<button class="mini" onclick="iaModelReset()">↺ Tout retirer</button>':''}
       <button class="btn btn-primary" onclick="closeModal()">Terminer</button>
     </div>`);
 }
-function iaModelAddFromCat(id){
+function iaModelEdit(id,k,v){
   ensureIaModels();
-  const m=IA_CATALOGUE.find(x=>x.id===id);
-  if(!m||library.iaModels.some(x=>x.id===id))return;
-  library.iaModels.push({id:m.id,label:m.label,note:m.note});
-  saveLibraryDebounced();openIaModelsPanel();
-  toast(m.label+' ajouté');
+  const m=library.iaModels.find(x=>x.id===id);
+  if(m){m[k]=v;saveLibraryDebounced();}
 }
-function iaModelEdit(i,k,v){ensureIaModels();library.iaModels[i][k]=v;saveLibraryDebounced();}
-function iaModelAdd(){ensureIaModels();library.iaModels.push({id:'',label:'Nouveau modèle',note:''});saveLibraryDebounced();openIaModelsPanel();}
-function iaModelDel(i){ensureIaModels();library.iaModels.splice(i,1);saveLibraryDebounced();openIaModelsPanel();}
-function iaModelReset(){library.iaModels=DEFAULT_IA_MODELS.map(m=>({...m}));saveLibraryDebounced();openIaModelsPanel();}
+function iaModelDel(id){
+  ensureIaModels();
+  const m=library.iaModels.find(x=>x.id===id);if(!m)return;
+  askConfirm('Retirer « '+(m.label||m.id)+' » de vos modèles ? Le catalogue n’est pas touché.',()=>{
+    library.iaModels=library.iaModels.filter(x=>x.id!==id);
+    if(library.iaLastModel===id)library.iaLastModel=iaSettings().modeleDefaut;
+    saveLibraryDebounced();openIaModelsPanel();
+    if(_ed)buildEditorControls();
+    toast('Modèle retiré');
+  });
+}
+function iaModelReset(){
+  askConfirm('Retirer tous les modèles que vous avez ajoutés à la main ? Le catalogue reste disponible.',()=>{
+    library.iaModels=[];
+    library.iaLastModel=iaSettings().modeleDefaut;
+    saveLibraryDebounced();openIaModelsPanel();
+    if(_ed)buildEditorControls();
+    toast('Modèles retirés');
+  });
+}
 
 /* ============ PUBLICATION VERS LE SITE PUBLIC ============
    Le site vitrine est un dépôt SÉPARÉ (rnab26/melissa-nabet-site), servi sur son propre
@@ -5478,6 +5683,7 @@ function iaModelReset(){library.iaModels=DEFAULT_IA_MODELS.map(m=>({...m}));save
 
    Publier écrit des copies redimensionnées, retouches appliquées. Les originaux ne
    quittent jamais le stockage privé. */
+let _pubLastError=null; /* dernière panne de publication, affichée jusqu'à la prochaine tentative */
 const GALLERY_BUCKET='galerie';
 const PUB_FULL=1600, PUB_FULL_Q=0.85, PUB_THUMB=700, PUB_THUMB_Q=0.8;
 function galleryPublicUrl(path){return SB_URL+'/storage/v1/object/public/'+GALLERY_BUCKET+'/'+path;}
@@ -5569,11 +5775,17 @@ async function publishRealisation(r){
     await writeManifest(man);
 
     r.published=true;r.publishedAt=Date.now();r.updatedAt=Date.now();
+    _pubLastError=null;
     saveRealisations();renderRealisations();
     toast('Publié sur le site');
   }catch(e){
     console.error('publication',e);
-    toast('Échec de la publication : '+((e&&e.message)||'erreur'));
+    /* Une publication dure plusieurs secondes et peut échouer en cours : un message qui
+       s'efface au bout de trois secondes se rate. Celui-ci reste jusqu'à la prochaine
+       tentative. */
+    _pubLastError='Publication interrompue : '+((e&&e.message)||'erreur')+'. Le site n’a pas été modifié — vous pouvez réessayer.';
+    renderRealisations();
+    toast('Échec de la publication — le détail reste affiché');
     if(btn){btn.disabled=false;btn.textContent='🌐 Publier sur le site';}
   }
 }
