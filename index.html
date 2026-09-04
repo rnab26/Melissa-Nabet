@@ -4802,10 +4802,21 @@ function iaParamsFor(model){
   if(!library.iaParams[model])library.iaParams[model]={};
   return library.iaParams[model];
 }
-/* Valeur effective : ce que l'utilisateur a choisi, sinon le défaut du modèle. */
+/* Valeur effective : ce que l'utilisateur a choisi, sinon la préférence du CRM, sinon le
+   défaut du modèle.
+   Une seule préférence, et elle a une raison : les photos sont publiées en 1600 px de côté.
+   Une sortie en 1K (1024 px) y serait agrandie, donc molle — le contraire du but. Quand le
+   modèle sait sortir en 2K, on prend 2K. Chez Nano Banana Pro, 1K et 2K sont au même prix.
+   L'utilisateur reste libre de changer dans « Réglages avancés ». */
+const IA_PREFS={resolution:'2K'};
 function iaValue(model,name,spec){
   const saved=iaParamsFor(model);
   if(Object.prototype.hasOwnProperty.call(saved,name))return saved[name];
+  const pref=IA_PREFS[name];
+  if(pref!==undefined){
+    const enums=iaFieldEnum(spec)||[];
+    if(enums.indexOf(pref)>=0)return pref;
+  }
   return spec.default;
 }
 
@@ -4827,11 +4838,38 @@ async function runIaEdit(photo,consigne,modelId){
   const cv=glRenderTo(img,photo.edit||blankEdit(),1600,'ia_'+photo.id);
   if(!cv)throw new Error('rendu impossible');
   _glTexKey='';
-  const input=Object.assign({},iaParamsFor(modelId),{prompt:consigne});
+  /* Les préférences du CRM ne sont pas seulement affichées : elles partent réellement — mais
+     seulement là où le modèle les accepte. Envoyer « 2K » à un modèle qui nomme ses
+     résolutions autrement le ferait échouer. On lit son schéma avant. */
+  const prefs={};
+  try{
+    const sc=await iaSchema(modelId);
+    Object.keys(IA_PREFS).forEach(k=>{
+      const spec=sc.properties&&sc.properties[k];
+      if(!spec)return;
+      const enums=iaFieldEnum(spec)||[];
+      if(enums.indexOf(IA_PREFS[k])>=0)prefs[k]=IA_PREFS[k];
+    });
+  }catch(e){ /* schéma illisible : on part sans préférence, le modèle prendra ses défauts */ }
+  const input=Object.assign(prefs,iaParamsFor(modelId),{prompt:consigne});
   const data=await iaCall({action:'edit',model:modelId,input,imageDataUri:cv.toDataURL('image/jpeg',0.9)});
   if(!data.imageDataUri)throw new Error('aucune image renvoyée');
   iaCountCall();
   return data;
+}
+
+/* Ce qui part au modèle, ce sont les corrections DÉJÀ APPLIQUÉES (verticales, lumière,
+   cadrage). Elles sont donc cuites dans l'image qu'il renvoie. Les laisser aussi dans
+   `photo.edit` les appliquait une SECONDE fois — à l'écran, à l'export et à la publication :
+   verticales sur-redressées, lumière poussée deux fois. Chaque version porte donc ses
+   propres réglages, et bascule avec elle. */
+function iaUseVersion(photo,useIa){
+  const clone=e=>JSON.parse(JSON.stringify(e||blankEdit()));
+  useIa=!!useIa;
+  if(useIa===!!photo.useIa)return;
+  if(photo.useIa)photo.editIa=clone(photo.edit); else photo.editOrig=clone(photo.edit);
+  photo.useIa=useIa;
+  photo.edit=clone(useIa?photo.editIa:photo.editOrig);
 }
 
 async function applyIaToPhoto(r,photo,consigne,modelId,btn){
@@ -4842,6 +4880,11 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
     await photoStore.save(iaKey(photo.id),dataUriToBlob(data.imageDataUri));
     _imgCache.delete(iaKey(photo.id));
     photo.ia={model:modelId,prompt:consigne,params:Object.assign({},iaParamsFor(modelId)),createdAt:Date.now()};
+    /* Les réglages du moment sont maintenant DANS l'image renvoyée : on les met de côté pour
+       la photo d'origine, et la version IA repart de réglages neutres. */
+    photo.editOrig=JSON.parse(JSON.stringify(photo.edit||blankEdit()));
+    photo.editIa=blankEdit();
+    photo.edit=blankEdit();
     photo.useIa=true;
     if(consigne&&consigne.length>3&&library.iaPrompts.indexOf(consigne)<0){
       library.iaPrompts.unshift(consigne);
@@ -5084,14 +5127,15 @@ function buildIaPanel(host){
     const sw=document.createElement('div');sw.className='ed-acts';sw.style.marginTop='10px';
     const bOrig=document.createElement('button');bOrig.className='btn '+(p.useIa?'btn-onlight':'btn-primary');bOrig.textContent='Photo d’origine';
     const bIa=document.createElement('button');bIa.className='btn '+(p.useIa?'btn-primary':'btn-onlight');bIa.textContent='Version IA';
-    bOrig.addEventListener('click',async()=>{p.useIa=false;edTouch();buildEditorControls();await reloadEditorImage();});
-    bIa.addEventListener('click',async()=>{p.useIa=true;edTouch();buildEditorControls();await reloadEditorImage();});
+    bOrig.addEventListener('click',async()=>{iaUseVersion(p,false);edTouch();buildEditorControls();await reloadEditorImage();});
+    bIa.addEventListener('click',async()=>{iaUseVersion(p,true);edTouch();buildEditorControls();await reloadEditorImage();});
     sw.appendChild(bOrig);sw.appendChild(bIa);
     box.appendChild(sw);
     const del=document.createElement('button');del.className='mini';del.textContent='🗑 Supprimer la version IA';del.style.marginTop='10px';
     del.addEventListener('click',()=>askConfirm('Supprimer la version IA de cette photo ? L’original n’est pas touché.',async()=>{
       await photoStore.del(iaKey(p.id));_imgCache.delete(iaKey(p.id));
-      delete p.ia;p.useIa=false;edTouch();buildEditorControls();await reloadEditorImage();
+      iaUseVersion(p,false); /* rend à la photo d'origine les réglages qui étaient les siens */
+      delete p.ia;delete p.editIa;edTouch();buildEditorControls();await reloadEditorImage();
       toast('Version IA supprimée');
     }));
     box.appendChild(del);

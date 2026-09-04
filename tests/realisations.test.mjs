@@ -678,6 +678,50 @@ check('Pont IA : appelé avec le modèle, la consigne et une image',
   && appelEdit.body.imgPrefix === 'data:image/', JSON.stringify(appelEdit && appelEdit.body));
 check('Pont IA : les réglages du modèle partent avec la consigne',
   !!appelEdit && appelEdit.body.input.resolution === '4K', JSON.stringify(appelEdit && appelEdit.body.input));
+
+// --- Sans choix explicite, la sortie doit être demandée en 2K. Les photos sont publiées en
+//     1600 px : une sortie 1K (défaut du modèle) y serait agrandie, donc molle.
+const pref2k = await page.evaluate(async () => {
+  const m = 'fal-ai/nano-banana-pro/edit';
+  library.iaParams[m] = {};                       // plus rien de mémorisé
+  const sc = await iaSchema(m);
+  await runIaEdit(realisations[0].photos[0], 'test préférence', m);   // pont intercepté
+  return { affiche: iaValue(m, 'resolution', sc.properties.resolution), defautModele: sc.properties.resolution.default };
+});
+const appelPref = iaCalls.filter(c => c.body.action === 'edit').pop();
+check('Sans choix explicite : 2K affiché dans les réglages (le modèle propose 1K par défaut)',
+  pref2k.affiche === '2K' && pref2k.defautModele === '1K', JSON.stringify(pref2k));
+check('Sans choix explicite : le 2K part réellement au modèle',
+  !!appelPref && appelPref.body.input.resolution === '2K', JSON.stringify(appelPref && appelPref.body.input));
+
+// --- Les corrections envoyées au modèle sont CUITES dans l'image qu'il renvoie : les
+//     laisser actives les appliquerait une seconde fois (verticales sur-redressées, lumière
+//     poussée deux fois) à l'écran, à l'export ET à la publication.
+const doubleCorrection = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  // On repart d'une photo SANS version IA mais AVEC des corrections marquées : sans valeurs
+  // non nulles, ce test passerait même si le bug était toujours là.
+  delete p.ia; delete p.editIa; delete p.editOrig; p.useIa = false;
+  Object.assign(p.edit, { persp: 0.35, expo: 0.4 });
+  await applyIaToPhoto(r, p, 'consigne de test', 'fal-ai/nano-banana-pro/edit', null);
+  const apresIa = { persp: p.edit.persp, expo: p.edit.expo, useIa: p.useIa };
+  const memorise = p.editOrig ? { persp: p.editOrig.persp, expo: p.editOrig.expo } : null;
+  iaUseVersion(p, false);                      // retour à la photo d'origine
+  const retour = { persp: p.edit.persp, expo: p.edit.expo, useIa: p.useIa };
+  iaUseVersion(p, true);
+  return { apresIa, memorise, retour, apresRetourIa: { persp: p.edit.persp, expo: p.edit.expo } };
+});
+check('Après retouche IA : les réglages déjà appliqués ne sont PAS réappliqués par-dessus',
+  doubleCorrection.apresIa.persp === 0 && doubleCorrection.apresIa.expo === 0,
+  JSON.stringify(doubleCorrection.apresIa));
+check('Les réglages de la photo d’origine sont conservés et reviennent avec elle',
+  doubleCorrection.memorise !== null && doubleCorrection.memorise.persp === 0.35
+  && doubleCorrection.retour.persp === 0.35 && doubleCorrection.retour.expo === 0.4,
+  JSON.stringify(doubleCorrection));
+check('Chaque version garde ses propres réglages d’un aller-retour à l’autre',
+  doubleCorrection.apresRetourIa.persp === 0 && doubleCorrection.apresRetourIa.expo === 0,
+  JSON.stringify(doubleCorrection.apresRetourIa));
+
 check('Pont IA : le jeton envoyé est celui de la SESSION, pas la clé publique de la page',
   iaCalls.every(c => c.auth === 'Bearer jeton-de-test' && !c.auth.includes('sb_publishable')),
   iaCalls[0] && iaCalls[0].auth);

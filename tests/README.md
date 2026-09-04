@@ -1,9 +1,13 @@
 # Tests
 
-Deux suites :
+Trois suites :
 
 - `tests/realisations.test.mjs` — l'espace **Réalisations** dans le CRM (import, éditeur,
   rendu, synchronisation, sauvegarde, publication vers le site).
+- `tests/pont-ia.test.mjs` — le **pont `photo-ia`**, côté serveur : la forme exacte de la
+  requête envoyée au fournisseur, sur des schémas relevés sur l'API réelle de fal. Se lance
+  avec `bun tests/pont-ia.test.mjs` (bun exécute le TypeScript du pont). Aucune dépense :
+  `buildPayload` est une fonction pure, aucun appel n'est émis.
 - `tests/site.test.mjs` — le **site vitrine public** (`site-vitrine/index.html`), servi
   depuis un banc d'essai local avec un faux manifeste. Vérifie notamment qu'aucune clé
   d'accès ne figure dans la page publique.
