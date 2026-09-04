@@ -1552,6 +1552,106 @@ check('Série : on est prévenu quand le plafond tombera au milieu de la série'
 await page.unroute('**/functions/v1/photo-ia');
 await page.evaluate(() => { _iaSerieReport = null; renderRealisations(); });
 
+
+// ============================================================================
+//  PLACE OCCUPÉE DANS LE CLOUD : compter les deux seaux, et prévenir avant la panne
+// ============================================================================
+const stock = await page.evaluate(async () => {
+  const vrai = sb.storage.from;
+  // Deux seaux, et la galerie range ses photos dans un sous-dossier par réalisation :
+  // c'est exactement le cas que l'ancien comptage (un seul seau, un seul niveau) ratait.
+  sb.storage.from = (b) => ({
+    list: async (prefix) => {
+      if (b === 'client-docs') return { data: [{ name: 'rp_1', metadata: { size: 2 * 1048576 } }, { name: 'rt_1', metadata: { size: 204800 } }], error: null };
+      if (b === 'galerie') {
+        if (!prefix.includes('/')) return { data: [{ name: 'manifest.json', metadata: { size: 1024 } }, { name: 'r1' }], error: null };
+        return { data: [{ name: 'p0.jpg', metadata: { size: 409600 } }, { name: 't0.jpg', metadata: { size: 102400 } }], error: null };
+      }
+      return { data: [], error: null };
+    },
+  });
+  storageInvalidate();
+  const st = await loadStorageStat(true);
+  sb.storage.from = vrai;
+  return { bytes: st.bytes, files: st.files, docs: st.docs.bytes, gal: st.gal.bytes };
+});
+check('Stockage : les documents privés sont comptés', stock.docs === 2 * 1048576 + 204800, stock.docs + ' octets');
+check('Stockage : la galerie publiée est comptée aussi, sous-dossiers compris',
+  stock.gal === 1024 + 409600 + 102400, stock.gal + ' octets');
+check('Stockage : le total additionne les deux seaux', stock.bytes === stock.docs + stock.gal && stock.files === 5,
+  stock.bytes + ' octets, ' + stock.files + ' fichier(s)');
+
+const jauge = await page.evaluate(() => {
+  const faux = (pct, files) => ({ at: Date.now(), bytes: Math.round(pct / 100 * 1024 * 1048576), files,
+    docs: { bytes: 1, files: 1 }, gal: { bytes: 1, files: 1 }, erreur: '' });
+  library.storage = { quotaMo: 1024, seuil: 70, photoMo: 1.2 };
+  const lire = () => {
+    const b = document.querySelector('#rz-storage .rz-quota');
+    return b ? { txt: b.querySelector('p').textContent, plein: b.className.includes('plein'),
+                 aide: b.querySelectorAll('p')[1].textContent } : null;
+  };
+  _storageStat = faux(50, 400); paintStorageBanner();
+  const sous = lire();
+  _storageStat = faux(73, 700); paintStorageBanner();
+  const alerte = lire();
+  _storageStat = faux(97, 950); paintStorageBanner();
+  const plein = lire();
+  library.storage.seuil = 90;
+  _storageStat = faux(73, 700); paintStorageBanner();
+  const seuilPlusHaut = lire();
+  library.storage.seuil = 70;
+  _storageStat = null;
+  return { sous, alerte, plein, seuilPlusHaut };
+});
+check('Stockage : rien ne s’affiche tant qu’on est sous le seuil', jauge.sous === null);
+check('Stockage : au-delà du seuil, l’alerte dit le pourcentage et ce qui reste en PHOTOS',
+  jauge.alerte && /73 %/.test(jauge.alerte.txt) && /environ \d+ photo/.test(jauge.alerte.txt), jauge.alerte && jauge.alerte.txt);
+check('Stockage : l’alerte dit quoi faire pour récupérer de la place',
+  jauge.alerte && /supprimez|retirez du site/i.test(jauge.alerte.aide), jauge.alerte && jauge.alerte.aide.slice(0, 80));
+check('Stockage : presque plein, le ton change et annonce l’échec des envois',
+  jauge.plein && jauge.plein.plein && /vont échouer/.test(jauge.plein.txt), jauge.plein && jauge.plein.txt);
+check('Stockage : remonter le seuil fait taire l’alerte', jauge.seuilPlusHaut === null);
+
+const reglagesStock = await page.evaluate(() => {
+  openSyncPanel();
+  const q = document.getElementById('stor-quota'), s = document.getElementById('stor-seuil'), m = document.getElementById('stor-msg');
+  q.value = '10'; q.dispatchEvent(new Event('input'));
+  const refusQ = m.textContent, quotaApres = storageSettings().quotaMo;
+  q.value = '2048'; q.dispatchEvent(new Event('input'));
+  const okQ = storageSettings().quotaMo, videQ = m.textContent;
+  s.value = '150'; s.dispatchEvent(new Event('input'));
+  const refusS = m.textContent, seuilApres = storageSettings().seuil;
+  s.value = '80'; s.dispatchEvent(new Event('input'));
+  const okS = storageSettings().seuil;
+  const recalc = !!document.getElementById('stor-refresh');
+  closeModal();
+  library.storage = { quotaMo: 1024, seuil: 70, photoMo: 1.2 };
+  return { refusQ, quotaApres, okQ, videQ, refusS, seuilApres, okS, recalc };
+});
+check('Réglages stockage : une capacité absurde est refusée avec sa raison',
+  /au moins 50 Mo/.test(reglagesStock.refusQ) && reglagesStock.quotaApres === 1024, reglagesStock.refusQ);
+check('Réglages stockage : une capacité valable est prise en compte', reglagesStock.okQ === 2048 && reglagesStock.videQ === '');
+check('Réglages stockage : un seuil hors bornes est refusé avec sa raison',
+  /entre 10 et 99/.test(reglagesStock.refusS) && reglagesStock.seuilApres === 70, reglagesStock.refusS);
+check('Réglages stockage : un seuil valable est pris en compte', reglagesStock.okS === 80);
+check('Réglages stockage : on peut relancer la mesure à la main', reglagesStock.recalc);
+
+const invalid = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  _storageStat = { at: Date.now(), bytes: 1, files: 1, docs: { bytes: 1 }, gal: { bytes: 0 }, erreur: '' };
+  await addPhotosToRealisation(r, [await window.__mkImg('mesure.jpg', 400, 300, '#777')]);
+  const apresImport = _storageStat === null || _storageStat.bytes !== 1;
+  _storageStat = { at: Date.now(), bytes: 1, files: 1, docs: { bytes: 1 }, gal: { bytes: 0 }, erreur: '' };
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    delPhoto(r, r.photos[r.photos.length - 1].id);
+  });
+  return { apresImport, apresSuppression: _storageStat === null || _storageStat.bytes !== 1 };
+});
+check('Stockage : la mesure est refaite après un import', invalid.apresImport);
+check('Stockage : la mesure est refaite après une suppression', invalid.apresSuppression);
+
 // --- On rend la vue à la réalisation utilisée par les mesures suivantes
 await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
 await page.waitForTimeout(300);

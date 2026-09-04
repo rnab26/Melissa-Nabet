@@ -612,6 +612,15 @@
   /* Les styles de `.fld` ne visent que `label.fld` : ce bloc porte des boutons radio,
      pas un champ, il a donc ses propres règles au lieu d'emprunter une classe qui ne
      s'applique pas (les libellés se chevauchaient). */
+  /* Alerte de place : visible là où l'on ajoute des photos, et seulement au-delà du seuil. */
+  .rz-quota{background:#fdf4e6;border:1px solid #e6d3b0;border-left:3px solid #b7752f;
+    border-radius:9px;padding:11px 13px;margin:0 0 16px;}
+  .rz-quota.plein{background:#fbeee9;border-color:#e8c9bd;border-left-color:#b6543f;}
+  .rz-quota p{margin:0 0 6px;font-size:12.5px;color:#8a5a1f;line-height:1.5;font-weight:600;}
+  .rz-quota.plein p{color:#8c3f2d;}
+  .rz-quota .rz-quota-sub{font-weight:400;color:var(--stone-deep);font-size:11.5px;}
+  .stor-box{font-size:12.5px;color:var(--stone-deep);line-height:1.55;margin-bottom:10px;}
+  .stor-det{margin:7px 0 0;}
   .ia-portee-wrap{display:block;margin-bottom:11px;}
   .ia-portee-wrap>.lbl{display:block;font-size:11px;color:var(--stone);margin-bottom:4px;}
   .ia-portee{display:flex;flex-direction:column;gap:7px;margin-top:4px;}
@@ -999,6 +1008,7 @@
       </div>
     </div>
     <p class="rz-intro">Les photos de chantiers terminés, retouchées et prêtes à publier sur le site. Rien à voir avec les documents d'une fiche client : ici les photos sont gardées en pleine définition et les retouches ne modifient jamais l'original.</p>
+    <div id="rz-storage"></div>
     <div id="rz-body"></div>
   </div>
 </div>
@@ -3963,6 +3973,108 @@ function mergeRealisations(list){
   realisations=realisations.filter(r=>seen.has(r.id));
 }
 
+/* ============ PLACE OCCUPÉE DANS LE CLOUD ============
+   Le plan gratuit Supabase plafonne à 1 Go. À une photo d'environ 1 Mo, ça tient un à deux
+   ans — puis les envois échouent, et sans avertissement on ne comprend pas pourquoi une
+   photo « ne s'ajoute pas ». On compte donc les DEUX seaux : les documents et les photos
+   privées (`client-docs`) ET ce qui est publié sur le site (`galerie`). Ne compter que le
+   premier sous-estimait d'autant que la galerie publiée pèse. */
+const STORAGE_DEFAULTS={quotaMo:1024,seuil:70,photoMo:1.2};
+function storageSettings(){
+  library.storage=Object.assign({},STORAGE_DEFAULTS,library.storage||{});
+  return library.storage;
+}
+let _storageStat=null;       /* {at,bytes,files,docs,gal,photoMoyen} */
+let _storageLoading=false;
+const STORAGE_TTL=120000;    /* la mesure coûte deux listings : inutile de la refaire sans arrêt */
+async function bucketBytes(bucket,prefix,profondeur){
+  let bytes=0,files=0;
+  const {data,error}=await sb.storage.from(bucket).list(prefix,{limit:1000});
+  if(error)throw error;
+  for(const f of (data||[])){
+    const taille=f&&f.metadata&&f.metadata.size;
+    if(taille!=null){bytes+=taille;files++;}
+    else if((profondeur||0)<2){
+      /* Une entrée sans métadonnées est un dossier : la galerie range ses photos par
+         réalisation, on descend d'un cran. */
+      const sous=await bucketBytes(bucket,prefix+'/'+f.name,(profondeur||0)+1);
+      bytes+=sous.bytes;files+=sous.files;
+    }
+  }
+  return {bytes,files};
+}
+function storageInvalidate(){_storageStat=null;}
+async function loadStorageStat(force){
+  if(!(sb&&sbUser&&ownerId))return null;
+  if(!force&&_storageStat&&Date.now()-_storageStat.at<STORAGE_TTL)return _storageStat;
+  if(_storageLoading)return _storageStat;
+  _storageLoading=true;
+  try{
+    const docs=await bucketBytes(DOC_BUCKET,ownerId,0);
+    let gal={bytes:0,files:0};
+    try{gal=await bucketBytes(GALLERY_BUCKET,ownerId,0);}catch(e){ /* seau public absent : on n'invente pas de chiffre */ }
+    const bytes=docs.bytes+gal.bytes, files=docs.files+gal.files;
+    _storageStat={at:Date.now(),bytes,files,docs,gal,erreur:''};
+  }catch(e){
+    _storageStat={at:Date.now(),bytes:0,files:0,docs:null,gal:null,erreur:(e&&e.message)||'erreur'};
+  }finally{_storageLoading=false;}
+  return _storageStat;
+}
+function storagePct(st){
+  const q=(storageSettings().quotaMo|0)*1048576;
+  if(!q||!st)return 0;
+  return Math.min(999,st.bytes/q*100);
+}
+function moLisible(o){
+  const mo=o/1048576;
+  if(mo>=1024)return (mo/1024).toFixed(2).replace('.',',')+' Go';
+  if(mo<0.1&&o>0)return '< 0,1 Mo';
+  return mo.toFixed(1).replace('.',',')+' Mo';
+}
+/* Combien de photos peuvent encore entrer. On préfère la taille moyenne RÉELLE des fichiers
+   déjà stockés à une estimation de principe : une photo de téléphone ne pèse pas la même
+   chose d'un appareil à l'autre. */
+function storagePhotosRestantes(st){
+  const set=storageSettings();
+  const q=(set.quotaMo|0)*1048576;
+  const reste=Math.max(0,q-st.bytes);
+  const moyen=(st.files>3&&st.bytes>0)?(st.bytes/st.files):((parseFloat(set.photoMo)||1.2)*1048576);
+  return Math.floor(reste/Math.max(moyen,1));
+}
+/* Bandeau visible là où l'on ajoute des photos. Rien tant qu'on est sous le seuil : une
+   alerte permanente ne s'alerte plus de rien. */
+function paintStorageBanner(){
+  const host=document.getElementById('rz-storage');
+  if(!host)return;
+  if(!(sb&&sbUser&&ownerId)){host.innerHTML='';return;}
+  const st=_storageStat;
+  if(!st){
+    loadStorageStat().then(x=>{if(x)paintStorageBanner();});
+    host.innerHTML='';return;
+  }
+  if(st.erreur){host.innerHTML='';return;}
+  const set=storageSettings();
+  const pct=storagePct(st);
+  if(pct<(set.seuil|0)){host.innerHTML='';return;}
+  const plein=pct>=95;
+  const reste=storagePhotosRestantes(st);
+  host.innerHTML='';
+  const box=document.createElement('div');
+  box.className='rz-quota'+(plein?' plein':'');
+  const t=document.createElement('p');
+  t.textContent=(plein?'⛔ Stockage presque plein : ':'⚠ Stockage : ')
+    +moLisible(st.bytes)+' sur '+set.quotaMo+' Mo ('+Math.round(pct)+' %). '
+    +(plein?'Les prochains envois de photos vont échouer.':'Il reste de la place pour environ '+reste+' photo(s).');
+  box.appendChild(t);
+  const q=document.createElement('p');q.className='rz-quota-sub';
+  q.textContent='Pour faire de la place : supprimez les photos ratées d’un chantier, ou retirez du site une réalisation ancienne (ses fichiers publiés sont alors effacés). Le seuil d’alerte et la capacité du plan se règlent dans Sauvegarde → Synchronisation.';
+  box.appendChild(q);
+  const bar=document.createElement('div');bar.className='rz-bar';
+  bar.innerHTML='<i></i>';bar.querySelector('i').style.width=Math.min(100,pct)+'%';
+  box.appendChild(bar);
+  host.appendChild(box);
+}
+
 /* ---- Stockage des fichiers photo ----
    Même bucket que les documents (`client-docs`), chemin `ownerId/<clé>`. La policy réelle
    (vérifiée en base) est `(storage.foldername(name))[1] = auth.uid()::text` : c'est le
@@ -4120,6 +4232,7 @@ async function addPhotosToRealisation(r,files){
   _rzImport=null;
   _rzImportReport=refus.length?{n,refus}:null;
   r.updatedAt=Date.now();
+  storageInvalidate();
   saveRealisations();renderRealisations();
   if(n)toast(n+' photo(s) ajoutée(s)');
 }
@@ -4408,6 +4521,7 @@ function renderRealisations(){
   host.innerHTML='';
   if(_rzOpenId)renderRealisationDetail(host,findRealisation(_rzOpenId));
   else renderRealisationList(host);
+  paintStorageBanner();
 }
 function renderRealisationList(host){
   const grid=document.createElement('div');grid.className='rz-grid';
@@ -4764,7 +4878,7 @@ function delRealisation(id){
   askConfirm('Supprimer « '+(r.title||'cette réalisation')+' » et ses '+(r.photos||[]).length+' photo(s) ? C’est définitif.',async()=>{
     for(const p of (r.photos||[])){await photoStore.del(fullKey(p.id));await photoStore.del(thumbKey(p.id));if(p.ia)await photoStore.del(iaKey(p.id));}
     realisations=realisations.filter(x=>x.id!==id);
-    _rzOpenId=null;saveRealisations();renderRealisations();toast('Réalisation supprimée');
+    _rzOpenId=null;storageInvalidate();saveRealisations();renderRealisations();toast('Réalisation supprimée');
   });
 }
 function delPhoto(r,pid){
@@ -4774,7 +4888,7 @@ function delPhoto(r,pid){
     if(gone&&gone.ia)await photoStore.del(iaKey(pid));
     r.photos=(r.photos||[]).filter(p=>p.id!==pid);
     if(r.cover===pid)r.cover=(r.photos[0]||{}).id||'';
-    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+    r.updatedAt=Date.now();storageInvalidate();saveRealisations();renderRealisations();
   });
 }
 
@@ -6354,7 +6468,7 @@ async function publishRealisation(r){
     await writeManifest(man);
 
     r.published=true;r.publishedAt=Date.now();r.updatedAt=Date.now();
-    _pubLastError=null;
+    _pubLastError=null;storageInvalidate();
     saveRealisations();renderRealisations();
     toast('Publié sur le site');
   }catch(e){
@@ -6379,7 +6493,7 @@ async function unpublishRealisation(r){
       man.realisations=man.realisations.filter(x=>x.id!==r.id);
       man.updatedAt=new Date().toISOString();
       await writeManifest(man);
-      r.published=false;delete r.publishedAt;r.updatedAt=Date.now();
+      r.published=false;delete r.publishedAt;r.updatedAt=Date.now();storageInvalidate();
       (r.photos||[]).forEach(p=>{delete p.publishedAt;photoLog(p,'depublie','');});
       saveRealisations();renderRealisations();
       toast('Retiré du site');
@@ -6553,10 +6667,19 @@ function openSyncPanel(){
       Clients sur cet appareil : <b>${clients.length}</b><br>
       Clients dans le cloud : <b id="cloud-count">…</b><br>
       Devis enregistrés : <b>${devisList.length}</b><br>
-      Stockage documents : <b id="doc-storage">…</b><br>
+      Stockage cloud : <b id="doc-storage">…</b><br>
       Version de l'appli : <b>${APP_VERSION}</b><br>
       État : <b>${lastSyncError?('⚠ '+esc(lastSyncError)):'✓ ok'}</b>
     </div>
+    <div class="ed-eyebrow" style="margin-top:16px">Place occupée</div>
+    <div id="stor-box" class="stor-box">Mesure en cours…</div>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Capacité du plan (Mo)</span><input type="number" id="stor-quota" min="50" max="1048576" step="50"></label>
+      <label class="fld"><span class="lbl">Alerter à partir de (%)</span><input type="number" id="stor-seuil" min="10" max="99" step="5"></label>
+    </div>
+    <p class="ias-msg" id="stor-msg"></p>
+    <button class="mini" id="stor-refresh">↻ Recalculer maintenant</button>
+
     <p class="msub" style="margin-top:10px">« Forcer » renvoie toutes les données de <b>cet</b> appareil vers le cloud, puis recharge.</p>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
       <button class="btn btn-primary" onclick="forceSync()">Forcer la synchronisation</button>
@@ -6565,18 +6688,68 @@ function openSyncPanel(){
   if(sb&&sbUser){sb.from('app_data').select('id',{count:'exact',head:true}).eq('kind','client').then(({count,error})=>{const el=document.getElementById('cloud-count');if(el)el.textContent=error?('erreur ('+((error.message)||'?')+')'):count;});}
   else{const el=document.getElementById('cloud-count');if(el)el.textContent='hors ligne';}
   loadDocStorageUsage();
+  storageSettingsBind();
 }
-async function loadDocStorageUsage(){
-  const el=document.getElementById('doc-storage');if(!el)return;
-  if(!sb||!sbUser||!ownerId){el.textContent='hors ligne';return;}
-  try{
-    const {data,error}=await sb.storage.from(DOC_BUCKET).list(ownerId,{limit:1000});
-    if(error)throw error;
-    const bytes=(data||[]).reduce((a,f)=>a+((f.metadata&&f.metadata.size)||0),0);
-    const mo=bytes/1024/1024;
-    const moTxt=(mo<0.1&&bytes>0?'< 0,1':mo.toFixed(1).replace('.',',')) ;
-    el.textContent=moTxt+' Mo utilisés sur 1 Go (plan gratuit Supabase) · '+(data||[]).length+' fichier(s)';
-  }catch(e){el.textContent='indisponible ('+((e&&e.message)||'erreur')+')';}
+/* La jauge compte les DEUX seaux et dit ce qu'il reste en photos, pas seulement en méga-
+   octets : « il reste 280 photos » se décide, « il reste 320 Mo » se calcule. */
+async function loadDocStorageUsage(force){
+  const el=document.getElementById('doc-storage'), box=document.getElementById('stor-box');
+  if(!el&&!box)return;
+  const set=storageSettings();
+  const qi=document.getElementById('stor-quota'), si=document.getElementById('stor-seuil');
+  if(qi&&!qi.value)qi.value=set.quotaMo;
+  if(si&&!si.value)si.value=set.seuil;
+  if(!sb||!sbUser||!ownerId){
+    if(el)el.textContent='hors ligne';
+    if(box)box.textContent='Hors ligne : la place occupée ne peut pas être mesurée.';
+    return;
+  }
+  if(el)el.textContent='mesure…';
+  if(box)box.textContent='Mesure en cours…';
+  const st=await loadStorageStat(force);
+  if(!st)return;
+  if(st.erreur){
+    if(el)el.textContent='indisponible ('+st.erreur+')';
+    if(box)box.textContent='Mesure impossible : '+st.erreur+'. Rien n’est perdu — réessayez plus tard.';
+    return;
+  }
+  const pct=storagePct(st);
+  if(el)el.textContent=moLisible(st.bytes)+' sur '+set.quotaMo+' Mo ('+Math.round(pct)+' %) · '+st.files+' fichier(s)';
+  if(box){
+    box.innerHTML='';
+    const bar=document.createElement('div');bar.className='rz-bar';
+    bar.innerHTML='<i></i>';
+    const i=bar.querySelector('i');
+    i.style.width=Math.min(100,pct)+'%';
+    if(pct>=95)i.style.background='#b6543f'; else if(pct>=(set.seuil|0))i.style.background='#b7752f';
+    box.appendChild(bar);
+    const d=document.createElement('p');d.className='stor-det';
+    d.textContent=moLisible(st.bytes)+' sur '+set.quotaMo+' Mo — soit '+Math.round(pct)+' %. '
+      +'Documents et photos privées : '+moLisible(st.docs?st.docs.bytes:0)+'. Publié sur le site : '+moLisible(st.gal?st.gal.bytes:0)+'. '
+      +'Place pour environ '+storagePhotosRestantes(st)+' photo(s) de plus.';
+    box.appendChild(d);
+  }
+}
+function storageSettingsBind(){
+  const qi=document.getElementById('stor-quota'), si=document.getElementById('stor-seuil');
+  const msg=document.getElementById('stor-msg'), btn=document.getElementById('stor-refresh');
+  if(!qi||!si)return;
+  const set=storageSettings();
+  qi.value=set.quotaMo;si.value=set.seuil;
+  const dire=t=>{if(msg)msg.textContent=t||'';};
+  const majQuota=()=>{
+    const v=parseInt(qi.value,10);
+    if(!isFinite(v)||v<50){dire('Capacité refusée : il faut au moins 50 Mo. Le plan gratuit Supabase vaut 1024 Mo.');return;}
+    dire('');storageSettings().quotaMo=v;saveLibraryDebounced();loadDocStorageUsage();paintStorageBanner();
+  };
+  const majSeuil=()=>{
+    const v=parseInt(si.value,10);
+    if(!isFinite(v)||v<10||v>99){dire('Seuil refusé : donnez un pourcentage entre 10 et 99.');return;}
+    dire('');storageSettings().seuil=v;saveLibraryDebounced();paintStorageBanner();
+  };
+  qi.addEventListener('change',majQuota);qi.addEventListener('input',majQuota);
+  si.addEventListener('change',majSeuil);si.addEventListener('input',majSeuil);
+  if(btn)btn.addEventListener('click',()=>{storageInvalidate();loadDocStorageUsage(true).then(paintStorageBanner);});
 }
 function forceSync(){
   if(!sb||!sbUser){toast('Non connecté');return;}
