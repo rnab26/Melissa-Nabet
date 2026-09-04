@@ -70,17 +70,12 @@ menu, dialogue de légende, éditeur) : aucun débordement horizontal, rien d'il
 - Le **glisser-déposer tactile** n'est pas implémenté (le HTML5 drag-and-drop ne fonctionne
   pas au doigt). Sur téléphone, ce sont les ◀ ▶ qui rangent. Un glisser tactile maison est
   faisable (~0,5 j) si l'usage montre que les flèches ne suffisent pas.
-- Le **site vitrine vit dans un dépôt séparé** (`rnab26/melissa-nabet-site`) : les légendes
-  s'affichent une fois `site-vitrine/index.html` recopié là-bas. Voir « À faire côté
-  Raphaël » ci-dessous.
+- Rien. Le **site vitrine** (dépôt séparé `rnab26/melissa-nabet-site`) a été mis à jour dans
+  la foulée : `site-vitrine/index.html` y a été recopié à l'identique, fusionné et déployé.
+  **Vérifié sur la page réellement servie** : `https://rnab26.github.io/melissa-nabet-site/`
+  répond 200 et contient bien le code des légendes.
 
 ### À faire côté Raphaël
 
-1. **Reporter le site vitrine dans son dépôt.** Le fichier `site-vitrine/index.html` de ce
-   dépôt est la source ; c'est lui qu'il faut copier dans `rnab26/melissa-nabet-site`
-   (fichier `index.html`) pour que les légendes apparaissent sur la page publique. Tant que
-   ce n'est pas fait, les légendes sont bien publiées dans le manifeste mais la page ne les
-   affiche pas — rien n'est cassé, elles sont simplement invisibles.
-   *(Cette session n'a accès qu'au dépôt du CRM.)*
-2. Rien d'autre. Le reste est en ligne dès que GitHub Pages a fini de déployer `main`.
+**Rien.** Tout est en ligne : CRM (déploiement Pages réussi, run 99) et site public.
 
