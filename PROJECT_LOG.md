@@ -359,7 +359,7 @@ appareil) ou **avec les retouches**.
 
 ## Retouche IA — pont ouvert vers un agrégateur de modèles
 
-**État** : **livré et déployé**, en attente de la clé du fournisseur pour fonctionner.
+**État** : **livré, déployé et branché** — clé fal.ai en place, crédits rechargés.
 
 **Ce que l'utilisateur demandait** : ne pas être lié à un modèle, recharger des crédits une
 fois chez un fournisseur qui regroupe les IA, et choisir le modèle depuis le CRM.
@@ -404,10 +404,51 @@ Réponse : `{images:[{url}]}`, où `url` est un data URI quand `sync_mode` est v
   pour la fonction serveur, et les modèles ressortent de toute façon dans leur propre
   définition.
 
-**Manip utilisateur restante** : créer un compte fal.ai, recharger des crédits, coller la
-clé dans Supabase → Project Settings → Edge Functions → Secrets, sous le nom exact `FAL_KEY`.
-Rien à redéployer ensuite. Sans elle, le pont répond « FAL_KEY non configurée côté serveur ».
+**Deux portées de clé chez fal — ne pas confondre les deux échecs** :
+- **portée API** : consommer les modèles. C'est la clé en place, et c'est tout ce qu'il faut
+  pour retoucher.
+- **portée ADMIN** : les API de plateforme, dont `GET /v1/account/billing` qui donne le solde.
+  La clé actuelle s'y fait refuser — d'où « Solde : n/c » dans le panneau.
 
-**Vérification** : `tests/realisations.test.mjs` (69 contrôles) couvre le panneau IA, le
-jeton réellement envoyé au pont, la non-destruction de l'original et la bascule entre les
-deux versions. Le test intercepte le pont : il ne dépense aucun crédit.
+Un solde illisible **ne dit rien** sur la retouche : ce sont deux droits différents. Le
+panneau l'écrit en clair au lieu de laisser croire à une panne. Pour afficher le solde, il
+faudrait une clé de portée ADMIN dans `FAL_KEY` (chantier `ph12`, confort pur).
+
+**L'échec de solde est mémorisé comme le succès** (60 s) : sans ça, chaque ouverture de
+l'éditeur relançait un appel voué à échouer.
+
+**Le pont trace ses échecs** (`console.error` sur l'authentification, le solde, le schéma et
+l'exécution). Avant, un 502 ne laissait dans les journaux Supabase que les lignes de
+démarrage : rien à diagnostiquer à distance. Déployé en version 4.
+
+**Vérification** : `tests/realisations.test.mjs` (93 contrôles) couvre le panneau IA, le
+jeton réellement envoyé au pont, la non-destruction de l'original, la bascule entre les deux
+versions, et le message d'échec du solde. Le test intercepte le pont : il ne dépense aucun
+crédit.
+
+### Panneau de retouche — refonte (septembre 2026)
+
+**Demande** : « rends ça plus ergonomique, plus agréable, style site pro connu, la c'est trop
+rustique — et passe le mode IA en premier choix plutôt que les réglages manuels. »
+
+**Ce qui a changé** :
+- La retouche IA est le **premier onglet et l'onglet ouvert par défaut** (`_ed.tab='ia'`).
+  Les curseurs manuels sont un rattrapage ; la consigne écrite est ce qui rend une photo
+  publiable. Ouvrir sur « Géométrie » mettait le rattrapage en avant.
+- Onglets en **segment** (une piste, une pastille) au lieu de quatre boutons séparés.
+  L'onglet IA garde la couleur de marque quand il est actif.
+- Panneau découpé en **cartes**, une par question : ce que je veux (consigne, consignes
+  toutes prêtes, un seul bouton pleine largeur), avec quel modèle (choix + réglages avancés
+  repliés), ce qui existe déjà (version IA, bascule original/IA).
+- **Cinq consignes toutes prêtes** (`IA_PRESETS`) : lumière équilibrée, couleurs fidèles,
+  désencombrer, fenêtres dégagées, netteté et matières. Taper trois lignes de français sur un
+  téléphone est le vrai frein à l'usage.
+- Solde en **pastille discrète** dans l'en-tête de carte, plus en bandeau.
+
+**Ne pas casser** :
+- Les onglets sont en `flex:1 1 auto` + `white-space:nowrap` : à parts égales, « ✨ Retouche »
+  passait sur deux lignes dans le panneau de 340 px du bureau.
+- `paintEditorTabs()` est appelé **à l'ouverture** de l'éditeur, pas seulement au changement
+  d'onglet : sans ça les boutons de réglage photo restaient visibles sous l'onglet IA.
+- Le libellé du bouton principal (« ✨ Retoucher cette photo ») est répété dans `setBtn` de
+  `applyIaToPhoto` : changer l'un sans l'autre laisse un libellé faux après un envoi.
