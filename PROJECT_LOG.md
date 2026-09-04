@@ -296,6 +296,32 @@ séparation est une exigence d'adresse, pas un correctif de faille.
 - Republier avec moins de photos qu'avant doit continuer à supprimer les fichiers
   orphelins du bucket : sinon ils restent accessibles publiquement hors galerie.
 
+## Photos — sélection multiple, téléchargement et suppression en lot
+
+**État** : livré et déployé. Besoin réel : plusieurs personnes alimentent la même galerie
+depuis des téléphones différents, il faut pouvoir récupérer sur son propre appareil des
+photos ajoutées depuis celui de quelqu'un d'autre, et faire le ménage à plusieurs.
+
+Bouton « ☑ Sélectionner » dans une réalisation : appui = cocher, barre d'actions en bas
+(tout sélectionner / télécharger / supprimer / annuler). Deux choix au téléchargement,
+explicités dans la fenêtre : **telles qu'importées** (pour récupérer l'image sur un autre
+appareil) ou **avec les retouches**.
+
+**Ne pas casser** :
+- Le téléchargement en lot doit rester **un seul fichier .zip**. Une rafale de liens de
+  téléchargement est bloquée par les navigateurs mobiles après le premier fichier — c'est
+  exactement le cas d'usage visé. L'ancien export photo par photo a été supprimé pour
+  cette raison ; ne pas le réintroduire.
+- L'archive est écrite à la main (`buildZip`, méthode « store », sans dépendance externe) :
+  un JPEG est déjà compressé, le recompresser ne gagnerait rien et coûterait du calcul sur
+  un téléphone. Le test fait relire l'archive produite par `unzip -t` — ne pas remplacer ce
+  contrôle par une relecture de code, un ZIP mal formé reste silencieux jusqu'à l'ouverture.
+- « Telles qu'importées » = le fichier stocké à l'import (jusqu'à 2560 px), **pas** le
+  fichier brut de l'appareil photo, qui n'est jamais envoyé. Le libellé de la fenêtre le
+  dit ; si on change la limite d'import, mettre ce texte à jour.
+- Sur la barre d'actions (fond sombre), ne pas utiliser `.btn-onlight` : il écrit en foncé
+  sur foncé et rend le bouton invisible. Les règles `.rz-selbar .btn` sont là pour ça.
+
 **Vérification** : `tests/realisations.test.mjs` (Playwright + WebGL réel, 37 contrôles). C'est la méthode de référence pour ce chantier — elle **mesure** le rendu (convergence des verticales sur une façade en trapèze, dominante couleur, luminance, ratio de recadrage) au lieu de relire le code. Mode d'emploi dans `tests/README.md`.
 
 **Notes / À faire**
@@ -306,11 +332,14 @@ séparation est une exigence d'adresse, pas un correctif de faille.
 - [ ] Obtenir 3 à 5 photos réelles typiques pour mesurer le gain réel avant tout achat.
 - [x] Étapes 1 à 7 (gratuites) : livrées, testées, mergées sur `main`, déployées.
 - [x] Étape 8 : publication vers le site. Bouton « Publier sur le site » par réalisation.
-- [ ] **Une manip attend l'utilisateur** : créer le dépôt vide `rnab26/melissa-nabet-site`
-      (public, avec README). Le connecteur GitHub de la session n'a pas le droit de créer
-      un dépôt (403 « Resource not accessible by integration ») — ce n'est pas contournable
-      depuis ici. Les sources du site sont prêtes dans `site-vitrine/` et n'attendent qu'un
-      `push` une fois le dépôt créé (+ `add_repo` pour l'ajouter à la session).
+- [x] Dépôt `rnab26/melissa-nabet-site` créé par l'utilisateur, site poussé dessus.
+- [ ] **Une manip attend l'utilisateur** : activer GitHub Pages sur ce dépôt
+      (Settings → Pages → Source : « GitHub Actions »). `enablement: true` sur
+      `configure-pages` échoue — le jeton du workflow n'a pas le droit de créer le site
+      Pages (« Create Pages site failed. Error: Resource not accessible by integration »).
+      Le connecteur GitHub de la session ne peut pas le faire non plus. Une fois activé,
+      relancer le workflow suffit.
+- [x] Sélection multiple de photos : téléchargement en lot (.zip) et suppression en lot.
 - [ ] Étape 9 (service externe payant) — bloquée sur la décision 2 et sur un test sur ses vraies photos.
 - [ ] Obtenir 3 à 5 photos réelles typiques : rien n'a encore été mesuré sur de vraies photos de téléphone, uniquement sur une image de synthèse.
 - [ ] La barre de navigation passe maintenant sur deux lignes en mobile (5 onglets). Ça règle le débordement mais la refonte du menu mobile, déjà notée plus haut, devient plus pertinente.
