@@ -355,3 +355,59 @@ appareil) ou **avec les retouches**.
 - [ ] Étape 9 (service externe payant) — bloquée sur la décision 2 et sur un test sur ses vraies photos.
 - [ ] Obtenir 3 à 5 photos réelles typiques : rien n'a encore été mesuré sur de vraies photos de téléphone, uniquement sur une image de synthèse.
 - [ ] La barre de navigation passe maintenant sur deux lignes en mobile (5 onglets). Ça règle le débordement mais la refonte du menu mobile, déjà notée plus haut, devient plus pertinente.
+
+
+## Retouche IA — pont ouvert vers un agrégateur de modèles
+
+**État** : **livré et déployé**, en attente de la clé du fournisseur pour fonctionner.
+
+**Ce que l'utilisateur demandait** : ne pas être lié à un modèle, recharger des crédits une
+fois chez un fournisseur qui regroupe les IA, et choisir le modèle depuis le CRM.
+
+**Réponse retenue** : `fal.ai` — un agrégateur, un compte, des crédits, des dizaines de
+modèles d'image. Forme HTTP vérifiée dans leur documentation : `POST https://fal.run/<modèle>`,
+en-tête `Authorization: Key …`, corps `{prompt, image_urls:[data URI], sync_mode:true}`.
+Réponse : `{images:[{url}]}`, où `url` est un data URI quand `sync_mode` est vrai.
+
+**Faits vérifiés, à ne pas re-deviner** :
+- **L'API Anthropic ne génère ni ne modifie d'images.** Claude ne peut pas retoucher une
+  photo. Le bouton « Embellir » des devis n'a pas d'équivalent image chez Anthropic.
+- Tarifs relevés en septembre 2026 : Nano Banana Pro ~0,13 $ l'image en 1-2K (0,24 $ en 4K)
+  via Google, moins cher chez les revendeurs ; FLUX.2 entre 0,014 et 0,07 $ le mégapixel.
+  À 20-100 photos/mois : 1 à 15 $/mois.
+
+**Architecture** :
+- `supabase/functions/photo-ia` — pont provider-agnostique. Reçoit `{model, prompt,
+  imageDataUri}`, route vers fal, renvoie un data URI.
+- Côté CRM : onglet « ✨ IA » dans l'éditeur, consigne libre, liste de modèles **modifiable
+  par l'utilisateur** (`library.iaModels`) — coller un identifiant du catalogue suffit,
+  rien à recoder. Consignes récentes mémorisées. Compteur mensuel d'appels facturés.
+
+**Ne pas casser** :
+- **Les fonctions serveur ne doivent JAMAIS accepter la clé publiable comme jeton.** C'était
+  le cas de `embellish` : cette clé est lisible dans `index.html`, page publique, donc
+  n'importe qui pouvait consommer les crédits Anthropic du compte. Les deux fonctions
+  vérifient maintenant un vrai utilisateur auprès de `/auth/v1/user`. **Vérifié en vrai** :
+  401 « session invalide » avec la clé publique, 401 « authentification requise » sans jeton,
+  sur les deux fonctions.
+- `verify_jwt` est **volontairement désactivé** au déploiement des deux fonctions : la clé
+  publiable est elle-même un JWT valide, donc la vérification générique de Supabase
+  laisserait passer n'importe qui. Le contrôle réel est dans `requireUser`. Ne pas
+  « corriger » en réactivant verify_jwt en croyant renforcer la sécurité — ce serait
+  l'affaiblir.
+- Le résultat IA est stocké sous la clé `ra_<id>`, **à côté** de l'original (`rp_<id>`),
+  jamais à sa place. `photo.useIa` décide de la version affichée, exportée et publiée.
+- L'envoi au modèle part **toujours** de l'original (`loadPhotoImage(..., {original:true})`)
+  avec les corrections géométriques et de lumière appliquées — jamais d'une sortie IA
+  réinjectée dans l'IA, qui dériverait à chaque passage.
+- La photo est réduite à 1600 px avant l'envoi : au-delà, la requête devient trop lourde
+  pour la fonction serveur, et les modèles ressortent de toute façon dans leur propre
+  définition.
+
+**Manip utilisateur restante** : créer un compte fal.ai, recharger des crédits, coller la
+clé dans Supabase → Project Settings → Edge Functions → Secrets, sous le nom exact `FAL_KEY`.
+Rien à redéployer ensuite. Sans elle, le pont répond « FAL_KEY non configurée côté serveur ».
+
+**Vérification** : `tests/realisations.test.mjs` (69 contrôles) couvre le panneau IA, le
+jeton réellement envoyé au pont, la non-destruction de l'original et la bascule entre les
+deux versions. Le test intercepte le pont : il ne dépense aucun crédit.

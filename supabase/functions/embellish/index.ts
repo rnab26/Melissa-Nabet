@@ -5,6 +5,10 @@
 // publiable de l'application comme jeton — or cette clé est lisible dans le code de la page,
 // qui est publique : n'importe qui pouvait appeler la fonction et consommer les crédits
 // Anthropic du compte. Ne jamais revenir en arrière là-dessus.
+//
+// verify_jwt est désactivé au déploiement, volontairement : la clé publiable est
+// elle-même un JWT valide, la vérification générique de Supabase laisserait donc passer
+// n'importe qui. Le vrai contrôle est fait par requireUser ci-dessous.
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
