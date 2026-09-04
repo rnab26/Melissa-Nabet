@@ -219,9 +219,7 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 
 ## Galerie de réalisations — embellissement des photos
 
-**État** : chantier ouvert, **rien codé**. Diagnostic fait, options externes chiffrées, fiche de décision publiée, en attente des réponses. Branche prévue : `claude/chantier-photos-quality-4kwyav`.
-
-Fiche de décision (5 questions) : https://claude.ai/code/artifact/46d7e74d-3f5e-45a6-b922-3cc10d562254 — réponses dans la base de l'artefact, collection `reponses`, document `photos-chantier`. **À relire avant de reprendre ce chantier.**
+**État** : **livré et déployé** (étapes gratuites). Espace « Réalisations » en ligne dans l'appli : import des photos en pleine définition, éditeur de retouche non destructif, export prêt pour le site, mémo de prise de vue. Aucun service externe payant branché à ce stade — décision volontaire, voir plus bas.
 
 **Deux circuits distincts — ne pas les confondre** (erreur de cadrage faite au premier tour, corrigée par l'utilisateur) :
 - **Documents client** (existe déjà) : fiche client → Documents. Factures, plans, photos de chantier prises en vrac. Usage interne, jamais publié. Compression à 1400 px / JPEG 0,82 dans `readFileAsDoc()` — **c'est adapté à cet usage, ne pas y toucher au titre de ce chantier.**
@@ -242,12 +240,28 @@ Fiche de décision (5 questions) : https://claude.ai/code/artifact/46d7e74d-3f5e
 
 **Point à trancher par l'utilisateur, pas par nous** : la retouche générative repeint des pixels. Effacer une poubelle est défendable ; laisser l'outil redessiner une menuiserie ou un plafond fait que la photo ne montre plus le chantier réellement livré. Décision 3 de la fiche.
 
-**Plan prévu une fois les réponses reçues** :
-1. Espace « Réalisations » : un chantier terminé, ses photos retenues en pleine définition, circuit séparé des documents client.
-2. Embellissement gratuit côté navigateur : redressement des verticales (poignées), recadrage au format du site, balance des blancs/exposition auto rattrapables, réglage appliqué à toute la série (c'est l'unité de la série qui fait la galerie). Original jamais écrasé.
-3. Sortie vers le site : fichiers au bon format/taille prêts à publier, ou publication directe selon la décision 1.
-4. Mémo de prise de vue (téléphone droit, HDR activé, pas de 0,5×, toutes les lumières allumées, hauteur d'yeux) — meilleur rapport gain/coût, gratuit.
-5. Optionnel selon décision 2 : bouton « Améliorer » branché sur un service externe via une Edge Function Supabase, **même patron que `supabase/functions/embellish/index.ts`** (clé en secret côté serveur, jamais dans `index.html`), avec comparaison avant/après.
+**Réponses de l'utilisateur** (fiche du 04/09/2026) : l'outil vit **dans le CRM** (`onglet-crm`), volume **20 à 100 photos/mois**, retouche générative « juste embellir, pas ajouter ni supprimer des choses sauf si ça nous dérange vraiment », et un outil externe déjà connu « éventuellement, si on galère ». Deux décisions restées ouvertes : **le site** (sur quoi il tourne) et **le budget** — aucune des deux ne bloquait la partie gratuite, qui a donc été faite d'abord.
+
+**Ce qui a été livré** :
+1. [x] Espace « Réalisations » (5e onglet) : une réalisation par chantier terminé, nom/client/date, photos en pleine définition (2560 px, JPEG 0,92), photo de couverture.
+2. [x] Éditeur non destructif, rendu WebGL en un seul passage (utilisable en direct depuis un téléphone) : **Verticales** (homographie carré→quadrilatère, méthode Heckbert, avec compensation verticale), **Rotation** (avec zoom automatique pour ne jamais laisser de coin vide), **Lumière** (exposition, contraste, température, teinte, saturation), **Cadrage** (libre / 3:2 / 4:3 / 16:9 / 1:1 + position). Appui long sur la photo = comparaison avec l'original.
+3. [x] **Réglage auto** : balance des blancs gris-moyen + exposition + contraste calculés sur un échantillon 64×64. L'exposition est calculée APRÈS la balance des blancs et en tenant compte du contraste — sinon l'image reste sous-exposée dès qu'il faut neutraliser une dominante chaude (mesuré : luminance 92,6 → 98,8 avant correction du calcul, 92,6 → 122,3 après).
+4. [x] **Appliquer la lumière à toute la série** : copie exposition/contraste/température/teinte/saturation sur toutes les photos de la réalisation, **sans** copier la géométrie (propre à chaque photo). C'est ce qui donne l'unité d'une vraie galerie.
+5. [x] **Appliquer ce format à toute la série** (onglet Cadrage).
+6. [x] Export « pour le site » : rendu JPEG à 2560 / 1920 / 1280 px, retouches appliquées, originaux intacts.
+7. [x] Mémo de prise de vue (bouton « 📷 Bien photographier »).
+8. [ ] Publication directe vers le site — **en attente de la décision 1** (sur quoi tourne le site). En l'état, l'export produit des fichiers à déposer à la main.
+9. [ ] Bouton « Embellir » sur un service externe (fenêtre cramée, effacement d'objets) — **en attente de la décision 2** et d'un test sur ses vraies photos. Le jour où c'est validé : même patron que `supabase/functions/embellish/index.ts` (clé en secret côté serveur, jamais dans `index.html`).
+
+**Ne pas casser** :
+- Les deux circuits restent séparés. `readFileAsDoc()` (documents client) doit **rester** à 1400 px / JPEG 0,82 : c'est adapté à une pièce jointe de dossier. Ne jamais aligner l'un sur l'autre. Un test le vérifie explicitement.
+- Les fichiers photo vont dans le bucket `client-docs` avec **la même forme de chemin que les documents** (`ownerId/<clé>`, clés préfixées `rp_` pour la pleine définition et `rt_` pour la vignette). La policy Supabase en place autorise exactement cette forme — ne pas introduire de sous-dossier sans avoir vérifié la policy d'abord.
+- Rien n'est mis en `localStorage` côté photos (une photo de publication pèse ~1 Mo, le cache local sature) : mémoire bornée + cloud. `photoStore.mem` est plafonné à 40 entrées, le cache d'images décodées à 2 (une photo 2560 px décodée pèse ~26 Mo en RAM).
+- Les mises à jour distantes sont fusionnées **en place** (`mergeRealisations`) et ignorées pendant une saisie ou pendant que l'éditeur est ouvert (`isEditingRealisations`). Sans ça on reproduisait le bug de corruption du nom de client : un champ lié à un objet remplacé devient orphelin et n'est plus jamais sauvegardé.
+- La **sauvegarde JSON** contient les réalisations et leurs **vignettes seulement**. Les photos en pleine définition vivent dans le stockage Supabase (lié au compte, donc insensible à un vidage de cache) et se récupèrent via « Exporter pour le site ». Les inclure ferait un JSON de plusieurs centaines de Mo, impossible à produire depuis un téléphone.
+- `.viewnav` doit garder `flex-wrap:wrap` : sans ça, un onglet de plus fait déborder la barre du haut sur mobile (mesuré : 450 px de contenu pour 375 px d'écran).
+
+**Vérification** : `tests/realisations.test.mjs` (Playwright + WebGL réel, 37 contrôles). C'est la méthode de référence pour ce chantier — elle **mesure** le rendu (convergence des verticales sur une façade en trapèze, dominante couleur, luminance, ratio de recadrage) au lieu de relire le code. Mode d'emploi dans `tests/README.md`.
 
 **Notes / À faire**
 - [x] Cadrage : circuit galerie séparé du circuit documents client (recadré par l'utilisateur).
@@ -255,5 +269,8 @@ Fiche de décision (5 questions) : https://claude.ai/code/artifact/46d7e74d-3f5e
 - [x] Fiche de décision publiée (5 questions).
 - [ ] Lire les réponses de la fiche avant de coder.
 - [ ] Obtenir 3 à 5 photos réelles typiques pour mesurer le gain réel avant tout achat.
-- [ ] Étapes 1 à 4 du plan (gratuites).
-- [ ] Étape 5 (service externe) — conditionnée au test gratuit et à la décision budget.
+- [x] Étapes 1 à 7 (gratuites) : livrées, testées, mergées sur `main`, déployées.
+- [ ] Étape 8 (publication directe vers le site) — bloquée sur la décision 1 de la fiche.
+- [ ] Étape 9 (service externe payant) — bloquée sur la décision 2 et sur un test sur ses vraies photos.
+- [ ] Obtenir 3 à 5 photos réelles typiques : rien n'a encore été mesuré sur de vraies photos de téléphone, uniquement sur une image de synthèse.
+- [ ] La barre de navigation passe maintenant sur deux lignes en mobile (5 onglets). Ça règle le débordement mais la refonte du menu mobile, déjà notée plus haut, devient plus pertinente.
