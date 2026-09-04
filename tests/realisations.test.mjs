@@ -485,6 +485,12 @@ await page.route('**/functions/v1/photo-ia', async (route) => {
     return;
   }
   if (body.action === 'schema') {
+    // Un agrandisseur réel n'expose pas de `prompt` : on reproduit ce cas pour vérifier que
+    // le panneau ne réclame pas une consigne qui serait de toute façon ignorée.
+    if (body.model === 'test/agrandisseur') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ model: body.model, required: ['image_url'], properties: { image_url: { type: 'string' }, sync_mode: { type: 'boolean' }, scale: { type: 'integer', minimum: 1, maximum: 4, default: 2, title: 'Scale' } } }) });
+      return;
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SCHEMA_REEL) });
     return;
   }
@@ -552,6 +558,61 @@ check('Échec du solde : la raison est lisible à l’écran, pas cachée dans u
   soldeEchec.texte.slice(0, 90));
 soldeKo = false;
 await page.evaluate(async () => { _iaBalance = null; buildEditorControls(); await new Promise(r => setTimeout(r, 700)); });
+
+// --- LES FENÊTRES OUVERTES DEPUIS L'ÉDITEUR DOIVENT ÊTRE AU-DESSUS DE LUI.
+//     Bug constaté en production : l'éditeur est en plein écran à z-index 80, la fenêtre
+//     modale était à 40. La confirmation d'envoi et le panneau « Modèles » s'ouvraient donc
+//     DERRIÈRE l'éditeur : les deux boutons paraissaient morts alors qu'ils répondaient.
+//     On vérifie le rendu réel (elementFromPoint), pas la valeur de z-index.
+const dessus = await page.evaluate(async () => {
+  const vu = (sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return { existe: false };
+    const r = el.getBoundingClientRect();
+    const dessus = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(30, r.height / 2));
+    return { existe: true, visible: r.width > 0 && r.height > 0, auDessus: !!(dessus && el.contains(dessus)) };
+  };
+  const out = {};
+  // 1. la confirmation d'envoi, ouverte depuis le bouton principal
+  const orig = window.askConfirm;
+  let vuConfirm = null;
+  window.askConfirm = (m, cb) => { orig(m, () => {}); vuConfirm = vu('#modal'); closeModal(); window.askConfirm = orig; };
+  document.querySelector('.ia-prompt').value = 'équilibre la lumière';
+  document.querySelector('#ed-controls .ia-go').click();
+  await new Promise(r => setTimeout(r, 250));
+  out.confirmation = vuConfirm;
+  // 2. le panneau des modèles, ouvert depuis « ⚙ Gérer »
+  openIaModelsPanel();
+  await new Promise(r => setTimeout(r, 250));
+  out.modeles = vu('#modal');
+  out.catalogue = document.querySelectorAll('#modal .ia-cat-row').length;
+  closeModal();
+  return out;
+});
+check('Confirmation d’envoi réellement visible par-dessus l’éditeur',
+  dessus.confirmation && dessus.confirmation.visible && dessus.confirmation.auDessus, JSON.stringify(dessus.confirmation));
+check('Panneau « Modèles » réellement visible par-dessus l’éditeur',
+  dessus.modeles.visible && dessus.modeles.auDessus, JSON.stringify(dessus.modeles));
+check('Catalogue de modèles proposé dans le panneau', dessus.catalogue >= 10, dessus.catalogue + ' modèle(s)');
+
+// --- Un modèle sans consigne (agrandisseur) ne doit pas exiger de texte
+const sansPrompt = await page.evaluate(async () => {
+  library.iaModels.push({ id: 'test/agrandisseur', label: 'Agrandisseur de test', note: '' });
+  library.iaLastModel = 'test/agrandisseur';
+  buildEditorControls();
+  await new Promise(r => setTimeout(r, 700));
+  const ta = document.querySelector('.ia-prompt');
+  const chips = document.querySelector('#ed-controls .ia-chips');
+  return { desactive: ta.disabled, chipsMasquees: chips ? getComputedStyle(chips).display === 'none' : null, aide: ta.placeholder };
+});
+check('Modèle sans consigne : le champ de texte est neutralisé, pas laissé trompeur',
+  sansPrompt.desactive && sansPrompt.chipsMasquees === true, JSON.stringify(sansPrompt));
+await page.evaluate(async () => {
+  library.iaModels = library.iaModels.filter(m => m.id !== 'test/agrandisseur');
+  library.iaLastModel = 'fal-ai/nano-banana-pro/edit';
+  buildEditorControls();
+  await new Promise(r => setTimeout(r, 700));
+});
 
 // --- Les réglages sont LUS DANS LE SCHÉMA du modèle, pas codés en dur.
 //     C'est ce qui garantit qu'on retrouve ce que fal.ai propose sur son propre site,

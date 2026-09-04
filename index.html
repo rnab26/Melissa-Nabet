@@ -118,7 +118,10 @@
   .hint{font-size:11px;color:var(--stone);font-style:italic;margin:0 0 10px;}
 
   /* modals */
-  .overlay{position:fixed;inset:0;background:rgba(35,32,28,.55);z-index:40;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;}
+  /* Au-dessus de l'éditeur photo (z-index 80) : sinon toute fenêtre ouverte depuis
+     l'éditeur — confirmation d'envoi au modèle, panneau des modèles — s'affiche derrière
+     lui et le bouton paraît mort. Ne pas redescendre cette valeur sous 80. */
+  .overlay{position:fixed;inset:0;background:rgba(35,32,28,.55);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;}
   .overlay.open{display:flex;}
   .modal{background:var(--travertine);border-radius:6px;width:100%;max-width:560px;padding:22px 22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
   .modal h3{font-family:'Cormorant Garamond',serif;font-size:23px;margin:0 0 4px;color:var(--ink);}
@@ -143,10 +146,10 @@
   .cgv-body{display:block;width:calc(100% - 22px);margin:0 11px 11px;min-height:60px;font-size:12.5px;padding:7px 9px;border:1px solid var(--panel-edge);border-radius:3px;font-family:'Inter';resize:vertical;}
   .lib-item input{font-size:12.5px;padding:6px 8px;}
   .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;}
   .toast.show{opacity:1;}
   .sync-badge{font-size:10.5px;color:var(--stone-light);letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
-  #login-overlay{display:none;position:fixed;inset:0;z-index:60;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
+  #login-overlay{display:none;position:fixed;inset:0;z-index:110;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
   .login-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:10px;padding:30px 26px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(60,50,35,.2);text-align:center;}
   .login-title{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;letter-spacing:.14em;color:var(--ink);padding-left:.14em;}
   .login-sub{font-size:11px;color:var(--stone);margin:2px 0 20px;letter-spacing:.08em;text-transform:uppercase;}
@@ -671,6 +674,15 @@
   .ia-solde button:hover{background:var(--panel-edge);color:var(--ink);}
   .ia-warn{margin:9px 0 0;font-size:11px;color:var(--stone);line-height:1.5;
     background:var(--travertine);border-radius:7px;padding:8px 10px;}
+  .ia-cat{margin-top:14px;}
+  .ia-cat-t{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);
+    font-weight:700;margin-bottom:6px;}
+  .ia-cat-row{display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:5px;
+    background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;}
+  .ia-cat-txt{flex:1;min-width:0;font-size:12.5px;}
+  .ia-cat-txt b{display:block;color:var(--ink);}
+  .ia-cat-txt span{display:block;font-size:11px;color:var(--stone);line-height:1.45;margin-top:2px;}
+  .ia-cat-in{font-size:11px;color:var(--stone-light);white-space:nowrap;}
   .ia-params{margin-top:11px;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);}
   .ia-params>summary{cursor:pointer;padding:10px 12px;font-size:12.5px;font-weight:600;color:var(--stone-deep);}
   .ia-params-body{padding:4px 12px 12px;font-size:12.5px;color:var(--stone);}
@@ -4681,12 +4693,35 @@ function openShootingMemo(){
 
    Le résultat est stocké À CÔTÉ de l'original, jamais à sa place. */
 
-const DEFAULT_IA_MODELS=[
-  {id:'fal-ai/nano-banana-pro/edit',label:'Nano Banana Pro (Google)',note:'Comprend le mieux une consigne écrite. ~0,13 $ en 1K/2K, ~0,24 $ en 4K.'},
-  {id:'fal-ai/flux-pro/kontext',label:'FLUX.1 Kontext Pro',note:'Retouche dirigée, moins cher.'},
-  {id:'fal-ai/qwen-image-edit',label:'Qwen Image Edit',note:'Alternative économique.'},
+/* CATALOGUE DE MODÈLES — chaque identifiant a été vérifié contre le catalogue réel de
+   fal.ai (son schéma public répond 200), aucun n'est deviné. Le CRM n'est pas limité à
+   cette liste : « ⚙ Gérer » permet de coller n'importe quel identifiant de fal.ai/models.
+   Le pont lit le schéma du modèle choisi et s'adapte tout seul.
+   `cat` sert uniquement à regrouper l'affichage. */
+const IA_CATALOGUE=[
+  {cat:'Retouche par consigne écrite',id:'fal-ai/nano-banana-pro/edit',label:'Nano Banana Pro (Google)',note:'Comprend le mieux une consigne écrite. ~0,13 $ en 1K/2K, ~0,24 $ en 4K.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/gemini-25-flash-image/edit',label:'Nano Banana (Gemini 2.5 Flash)',note:'La version rapide et moins chère du précédent.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-2-pro/edit',label:'FLUX.2 Pro — édition',note:'Très bon rendu photographique, fidèle à la photo d’origine.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-2/edit',label:'FLUX.2 — édition',note:'Même famille, moins cher.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-pro/kontext',label:'FLUX.1 Kontext Pro',note:'Retouche dirigée, une image à la fois.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-pro/kontext/max',label:'FLUX.1 Kontext Max',note:'La version la plus fidèle de Kontext.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/bytedance/seedream/v4/edit',label:'Seedream 4 — édition',note:'Bon sur les intérieurs, rendu net.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/qwen-image-edit-plus',label:'Qwen Image Edit Plus',note:'Alternative économique.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/qwen-image-edit',label:'Qwen Image Edit',note:'Version simple, la moins chère.'},
+  {cat:'Retouche ciblée',id:'fal-ai/object-removal',label:'Retirer un objet',note:'Décrire l’objet à faire disparaître. Ne touche à rien d’autre.'},
+  {cat:'Retouche ciblée',id:'fal-ai/image-editing/background-change',label:'Changer le fond',note:'Remplace l’arrière-plan en gardant le sujet.'},
+  {cat:'Agrandir / rendre plus net',id:'fal-ai/recraft/upscale/creative',label:'Agrandissement Recraft',note:'Agrandit et redonne du détail. Sans consigne.'},
+  {cat:'Agrandir / rendre plus net',id:'fal-ai/clarity-upscaler',label:'Clarity Upscaler',note:'Agrandissement net, très utilisé en immobilier.'},
+  {cat:'Agrandir / rendre plus net',id:'fal-ai/aura-sr',label:'Aura SR',note:'Agrandissement rapide ×4. Sans consigne.'},
 ];
-/* Réglages pilotés par le CRM lui-même : inutile de les montrer deux fois. */
+/* Ce que le CRM propose au premier lancement. Le reste du catalogue s'ajoute en un geste. */
+const DEFAULT_IA_MODELS=IA_CATALOGUE.filter(m=>[
+  'fal-ai/nano-banana-pro/edit','fal-ai/flux-2-pro/edit','fal-ai/bytedance/seedream/v4/edit',
+  'fal-ai/object-removal','fal-ai/recraft/upscale/creative',
+].indexOf(m.id)>=0).map(m=>({id:m.id,label:m.label,note:m.note}));
+/* Réglages pilotés par le CRM lui-même : inutile de les montrer deux fois.
+   `image_url` autant que `image_urls` : selon le modèle, l'image se transmet sous l'un ou
+   sous l'autre, et c'est le pont qui choisit d'après le schéma. */
 const IA_HIDDEN_PARAMS=['image_urls','image_url','sync_mode','prompt'];
 
 function ensureIaModels(){
@@ -4808,7 +4843,7 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
     _imgCache.delete(iaKey(photo.id));
     photo.ia={model:modelId,prompt:consigne,params:Object.assign({},iaParamsFor(modelId)),createdAt:Date.now()};
     photo.useIa=true;
-    if(consigne&&library.iaPrompts.indexOf(consigne)<0){
+    if(consigne&&consigne.length>3&&library.iaPrompts.indexOf(consigne)<0){
       library.iaPrompts.unshift(consigne);
       library.iaPrompts=library.iaPrompts.slice(0,8);
       saveLibraryDebounced();
@@ -4943,6 +4978,9 @@ function buildIaPanel(host){
   const body=det.querySelector('.ia-params-body');
   host.appendChild(cardM);
 
+  /* Tous les modèles ne prennent pas de consigne : un agrandisseur travaille seul. Le
+     panneau le dit au lieu d'exiger un texte qui serait ignoré. */
+  let prendPrompt=true;
   const paintModel=async()=>{
     const m=library.iaModels.find(x=>x.id===sel.value);
     note.textContent=(m&&m.note)?m.note:'';
@@ -4950,6 +4988,13 @@ function buildIaPanel(host){
     body.textContent='Lecture des réglages proposés par le modèle…';
     try{
       const sc=await iaSchema(sel.value);
+      prendPrompt=!!(sc.properties&&sc.properties.prompt);
+      ta.disabled=!prendPrompt;
+      ta.placeholder=prendPrompt
+        ? 'Décrivez ce que vous voulez obtenir — ou touchez une consigne toute prête ci-dessous.'
+        : 'Ce modèle ne prend pas de consigne : il travaille seul.';
+      if(!prendPrompt)ta.value='';
+      chips.style.display=prendPrompt?'':'none';
       body.innerHTML='';
       const saved=iaParamsFor(sel.value);
       const noms=Object.keys(sc.properties||{}).filter(n=>IA_HIDDEN_PARAMS.indexOf(n)<0);
@@ -5016,7 +5061,7 @@ function buildIaPanel(host){
 
   go.addEventListener('click',()=>{
     const c=(ta.value||'').trim();
-    if(!c){toast('Écrivez d’abord ce que vous voulez, ou touchez une consigne toute prête');ta.focus();return;}
+    if(prendPrompt&&!c){toast('Écrivez d’abord ce que vous voulez, ou touchez une consigne toute prête');ta.focus();return;}
     askConfirm('Envoyer cette photo au modèle « '+((sel.options[sel.selectedIndex]||{}).text||'')+' » ? Cet appel est facturé par le fournisseur.',()=>{
       applyIaToPhoto(r,p,c,sel.value,go);
     });
@@ -5031,9 +5076,11 @@ function buildIaPanel(host){
     const meta=document.createElement('p');
     meta.innerHTML=`<b>${esc((library.iaModels.find(m=>m.id===p.ia.model)||{}).label||p.ia.model)}</b>`;
     box.appendChild(meta);
-    const echo=document.createElement('p');echo.className='ia-prompt-echo';
-    echo.textContent='« '+p.ia.prompt+' »';
-    box.appendChild(echo);
+    if(p.ia.prompt){
+      const echo=document.createElement('p');echo.className='ia-prompt-echo';
+      echo.textContent='« '+p.ia.prompt+' »';
+      box.appendChild(echo);
+    }
     const sw=document.createElement('div');sw.className='ed-acts';sw.style.marginTop='10px';
     const bOrig=document.createElement('button');bOrig.className='btn '+(p.useIa?'btn-onlight':'btn-primary');bOrig.textContent='Photo d’origine';
     const bIa=document.createElement('button');bIa.className='btn '+(p.useIa?'btn-primary':'btn-onlight');bIa.textContent='Version IA';
@@ -5056,23 +5103,51 @@ function buildIaPanel(host){
   host.appendChild(spend);
 }
 
+/* Panneau « Modèles ». Deux parties : le catalogue (ajout en un geste, identifiants vérifiés
+   contre le catalogue réel de fal.ai) et la liste personnelle, où l'on peut coller
+   n'importe quel identifiant de fal.ai/models. Le CRM n'est donc jamais limité à ce qui a
+   été prévu ici : le pont lit le schéma du modèle et s'adapte. */
 function openIaModelsPanel(){
   ensureIaModels();
+  const dejaLa=id=>library.iaModels.some(m=>m.id===id);
+  const cats=[];
+  IA_CATALOGUE.forEach(m=>{ if(cats.indexOf(m.cat)<0)cats.push(m.cat); });
+  const catalogue=cats.map(c=>`<div class="ia-cat">
+      <div class="ia-cat-t">${esc(c)}</div>
+      ${IA_CATALOGUE.filter(m=>m.cat===c).map(m=>`<div class="ia-cat-row">
+        <div class="ia-cat-txt"><b>${esc(m.label)}</b><span>${esc(m.note||'')}</span></div>
+        ${dejaLa(m.id)
+          ? '<span class="ia-cat-in">déjà dans la liste</span>'
+          : `<button class="mini" onclick="iaModelAddFromCat('${esc(m.id)}')">+ Ajouter</button>`}
+      </div>`).join('')}
+    </div>`).join('');
+
   const rows=library.iaModels.map((m,i)=>`<div class="lib-item">
       <input type="text" value="${esc(m.label||'')}" placeholder="Nom affiché" oninput="iaModelEdit(${i},'label',this.value)">
       <input type="text" value="${esc(m.id||'')}" placeholder="identifiant du modèle" oninput="iaModelEdit(${i},'id',this.value)">
       <input type="text" value="${esc(m.note||'')}" placeholder="note (prix, usage)" oninput="iaModelEdit(${i},'note',this.value)">
       <button class="mini" onclick="iaModelDel(${i})">✕</button>
     </div>`).join('');
+
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
     <h3>Modèles de retouche</h3>
-    <p class="msub">L’identifiant vient du catalogue fal.ai (<b>fal.ai/models</b>). Coller un identifiant suffit : le CRM lit tout seul les réglages que ce modèle propose. Exemple : <code>fal-ai/nano-banana-pro/edit</code>.</p>
+    <p class="msub">Ajoutez ce que vous voulez utiliser depuis le catalogue ci-dessous. Pour un modèle qui n’y figure pas : copiez son identifiant depuis <b>fal.ai/models</b> et collez-le dans « Ma liste ». Le CRM lit tout seul les réglages que ce modèle propose — rien à recoder.</p>
+    ${catalogue}
+    <div class="ia-cat-t" style="margin-top:16px">Ma liste (ce qui apparaît dans l’éditeur)</div>
     <div id="ia-model-rows">${rows}</div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      <button class="mini" onclick="iaModelAdd()">+ Ajouter un modèle</button>
+      <button class="mini" onclick="iaModelAdd()">+ Identifiant personnalisé</button>
       <button class="mini" onclick="iaModelReset()">↺ Réinitialiser</button>
       <button class="btn btn-primary" onclick="closeModal()">Terminer</button>
     </div>`);
+}
+function iaModelAddFromCat(id){
+  ensureIaModels();
+  const m=IA_CATALOGUE.find(x=>x.id===id);
+  if(!m||library.iaModels.some(x=>x.id===id))return;
+  library.iaModels.push({id:m.id,label:m.label,note:m.note});
+  saveLibraryDebounced();openIaModelsPanel();
+  toast(m.label+' ajouté');
 }
 function iaModelEdit(i,k,v){ensureIaModels();library.iaModels[i][k]=v;saveLibraryDebounced();}
 function iaModelAdd(){ensureIaModels();library.iaModels.push({id:'',label:'Nouveau modèle',note:''});saveLibraryDebounced();openIaModelsPanel();}

@@ -97,7 +97,17 @@ async function getBalance() {
 }
 
 /** Schéma d'entrée du modèle. Public : on le relaie pour éviter toute question de CORS
- *  et garder un seul chemin d'appel côté navigateur. */
+ *  et garder un seul chemin d'appel côté navigateur. Il sert AUSSI à l'exécution (voir
+ *  buildPayload), d'où le cache : sans lui, chaque retouche paierait un aller-retour de plus. */
+const SCHEMA_CACHE = new Map<string, { model: string; title: string; properties: Record<string, unknown>; required: string[] }>();
+async function getSchemaCached(model: string) {
+  const hit = SCHEMA_CACHE.get(model);
+  if (hit) return hit;
+  const sc = await getSchema(model);
+  SCHEMA_CACHE.set(model, sc);
+  return sc;
+}
+
 async function getSchema(model: string) {
   const res = await fetch(
     "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=" + encodeURIComponent(model),
@@ -144,6 +154,45 @@ async function runModel(model: string, input: Record<string, unknown>) {
   return { imageDataUri: await toDataUri(first.url), raw: { seed: (data as { seed?: unknown }).seed ?? null } };
 }
 
+/** Construit la requête du modèle À PARTIR DE SON SCHÉMA, jamais d'une convention supposée.
+ *
+ *  C'est le cœur du pont, et ce n'est pas un détail de forme : chez fal, certains modèles
+ *  attendent l'image sous `image_urls` (un tableau — Nano Banana, FLUX.2, Seedream), d'autres
+ *  sous `image_url` (une chaîne — FLUX.1 Kontext, Qwen, les agrandisseurs). Envoyer toujours
+ *  `image_urls` faisait échouer la moitié du catalogue avec « champ requis manquant », y
+ *  compris deux des trois modèles proposés d'origine.
+ *
+ *  De même : la consigne n'est exigée que si le modèle la déclare requise (un agrandisseur
+ *  n'en prend pas), et tout paramètre inconnu du modèle est retiré — sinon un réglage
+ *  mémorisé pour un modèle ferait planter le suivant. */
+export function buildPayload( // exportée pour être testable hors ligne (tests/pont-ia.test.mjs)
+  sc: { properties: Record<string, unknown>; required: string[] },
+  input: Record<string, unknown>,
+  imageDataUri: string,
+): Record<string, unknown> {
+  const props = sc.properties || {};
+  const required = sc.required || [];
+  const payload: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(input)) {
+    if (k in props && v !== null && v !== undefined && v !== "") payload[k] = v;
+  }
+
+  if ("image_urls" in props) payload.image_urls = [imageDataUri];
+  else if ("image_url" in props) payload.image_url = imageDataUri;
+  else throw new Error("ce modèle n'accepte pas d'image en entrée : il ne sert pas à retoucher une photo");
+
+  if ("sync_mode" in props) payload.sync_mode = true;
+
+  if (!("prompt" in props)) delete payload.prompt;
+  else if (required.includes("prompt") && !String(payload.prompt || "").trim()) {
+    throw new Error("ce modèle exige une consigne écrite");
+  }
+
+  const manquants = required.filter((k) => !(k in payload));
+  if (manquants.length) throw new Error("réglage(s) obligatoire(s) du modèle non renseigné(s) : " + manquants.join(", "));
+  return payload;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
 
@@ -163,7 +212,7 @@ Deno.serve(async (req) => {
 
     if (action === "schema") {
       if (!body.model) return json({ error: "modèle manquant" }, 400);
-      return json(await getSchema(String(body.model)));
+      return json(await getSchemaCached(String(body.model)));
     }
 
     if (action === "edit") {
@@ -172,13 +221,8 @@ Deno.serve(async (req) => {
       if (!imageDataUri || !String(imageDataUri).startsWith("data:")) {
         return json({ error: "image manquante" }, 400);
       }
-      const payload: Record<string, unknown> = { ...(input || {}) };
-      // L'image et le mode synchrone sont gérés ici : le CRM n'a pas à les connaître.
-      payload.image_urls = [imageDataUri];
-      payload.sync_mode = true;
-      if (!payload.prompt || !String(payload.prompt).trim()) {
-        return json({ error: "consigne manquante" }, 400);
-      }
+      const sc = await getSchemaCached(String(model));
+      const payload = buildPayload(sc, input || {}, String(imageDataUri));
       const out = await runModel(String(model), payload);
       return json({ ...out, model });
     }
