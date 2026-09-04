@@ -30,3 +30,10 @@ Consignes de travail pour Claude sur ce dépôt. À lire avant toute interventio
 ## Communication
 
 Toujours rendre compte en français, de façon concise et directe. Pas de remplissage, pas de tournures commerciales.
+
+## Fiches de décision (artefacts)
+
+Questions ouvertes posées à l'utilisateur sous forme d'artefact cliquable plutôt qu'en mur de texte. Les réponses sont stockées dans la base de l'artefact (`read_db` / `write_db` sur son URL) — **les relire avant de reprendre le chantier concerné**, elles ne sont pas dans la conversation.
+
+- **Photos de chantier (qualité pro pour le site)** — https://claude.ai/code/artifact/46d7e74d-3f5e-45a6-b922-3cc10d562254
+  Réponses : collection `reponses`, document `photos-chantier` (`choices` + `notes`).

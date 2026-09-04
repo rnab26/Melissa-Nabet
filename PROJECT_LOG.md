@@ -216,3 +216,41 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 **Notes / À faire**
 - [x] Nettoyage code mort + CSS dupliqué + factorisation import image.
 - [ ] Repasser dessus périodiquement si le fichier continue de grossir.
+
+## Photos de chantier — rendu publiable sur le site
+
+**État** : chantier ouvert, **rien codé**. Diagnostic fait sur le code existant + recherche des options externes, fiche de décision publiée, en attente des réponses de l'utilisateur. Branche prévue : `claude/chantier-photos-quality-4kwyav`.
+
+Fiche de décision (5 questions) : https://claude.ai/code/artifact/46d7e74d-3f5e-45a6-b922-3cc10d562254 — réponses dans la base de l'artefact, collection `reponses`, document `photos-chantier`. **À relire avant de reprendre ce chantier.**
+
+**Problème** : les photos de chantiers terminés sont prises au téléphone et ne sont pas assez propres pour être affichées sur le site (architecture d'intérieur).
+
+**Diagnostic (vérifié dans le code)** : `readFileAsDoc()` (`index.html`) réduit toute image importée à **1400 px max et la recompresse en JPEG 0,82** avant stockage. Correct pour une pièce jointe de dossier, destructeur pour un usage site web — la qualité est perdue avant même toute retouche. À corriger dans tous les cas, indépendamment des réponses.
+
+**Triage des défauts** (ce qui est corrigeable gratuitement côté navigateur vs ce qui exige un service externe payant) :
+- Gratuit, déterministe, sans envoi extérieur : verticales fuyantes (correction géométrique), balance des blancs, exposition, homogénéité d'une série (un réglage appliqué à toutes les photos d'un chantier).
+- Payant, service externe : fusion HDR (fenêtre cramée / pièce sombre — la donnée n'existe pas dans le fichier), effacement d'objets (générative).
+- Non rattrapable en retouche, relève de la prise de vue : ultra grand-angle 0,5×.
+
+**Options externes retenues à ce stade** (tarifs relevés en septembre 2026, à reconfirmer avant tout achat) :
+- [Autoenhance.ai](https://www.autoenhance.ai/api) — spécialisé immobilier/archi (perspective, HDR, balance des blancs, RAW), vraie API, aperçu gratuit filigrané **sans compte**. Plans annoncés : Essential ~29 $/mois 50 images, Advanced ~109 $/mois 250, Expert ~449 $/mois 1500 ; report des crédits 1 mois ; facturé au téléchargement, pas à l'essai.
+- Gemini / Nano Banana (image) — ~0,04 à 0,15 $/image selon le modèle et la résolution, pour l'effacement d'objets uniquement.
+- [Adobe Firefly Services / Lightroom API](https://developer.adobe.com/firefly-services/docs/lightroom/guides/) — Auto Tone et Auto Straighten (Upright) exactement adaptés, mais **contrat entreprise requis, tarifs non publiés** — écarté à ce stade.
+- Upscaling type Topaz (à partir de ~0,05 $/image) — **écarté** : les photos de téléphone font déjà 12 Mpx, la résolution n'est pas le problème.
+
+**Point à trancher par l'utilisateur, pas par nous** : la retouche générative repeint des pixels. Effacer une poubelle est défendable ; laisser l'outil redessiner une menuiserie ou un plafond fait que la photo ne montre plus le chantier réellement livré. Décision 3 de la fiche.
+
+**Plan prévu une fois les réponses reçues** :
+1. Conserver la définition d'origine pour les photos de chantier (sans changer le comportement des pièces jointes de dossier).
+2. Éditeur photo dans le CRM : redressement des verticales (poignées), recadrage au format du site, balance des blancs/exposition auto rattrapables, réglage appliqué à toute la série. Original jamais écrasé.
+3. Mémo de prise de vue dans le CRM (téléphone droit, HDR activé, pas de 0,5×, toutes les lumières allumées, hauteur d'yeux) — meilleur rapport gain/coût, gratuit.
+4. Optionnel selon décision 2 : bouton « Améliorer » branché sur un service externe via une Edge Function Supabase, **même patron que `supabase/functions/embellish/index.ts`** (clé en secret côté serveur, jamais dans `index.html`), avec comparaison avant/après.
+
+**Notes / À faire**
+- [x] Diagnostic du pipeline d'import d'image existant (1400 px / JPEG 0,82).
+- [x] Recherche et chiffrage des options externes.
+- [x] Fiche de décision publiée (5 questions).
+- [ ] Lire les réponses de la fiche avant de coder.
+- [ ] Obtenir 3 à 5 photos réelles typiques pour mesurer le gain réel avant tout achat.
+- [ ] Étapes 1 à 3 du plan (gratuites).
+- [ ] Étape 4 (service externe) — conditionnée au test gratuit et à la décision budget.
