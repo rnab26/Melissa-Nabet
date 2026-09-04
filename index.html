@@ -575,6 +575,27 @@
   .rz-ph{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:#efe9df;aspect-ratio:3/2;cursor:pointer;}
   .rz-ph img{width:100%;height:100%;object-fit:cover;display:block;}
   .rz-ph-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--stone);}
+  /* Pastilles d'état sur la vignette : « en ligne », « modifiée depuis », « version IA ».
+     Sans elles, une photo ajoutée après publication est indiscernable d'une photo publiée. */
+  .rz-warn{color:#b7752f;}
+  .hist{list-style:none;margin:12px 0 0;padding:0;max-height:46vh;overflow-y:auto;}
+  .hist li{padding:9px 11px;border:1px solid var(--panel-edge);border-radius:8px;background:var(--panel);margin-bottom:6px;}
+  .hist-t{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone-light);font-weight:700;}
+  .hist-k{display:block;font-size:13px;color:var(--ink);margin-top:2px;}
+  .hist-d{display:block;font-size:11.5px;color:var(--stone);font-style:italic;margin-top:2px;line-height:1.45;}
+  .hist-etat{margin:10px 0 0;padding:9px 11px;border-radius:8px;font-size:12.5px;line-height:1.5;
+    background:var(--travertine);color:var(--stone-deep);border-left:3px solid var(--stone-light);}
+  .hist-etat.t-enligne{border-left-color:#4a7c59;}
+  .hist-etat.t-modifiee{border-left-color:#b7752f;color:#8a5a1f;}
+  .rz-ph-tags{position:absolute;left:5px;bottom:5px;right:5px;display:flex;flex-wrap:wrap;gap:4px;}
+  .rz-tag{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;
+    padding:3px 7px;border-radius:999px;color:#fff;background:rgba(61,57,52,.85);
+    backdrop-filter:blur(2px);white-space:nowrap;}
+  .rz-tag.t-enligne{background:rgba(74,124,89,.92);}
+  .rz-tag.t-modifiee{background:rgba(183,124,52,.94);}
+  .rz-tag.t-absente{background:rgba(61,57,52,.72);}
+  .rz-tag.t-ia{background:rgba(154,133,116,.94);}
+  .rz-tag.t-reg{background:rgba(61,57,52,.6);}
   .rz-ph-badge{position:absolute;left:6px;bottom:6px;background:rgba(61,57,52,.82);color:#fff;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2px 6px;border-radius:2px;}
   .rz-ph-del{position:absolute;right:5px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;border-radius:3px;width:24px;height:24px;font-size:13px;cursor:pointer;line-height:1;}
   .rz-add{border:1px dashed var(--stone-light);border-radius:6px;background:transparent;color:var(--stone);cursor:pointer;font-size:12px;font-family:'Inter';aspect-ratio:3/2;}
@@ -3799,6 +3820,39 @@ const REAL_RATIOS=[
   {id:'1:1',label:'1:1',v:1},
 ];
 function blankEdit(){return {persp:0,rot:0,expo:0,contrast:0,temp:0,tint:0,sat:0,ratio:'libre',pan:0};}
+
+/* ---- Ce qu'on sait d'une photo : ce qu'elle a vécu, et où elle en est du site ----
+   Deux questions revenaient sans réponse : « qu'est-ce qui est en ligne ? » et « qu'est-ce
+   qui a été fait sur cette photo ? ». Le CRM ne gardait ni l'un ni l'autre : une photo
+   ajoutée après une publication ressemblait en tout point à une photo déjà en ligne. */
+const PHOTO_HIST_MAX=30;
+function photoLog(p,kind,detail){
+  if(!p)return;
+  p.hist=p.hist||[];
+  const last=p.hist[0];
+  /* Une session de réglages, c'est un événement, pas un par mouvement de curseur : tant
+     qu'on reste sur le même geste à moins de 10 minutes, on met à jour au lieu d'empiler. */
+  if(last&&last.k===kind&&kind==='reglages'&&Date.now()-last.t<600000){last.t=Date.now();return;}
+  p.hist.unshift({t:Date.now(),k:kind,d:detail||''});
+  p.hist=p.hist.slice(0,PHOTO_HIST_MAX);
+}
+/* Toute modification visible de la photo. C'est ce qui permet de dire « modifiée depuis sa
+   mise en ligne » plutôt que de laisser croire que le site est à jour. */
+function photoTouch(p,kind,detail){
+  if(!p)return;
+  p.touchedAt=Date.now();
+  if(kind)photoLog(p,kind,detail);
+}
+/* État vis-à-vis du site public. `r.published` dit si la RÉALISATION est en ligne ; ceci dit
+   si CETTE photo l'est, ce qui n'est pas la même chose dès qu'on en ajoute une après coup. */
+function photoPubState(r,p){
+  if(!r||!r.published)return 'hors';
+  if(!p.publishedAt)return 'absente';
+  if((p.touchedAt||0)>p.publishedAt)return 'modifiee';
+  return 'enligne';
+}
+const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:''};
+const HIST_LABEL={import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site'};
 function normalizeRealisation(r){
   const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',w:0,h:0,useIa:false,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
@@ -3894,9 +3948,12 @@ function blobToImage(blob){
 }
 /* `original:true` force la photo d'origine même quand une version IA est active — sert au
    comparatif et à l'envoi vers le modèle (on ne réinjecte pas une sortie IA dans l'IA). */
-async function loadPhotoImage(pid,{thumb=false,original=false}={}){
+/* `original:true` force la photo d'origine, `useIaForce:true` force la version IA.
+   Sans forçage, c'est `photo.useIa` qui décide — la même règle partout : écran, export,
+   publication. */
+async function loadPhotoImage(pid,{thumb=false,original=false,useIaForce=false}={}){
   const ph=findPhoto(pid);
-  const useIa=!original&&ph&&ph.ia&&ph.useIa;
+  const useIa=useIaForce?!!(ph&&ph.ia):(!original&&ph&&ph.ia&&ph.useIa);
   const key=thumb?(useIa?iaKey(pid):thumbKey(pid)):(useIa?iaKey(pid):fullKey(pid));
   if(!thumb&&_imgCache.has(key))return _imgCache.get(key);
   const blob=await photoStore.get(key);
@@ -3942,7 +3999,9 @@ async function addPhotosToRealisation(r,files){
       await photoStore.save(fullKey(pid),fb);
       await photoStore.save(thumbKey(pid),tb);
       if(src.close)src.close();
-      r.photos.push({id:pid,name:file.name||'photo',w:full.width,h:full.height,edit:blankEdit(),createdAt:Date.now()});
+      const nouvelle={id:pid,name:file.name||'photo',w:full.width,h:full.height,edit:blankEdit(),createdAt:Date.now()};
+      photoLog(nouvelle,'import',file.name||'');
+      r.photos.push(nouvelle);
       if(!r.cover)r.cover=pid;
       n++;
     }catch(e){console.error('import photo',e);fail++;}
@@ -4197,8 +4256,15 @@ function renderRealisationDetail(host,r){
   head.appendChild(bar);
   const site=document.createElement('p');
   site.className='rz-site';
+  /* Compté photo par photo : « en ligne » au niveau du projet ne dit pas si LA photo
+     ajoutée ce matin y est. */
+  const etats=(r.photos||[]).map(p=>photoPubState(r,p));
+  const nb=k=>etats.filter(x=>x===k).length;
+  const aJour=nb('enligne'), aRepublier=nb('modifiee')+nb('absente');
   site.innerHTML=r.published
-    ? 'Visible sur le site : <a href="'+SITE_URL+'" target="_blank" rel="noopener">'+esc(SITE_URL)+'</a>. Republiez après une retouche pour mettre le site à jour.'
+    ? 'Visible sur le site : <a href="'+SITE_URL+'" target="_blank" rel="noopener">'+esc(SITE_URL)+'</a>.'
+      +' <b>'+aJour+'</b> photo(s) à jour en ligne'
+      +(aRepublier?', <b class="rz-warn">'+aRepublier+' en attente</b> (ajoutée ou modifiée depuis la dernière publication) — republiez pour mettre le site à jour.':'.')
     : 'Pas encore sur le site. Rien ne part en ligne tant que vous ne cliquez pas sur « Publier ».';
   head.appendChild(site);
 
@@ -4221,9 +4287,14 @@ function renderRealisationDetail(host,r){
     const picked=_rzSel.has(p.id);
     tile.className='rz-ph'+(_rzSelMode?' rz-selectable':'')+(picked?' rz-picked':'');
     const edited=JSON.stringify(p.edit)!==JSON.stringify(blankEdit());
+    const etat=photoPubState(r,p);
     tile.innerHTML=`<div class="rz-ph-load">…</div><img alt="" style="display:none">
-      ${edited?'<span class="rz-ph-badge">retouchée</span>':''}
-      ${r.cover===p.id?'<span class="rz-ph-badge" style="left:auto;right:6px;bottom:6px;background:rgba(154,133,116,.92)">couverture</span>':''}
+      <div class="rz-ph-tags">
+        ${etat!=='hors'?`<span class="rz-tag t-${etat}">${esc(PHOTO_PUB_LABEL[etat])}</span>`:''}
+        ${p.ia?`<span class="rz-tag t-ia">${p.useIa?'✨ version IA':'✨ IA disponible'}</span>`:''}
+        ${edited&&!p.ia?'<span class="rz-tag t-reg">réglée</span>':''}
+      </div>
+      ${r.cover===p.id?'<span class="rz-ph-badge" style="top:6px;bottom:auto;background:rgba(154,133,116,.92)">couverture</span>':''}
       ${_rzSelMode?`<span class="rz-check">${picked?'✓':''}</span>`:'<button class="rz-ph-del" title="Retirer">×</button>'}`;
     const im=tile.querySelector('img'),ld=tile.querySelector('.rz-ph-load');
     renderThumbInto(p,im,ld);
@@ -4317,11 +4388,14 @@ async function openPhotoEditor(rid,pid){
   const p=(r.photos||[]).find(x=>x.id===pid);if(!p)return;
   if(!glSetup()){toast('Votre navigateur ne gère pas WebGL : édition indisponible');return;}
   const host=document.createElement('div');host.className='ed-modal';host.id='ed-modal';
+  /* Un seul bouton pour sortir : « Retour » et « Terminer » faisaient exactement la même
+     chose (tout est enregistré au fur et à mesure), et deux façons de faire un même geste,
+     c'est une hésitation de plus. */
   host.innerHTML=`<div class="ed-bar">
-      <button class="btn" data-close>← Retour</button>
+      <button class="btn btn-primary" data-close>✓ Terminer</button>
       <span class="ed-title">${esc(p.name||'photo')}</span>
       <span class="ed-cmp" data-cmp>maintenir pour voir l’original</span>
-      <button class="btn btn-primary" data-done>Terminer</button>
+      <button class="btn" data-hist title="Historique de cette photo">🕘</button>
     </div>
     <div class="ed-body">
       <div class="ed-stage"><canvas id="ed-canvas"></canvas></div>
@@ -4348,9 +4422,9 @@ async function openPhotoEditor(rid,pid){
   document.body.appendChild(host);
   /* La retouche par consigne écrite est le mode d'entrée : c'est elle qui fait passer une
      photo de téléphone à une photo publiable. Les réglages manuels restent à un doigt. */
-  _ed={r,p,tab:'ia',img:null,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
+  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
   host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
-  host.querySelector('[data-done]').addEventListener('click',closePhotoEditor);
+  host.querySelector('[data-hist]').addEventListener('click',()=>openPhotoHistory(_ed.r,_ed.p));
   host.querySelector('[data-auto]').addEventListener('click',()=>{
     if(!_ed.img)return;
     Object.assign(_ed.p.edit,autoEdit(_ed.img,_ed.p.edit));
@@ -4369,8 +4443,30 @@ async function openPhotoEditor(rid,pid){
   }));
   const cmp=host.querySelector('[data-cmp]'),stage=host.querySelector('.ed-stage');
   const showOrig=on=>{_ed.showOrig=on;edPaint();};
-  ['mousedown','touchstart'].forEach(ev=>{cmp.addEventListener(ev,e=>{e.preventDefault();showOrig(true);});stage.addEventListener(ev,()=>showOrig(true));});
-  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>{cmp.addEventListener(ev,()=>showOrig(false));stage.addEventListener(ev,()=>showOrig(false));});
+  /* Deux gestes sur la photo, jamais les deux en même temps :
+     - une version IA existe → on fait glisser le curseur avant/après ;
+     - sinon → appui long pour voir la photo sans réglages. */
+  const posSplit=e=>{
+    const cvEl=$('ed-canvas');if(!cvEl)return;
+    const r=cvEl.getBoundingClientRect();
+    const cx=(e.touches&&e.touches[0]?e.touches[0].clientX:e.clientX);
+    if(cx==null||!r.width)return;
+    _ed.split=Math.max(0,Math.min(1,(cx-r.left)/r.width));
+    edPaint();
+  };
+  let glisse=false;
+  ['mousedown','touchstart'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(edHasCompare()){glisse=true;posSplit(e);if(e.cancelable)e.preventDefault();}
+    else showOrig(true);
+  },{passive:false}));
+  ['mousemove','touchmove'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(glisse){posSplit(e);if(e.cancelable)e.preventDefault();}
+  },{passive:false}));
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>stage.addEventListener(ev,()=>{
+    glisse=false;if(!edHasCompare())showOrig(false);
+  }));
+  ['mousedown','touchstart'].forEach(ev=>cmp.addEventListener(ev,e=>{if(!edHasCompare()){e.preventDefault();showOrig(true);}}));
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>cmp.addEventListener(ev,()=>{if(!edHasCompare())showOrig(false);}));
   paintEditorTabs();buildEditorControls();
   const cv=$('ed-canvas');
   const ctx=cv.getContext('2d');cv.width=600;cv.height=400;
@@ -4381,6 +4477,14 @@ async function openPhotoEditor(rid,pid){
   if(!_ed)return;
   if(!img){toast('Photo introuvable dans le cloud');closePhotoEditor();return;}
   _ed.img=img;edPaint();
+  await edLoadAlt();          /* de quoi comparer avant/après s'il existe une version IA */
+  if(_ed){edPaintHint();edPaint();}
+}
+/* La barre du haut dit quel geste est actif : ils ne coexistent pas. */
+function edPaintHint(){
+  const el=document.querySelector('#ed-modal [data-cmp]');
+  if(!el)return;
+  el.textContent=edHasCompare()?'faire glisser sur la photo : avant / après':'maintenir pour voir l’original';
 }
 function paintEditorTabs(){
   document.querySelectorAll('#ed-modal .ed-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===_ed.tab));
@@ -4437,6 +4541,26 @@ function sliderRow(cfg){
   inp.addEventListener('change',edTouch);
   return row;
 }
+/* Comparateur avant / après.
+
+   Il manquait la chose la plus importante : après une retouche, rien à l'écran ne disait ce
+   qui avait changé — une seule image, sans point de comparaison. Le curseur coupe l'image en
+   deux : à gauche l'avant, à droite l'après. On le fait glisser au doigt.
+
+   « Avant » veut dire deux choses selon le cas, et c'est voulu :
+   - une version IA existe → avant = la photo d'origine avec SES réglages, après = la version IA ;
+   - sinon → avant = la photo sans aucun réglage, après = la photo réglée. */
+function edHasCompare(){return !!(_ed&&_ed.imgAlt);}
+async function edLoadAlt(){
+  if(!_ed)return;
+  const p=_ed.p;
+  if(!p.ia){_ed.imgAlt=null;_ed.altEdit=null;return;}
+  /* L'autre version : l'original quand on regarde l'IA, l'IA quand on regarde l'original. */
+  const alt=await loadPhotoImage(p.id,p.useIa?{thumb:false,original:true}:{thumb:false,useIaForce:true});
+  if(!_ed||_ed.p!==p)return;
+  _ed.imgAlt=alt;
+  _ed.altEdit=JSON.parse(JSON.stringify((p.useIa?p.editOrig:p.editIa)||blankEdit()));
+}
 function edPaint(){
   if(!_ed||!_ed.img)return;
   cancelAnimationFrame(_ed.raf);
@@ -4446,11 +4570,56 @@ function edPaint(){
     const out=glRenderTo(_ed.img,edit,1400,'f_'+_ed.p.id);
     if(!out)return;
     cv.width=out.width;cv.height=out.height;
-    cv.getContext('2d').drawImage(out,0,0);
+    const ctx=cv.getContext('2d');
+
+    /* Sans version IA, le « avant » est la même image sans réglages : un seul rendu suffit,
+       l'appui long continue de servir. */
+    const compare=edHasCompare()&&!_ed.showOrig;
+    if(!compare){ctx.drawImage(out,0,0);edPaintLabels(ctx,cv,null);return;}
+
+    /* glRenderTo dessine TOUJOURS dans le même canevas WebGL : sans cette copie, les deux
+       « versions » seraient la même image et le comparateur ne comparerait rien. */
+    const snap=_ed.snap||(_ed.snap=document.createElement('canvas'));
+    snap.width=out.width;snap.height=out.height;
+    snap.getContext('2d').drawImage(out,0,0);
+    const alt=glRenderTo(_ed.imgAlt,_ed.altEdit||blankEdit(),1400,'alt_'+_ed.p.id);
+    _glTexKey=''; /* deux images dans le même rendu : la texture en cache n'est plus la bonne */
+    const x=Math.round(cv.width*(_ed.split==null?0.5:_ed.split));
+    /* L'avant occupe toute la surface ; l'après est découpé à droite du curseur. Les deux
+       rendus peuvent avoir des tailles différentes (le modèle rend dans sa propre
+       définition) : on les ramène au même cadre. */
+    const avantEstAlt=!!_ed.p.useIa; /* la version IA est l'APRÈS */
+    const bas=avantEstAlt?alt:snap, haut=avantEstAlt?snap:alt;
+    if(bas)ctx.drawImage(bas,0,0,cv.width,cv.height);
+    if(haut){
+      ctx.save();
+      ctx.beginPath();ctx.rect(x,0,cv.width-x,cv.height);ctx.clip();
+      ctx.drawImage(haut,0,0,cv.width,cv.height);
+      ctx.restore();
+    }
+    ctx.fillStyle='rgba(255,255,255,.92)';ctx.fillRect(x-1,0,2,cv.height);
+    edPaintLabels(ctx,cv,x);
   });
+}
+function edPaintLabels(ctx,cv,x){
+  if(x==null)return;
+  const f=Math.max(13,Math.round(cv.width/46));
+  ctx.font='700 '+f+'px Inter, sans-serif';
+  ctx.textBaseline='top';
+  const tag=(txt,px,align)=>{
+    ctx.textAlign=align;
+    const w=ctx.measureText(txt).width;
+    const bx=align==='left'?px:px-w;
+    ctx.fillStyle='rgba(35,32,28,.62)';
+    ctx.fillRect(bx-8,f*0.6,w+16,f*1.6);
+    ctx.fillStyle='#fff';ctx.fillText(txt,px,f);
+  };
+  if(x>f*5)tag('AVANT',f,'left');
+  if(cv.width-x>f*5)tag('APRÈS',cv.width-f,'right');
 }
 function edTouch(){
   if(!_ed)return;
+  photoTouch(_ed.p,'reglages');
   _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
 }
 function applyLightToSeries(){
@@ -4463,6 +4632,30 @@ function applyLightToSeries(){
     edTouch();toast('Lumière appliquée à '+others.length+' photo(s)');
   });
 }
+/* Historique de la photo. Sans lui, impossible de savoir ce qui a été fait, quand, avec quel
+   modèle et avec quelle consigne — ni si ce qui est en ligne correspond à ce qu'on voit. */
+function openPhotoHistory(r,p){
+  const etat=photoPubState(r,p);
+  const quand=t=>{
+    const d=new Date(t);
+    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  };
+  const lignes=(p.hist||[]).map(h=>`<li><span class="hist-t">${esc(quand(h.t))}</span>
+      <span class="hist-k">${esc(HIST_LABEL[h.k]||h.k)}</span>
+      ${h.d?`<span class="hist-d">${esc(h.d)}</span>`:''}</li>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Historique de la photo</h3>
+    <p class="msub">${esc(p.name||'photo')}</p>
+    <p class="hist-etat t-${etat}">${etat==='hors'
+      ? 'Cette réalisation n’est pas publiée : aucune de ses photos n’est en ligne.'
+      : etat==='enligne' ? 'Cette photo est en ligne sur le site, à jour.'
+      : etat==='modifiee' ? 'Cette photo est en ligne, mais elle a été modifiée depuis : republiez pour mettre le site à jour.'
+      : 'Cette photo n’est pas encore en ligne : elle a été ajoutée après la dernière publication.'}</p>
+    ${p.ia?`<p class="msub">Version affichée : <b>${p.useIa?'la retouche IA':'la photo d’origine'}</b> — c’est elle qui part à l’export et sur le site.</p>`:''}
+    <ul class="hist">${lignes||'<li><span class="hist-k">Aucun événement enregistré</span></li>'}</ul>
+    <div style="margin-top:12px"><button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+}
+
 function closePhotoEditor(){
   const host=$('ed-modal');if(host)host.remove();
   _ed=null;_glTexKey='';
@@ -4730,6 +4923,11 @@ function ensureIaModels(){
   if(!library.iaParams)library.iaParams={};
 }
 function iaKey(pid){return 'ra_'+pid;}
+/* Le nom lisible d'un modèle, qu'il vienne du catalogue ou de la liste personnelle. */
+function iaModelLabel(id){
+  const m=(library.iaModels||[]).find(x=>x.id===id)||IA_CATALOGUE.find(x=>x.id===id);
+  return (m&&m.label)||id;
+}
 
 /* Jeton de la session en cours. Les fonctions serveur exigent un utilisateur réellement
    connecté : la clé publiable de l'application ne suffit pas (et ne doit pas suffire). */
@@ -4870,6 +5068,9 @@ function iaUseVersion(photo,useIa){
   if(photo.useIa)photo.editIa=clone(photo.edit); else photo.editOrig=clone(photo.edit);
   photo.useIa=useIa;
   photo.edit=clone(useIa?photo.editIa:photo.editOrig);
+  /* C'est cette version-là qui partira à l'export et sur le site : c'est un changement de
+     ce qui sera publié, donc la photo n'est plus « à jour » vis-à-vis du site. */
+  photoTouch(photo,'version',useIa?'version IA':'photo d’origine');
 }
 
 async function applyIaToPhoto(r,photo,consigne,modelId,btn){
@@ -4886,6 +5087,7 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
     photo.editIa=blankEdit();
     photo.edit=blankEdit();
     photo.useIa=true;
+    photoTouch(photo,'ia',iaModelLabel(modelId)+(consigne?' · « '+consigne+' »':''));
     if(consigne&&consigne.length>3&&library.iaPrompts.indexOf(consigne)<0){
       library.iaPrompts.unshift(consigne);
       library.iaPrompts=library.iaPrompts.slice(0,8);
@@ -4905,7 +5107,10 @@ async function reloadEditorImage(){
   if(!_ed)return;
   const img=await loadPhotoImage(_ed.p.id,{thumb:false});
   if(!_ed)return;
-  _ed.img=img;_glTexKey='';edPaint();
+  _ed.img=img;_glTexKey='';
+  await edLoadAlt();
+  if(!_ed)return;
+  edPaintHint();edPaint();
 }
 
 /* ---- Panneau ----
@@ -5006,9 +5211,21 @@ function buildIaPanel(host){
   const modelRow=document.createElement('div');modelRow.className='ia-model-row';
   modelRow.innerHTML='<select></select>';
   const sel=modelRow.querySelector('select');
-  sel.innerHTML=library.iaModels.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('');
-  if(library.iaLastModel&&library.iaModels.some(m=>m.id===library.iaLastModel))sel.value=library.iaLastModel;
-  if(!sel.value&&library.iaModels[0])sel.value=library.iaModels[0].id;
+  /* Tout le catalogue est dans la liste, rangé par usage. Aucune raison de cacher des
+     modèles derrière un panneau de réglages : c'est le choix principal de cet écran.
+     Les modèles ajoutés à la main apparaissent à part, et la dernière ligne permet de
+     coller n'importe quel identifiant de fal.ai/models. */
+  const perso=library.iaModels.filter(m=>m.id&&!IA_CATALOGUE.some(c=>c.id===m.id));
+  const cats=[];
+  IA_CATALOGUE.forEach(m=>{if(cats.indexOf(m.cat)<0)cats.push(m.cat);});
+  sel.innerHTML=cats.map(c=>`<optgroup label="${esc(c)}">`+
+      IA_CATALOGUE.filter(m=>m.cat===c).map(m=>`<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('')+
+      '</optgroup>').join('')
+    +(perso.length?`<optgroup label="Mes modèles">${perso.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('')}</optgroup>`:'')
+    +'<optgroup label="Autre"><option value="__coller">＋ Coller un identifiant fal.ai…</option></optgroup>';
+  const connu=id=>IA_CATALOGUE.some(m=>m.id===id)||perso.some(m=>m.id===id);
+  if(library.iaLastModel&&connu(library.iaLastModel))sel.value=library.iaLastModel;
+  if(!sel.value)sel.value=IA_CATALOGUE[0].id;
   cardM.appendChild(modelRow);
   const note=document.createElement('p');note.className='ia-model-note';
   cardM.appendChild(note);
@@ -5025,7 +5242,7 @@ function buildIaPanel(host){
      panneau le dit au lieu d'exiger un texte qui serait ignoré. */
   let prendPrompt=true;
   const paintModel=async()=>{
-    const m=library.iaModels.find(x=>x.id===sel.value);
+    const m=library.iaModels.find(x=>x.id===sel.value)||IA_CATALOGUE.find(x=>x.id===sel.value);
     note.textContent=(m&&m.note)?m.note:'';
     sub.textContent='Appel facturé par fal.ai · l’original est conservé, la retouche s’ajoute à côté.';
     body.textContent='Lecture des réglages proposés par le modèle…';
@@ -5099,13 +5316,20 @@ function buildIaPanel(host){
       body.textContent='Réglages indisponibles : '+((e&&e.message)||'erreur');
     }
   };
-  sel.addEventListener('change',()=>{library.iaLastModel=sel.value;saveLibraryDebounced();paintModel();});
+  sel.addEventListener('change',()=>{
+    if(sel.value==='__coller'){
+      sel.value=library.iaLastModel||IA_CATALOGUE[0].id;
+      iaAskCustomModel();
+      return;
+    }
+    library.iaLastModel=sel.value;saveLibraryDebounced();paintModel();
+  });
   paintModel();
 
   go.addEventListener('click',()=>{
     const c=(ta.value||'').trim();
     if(prendPrompt&&!c){toast('Écrivez d’abord ce que vous voulez, ou touchez une consigne toute prête');ta.focus();return;}
-    askConfirm('Envoyer cette photo au modèle « '+((sel.options[sel.selectedIndex]||{}).text||'')+' » ? Cet appel est facturé par le fournisseur.',()=>{
+    askConfirm('Envoyer cette photo au modèle « '+iaModelLabel(sel.value)+' » ? Cet appel est facturé par le fournisseur.',()=>{
       applyIaToPhoto(r,p,c,sel.value,go);
     });
   });
@@ -5117,7 +5341,7 @@ function buildIaPanel(host){
     h.innerHTML='<span class="ttl">Version IA de cette photo</span>';
     box.appendChild(h);
     const meta=document.createElement('p');
-    meta.innerHTML=`<b>${esc((library.iaModels.find(m=>m.id===p.ia.model)||{}).label||p.ia.model)}</b>`;
+    meta.innerHTML=`<b>${esc(iaModelLabel(p.ia.model))}</b>`;
     box.appendChild(meta);
     if(p.ia.prompt){
       const echo=document.createElement('p');echo.className='ia-prompt-echo';
@@ -5135,7 +5359,9 @@ function buildIaPanel(host){
     del.addEventListener('click',()=>askConfirm('Supprimer la version IA de cette photo ? L’original n’est pas touché.',async()=>{
       await photoStore.del(iaKey(p.id));_imgCache.delete(iaKey(p.id));
       iaUseVersion(p,false); /* rend à la photo d'origine les réglages qui étaient les siens */
-      delete p.ia;delete p.editIa;edTouch();buildEditorControls();await reloadEditorImage();
+      delete p.ia;delete p.editIa;
+      photoTouch(p,'iasuppr','');
+      edTouch();buildEditorControls();await reloadEditorImage();
       toast('Version IA supprimée');
     }));
     box.appendChild(del);
@@ -5151,6 +5377,49 @@ function buildIaPanel(host){
    contre le catalogue réel de fal.ai) et la liste personnelle, où l'on peut coller
    n'importe quel identifiant de fal.ai/models. Le CRM n'est donc jamais limité à ce qui a
    été prévu ici : le pont lit le schéma du modèle et s'adapte. */
+/* Coller un identifiant. On le VÉRIFIE avant de l'ajouter : le schéma du modèle est public,
+   s'il ne répond pas, l'identifiant est faux — autant le dire tout de suite plutôt qu'au
+   moment de lancer une retouche facturée. */
+function iaAskCustomModel(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Ajouter un modèle de fal.ai</h3>
+    <p class="msub">Ouvrez <b>fal.ai/models</b>, choisissez un modèle d’édition d’image et copiez son identifiant (il ressemble à <code>fal-ai/…</code>). Le CRM lit tout seul les réglages qu’il propose.</p>
+    <label class="fld"><span class="lbl">Identifiant du modèle</span>
+      <input type="text" id="ia-custom-id" placeholder="fal-ai/mon-modele/edit"></label>
+    <label class="fld"><span class="lbl">Nom affiché (optionnel)</span>
+      <input type="text" id="ia-custom-label" placeholder="laissez vide pour reprendre l’identifiant"></label>
+    <p id="ia-custom-msg" class="msub"></p>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="ia-custom-go">Vérifier et ajouter</button>
+      <button class="btn btn-onlight" onclick="closeModal()">Annuler</button>
+    </div>`);
+  const go=$('ia-custom-go'), msg=$('ia-custom-msg');
+  go.addEventListener('click',async()=>{
+    const id=($('ia-custom-id').value||'').trim();
+    if(!id){msg.textContent='Collez d’abord un identifiant.';return;}
+    ensureIaModels();
+    if(library.iaModels.some(m=>m.id===id)||IA_CATALOGUE.some(m=>m.id===id)){
+      msg.textContent='Ce modèle est déjà dans la liste.';return;
+    }
+    go.disabled=true;msg.textContent='Vérification auprès de fal.ai…';
+    try{
+      const sc=await iaSchema(id);
+      const props=sc.properties||{};
+      if(!('image_urls' in props)&&!('image_url' in props)){
+        msg.textContent='Ce modèle n’accepte pas d’image en entrée : il ne sert pas à retoucher une photo.';
+        go.disabled=false;return;
+      }
+      library.iaModels.push({id,label:($('ia-custom-label').value||'').trim()||id,note:sc.title||''});
+      library.iaLastModel=id;saveLibraryDebounced();
+      closeModal();buildEditorControls();
+      toast('Modèle ajouté');
+    }catch(e){
+      msg.textContent='Identifiant introuvable chez fal.ai : '+((e&&e.message)||'erreur');
+      go.disabled=false;
+    }
+  });
+}
+
 function openIaModelsPanel(){
   ensureIaModels();
   const dejaLa=id=>library.iaModels.some(m=>m.id===id);
@@ -5278,6 +5547,9 @@ async function publishRealisation(r){
       };
       await up(fullName,bigBlob);await up(thumbName,smallBlob);
       entries.push({full:ownerId+'/'+fullName,thumb:ownerId+'/'+thumbName,w:bw,h:bh,cover:r.cover===p.id});
+      /* Daté photo par photo : une photo ajoutée après cette publication n'est pas en ligne,
+         et doit le dire. */
+      p.publishedAt=Date.now();photoLog(p,'publie','');
     }
     _glTexKey='';
     /* Republication avec moins de photos qu'avant : on retire les fichiers devenus orphelins,
@@ -5317,6 +5589,7 @@ async function unpublishRealisation(r){
       man.updatedAt=new Date().toISOString();
       await writeManifest(man);
       r.published=false;delete r.publishedAt;r.updatedAt=Date.now();
+      (r.photos||[]).forEach(p=>{delete p.publishedAt;photoLog(p,'depublie','');});
       saveRealisations();renderRealisations();
       toast('Retiré du site');
     }catch(e){toast('Échec du retrait : '+((e&&e.message)||'erreur'));}

@@ -738,6 +738,73 @@ const bascule = await page.evaluate(async () => {
 check('Bascule original / version IA effective', bascule.differentes);
 check('« original:true » ramène bien la photo d’origine (pas de réinjection de l’IA dans l’IA)', bascule.originalForce);
 
+// --- COMPARATEUR AVANT / APRÈS. Sans lui, après une retouche il n'y a qu'une image à
+//     l'écran et rien ne dit ce qui a changé. Le curseur coupe l'image en deux.
+const comparateur = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  p.useIa = true;
+  await reloadEditorImage();
+  await new Promise(r => setTimeout(r, 500));
+  const cv = document.getElementById('ed-canvas');
+  const lit = (fx) => {
+    const x = Math.round(cv.width * fx), y = Math.round(cv.height / 2);
+    return [...cv.getContext('2d').getImageData(x, y, 1, 1).data].slice(0, 3).join(',');
+  };
+  _ed.split = 0.5; edPaint();
+  await new Promise(r => setTimeout(r, 400));
+  const gauche = lit(0.12), droite = lit(0.88);
+  // le curseur déplacé à droite : le point à 60 % doit basculer de l'après vers l'avant
+  const avant60 = lit(0.6);
+  _ed.split = 0.9; edPaint();
+  await new Promise(r => setTimeout(r, 400));
+  const apres60 = lit(0.6);
+  return { compare: edHasCompare(), gauche, droite, avant60, apres60 };
+});
+check('Comparateur disponible dès qu’une version IA existe', comparateur.compare, JSON.stringify(comparateur.compare));
+check('Comparateur : les deux moitiés de l’image sont bien différentes (avant ≠ après)',
+  comparateur.gauche !== comparateur.droite, comparateur.gauche + ' | ' + comparateur.droite);
+check('Comparateur : déplacer le curseur change ce qu’on voit',
+  comparateur.avant60 !== comparateur.apres60, comparateur.avant60 + ' → ' + comparateur.apres60);
+
+// --- HISTORIQUE : ce qui a été fait sur la photo, avec le modèle et la consigne
+const histo = await page.evaluate(() => {
+  const p = realisations[0].photos[0];
+  openPhotoHistory(realisations[0], p);
+  const lignes = [...document.querySelectorAll('#modal .hist li')].map(li => li.textContent);
+  const etat = (document.querySelector('#modal .hist-etat') || {}).textContent || '';
+  const rect = document.querySelector('#modal').getBoundingClientRect();
+  const dessus = document.elementFromPoint(rect.left + rect.width / 2, rect.top + 20);
+  closeModal();
+  return { n: lignes.length, texte: lignes.join(' ~ '), etat, auDessus: !!(dessus && document.querySelector('#modal').contains(dessus)) };
+});
+check('Historique : la retouche IA y figure avec son modèle et sa consigne',
+  /Retouche IA/.test(histo.texte) && /Nano Banana/.test(histo.texte) && /consigne de test/.test(histo.texte),
+  histo.texte.slice(0, 120));
+check('Historique : l’import de la photo y figure', /Ajoutée/.test(histo.texte), histo.n + ' événement(s)');
+check('Historique : la fenêtre s’ouvre bien par-dessus l’éditeur', histo.auDessus);
+
+// --- La liste des modèles n'est plus limitée : tout le catalogue y est, rangé par usage
+const listeModeles = await page.evaluate(() => {
+  const sel = document.querySelector('#ed-controls select');
+  return {
+    groupes: [...sel.querySelectorAll('optgroup')].map(g => g.label),
+    n: sel.querySelectorAll('option').length,
+    coller: !!sel.querySelector('option[value="__coller"]'),
+  };
+});
+check('Tous les modèles du catalogue sont dans la liste, rangés par usage',
+  listeModeles.n >= 15 && listeModeles.groupes.length >= 3, JSON.stringify(listeModeles.groupes) + ' · ' + listeModeles.n + ' entrées');
+check('Un identifiant fal.ai quelconque peut être ajouté depuis la liste', listeModeles.coller);
+
+// --- Une seule façon de sortir de l'éditeur (deux boutons faisaient la même chose)
+const sortie = await page.evaluate(() => ({
+  ferme: document.querySelectorAll('#ed-modal .ed-bar [data-close]').length,
+  done: document.querySelectorAll('#ed-modal .ed-bar [data-done]').length,
+  hist: document.querySelectorAll('#ed-modal .ed-bar [data-hist]').length,
+}));
+check('Éditeur : un seul bouton pour sortir, et un accès à l’historique',
+  sortie.ferme === 1 && sortie.done === 0 && sortie.hist === 1, JSON.stringify(sortie));
+
 await page.evaluate(() => { _ed.tab = 'geometrie'; closePhotoEditor(); });
 await page.waitForTimeout(500);
 await page.unroute('**/functions/v1/photo-ia');
@@ -757,6 +824,36 @@ const pub = await page.evaluate(async () => {
   return { nouveaux, manif, publie: r.published === true };
 });
 check('Publication : la réalisation est marquée en ligne', pub.publie);
+
+// --- ÉTAT DE PUBLICATION PHOTO PAR PHOTO. « Le projet est en ligne » ne dit pas si LA photo
+//     ajoutée après coup y est : c'est exactement ce qui manquait pour savoir quoi republier.
+const etatsPhotos = await page.evaluate(async () => {
+  const r = realisations[0];
+  const lire = () => [...document.querySelectorAll('.rz-ph .rz-tag')].map(t => t.textContent.trim());
+  renderRealisations(); await new Promise(x => setTimeout(x, 400));
+  const justePubliees = r.photos.map(p => photoPubState(r, p));
+  const tags = lire();
+  // une photo modifiée après la publication
+  photoTouch(r.photos[0], 'reglages');
+  const apresRetouche = photoPubState(r, r.photos[0]);
+  // une photo ajoutée après la publication n'a jamais été mise en ligne
+  const neuve = { id: 'photo-neuve', name: 'neuve.jpg', edit: blankEdit(), createdAt: Date.now() };
+  r.photos.push(neuve);
+  const etatNeuve = photoPubState(r, neuve);
+  r.photos.pop();
+  renderRealisations(); await new Promise(x => setTimeout(x, 400));
+  return { justePubliees, tags, apresRetouche, etatNeuve, resume: (document.querySelector('.rz-site') || {}).textContent || '' };
+});
+check('Chaque photo publiée est datée et marquée « en ligne »',
+  etatsPhotos.justePubliees.every(e => e === 'enligne') && etatsPhotos.tags.some(t => /en ligne/.test(t)),
+  JSON.stringify(etatsPhotos.justePubliees) + ' · ' + etatsPhotos.tags.join(' | '));
+check('Une photo modifiée après la publication est signalée « à republier »',
+  etatsPhotos.apresRetouche === 'modifiee', etatsPhotos.apresRetouche);
+check('Une photo ajoutée après la publication est signalée « pas encore en ligne »',
+  etatsPhotos.etatNeuve === 'absente', etatsPhotos.etatNeuve);
+check('La fiche annonce combien de photos sont à jour et combien attendent',
+  /photo\(s\) à jour en ligne/.test(etatsPhotos.resume) && /en attente/.test(etatsPhotos.resume),
+  etatsPhotos.resume.slice(0, 140));
 check('Publication : un fichier pleine taille + une vignette par photo',
   pub.nouveaux.filter(k => /\/p\d+\.jpg$/.test(k)).length === realisationPhotoCount &&
   pub.nouveaux.filter(k => /\/t\d+\.jpg$/.test(k)).length === realisationPhotoCount,
