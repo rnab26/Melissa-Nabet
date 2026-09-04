@@ -261,6 +261,41 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 - La **sauvegarde JSON** contient les réalisations et leurs **vignettes seulement**. Les photos en pleine définition vivent dans le stockage Supabase (lié au compte, donc insensible à un vidage de cache) et se récupèrent via « Exporter pour le site ». Les inclure ferait un JSON de plusieurs centaines de Mo, impossible à produire depuis un téléphone.
 - `.viewnav` doit garder `flex-wrap:wrap` : sans ça, un onglet de plus fait déborder la barre du haut sur mobile (mesuré : 450 px de contenu pour 375 px d'écran).
 
+## Site vitrine public (dépôt séparé)
+
+**État** : sources prêtes et testées dans `site-vitrine/`, **pas encore déployées** — le
+dépôt `rnab26/melissa-nabet-site` reste à créer à la main (voir ci-dessus).
+
+**Décision de l'utilisateur** : le site public ne doit PAS partager son adresse avec le
+CRM. « Sinon les gens vont consulter des choses qu'ils ne devraient pas voir. » Le CRM est
+pourtant déjà inaccessible sans connexion (policies `app_data` vérifiées en base :
+`auth.uid() = owner` sur SELECT/INSERT/UPDATE/DELETE, un anonyme ne lit rien) — la
+séparation est une exigence d'adresse, pas un correctif de faille.
+
+**Architecture** :
+- Bucket Supabase `galerie`, **public en lecture**, créé par migration
+  `galerie_publique_bucket`. Écriture limitée au dossier du propriétaire
+  (`foldername[1] = auth.uid()`), lecture anonyme limitée à ce bucket. `client-docs`
+  (documents clients, photos non publiées) reste totalement privé.
+- Le CRM y dépose des copies redimensionnées (1600 px et 700 px), retouches appliquées,
+  plus un `manifest.json`. Les originaux ne quittent jamais le stockage privé.
+- Le site lit `manifest.json` et les images par leurs URLs publiques. **Il ne contient
+  aucune clé d'accès** — un test le vérifie explicitement.
+
+**Ne pas casser** :
+- Ne jamais mettre de clé Supabase (même « publishable ») dans `site-vitrine/index.html`.
+  Le site n'en a pas besoin : tout ce qu'il lit est public.
+- `site-vitrine/` est retiré de l'artefact GitHub Pages du CRM (étape `rm -rf site-vitrine`
+  dans `.github/workflows/pages.yml`). Vérifié en ligne : `…/Melissa-Nabet/site-vitrine/`
+  renvoie 404. Ne pas supprimer cette étape tant que le dossier vit dans ce dépôt.
+- Le manifeste se relit par l'**API authentifiée**, jamais par l'URL publique : le CDN peut
+  servir une version périmée, et une coupure réseau se confondrait avec « pas de
+  manifeste ». Dans les deux cas on republierait à partir d'un état vide, ce qui
+  dépublierait toutes les autres réalisations. Seul un manifeste réellement absent (404)
+  fait repartir de zéro. Un test reproduit la panne.
+- Republier avec moins de photos qu'avant doit continuer à supprimer les fichiers
+  orphelins du bucket : sinon ils restent accessibles publiquement hors galerie.
+
 **Vérification** : `tests/realisations.test.mjs` (Playwright + WebGL réel, 37 contrôles). C'est la méthode de référence pour ce chantier — elle **mesure** le rendu (convergence des verticales sur une façade en trapèze, dominante couleur, luminance, ratio de recadrage) au lieu de relire le code. Mode d'emploi dans `tests/README.md`.
 
 **Notes / À faire**
@@ -270,7 +305,12 @@ Aucune fonction interne modifiée (`buildRelanceBox`, `buildClientDevisList`, `b
 - [ ] Lire les réponses de la fiche avant de coder.
 - [ ] Obtenir 3 à 5 photos réelles typiques pour mesurer le gain réel avant tout achat.
 - [x] Étapes 1 à 7 (gratuites) : livrées, testées, mergées sur `main`, déployées.
-- [ ] Étape 8 (publication directe vers le site) — bloquée sur la décision 1 de la fiche.
+- [x] Étape 8 : publication vers le site. Bouton « Publier sur le site » par réalisation.
+- [ ] **Une manip attend l'utilisateur** : créer le dépôt vide `rnab26/melissa-nabet-site`
+      (public, avec README). Le connecteur GitHub de la session n'a pas le droit de créer
+      un dépôt (403 « Resource not accessible by integration ») — ce n'est pas contournable
+      depuis ici. Les sources du site sont prêtes dans `site-vitrine/` et n'attendent qu'un
+      `push` une fois le dépôt créé (+ `add_repo` pour l'ajouter à la session).
 - [ ] Étape 9 (service externe payant) — bloquée sur la décision 2 et sur un test sur ses vraies photos.
 - [ ] Obtenir 3 à 5 photos réelles typiques : rien n'a encore été mesuré sur de vraies photos de téléphone, uniquement sur une image de synthèse.
 - [ ] La barre de navigation passe maintenant sur deux lignes en mobile (5 onglets). Ça règle le débordement mais la refonte du menu mobile, déjà notée plus haut, devient plus pertinente.
