@@ -609,6 +609,13 @@
   .rz-bar i{display:block;height:100%;background:var(--oxblood);width:0;transition:width .2s;}
   .rz-refus{list-style:none;margin:8px 0 10px;padding:0;font-size:12px;line-height:1.5;}
   .rz-refus li{padding:5px 0;border-top:1px solid rgba(61,57,52,.12);}
+  /* Les styles de `.fld` ne visent que `label.fld` : ce bloc porte des boutons radio,
+     pas un champ, il a donc ses propres règles au lieu d'emprunter une classe qui ne
+     s'applique pas (les libellés se chevauchaient). */
+  .ia-portee-wrap{display:block;margin-bottom:11px;}
+  .ia-portee-wrap>.lbl{display:block;font-size:11px;color:var(--stone);margin-bottom:4px;}
+  .ia-portee{display:flex;flex-direction:column;gap:7px;margin-top:4px;}
+  .ia-portee label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);cursor:pointer;}
   .ph-menu{display:flex;flex-direction:column;gap:7px;margin-top:14px;}
   .ph-menu .mini{text-align:left;padding:10px 12px;font-size:13px;}
   .rz-ph-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--stone);}
@@ -735,6 +742,9 @@
   .ia-erreur{background:#fbeee9;border:1px solid #e8c9bd;border-left:3px solid #b6543f;
     border-radius:9px;padding:11px 13px;margin:0 0 11px;}
   .ia-erreur p{margin:0 0 8px;font-size:12.5px;color:#8c3f2d;line-height:1.5;}
+  /* Même bloc, mais pour une fin de série sans incident : ce n'est pas une alerte. */
+  .ia-erreur.ia-ok{background:#eef3ec;border-color:#c9dcc2;border-left-color:#4a7c59;}
+  .ia-erreur.ia-ok p{color:#33613f;}
   .ia-pied{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
     margin:2px 0 0;font-size:11.5px;color:var(--stone);}
   .ias-note{margin:0 0 14px;font-size:11.5px;color:var(--stone);line-height:1.5;}
@@ -4439,6 +4449,7 @@ function renderRealisationDetail(host,r){
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ${r.published?'btn-onlight':'btn-primary'}" data-publish>${r.published?'✓ En ligne — republier':'🌐 Publier sur le site'}</button>
       ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
+      <button class="btn btn-onlight" data-serie>✨ Retoucher plusieurs photos</button>
       <button class="btn btn-onlight" data-order>⇅ Réordonner</button>
       <button class="btn btn-onlight" data-select>☑ Sélectionner</button>
       <button class="btn btn-onlight" data-export>⬇ Tout télécharger</button>
@@ -4447,6 +4458,7 @@ function renderRealisationDetail(host,r){
   bar.querySelector('[data-publish]').addEventListener('click',()=>publishRealisation(r));
   const unpub=bar.querySelector('[data-unpublish]');
   if(unpub)unpub.addEventListener('click',()=>unpublishRealisation(r));
+  bar.querySelector('[data-serie]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
   bar.querySelector('[data-order]').addEventListener('click',()=>rzToggleOrderMode(!_rzOrderMode));
   bar.querySelector('[data-select]').addEventListener('click',()=>rzToggleSelectMode(true));
   bar.querySelector('[data-export]').addEventListener('click',()=>rzAskDownload(r,r.photos||[]));
@@ -4476,6 +4488,8 @@ function renderRealisationDetail(host,r){
 
   const imp=buildImportPanel();
   if(imp)head.appendChild(imp);
+  const serie=buildIaSeriePanel();
+  if(serie)head.appendChild(serie);
 
   const meta=document.createElement('div');meta.className='rz-meta';
   meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
@@ -5289,10 +5303,12 @@ function buildSelectionBar(r){
   const n=_rzSel.size, total=(r.photos||[]).length;
   bar.innerHTML=`<span class="rz-selcount">${n} sur ${total}</span>
     <button class="mini" data-all>${n===total&&total?'Tout désélectionner':'Tout sélectionner'}</button>
+    <button class="btn" data-ia ${n?'':'disabled'}>✨ Retoucher${n?' ('+n+')':''}</button>
     <button class="btn btn-primary" data-dl ${n?'':'disabled'}>⬇ Télécharger${n?' ('+n+')':''}</button>
     <button class="btn btn-onlight" data-del ${n?'':'disabled'}>🗑 Supprimer${n?' ('+n+')':''}</button>
     <button class="mini" data-cancel>Annuler</button>`;
   bar.querySelector('[data-all]').addEventListener('click',()=>rzSelectAll(r));
+  bar.querySelector('[data-ia]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
   bar.querySelector('[data-dl]').addEventListener('click',()=>rzAskDownload(r,rzSelectedPhotos(r)));
   bar.querySelector('[data-del]').addEventListener('click',()=>rzDeleteSelected(r));
   bar.querySelector('[data-cancel]').addEventListener('click',()=>rzToggleSelectMode(false));
@@ -5552,30 +5568,200 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
   setBtn('Envoi au modèle…');
   try{
     const data=await runIaEdit(photo,consigne,modelId);
-    await photoStore.save(iaKey(photo.id),dataUriToBlob(data.imageDataUri));
-    _imgCache.delete(iaKey(photo.id));
-    photo.ia={model:modelId,prompt:consigne,params:Object.assign({},iaParamsFor(modelId)),createdAt:Date.now()};
-    /* Les réglages du moment sont maintenant DANS l'image renvoyée : on les met de côté pour
-       la photo d'origine, et la version IA repart de réglages neutres. */
-    photo.editOrig=JSON.parse(JSON.stringify(photo.edit||blankEdit()));
-    photo.editIa=blankEdit();
-    photo.edit=blankEdit();
-    photo.useIa=true;
-    photoTouch(photo,'ia',iaModelLabel(modelId)+(consigne?' · « '+consigne+' »':''));
-    if(consigne&&consigne.length>3&&library.iaPrompts.indexOf(consigne)<0){
-      library.iaPrompts.unshift(consigne);
-      library.iaPrompts=library.iaPrompts.slice(0,8);
-      saveLibraryDebounced();
-    }
-    r.updatedAt=Date.now();saveRealisations();
+    await iaStoreResult(r,photo,data,consigne,modelId);
     if(_ed&&_ed.p===photo){_ed.img=null;await reloadEditorImage();}
-    _iaBalance=null; /* une retouche vient d'être facturée : le solde affiché n'est plus bon */
     toast('Retouche appliquée — l’original reste disponible');
   }catch(e){
     console.error('retouche IA',e);
     _iaLastError=(e&&e.message)||'erreur inconnue';
     toast('Échec de la retouche — le détail reste affiché');
   }finally{ setBtn(null); buildEditorControls(); }
+}
+
+/* Pose du résultat sur la photo. UNE seule écriture de cette règle : la retouche d'une
+   photo et la retouche d'une série doivent produire exactement le même état, sinon la
+   série finirait par diverger sans que rien ne le signale. */
+async function iaStoreResult(r,photo,data,consigne,modelId){
+  await photoStore.save(iaKey(photo.id),dataUriToBlob(data.imageDataUri));
+  _imgCache.delete(iaKey(photo.id));
+  photo.ia={model:modelId,prompt:consigne,params:Object.assign({},iaParamsFor(modelId)),createdAt:Date.now()};
+  /* Les réglages du moment sont maintenant DANS l'image renvoyée : on les met de côté pour
+     la photo d'origine, et la version IA repart de réglages neutres. */
+  photo.editOrig=JSON.parse(JSON.stringify(photo.edit||blankEdit()));
+  photo.editIa=blankEdit();
+  photo.edit=blankEdit();
+  photo.useIa=true;
+  photoTouch(photo,'ia',iaModelLabel(modelId)+(consigne?' · « '+consigne+' »':''));
+  if(consigne&&consigne.length>3&&library.iaPrompts.indexOf(consigne)<0){
+    library.iaPrompts.unshift(consigne);
+    library.iaPrompts=library.iaPrompts.slice(0,8);
+    saveLibraryDebounced();
+  }
+  r.updatedAt=Date.now();saveRealisations();
+  _iaBalance=null; /* une retouche vient d'être facturée : le solde affiché n'est plus bon */
+}
+
+/* ============ RETOUCHE D'UNE SÉRIE ============
+   Écrire la consigne une fois et la passer sur tout un chantier. Trois garde-fous, parce
+   que chaque photo est un appel facturé : le nombre et le coût sont annoncés AVANT de
+   lancer, le plafond mensuel arrête l'envoi, et on peut interrompre en cours. */
+let _iaSerie=null;         /* série en cours : {total,done,nom,stop,echecs} */
+let _iaSerieReport=null;   /* bilan de la dernière série, affiché jusqu'à ce qu'on le masque */
+
+function iaSerieCandidats(r,portee,selection){
+  const toutes=(r.photos||[]);
+  if(portee==='sel')return toutes.filter(p=>selection.has(p.id));
+  if(portee==='toutes')return toutes.slice();
+  return toutes.filter(p=>!p.ia);
+}
+function openIaSerieDialog(r,selection){
+  ensureIaModels();
+  const sel=selection||new Set();
+  const modeles=IA_CATALOGUE.concat(iaCustomModels());
+  const choisi=(library.iaLastModel&&modeles.some(m=>m.id===library.iaLastModel))?library.iaLastModel:iaSettings().modeleDefaut;
+  const nSel=(r.photos||[]).filter(p=>sel.has(p.id)).length;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Retoucher plusieurs photos</h3>
+    <p class="msub">Une seule consigne, envoyée photo par photo. Chaque photo garde son original : la version IA se pose à côté, et reste annulable photo par photo.</p>
+    <div class="ia-portee-wrap"><span class="lbl">Sur quelles photos</span>
+      <div class="ia-portee">
+        ${nSel?`<label><input type="radio" name="ia-portee" value="sel" checked> La sélection (${nSel})</label>`:''}
+        <label><input type="radio" name="ia-portee" value="neuves"${nSel?'':' checked'}> Celles qui n’ont pas encore de version IA (${iaSerieCandidats(r,'neuves',sel).length})</label>
+        <label><input type="radio" name="ia-portee" value="toutes"> Toutes les photos (${(r.photos||[]).length})</label>
+      </div>
+    </div>
+    <label class="fld"><span class="lbl">Votre consigne</span>
+      <textarea id="serie-consigne" rows="4" placeholder="ex. Équilibre la lumière, garde les matériaux et l’architecture tels quels."></textarea></label>
+    <div class="ia-chips" id="serie-presets"></div>
+    <label class="fld"><span class="lbl">Modèle</span><select id="serie-modele">
+      ${modeles.map(m=>`<option value="${esc(m.id)}"${m.id===choisi?' selected':''}>${esc(m.label||m.id)}</option>`).join('')}
+    </select></label>
+    <p class="msub" id="serie-recap"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="serie-go">✨ Lancer</button>
+    </div>`);
+  const ta=$('serie-consigne'), recap=$('serie-recap'), go=$('serie-go');
+  const pres=$('serie-presets');
+  IA_PRESETS.forEach(x=>{
+    const b=document.createElement('button');b.type='button';b.className='ia-chip';b.textContent=x.t;
+    b.addEventListener('click',()=>{ta.value=x.v;ta.focus();maj();});
+    pres.appendChild(b);
+  });
+  (library.iaPrompts||[]).slice(0,4).forEach(v=>{
+    const b=document.createElement('button');b.type='button';b.className='ia-chip recent';
+    b.textContent=v.length>34?v.slice(0,32)+'…':v;b.title=v;
+    b.addEventListener('click',()=>{ta.value=v;ta.focus();maj();});
+    pres.appendChild(b);
+  });
+  const portee=()=>(document.querySelector('input[name="ia-portee"]:checked')||{}).value||'neuves';
+  const maj=()=>{
+    const liste=iaSerieCandidats(r,portee(),sel);
+    const st=iaSettings(), fait=iaSpend();
+    const cout=liste.length*(parseFloat(st.coutUnitaire)||0);
+    const reste=st.plafondMois>0?Math.max(0,st.plafondMois-fait):Infinity;
+    let t=liste.length+' photo(s)'+(cout?' · environ '+cout.toFixed(2).replace('.',',')+' $':'')
+      +' · ce mois-ci '+fait+(st.plafondMois?' / '+st.plafondMois+' retouches':' retouche(s)');
+    if(!liste.length)t='Aucune photo dans cette portée. Choisissez « Toutes les photos » pour refaire celles qui ont déjà une version IA.';
+    else if(reste===0)t='Plafond du mois atteint ('+fait+' / '+st.plafondMois+'). Rien ne sera envoyé, donc rien ne sera facturé. Relevez le plafond dans ⚙ Réglages.';
+    else if(reste<liste.length)t+=' — attention : le plafond sera atteint après '+reste+' photo(s), les suivantes ne partiront pas.';
+    recap.textContent=t;
+    go.disabled=!liste.length||reste===0;
+    go.textContent='✨ Lancer sur '+liste.length+' photo(s)';
+  };
+  document.querySelectorAll('input[name="ia-portee"]').forEach(el=>el.addEventListener('change',maj));
+  ta.addEventListener('input',maj);
+  maj();
+  go.addEventListener('click',()=>{
+    const c=(ta.value||'').trim();
+    if(!c){toast('Écrivez la consigne, ou touchez une consigne toute prête');ta.focus();return;}
+    const liste=iaSerieCandidats(r,portee(),sel);
+    if(!liste.length)return;
+    runIaSerie(r,liste,c,$('serie-modele').value);
+  });
+}
+function iaSeriePaint(){
+  if(!_iaSerie)return;
+  const e=$('serie-etat'); if(e)e.textContent='Photo '+Math.min(_iaSerie.done+1,_iaSerie.total)+' / '+_iaSerie.total+' · '+_iaSerie.nom;
+  const b=document.querySelector('#modal .rz-bar i'); if(b)b.style.width=Math.round(_iaSerie.done/_iaSerie.total*100)+'%';
+  const ul=$('serie-live');
+  if(ul&&ul.childElementCount!==_iaSerie.echecs.length){
+    ul.innerHTML='';
+    _iaSerie.echecs.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+  }
+}
+async function runIaSerie(r,photos,consigne,modelId){
+  _iaSerie={total:photos.length,done:0,nom:(photos[0].name||'photo'),stop:false,echecs:[]};
+  _iaSerieReport=null;
+  openModal(`<h3>Retouche en cours</h3>
+    <p class="msub">Une photo à la fois. L’original de chacune est conservé.</p>
+    <p class="msub" id="serie-etat"></p>
+    <div class="rz-bar"><i style="width:0%"></i></div>
+    <ul class="rz-refus" id="serie-live"></ul>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button class="mini" id="serie-stop">Interrompre</button>
+    </div>`);
+  const stopBtn=$('serie-stop');
+  stopBtn.addEventListener('click',()=>{
+    if(!_iaSerie)return;
+    _iaSerie.stop=true;
+    /* On ne peut pas rappeler un appel déjà parti : il est facturé de toute façon, autant
+       en garder le résultat. On s'arrête donc APRÈS la photo en cours, et on le dit. */
+    stopBtn.disabled=true;stopBtn.textContent='Arrêt après la photo en cours…';
+  });
+  iaSeriePaint();
+  let ok=0,plafond=false;
+  for(const p of photos){
+    if(_iaSerie.stop)break;
+    if(iaPlafondAtteint()){plafond=true;break;}
+    _iaSerie.nom=p.name||'photo';iaSeriePaint();
+    try{
+      const data=await runIaEdit(p,consigne,modelId);
+      await iaStoreResult(r,p,data,consigne,modelId);
+      ok++;
+    }catch(e){
+      console.error('retouche IA série',e);
+      _iaSerie.echecs.push({name:p.name||'photo',why:(e&&e.message)||'erreur inconnue'});
+    }
+    _iaSerie.done++;iaSeriePaint();
+  }
+  const bilan={ok,total:photos.length,echecs:_iaSerie.echecs.slice(),
+    interrompu:_iaSerie.stop&&_iaSerie.done<photos.length,plafond};
+  _iaSerie=null;
+  _iaSerieReport=bilan;
+  closeModal();
+  saveRealisations();renderRealisations();
+  toast(ok+' photo(s) retouchée(s)'+(bilan.echecs.length?' · '+bilan.echecs.length+' échec(s)':''));
+}
+/* Bilan de la série : il reste à l'écran. Un toast de trois secondes ne suffit pas à lire
+   pourquoi trois photos sur douze n'ont pas abouti. */
+function buildIaSeriePanel(){
+  if(!_iaSerieReport)return null;
+  const b=_iaSerieReport;
+  const box=document.createElement('div');box.className='ia-erreur rz-bilan-serie'+(b.echecs.length||b.plafond?'':' ia-ok');
+  const t=document.createElement('p');
+  t.textContent='✨ Série terminée : '+b.ok+' photo(s) retouchée(s) sur '+b.total+'.'
+    +(b.interrompu?' Interrompu à votre demande.':'')
+    +(b.plafond?' Arrêté sur le plafond du mois : rien n’a été envoyé au-delà, donc rien n’a été facturé.':'')
+    +(b.echecs.length?'':' Les originaux restent disponibles : chaque photo peut revenir en arrière depuis son éditeur.');
+  box.appendChild(t);
+  if(b.echecs.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    b.echecs.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+  f.addEventListener('click',()=>{_iaSerieReport=null;renderRealisations();});
+  box.appendChild(f);
+  return box;
 }
 
 async function reloadEditorImage(){

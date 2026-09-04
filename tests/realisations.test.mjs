@@ -1392,6 +1392,166 @@ check('Éditeur : sur la première photo, ◀ est désactivé', nav2.reculBloque
 await page.evaluate(() => closePhotoEditor());
 await page.waitForTimeout(300);
 
+
+// ============================================================================
+//  RETOUCHE D'UNE SÉRIE : une consigne, tout un chantier
+//  Le pont est intercepté : aucun crédit n'est dépensé.
+// ============================================================================
+const serieCalls = [];
+let serieRate = false;      // fait échouer le 2e envoi du prochain lancement
+let serieEdits = 0;         // envois du lancement en cours
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  if (body.action === 'schema') {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ model: body.model, required: ['prompt', 'image_urls'],
+        properties: { prompt: { type: 'string' }, image_urls: { type: 'array' }, sync_mode: { type: 'boolean' },
+                      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K' } } }) });
+    return;
+  }
+  if (body.action === 'balance') { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ balance: 9.87 }) }); return; }
+  serieCalls.push({ model: body.model, prompt: (body.input || {}).prompt });
+  serieEdits++;
+  // Un envoi refusé au milieu d'un lancement : on vérifie que la série continue quand même.
+  await new Promise(res => setTimeout(res, 120));
+  if (serieRate && serieEdits === 2) {
+    await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'fal.ai a refusé (HTTP 422)' }) });
+    return;
+  }
+  const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: jpeg, model: body.model }) });
+});
+
+// --- Le dialogue annonce ce qui va être envoyé, et ce que ça coûte
+const dlg = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  r.photos.forEach(p => { delete p.ia; p.useIa = false; });
+  r.photos[0].ia = { model: 'x', prompt: 'déjà faite' };   // une photo déjà retouchée
+  library.iaSettings = Object.assign({}, library.iaSettings, { plafondMois: 0, coutUnitaire: 0.13 });
+  _rzSel.clear();
+  openIaSerieDialog(r, _rzSel);
+  const portees = [...document.querySelectorAll('.ia-portee label')].map(l => l.textContent.trim());
+  const recapNeuves = document.getElementById('serie-recap').textContent;
+  document.querySelector('input[name="ia-portee"][value="toutes"]').checked = true;
+  document.querySelector('input[name="ia-portee"][value="toutes"]').dispatchEvent(new Event('change'));
+  const recapToutes = document.getElementById('serie-recap').textContent;
+  const libelle = document.getElementById('serie-go').textContent;
+  const consignesPretes = document.querySelectorAll('#serie-presets .ia-chip').length;
+  closeModal();
+  return { portees, recapNeuves, recapToutes, libelle, consignesPretes, total: r.photos.length };
+});
+check('Série : les trois portées sont proposées avec leur décompte',
+  dlg.portees.length === 2 && /pas encore de version IA \(3\)/.test(dlg.portees[0]) && /Toutes les photos \(4\)/.test(dlg.portees[1]),
+  dlg.portees.join(' | '));
+check('Série : le nombre et le coût estimé sont annoncés AVANT de lancer',
+  /3 photo\(s\) · environ 0,39 \$/.test(dlg.recapNeuves), dlg.recapNeuves);
+check('Série : changer de portée met le coût à jour', /4 photo\(s\) · environ 0,52 \$/.test(dlg.recapToutes), dlg.recapToutes);
+check('Série : le bouton dit sur combien de photos il va lancer', /Lancer sur 4 photo/.test(dlg.libelle), dlg.libelle);
+check('Série : les consignes toutes prêtes sont là aussi', dlg.consignesPretes >= 5, dlg.consignesPretes + ' consigne(s)');
+
+// --- Lancement réel : chaque photo est envoyée une fois, l'original est conservé
+serieEdits = 0;
+const serie = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.photos.forEach(p => { delete p.ia; p.useIa = false; p.edit.persp = 20; });
+  const octetsAvant = await Promise.all(r.photos.map(async p => (await photoStore.get(fullKey(p.id))).size));
+  const usageAvant = iaSpend();
+  await runIaSerie(r, r.photos.slice(), 'équilibre la lumière de la pièce', IA_CATALOGUE[0].id);
+  const octetsApres = await Promise.all(r.photos.map(async p => (await photoStore.get(fullKey(p.id))).size));
+  const iaEnStock = await Promise.all(r.photos.map(async p => !!(await photoStore.get(iaKey(p.id)))));
+  return {
+    avecIa: r.photos.filter(p => p.ia && p.useIa).length,
+    total: r.photos.length,
+    memeConsigne: r.photos.every(p => p.ia && p.ia.prompt === 'équilibre la lumière de la pièce'),
+    originauxIntacts: octetsAvant.join() === octetsApres.join(),
+    iaEnStock: iaEnStock.every(Boolean),
+    reglagesRanges: r.photos.every(p => p.edit.persp === 0 && p.editOrig && p.editOrig.persp === 20),
+    hist: r.photos[0].hist.map(h => h.k),
+    usage: iaSpend() - usageAvant,
+    bilan: (document.querySelector('.rz-bilan-serie.ia-ok p') || {}).textContent || '',
+    modal: document.getElementById('overlay').classList.contains('open'),
+  };
+});
+check('Série : toutes les photos ont leur version IA', serie.avecIa === serie.total, serie.avecIa + ' / ' + serie.total);
+check('Série : c’est bien la même consigne qui est passée partout', serie.memeConsigne);
+check('Série : les originaux ne sont pas touchés', serie.originauxIntacts);
+check('Série : chaque version IA est bien stockée à côté', serie.iaEnStock);
+check('Série : les réglages manuels passent sur la version d’origine (pas appliqués deux fois)', serie.reglagesRanges);
+check('Série : l’historique de chaque photo garde la retouche', serie.hist.includes('ia'), serie.hist.join(','));
+check('Série : le compteur mensuel a bien compté chaque appel', serie.usage === serie.total, serie.usage + ' appel(s)');
+check('Série : le bilan reste affiché après coup', /4 photo\(s\) retouchée\(s\) sur 4/.test(serie.bilan), serie.bilan);
+check('Série : la fenêtre de progression se referme à la fin', serie.modal === false);
+check('Série : un appel au pont par photo (plus le schéma)', serieCalls.length === 4, serieCalls.length + ' appel(s)');
+
+// --- Une photo qui échoue n'arrête pas la série, et le bilan dit laquelle
+serieRate = true; serieEdits = 0;
+const serieKo = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.photos.forEach(p => { delete p.ia; p.useIa = false; });
+  await runIaSerie(r, r.photos.slice(0, 3), 'consigne', IA_CATALOGUE[0].id);
+  const box = document.querySelector('.rz-bilan-serie');
+  return { faites: r.photos.slice(0, 3).filter(p => p.ia).length,
+           texte: (box.querySelector('p') || {}).textContent || '',
+           lignes: [...box.querySelectorAll('.rz-refus li')].map(li => li.textContent) };
+});
+check('Série : une photo refusée n’arrête pas les suivantes', serieKo.faites === 2, serieKo.faites + ' réussie(s) sur 3');
+check('Série : le bilan dit combien ont abouti', /2 photo\(s\) retouchée\(s\) sur 3/.test(serieKo.texte), serieKo.texte);
+check('Série : la photo en échec est nommée avec la raison',
+  serieKo.lignes.length === 1 && /HTTP 422/.test(serieKo.lignes[0]), serieKo.lignes.join(' | '));
+serieRate = false;
+
+// --- Interrompre en cours de série
+const serieStop = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.photos.forEach(p => { delete p.ia; p.useIa = false; });
+  const pr = runIaSerie(r, r.photos.slice(), 'consigne', IA_CATALOGUE[0].id);
+  await new Promise(res => setTimeout(res, 60));
+  const btn = document.getElementById('serie-stop');
+  btn.click();
+  const libelle = btn.textContent;
+  await pr;
+  return { libelle, faites: r.photos.filter(p => p.ia).length, total: r.photos.length,
+           texte: (document.querySelector('.rz-bilan-serie p') || {}).textContent || '' };
+});
+check('Série : « Interrompre » dit que l’arrêt se fait après la photo en cours',
+  /Arrêt après la photo en cours/.test(serieStop.libelle), serieStop.libelle);
+check('Série : l’interruption arrête vraiment les envois suivants',
+  serieStop.faites < serieStop.total && serieStop.faites >= 1, serieStop.faites + ' / ' + serieStop.total);
+check('Série : le bilan dit que c’est vous qui avez interrompu', /Interrompu à votre demande/.test(serieStop.texte), serieStop.texte);
+
+// --- Le plafond du mois bloque AVANT tout envoi
+const seriePlafond = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  library.iaSettings = Object.assign({}, library.iaSettings, { plafondMois: iaSpend() });
+  openIaSerieDialog(r, new Set());
+  const t = document.getElementById('serie-recap').textContent;
+  const bloque = document.getElementById('serie-go').disabled;
+  closeModal();
+  library.iaSettings = Object.assign({}, library.iaSettings, { plafondMois: 0 });
+  return { t, bloque };
+});
+check('Série : plafond atteint — le lancement est bloqué', seriePlafond.bloque);
+check('Série : et le message dit que rien ne sera facturé et où relever le plafond',
+  /Plafond du mois atteint/.test(seriePlafond.t) && /facturé/.test(seriePlafond.t) && /Réglages/.test(seriePlafond.t), seriePlafond.t);
+
+// --- Plafond qui tombe en cours de série : annoncé avant de lancer
+const seriePartiel = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  library.iaSettings = Object.assign({}, library.iaSettings, { plafondMois: iaSpend() + 2 });
+  openIaSerieDialog(r, new Set());
+  document.querySelector('input[name="ia-portee"][value="toutes"]').checked = true;
+  document.querySelector('input[name="ia-portee"][value="toutes"]').dispatchEvent(new Event('change'));
+  const t = document.getElementById('serie-recap').textContent;
+  closeModal();
+  library.iaSettings = Object.assign({}, library.iaSettings, { plafondMois: 0 });
+  return t;
+});
+check('Série : on est prévenu quand le plafond tombera au milieu de la série',
+  /le plafond sera atteint après 2 photo\(s\)/.test(seriePartiel), seriePartiel);
+
+await page.unroute('**/functions/v1/photo-ia');
+await page.evaluate(() => { _iaSerieReport = null; renderRealisations(); });
+
 // --- On rend la vue à la réalisation utilisée par les mesures suivantes
 await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
 await page.waitForTimeout(300);
@@ -1481,7 +1641,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé \(HTTP 422\)/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
