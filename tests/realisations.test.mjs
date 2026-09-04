@@ -592,6 +592,51 @@ const guard = await page.evaluate(async () => {
 check('Panne de lecture du manifeste : la publication est abandonnée, pas forcée', guard.deuxiemePubliee === false);
 check('Panne de lecture du manifeste : le site déjà publié est intact', guard.apres === guard.avant, guard.avant + ' → ' + guard.apres);
 
+// --- Place réellement donnée à la photo dans l'éditeur, selon la forme de l'écran.
+//     Un téléphone en « site pour ordinateur » fait ~980 px de large tout en restant en
+//     PORTRAIT : ne regarder que la largeur envoyait l'éditeur en deux colonnes et la photo
+//     n'occupait plus que 13 % de l'écran, noyée dans 1660 px de noir.
+for (const [w, h, nom, minPart, enLigneAttendu] of [
+  [980, 2175, 'téléphone en mode ordinateur', 25, false],
+  [390, 844, 'téléphone', 25, false],
+  [820, 1180, 'tablette portrait', 40, false],
+  [1280, 900, 'ordinateur', 45, true],
+]) {
+  await page.setViewportSize({ width: w, height: h });
+  // On mesure sur la photo d'origine : à ce stade du test, la version IA est l'image
+  // factice de 1×1 px renvoyée par le faux pont, qui fausserait toute mesure de surface.
+  await page.evaluate(() => {
+    realisations[0].photos[0].useIa = false;
+    if (!document.getElementById('ed-modal')) openPhotoEditor(realisations[0].id, realisations[0].photos[0].id);
+  });
+  await page.waitForTimeout(900);
+  const m = await page.evaluate(() => {
+    const st = document.querySelector('.ed-stage').getBoundingClientRect();
+    const cv = document.getElementById('ed-canvas').getBoundingClientRect();
+    return {
+      enLigne: getComputedStyle(document.querySelector('.ed-body')).flexDirection === 'row',
+      part: 100 * (cv.width * cv.height) / (innerWidth * innerHeight),
+      noir: st.height - cv.height,
+    };
+  });
+  check('Éditeur ' + nom + ' (' + w + '×' + h + ') : la photo occupe une vraie place',
+    m.part >= minPart, Math.round(m.part) + '% de l’écran, ' + Math.round(m.noir) + 'px de vide');
+  check('Éditeur ' + nom + ' : disposition adaptée à la forme de l’écran',
+    m.enLigne === enLigneAttendu, m.enLigne ? 'deux colonnes' : 'empilé');
+}
+
+// --- L'onglet IA ne montre que ce qui concerne l'IA
+const boutonsIa = await page.evaluate(() => {
+  _ed.tab = 'ia'; paintEditorTabs(); buildEditorControls();
+  return [...document.querySelectorAll('.ed-panel .btn, .ed-panel .mini')].filter(b => b.offsetParent !== null).map(b => b.textContent.trim());
+});
+check('Onglet IA : pas de bouton de réglage photo qui traîne',
+  !boutonsIa.some(b => /Réglage auto|Réinitialiser|lumière à toute la série|couverture/i.test(b)),
+  boutonsIa.join(' | '));
+await page.evaluate(() => { _ed.tab = 'geometrie'; paintEditorTabs(); buildEditorControls(); closePhotoEditor(); });
+await page.waitForTimeout(400);
+await page.setViewportSize({ width: 1280, height: 900 });
+
 // --- Responsive : pas de débordement horizontal sur mobile
 for (const w of [375, 768]) {
   await page.setViewportSize({ width: w, height: 800 });

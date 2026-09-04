@@ -630,9 +630,20 @@
   .ia-prompt-echo{color:var(--stone);font-style:italic;margin-top:4px!important;}
   .ed-cmp{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;}
   @media(max-width:680px){.ed-cmp{display:none;}}
-  @media(min-width:900px){
+  /* La condition d'aspect compte autant que la largeur : un téléphone en « site pour
+     ordinateur » fait ~980 px de large tout en restant en portrait. En deux colonnes, la
+     photo n'y occupait que 13 % de l'écran (mesuré à 980×2175), le reste étant du noir. */
+  @media(min-width:900px) and (min-aspect-ratio:1/1){
     .ed-body{flex-direction:row;}
     .ed-panel{width:340px;flex:0 0 340px;max-height:none;border-top:none;border-left:1px solid var(--hair);}
+  }
+  /* Écran haut et étroit : la photo prend toute la largeur, et c'est le PANNEAU qui absorbe
+     la hauteur restante. Laisser la scène s'étirer donnait une photo perdue au milieu de
+     1145 px de noir (mesuré à 980×2175) ; le vide résiduel est maintenant du panneau clair,
+     à sa place, au lieu d'un trou noir. */
+  @media(max-aspect-ratio:1/1){
+    .ed-stage{flex:0 0 auto;max-height:56vh;}
+    .ed-panel{flex:1 1 auto;max-height:none;}
   }
 </style>
 </head>
@@ -4253,13 +4264,15 @@ async function openPhotoEditor(rid,pid){
           <button class="ed-tab" data-tab="ia">✨ IA</button>
         </div>
         <div id="ed-controls"></div>
-        <div class="ed-acts">
-          <button class="btn btn-onlight" data-auto>✨ Réglage auto</button>
-          <button class="btn btn-onlight" data-reset>↺ Réinitialiser</button>
-        </div>
-        <div class="ed-acts" style="margin-top:8px">
-          <button class="btn btn-onlight" data-series>Appliquer la lumière à toute la série</button>
-          <button class="btn btn-onlight" data-cover>Photo de couverture</button>
+        <div id="ed-photo-acts">
+          <div class="ed-acts">
+            <button class="btn btn-onlight" data-auto>✨ Réglage auto</button>
+            <button class="btn btn-onlight" data-reset>↺ Réinitialiser</button>
+          </div>
+          <div class="ed-acts" style="margin-top:8px">
+            <button class="btn btn-onlight" data-series>Appliquer la lumière à toute la série</button>
+            <button class="btn btn-onlight" data-cover>Photo de couverture</button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -4300,6 +4313,11 @@ async function openPhotoEditor(rid,pid){
 }
 function paintEditorTabs(){
   document.querySelectorAll('#ed-modal .ed-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===_ed.tab));
+  /* Réglage auto, réinitialisation, lumière de la série et couverture agissent sur les
+     réglages photographiques : les laisser visibles sur l'onglet IA laissait croire qu'ils
+     s'appliquaient à la retouche IA. */
+  const acts=$('ed-photo-acts');
+  if(acts)acts.style.display=(_ed.tab==='ia')?'none':'';
 }
 function buildEditorControls(){
   const host=$('ed-controls');if(!host||!_ed)return;
