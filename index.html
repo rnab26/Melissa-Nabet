@@ -575,6 +575,26 @@
   .rz-ph-badge{position:absolute;left:6px;bottom:6px;background:rgba(61,57,52,.82);color:#fff;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2px 6px;border-radius:2px;}
   .rz-ph-del{position:absolute;right:5px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;border-radius:3px;width:24px;height:24px;font-size:13px;cursor:pointer;line-height:1;}
   .rz-add{border:1px dashed var(--stone-light);border-radius:6px;background:transparent;color:var(--stone);cursor:pointer;font-size:12px;font-family:'Inter';aspect-ratio:3/2;}
+  .rz-selectable{outline:2px solid transparent;}
+  .rz-picked{outline:2px solid var(--oxblood);outline-offset:1px;}
+  .rz-picked img{opacity:.72;}
+  .rz-check{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:50%;
+    border:2px solid #fff;background:rgba(61,57,52,.45);color:#fff;display:flex;align-items:center;
+    justify-content:center;font-size:14px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+  .rz-picked .rz-check{background:var(--oxblood);}
+  .rz-selbar{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin-top:14px;padding:11px 13px;background:var(--ink);border-radius:7px;
+    box-shadow:0 6px 20px rgba(0,0,0,.25);}
+  .rz-selbar .rz-selcount{color:var(--paper);font-size:12.5px;font-weight:600;margin-right:2px;}
+  .rz-selbar .mini{background:transparent;border:1px solid var(--stone);color:var(--stone-light);}
+  .rz-selbar .mini:hover{color:var(--paper);border-color:var(--paper);}
+  /* La barre est sur fond sombre : `.btn-onlight` y écrirait en foncé sur foncé,
+     c'est-à-dire un bouton illisible (« Supprimer » invisible). */
+  .rz-selbar .btn{background:transparent;border-color:var(--stone);color:var(--paper);}
+  .rz-selbar .btn:hover:not([disabled]){background:var(--paper);color:var(--ink);border-color:var(--paper);}
+  .rz-selbar .btn-primary{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
+  .rz-selbar .btn-primary:hover:not([disabled]){background:var(--oxblood);color:#fff;}
+  .rz-selbar .btn[disabled]{opacity:.4;cursor:default;}
   .rz-add:hover{border-color:var(--oxblood);color:var(--oxblood);}
 
   /* ---- Éditeur photo ---- */
@@ -4018,6 +4038,7 @@ function renderRealisations(){
   const host=$('rz-body');if(!host)return;
   ensureRealisations();
   if(_rzOpenId&&!findRealisation(_rzOpenId))_rzOpenId=null;
+  if(!_rzOpenId&&_rzSelMode){_rzSelMode=false;_rzSel.clear();}
   host.innerHTML='';
   if(_rzOpenId)renderRealisationDetail(host,findRealisation(_rzOpenId));
   else renderRealisationList(host);
@@ -4062,13 +4083,15 @@ function renderRealisationDetail(host,r){
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ${r.published?'btn-onlight':'btn-primary'}" data-publish>${r.published?'✓ En ligne — republier':'🌐 Publier sur le site'}</button>
       ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
-      <button class="btn btn-onlight" data-export>⬇ Télécharger les photos</button>
+      <button class="btn btn-onlight" data-select>☑ Sélectionner</button>
+      <button class="btn btn-onlight" data-export>⬇ Tout télécharger</button>
       <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
     </div>`;
   bar.querySelector('[data-publish]').addEventListener('click',()=>publishRealisation(r));
   const unpub=bar.querySelector('[data-unpublish]');
   if(unpub)unpub.addEventListener('click',()=>unpublishRealisation(r));
-  bar.querySelector('[data-export]').addEventListener('click',()=>openExportPanel(r));
+  bar.querySelector('[data-select]').addEventListener('click',()=>rzToggleSelectMode(true));
+  bar.querySelector('[data-export]').addEventListener('click',()=>rzAskDownload(r,r.photos||[]));
   bar.querySelector('[data-del]').addEventListener('click',()=>delRealisation(r.id));
   head.appendChild(bar);
   const site=document.createElement('p');
@@ -4093,23 +4116,32 @@ function renderRealisationDetail(host,r){
 
   const grid=document.createElement('div');grid.className='rz-photos';
   (r.photos||[]).forEach(p=>{
-    const tile=document.createElement('div');tile.className='rz-ph';
+    const tile=document.createElement('div');
+    const picked=_rzSel.has(p.id);
+    tile.className='rz-ph'+(_rzSelMode?' rz-selectable':'')+(picked?' rz-picked':'');
     const edited=JSON.stringify(p.edit)!==JSON.stringify(blankEdit());
     tile.innerHTML=`<div class="rz-ph-load">…</div><img alt="" style="display:none">
       ${edited?'<span class="rz-ph-badge">retouchée</span>':''}
       ${r.cover===p.id?'<span class="rz-ph-badge" style="left:auto;right:6px;bottom:6px;background:rgba(154,133,116,.92)">couverture</span>':''}
-      <button class="rz-ph-del" title="Retirer">×</button>`;
+      ${_rzSelMode?`<span class="rz-check">${picked?'✓':''}</span>`:'<button class="rz-ph-del" title="Retirer">×</button>'}`;
     const im=tile.querySelector('img'),ld=tile.querySelector('.rz-ph-load');
     renderThumbInto(p,im,ld);
-    tile.querySelector('.rz-ph-del').addEventListener('click',e=>{e.stopPropagation();delPhoto(r,p.id);});
-    tile.addEventListener('click',()=>openPhotoEditor(r.id,p.id));
+    const del=tile.querySelector('.rz-ph-del');
+    if(del)del.addEventListener('click',e=>{e.stopPropagation();delPhoto(r,p.id);});
+    tile.addEventListener('click',()=>{
+      if(_rzSelMode)rzToggleSel(p.id);
+      else openPhotoEditor(r.id,p.id);
+    });
     grid.appendChild(tile);
   });
-  const add=document.createElement('button');add.className='rz-add';
-  add.innerHTML='＋<br>Ajouter des photos';
-  add.addEventListener('click',()=>rzPickPhotos(r));
-  grid.appendChild(add);
+  if(!_rzSelMode){
+    const add=document.createElement('button');add.className='rz-add';
+    add.innerHTML='＋<br>Ajouter des photos';
+    add.addEventListener('click',()=>rzPickPhotos(r));
+    grid.appendChild(add);
+  }
   host.appendChild(grid);
+  if(_rzSelMode)host.appendChild(buildSelectionBar(r));
 }
 /* La vignette montre la photo AVEC ses retouches : la galerie doit refléter ce qui sera
    publié, pas l'original. Rendu à la volée depuis la vignette stockée (rapide).
@@ -4319,51 +4351,198 @@ function closePhotoEditor(){
   saveRealisations();renderRealisations();
 }
 
-/* ============ EXPORT VERS LE SITE ============ */
-const EXPORT_SIZES=[{id:2560,label:'2560 px — grand écran'},{id:1920,label:'1920 px — usage courant'},{id:1280,label:'1280 px — vignettes / mobile'}];
-function openExportPanel(r){
-  const n=(r.photos||[]).length;
-  if(!n){toast('Aucune photo à exporter');return;}
-  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
-    <h3>Exporter « ${esc(r.title||'réalisation')} »</h3>
-    <p class="msub">${n} photo(s) seront téléchargées en JPEG, retouches appliquées. Les originaux restent intacts dans l’appli.</p>
-    <label class="fld" style="margin-bottom:12px"><span class="lbl">Largeur maximale</span>
-      <select id="exp-size">${EXPORT_SIZES.map(s=>`<option value="${s.id}"${s.id===1920?' selected':''}>${s.label}</option>`).join('')}</select></label>
-    <div id="exp-progress" style="font-size:13px;color:var(--stone);margin-bottom:10px"></div>
-    <button class="btn btn-primary" id="exp-go" onclick="runExport('${r.id}')">Télécharger les ${n} photo(s)</button>`);
-}
+/* ============ NOMS DE FICHIERS ============ */
 function slugify(s){
   return (s||'photo').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50)||'photo';
 }
-async function runExport(rid){
-  const r=findRealisation(rid);if(!r)return;
-  const size=parseInt(($('exp-size')||{}).value||1920,10);
-  const prog=$('exp-progress'),btn=$('exp-go');
-  if(btn)btn.disabled=true;
+
+
+/* ============ ARCHIVE ZIP (sans dépendance externe) ============
+   Un téléchargement en lot ne peut pas être une rafale de liens : sur mobile, le
+   navigateur bloque tout après le premier fichier. On produit donc UN fichier .zip.
+   Méthode « store » (aucune compression) : un JPEG est déjà compressé, compresser à
+   nouveau ne gagnerait rien et coûterait du temps de calcul sur un téléphone. */
+const _crcTable=(()=>{
+  const t=new Uint32Array(256);
+  for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[i]=c>>>0;}
+  return t;
+})();
+function crc32(bytes){
+  let c=0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++)c=_crcTable[(c^bytes[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+function dosDateTime(d){
+  return {
+    time:((d.getHours()&31)<<11)|((d.getMinutes()&63)<<5)|((d.getSeconds()/2)&31),
+    date:(((d.getFullYear()-1980)&127)<<9)|(((d.getMonth()+1)&15)<<5)|(d.getDate()&31),
+  };
+}
+/* entries : [{name, bytes:Uint8Array}] */
+function buildZip(entries){
+  const enc=new TextEncoder();
+  const now=dosDateTime(new Date());
+  const parts=[],central=[];
+  let offset=0;
+  entries.forEach(e=>{
+    const nameBytes=enc.encode(e.name);
+    const crc=crc32(e.bytes),size=e.bytes.length;
+    const local=new Uint8Array(30+nameBytes.length);
+    const lv=new DataView(local.buffer);
+    lv.setUint32(0,0x04034b50,true);
+    lv.setUint16(4,20,true);
+    lv.setUint16(6,0x0800,true); /* noms en UTF-8 */
+    lv.setUint16(8,0,true);      /* store */
+    lv.setUint16(10,now.time,true);lv.setUint16(12,now.date,true);
+    lv.setUint32(14,crc,true);lv.setUint32(18,size,true);lv.setUint32(22,size,true);
+    lv.setUint16(26,nameBytes.length,true);lv.setUint16(28,0,true);
+    local.set(nameBytes,30);
+    parts.push(local,e.bytes);
+
+    const cd=new Uint8Array(46+nameBytes.length);
+    const cv=new DataView(cd.buffer);
+    cv.setUint32(0,0x02014b50,true);
+    cv.setUint16(4,20,true);cv.setUint16(6,20,true);
+    cv.setUint16(8,0x0800,true);cv.setUint16(10,0,true);
+    cv.setUint16(12,now.time,true);cv.setUint16(14,now.date,true);
+    cv.setUint32(16,crc,true);cv.setUint32(20,size,true);cv.setUint32(24,size,true);
+    cv.setUint16(28,nameBytes.length,true);
+    cv.setUint16(30,0,true);cv.setUint16(32,0,true);cv.setUint16(34,0,true);
+    cv.setUint16(36,0,true);cv.setUint32(38,0,true);
+    cv.setUint32(42,offset,true);
+    cd.set(nameBytes,46);
+    central.push(cd);
+    offset+=local.length+size;
+  });
+  const cdSize=central.reduce((a,c)=>a+c.length,0);
+  const end=new Uint8Array(22);
+  const ev=new DataView(end.buffer);
+  ev.setUint32(0,0x06054b50,true);
+  ev.setUint16(4,0,true);ev.setUint16(6,0,true);
+  ev.setUint16(8,entries.length,true);ev.setUint16(10,entries.length,true);
+  ev.setUint32(12,cdSize,true);ev.setUint32(16,offset,true);
+  ev.setUint16(20,0,true);
+  return new Blob([...parts,...central,end],{type:'application/zip'});
+}
+function downloadBlob(blob,filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),8000);
+}
+
+/* ============ SÉLECTION MULTIPLE DANS UNE RÉALISATION ============
+   Plusieurs personnes alimentent la même galerie depuis des téléphones différents :
+   il faut pouvoir récupérer sur son propre appareil des photos ajoutées depuis un autre,
+   et faire le ménage à plusieurs sans supprimer une par une. */
+let _rzSel=new Set(), _rzSelMode=false;
+function rzToggleSelectMode(on){
+  _rzSelMode=(on===undefined)?!_rzSelMode:!!on;
+  if(!_rzSelMode)_rzSel.clear();
+  renderRealisations();
+}
+function rzToggleSel(pid){
+  if(_rzSel.has(pid))_rzSel.delete(pid);else _rzSel.add(pid);
+  renderRealisations();
+}
+function rzSelectAll(r){
+  const all=(r.photos||[]).map(p=>p.id);
+  if(_rzSel.size===all.length)_rzSel.clear();else all.forEach(id=>_rzSel.add(id));
+  renderRealisations();
+}
+function rzSelectedPhotos(r){
+  return (r.photos||[]).filter(p=>_rzSel.has(p.id));
+}
+
+/* Nom de fichier lisible et stable : slug du chantier + numéro d'ordre dans la galerie. */
+function photoFileName(r,p,index,suffix){
   const base=slugify(r.title||'realisation');
-  let done=0,fail=0;
-  for(const p of (r.photos||[])){
-    if(prog)prog.textContent='Rendu '+(done+fail+1)+' / '+r.photos.length+'…';
+  return base+'-'+String(index+1).padStart(2,'0')+(suffix||'')+'.jpg';
+}
+
+async function rzDownload(r,photos,{retouchees}){
+  if(!photos.length)return;
+  const label=retouchees?'retouchées':'importées';
+  toast('Préparation de '+photos.length+' photo'+(photos.length>1?'s':'')+'…');
+  const entries=[];
+  let fail=0;
+  for(const p of photos){
+    const index=(r.photos||[]).findIndex(x=>x.id===p.id);
     try{
-      const img=await loadPhotoImage(p.id,{thumb:false});
-      if(!img)throw new Error('photo absente');
-      const out=glRenderTo(img,p.edit||blankEdit(),size,'x_'+p.id);
-      if(!out)throw new Error('rendu impossible');
-      const blob=await canvasToBlob(out,0.9);
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      a.href=url;a.download=base+'-'+String(done+1).padStart(2,'0')+'.jpg';
-      document.body.appendChild(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),4000);
-      done++;
-      await new Promise(res=>setTimeout(res,350));
-    }catch(e){console.error('export',e);fail++;}
+      let blob;
+      if(retouchees){
+        const img=await loadPhotoImage(p.id,{thumb:false});
+        if(!img)throw new Error('photo absente');
+        const out=glRenderTo(img,p.edit||blankEdit(),REAL_MAX,'dl_'+p.id);
+        if(!out)throw new Error('rendu impossible');
+        blob=await canvasToBlob(out,0.92);
+      }else{
+        blob=await photoStore.get(fullKey(p.id));
+        if(!blob)throw new Error('photo absente');
+      }
+      entries.push({name:photoFileName(r,p,index,retouchees?'-retouchee':''),bytes:new Uint8Array(await blob.arrayBuffer())});
+    }catch(e){console.error('téléchargement',e);fail++;}
   }
   _glTexKey='';
-  if(prog)prog.textContent=done+' photo(s) téléchargée(s)'+(fail?' · '+fail+' échec(s)':'');
-  if(btn)btn.disabled=false;
-  toast(done+' photo(s) exportée(s)');
+  if(!entries.length){toast('Aucune photo n’a pu être préparée');return;}
+  if(entries.length===1){
+    downloadBlob(new Blob([entries[0].bytes],{type:'image/jpeg'}),entries[0].name);
+  }else{
+    downloadBlob(buildZip(entries),slugify(r.title||'realisation')+'-'+label+'.zip');
+  }
+  toast(entries.length+' photo(s) téléchargée(s)'+(fail?' · '+fail+' échec(s)':''));
+}
+
+function rzAskDownload(r,photos){
+  const n=photos.length;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Télécharger ${n} photo${n>1?'s':''}</h3>
+    <p class="msub">${n>1?'Un seul fichier .zip, pour que le téléphone ne bloque pas les téléchargements suivants.':'Le fichier est enregistré directement.'}</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" data-dl="brutes">Photos telles qu’importées</button>
+      <button class="btn btn-onlight" data-dl="retouchees">Photos avec les retouches</button>
+    </div>
+    <p class="msub" style="margin-top:12px">« Telles qu’importées » = ce qui a été déposé dans l’appli, sans retouche, en pleine définition (jusqu’à ${REAL_MAX} px). C’est ce qu’il faut pour récupérer sur un autre téléphone les photos ajoutées depuis celui de quelqu’un d’autre.</p>`);
+  const m=$('modal');
+  m.querySelector('[data-dl="brutes"]').addEventListener('click',()=>{closeModal();rzDownload(r,photos,{retouchees:false});});
+  m.querySelector('[data-dl="retouchees"]').addEventListener('click',()=>{closeModal();rzDownload(r,photos,{retouchees:true});});
+}
+
+function rzDeleteSelected(r){
+  const photos=rzSelectedPhotos(r);
+  if(!photos.length)return;
+  const n=photos.length;
+  askConfirm('Supprimer '+n+' photo'+(n>1?'s':'')+' de cette réalisation ? C’est définitif.',async()=>{
+    for(const p of photos){
+      await photoStore.del(fullKey(p.id));
+      await photoStore.del(thumbKey(p.id));
+    }
+    const ids=new Set(photos.map(p=>p.id));
+    r.photos=(r.photos||[]).filter(p=>!ids.has(p.id));
+    if(ids.has(r.cover))r.cover=(r.photos[0]||{}).id||'';
+    r.updatedAt=Date.now();
+    _rzSel.clear();_rzSelMode=false;
+    saveRealisations();renderRealisations();
+    toast(n+' photo(s) supprimée(s)'+(r.published?' — republiez pour mettre le site à jour':''));
+  });
+}
+
+function buildSelectionBar(r){
+  const bar=document.createElement('div');
+  bar.className='rz-selbar';
+  const n=_rzSel.size, total=(r.photos||[]).length;
+  bar.innerHTML=`<span class="rz-selcount">${n} sur ${total}</span>
+    <button class="mini" data-all>${n===total&&total?'Tout désélectionner':'Tout sélectionner'}</button>
+    <button class="btn btn-primary" data-dl ${n?'':'disabled'}>⬇ Télécharger${n?' ('+n+')':''}</button>
+    <button class="btn btn-onlight" data-del ${n?'':'disabled'}>🗑 Supprimer${n?' ('+n+')':''}</button>
+    <button class="mini" data-cancel>Annuler</button>`;
+  bar.querySelector('[data-all]').addEventListener('click',()=>rzSelectAll(r));
+  bar.querySelector('[data-dl]').addEventListener('click',()=>rzAskDownload(r,rzSelectedPhotos(r)));
+  bar.querySelector('[data-del]').addEventListener('click',()=>rzDeleteSelected(r));
+  bar.querySelector('[data-cancel]').addEventListener('click',()=>rzToggleSelectMode(false));
+  return bar;
 }
 
 /* ============ MÉMO DE PRISE DE VUE ============ */

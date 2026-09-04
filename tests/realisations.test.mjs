@@ -1,4 +1,6 @@
 import { chromium } from 'playwright';
+import { writeFileSync } from 'fs';
+import { execFileSync } from 'child_process';
 
 const URL_APP = process.env.APP_URL || 'http://127.0.0.1:8899/index.html';
 const ok = [], ko = [];
@@ -363,6 +365,86 @@ const guarded = await page.evaluate(() => {
 check('Saisie protégée : édition détectée', guarded.editing === true, JSON.stringify(guarded));
 check('Saisie protégée : la frappe locale n’est pas écrasée', guarded.kept === 'frappe en cours', guarded.kept);
 check('Saisie protégée : la version locale repartira en synchro', guarded.remoteNotMarked === true);
+
+// --- Sélection multiple, téléchargement en lot, suppression en lot.
+//     C'est le besoin réel : plusieurs personnes alimentent la galerie depuis des
+//     téléphones différents et doivent pouvoir récupérer et trier depuis le leur.
+await page.evaluate(async () => {
+  const mk = async (name) => {
+    const cv = document.createElement('canvas'); cv.width = 900; cv.height = 600;
+    const x = cv.getContext('2d'); x.fillStyle = '#c9bda8'; x.fillRect(0, 0, 900, 600);
+    x.fillStyle = '#55606d'; x.fillRect(100, 80, 300, 440);
+    const b = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
+    return new File([b], name, { type: 'image/jpeg' });
+  };
+  await addPhotosToRealisation(realisations[0], [await mk('c.jpg'), await mk('d.jpg')]);
+});
+await page.waitForTimeout(900);
+const total = await page.evaluate(() => realisations[0].photos.length);
+
+await page.evaluate(() => rzToggleSelectMode(true));
+await page.waitForTimeout(400);
+check('Mode sélection : barre d’actions affichée', await page.locator('.rz-selbar').count() === 1);
+check('Mode sélection : « Ajouter des photos » masqué (une étape à la fois)', await page.locator('.rz-add').count() === 0);
+check('Mode sélection : une case par photo', await page.locator('.rz-check').count() === total, total + ' photo(s)');
+
+await page.locator('.rz-ph').first().click();
+await page.waitForTimeout(300);
+check('Un appui sélectionne au lieu d’ouvrir l’éditeur',
+  (await page.locator('.rz-picked').count()) === 1 && (await page.locator('#ed-modal').count()) === 0);
+
+await page.locator('.rz-selbar [data-all]').click();
+await page.waitForTimeout(300);
+check('« Tout sélectionner » coche toutes les photos', await page.locator('.rz-picked').count() === total);
+
+// Téléchargement en lot : on intercepte le fichier produit et on le valide vraiment.
+const zipB64 = await page.evaluate(async () => {
+  let captured = null;
+  const orig = window.downloadBlob;
+  window.downloadBlob = (blob, name) => { captured = { blob, name }; };
+  await rzDownload(realisations[0], rzSelectedPhotos(realisations[0]), { retouchees: false });
+  window.downloadBlob = orig;
+  if (!captured) return null;
+  const buf = new Uint8Array(await captured.blob.arrayBuffer());
+  let bin = ''; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  return { name: captured.name, b64: btoa(bin) };
+});
+check('Téléchargement en lot : un seul fichier .zip est produit', !!zipB64 && /\.zip$/.test(zipB64.name), zipB64 && zipB64.name);
+if (zipB64) {
+  // L'archive est écrite par notre propre code : on la fait valider par un vrai
+  // décompresseur, pas par relecture du code. Un ZIP mal formé serait silencieux
+  // jusqu'à ce que quelqu'un essaie de l'ouvrir.
+  writeFileSync('/tmp/lot.zip', Buffer.from(zipB64.b64, 'base64'));
+  let zipOk = null, zipDetail = '';
+  try {
+    execFileSync('unzip', ['-t', '/tmp/lot.zip'], { stdio: 'pipe' });
+    const listing = execFileSync('unzip', ['-Z1', '/tmp/lot.zip'], { encoding: 'utf8' }).trim().split('\n');
+    zipOk = listing.length === 3 && listing.every(n => n.endsWith('.jpg'));
+    zipDetail = listing.join(', ');
+  } catch (e) {
+    if (e.code === 'ENOENT') zipDetail = 'unzip absent de la machine, contrôle non effectué';
+    else { zipOk = false; zipDetail = String(e.message).slice(0, 90); }
+  }
+  if (zipOk !== null) check('Archive relue par un vrai décompresseur, 3 JPEG intacts', zipOk, zipDetail);
+  else console.log('  (ignoré) validation ZIP — ' + zipDetail);
+}
+
+// Suppression en lot
+const del = await page.evaluate(async () => {
+  const r = realisations[0];
+  const avant = r.photos.length;
+  _rzSel.clear(); _rzSel.add(r.photos[0].id); _rzSel.add(r.photos[1].id);
+  const fichiersAvant = window.__files.size;
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    rzDeleteSelected(r);
+  });
+  return { avant, apres: r.photos.length, fichiersAvant, fichiersApres: window.__files.size, modeQuitte: _rzSelMode === false };
+});
+check('Suppression en lot : deux photos retirées en une confirmation', del.apres === del.avant - 2, del.avant + ' → ' + del.apres);
+check('Suppression en lot : les fichiers partent du stockage', del.fichiersApres === del.fichiersAvant - 4, del.fichiersAvant + ' → ' + del.fichiersApres);
+check('Suppression en lot : le mode sélection se referme', del.modeQuitte);
 
 // --- Publication vers le site public
 const realisationPhotoCount = await page.evaluate(() => realisations[0].photos.length);
