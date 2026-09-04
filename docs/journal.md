@@ -125,3 +125,36 @@ téléphone (quatre lignes, aucun débordement mesuré) mais ça commence à fai
 Piste : passer « Tout télécharger » et « Supprimer » dans un menu ⋯ au niveau de la
 réalisation, comme ce qui a été fait pour les vignettes. À décider avec Raphaël.
 
+
+---
+
+## 4 septembre 2026 — Alerte de saturation du stockage
+
+**Branche** `claude/infra-quota` → fusionnée sur `main`. **Chantier** `fi01` (haute).
+
+**Le risque** : le plan gratuit Supabase plafonne à 1 Go. À une photo d'environ 1 Mo, ça
+tient un à deux ans — puis un import échoue, et rien n'explique pourquoi.
+
+**Livré** : bandeau dans l'onglet Réalisations dès le seuil réglé (70 % par défaut), avec le
+pourcentage, **la place restante exprimée en photos** (calculée sur la taille moyenne réelle
+des fichiers déjà stockés) et quoi faire pour en récupérer. Au-delà de 95 %, le ton change :
+les prochains envois vont échouer. Capacité du plan et seuil se règlent dans Sauvegarde →
+Synchronisation, avec refus motivé des valeurs absurdes.
+
+**Correction au passage** : l'ancienne jauge ne comptait que le seau `client-docs`, et
+seulement son premier niveau. Elle ignorait donc **tout ce qui est publié sur le site**
+(seau `galerie`, rangé en sous-dossiers par réalisation) — c'est-à-dire une bonne part de la
+place réellement occupée. Le comptage descend maintenant dans les sous-dossiers et
+additionne les deux seaux.
+
+### Ce qu'il ne faut pas casser
+
+- `bucketBytes` traite une entrée **sans métadonnées** comme un dossier (c'est ainsi que
+  Supabase renvoie les préfixes) et descend d'un niveau, deux au maximum. Sans cette
+  descente, la galerie compte pour zéro.
+- La mesure est mise en cache deux minutes (`STORAGE_TTL`) : elle coûte deux listings.
+  `storageInvalidate()` est appelé après un import, une suppression, une publication et un
+  retrait du site — si un nouveau chemin fait varier la place occupée, il doit l'appeler
+  aussi, sinon la jauge ment jusqu'à l'expiration du cache.
+- Le seuil et la capacité vivent dans `library.storage` : ne pas revenir à des valeurs en
+  dur, le plan Supabase peut changer.

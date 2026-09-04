@@ -639,3 +639,26 @@ les garde-fous de coût et l'interface.
 
 **Vérification** : 24 contrôles ajoutés dans `tests/realisations.test.mjs` (207 au total),
 avec le pont intercepté — les tests ne dépensent aucun crédit.
+
+## Stockage — alerte de saturation (septembre 2026)
+
+**État** : livré. Chantier `fi01`.
+
+**Défaut trouvé en chemin** : `loadDocStorageUsage` ne listait que `client-docs`, et sur un
+seul niveau. Tout ce qui est publié sur le site (seau `galerie`, rangé en sous-dossiers par
+réalisation) n'était pas compté. La jauge annonçait donc systématiquement moins que la
+réalité — au moment précis où le chiffre compte.
+
+**Architecture** : `bucketBytes(bucket,prefix,profondeur)` descend dans les sous-dossiers
+(une entrée sans `metadata` est un préfixe chez Supabase), `loadStorageStat` additionne les
+deux seaux et met le résultat en cache deux minutes, `storageInvalidate()` le périme après
+un import, une suppression, une publication ou un retrait.
+
+**Choix** : la place restante est annoncée **en photos**, pas en méga-octets. « Il reste
+environ 258 photos » se décide ; « il reste 276 Mo » se calcule. La moyenne utilisée est
+celle des fichiers réellement stockés (une photo de téléphone ne pèse pas pareil d'un
+appareil à l'autre) ; la valeur de repli (1,2 Mo) ne sert que si moins de quatre fichiers
+existent.
+
+**Réglages** : `library.storage = {quotaMo, seuil, photoMo}` dans Sauvegarde →
+Synchronisation. Valeurs invalides refusées à l'écran avec leur raison.
