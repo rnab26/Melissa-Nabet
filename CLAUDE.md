@@ -67,3 +67,13 @@ Questions ouvertes posées à l'utilisateur sous forme d'artefact cliquable plut
 
 - **Photos de chantier (qualité pro pour le site)** — https://claude.ai/code/artifact/46d7e74d-3f5e-45a6-b922-3cc10d562254
   Réponses : collection `reponses`, document `photos-chantier` (`choices` + `notes`).
+
+- **Identité du site vitrine (quatre directions visuelles)** — https://claude.ai/code/artifact/0a5981ec-e66c-4ec9-86dd-500d76843969
+  Réponses : collection `reponses`, document `site-theme` (`theme`, `sections`, `accueil`,
+  `mouvement`, `langues`, `notes`). **À relire avant de toucher au chantier « Site vitrine ·
+  Identité »** : le thème retenu, les sections voulues et le degré de mouvement y sont, et
+  ils ne sont écrits nulle part ailleurs.
+  La fiche s'appuie sur un relevé réel des menus de cinq références (David Chipperfield,
+  Studio KO, Norm Architects, Vincent Van Duysen, Pierre Yovanovitch) : elles tiennent
+  toutes en trois sections — projets classés, studio, contact. Aucune n'a de blog, de
+  tarifs ni de témoignages. Ne pas en proposer.
