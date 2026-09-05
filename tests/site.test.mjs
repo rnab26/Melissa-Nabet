@@ -203,6 +203,42 @@ check('Plein écran : un balayage horizontal change de photo', balayage.ap === '
 check('Plein écran : un glissement vertical ne change rien', balayage.apresVertical === balayage.ap, balayage.apresVertical);
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 check('Échap ferme le plein écran', await page.locator('#lightbox.open').count() === 0);
+
+// --- Clavier : le plein écran prend le focus et le rend
+const clavierPlein = await page.evaluate(async () => {
+  const shot = document.querySelectorAll('.shot')[0];
+  shot.focus();
+  const avant = document.activeElement === shot;
+  shot.click();
+  await new Promise(r => setTimeout(r, 300));
+  const surFermer = document.activeElement === document.getElementById('lb-close');
+  // la tabulation reste dans le plein écran
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  const dansPlein = document.getElementById('lightbox').contains(document.activeElement);
+  document.getElementById('lb-close').click();
+  await new Promise(r => setTimeout(r, 250));
+  return { avant, surFermer, dansPlein, rendu: document.activeElement === shot };
+});
+check('Plein écran : le focus va sur le bouton fermer', clavierPlein.avant && clavierPlein.surFermer,
+  JSON.stringify(clavierPlein));
+check('Plein écran : la tabulation ne sort pas de la fenêtre', clavierPlein.dansPlein);
+check('Plein écran : refermer rend le focus à la photo d’où l’on venait', clavierPlein.rendu);
+
+// --- Appel à contact en fin de projet, seulement si des coordonnées existent
+const contactProjet = await page.evaluate(() => {
+  const p = document.getElementById('projet-contact');
+  const avec = { cache: p.hidden, texte: (p.textContent || '').trim(), lien: (p.querySelector('a') || {}).href || '' };
+  const garde = infosSite;
+  infosSite = { title: 'x' };            // aucune coordonnée renseignée
+  peindreContactProjet();
+  const sans = document.getElementById('projet-contact').hidden;
+  infosSite = garde; peindreContactProjet();
+  return { avec, sans };
+});
+check('Projet : une invitation à écrire quand des coordonnées existent',
+  !contactProjet.avec.cache && /Un projet de ce genre/.test(contactProjet.avec.texte)
+  && /wa\.me|mailto:/.test(contactProjet.avec.lien), contactProjet.avec.texte + ' → ' + contactProjet.avec.lien);
+check('Projet : rien du tout tant qu’aucune coordonnée n’est renseignée', contactProjet.sans === true);
 await page.click('#back'); await page.waitForTimeout(300);
 check('Retour à la liste', await page.locator('.projects').isVisible());
 
