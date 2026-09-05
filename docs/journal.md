@@ -834,3 +834,19 @@ deux colonnes, les deux tailles proposées, et le projet suivant au clic comme a
 - **Une image intermédiaire (1000 px)** : elle ferait gagner encore du poids sur les
   téléphones haute densité, mais coûterait +50 % de stockage par photo. Mauvais échange tant
   que le plan gratuit est à 1 Go.
+
+---
+
+## 5 septembre 2026 — Filtres dans la grille des réalisations
+
+**Branche** `claude/crm-real-filtres` → fusionnée sur `main`. **Chantier** `cr04`, la partie
+qui restait après la recherche globale.
+
+Toutes / À republier / En ligne / Pas publiées, plus une case par catégorie, chacune avec son
+décompte. **Le filtre n'apparaît qu'à partir de six réalisations** : en dessous, la grille se
+parcourt à l'œil et un contrôle de plus ne sert à rien. Une case qui ne rapporterait rien
+n'est pas proposée. « Nouvelle réalisation » disparaît tant qu'un filtre est actif, et un
+filtre devenu vide se rouvre tout seul plutôt que de laisser un écran vide sans raison.
+
+**Note** : la suite de tests est passée à 393 contrôles — l'autre session travaille en
+parallèle sur le même fichier et y a ajouté les siens. Tout est vert.
