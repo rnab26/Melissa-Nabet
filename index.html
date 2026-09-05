@@ -852,6 +852,10 @@
   .ia-model-row{display:flex;align-items:center;gap:9px;}
   .ia-model-row select{flex:1;min-width:0;font-family:'Inter';font-size:13px;padding:9px 10px;
     border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);color:var(--ink);}
+  .ia-model-fav{flex:0 0 auto;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);
+    color:var(--stone-light);cursor:pointer;font-size:16px;line-height:1;padding:9px 11px;}
+  .ia-model-fav:hover{color:var(--stone-deep);border-color:var(--stone-light);}
+  .ia-model-fav[aria-pressed="true"]{color:#c79a3e;border-color:#c79a3e;}
   .ia-model-note{margin:8px 0 0;font-size:11.5px;color:var(--stone);line-height:1.5;}
   .ia-field>label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
     color:var(--stone);font-weight:600;margin-bottom:4px;}
@@ -2452,8 +2456,15 @@ async function embellish(sv,btn,textarea){
 /* ============ MODALES ============ */
 function openModal(html){$('modal').innerHTML=html;$('overlay').classList.add('open');}
 function closeModal(){$('overlay').classList.remove('open');}
+/* Une explication qu'on lit puis qu'on ferme — pas une décision. `askConfirm` avec un seul
+   bouton ferait croire qu'on valide quelque chose. */
+function askInfo(titre,msg){
+  openModal(`<h3 style="font-size:19px;margin-bottom:2px">${esc(titre)}</h3><p class="msub" style="white-space:pre-line">${esc(msg)}</p>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+}
 function askConfirm(msg,onYes){
-  openModal(`<h3 style="font-size:19px;margin-bottom:2px">Confirmer</h3><p class="msub">${esc(msg)}</p>
+  openModal(`<h3 style="font-size:19px;margin-bottom:2px">Confirmer</h3><p class="msub" style="white-space:pre-line">${esc(msg)}</p>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
       <button class="mini" onclick="closeModal()">Annuler</button>
       <button class="btn btn-primary" id="confirm-yes">Confirmer</button></div>`);
@@ -6303,6 +6314,7 @@ function ensureIaModels(){
   library.iaModels=library.iaModels.filter(m=>m&&m.id&&!IA_CATALOGUE.some(c=>c.id===m.id));
   if(!library.iaPrompts)library.iaPrompts=[];
   if(!library.iaParams)library.iaParams={};
+  if(!Array.isArray(library.iaFavoris))library.iaFavoris=[];
 }
 function iaKey(pid){return 'ra_'+pid;} /* clé historique : la toute première retouche d'une photo */
 
@@ -6341,6 +6353,21 @@ function iaAskRenameVersion(photo,vid){
 function iaModelLabel(id){
   const m=(library.iaModels||[]).find(x=>x.id===id)||IA_CATALOGUE.find(x=>x.id===id);
   return (m&&m.label)||id;
+}
+
+/* Favoris. Quatorze modèles au catalogue, plus ceux collés à la main : on en utilise deux
+   ou trois. Les favoris remontent en tête de liste sans disparaître de leur rubrique —
+   déplacer un modèle qu'on cherchait ailleurs coûte plus cher que de le voir deux fois. */
+function iaFavoris(){
+  if(!Array.isArray(library.iaFavoris))library.iaFavoris=[];
+  return library.iaFavoris;
+}
+function iaEstFavori(id){return iaFavoris().indexOf(id)>=0;}
+function iaToggleFavori(id){
+  const f=iaFavoris(), i=f.indexOf(id);
+  if(i>=0)f.splice(i,1); else f.push(id);
+  saveLibraryDebounced();
+  return i<0;
 }
 
 /* Jeton de la session en cours. Les fonctions serveur exigent un utilisateur réellement
@@ -7174,13 +7201,29 @@ function buildIaPanel(host){
       soldeVal.textContent=(b.balance==null?'—':(Math.round(b.balance*100)/100)+' '+(b.currency||''));
       solde.classList.toggle('bas',typeof b.balance==='number'&&b.balance<1);
     }catch(e){
+      /* Six lignes de gris sous le bouton principal pour une commodité d'affichage, ça
+         noyait le bouton. Une phrase, et le détail à la demande pour qui veut le lire. */
       soldeVal.textContent='n/c';
       warn.style.display='';
-      warn.textContent='Solde non lisible : la consultation du solde fal.ai exige une clé de portée ADMIN, alors que la retouche fonctionne avec une clé de portée API. La retouche n’est pas concernée — vous pouvez lancer. Détail : '+((e&&e.message)||'erreur');
+      warn.innerHTML='';
+      /* La RAISON reste à l'écran — elle était dans une infobulle, inatteignable au doigt,
+         et le dépôt en a fait une règle. Seul le mode d'emploi de la réparation passe
+         derrière un bouton : il n'a pas à occuper six lignes sous le bouton principal. */
+      const t=document.createElement('span');
+      t.textContent='Solde indisponible : le lire demande une clé fal.ai de portée ADMIN. La retouche n’est pas concernée — vous pouvez lancer. ';
+      warn.appendChild(t);
+      const pk=document.createElement('button');pk.className='mini';pk.type='button';pk.textContent='Comment l’afficher';
+      pk.addEventListener('click',()=>askInfo('Afficher le solde fal.ai',
+        'Lire le solde et faire tourner un modèle ne demandent pas le même droit sur la clé fal.ai : la facturation exige une clé de portée ADMIN, la retouche se contente d’une clé de portée API. La clé en place est de portée API — elle fait donc tourner les modèles, mais se fait refuser sur le solde.\n\nPour afficher le solde : créer sur fal.ai une clé de portée ADMIN et la déposer dans Supabase sous le nom FAL_ADMIN_KEY. La clé qui fait tourner les modèles n’est pas touchée.\n\nDétail renvoyé par le serveur : '+((e&&e.message)||'erreur')));
+      warn.appendChild(pk);
     }
   };
   soldeBtn.addEventListener('click',()=>paintSolde(true));
-  host.appendChild(card);
+  /* L'ordre à l'écran suit l'ordre de l'action : avec QUEL modèle, puis QUOI lui demander,
+     puis lancer. La carte du modèle est donc posée en premier — plus bas, une fois
+     construite — et celle-ci vient après, son gros bouton en dernier élément de l'écran.
+     Avant, le bouton était au milieu et le choix du modèle après : on lançait sans avoir
+     vu avec quoi. */
   paintSolde(false);
 
   /* ---------- Carte 2 : le modèle et ses réglages ---------- */
@@ -7195,22 +7238,49 @@ function buildIaPanel(host){
   const modelRow=document.createElement('div');modelRow.className='ia-model-row';
   modelRow.innerHTML='<select class="ia-model-sel"></select>';
   const sel=modelRow.querySelector('select');
+  const favBtn=document.createElement('button');
+  favBtn.className='ia-model-fav';favBtn.type='button';
+  modelRow.appendChild(favBtn);
   /* Tout le catalogue est dans la liste, rangé par usage. Aucune raison de cacher des
      modèles derrière un panneau de réglages : c'est le choix principal de cet écran.
      Les modèles ajoutés à la main apparaissent à part, et la dernière ligne permet de
      coller n'importe quel identifiant de fal.ai/models. */
   const perso=iaCustomModels();
+  const connu=id=>IA_CATALOGUE.some(m=>m.id===id)||perso.some(m=>m.id===id);
   const cats=[];
   IA_CATALOGUE.forEach(m=>{if(cats.indexOf(m.cat)<0)cats.push(m.cat);});
-  sel.innerHTML=cats.map(c=>`<optgroup label="${esc(c)}">`+
-      IA_CATALOGUE.filter(m=>m.cat===c).map(m=>`<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('')+
-      '</optgroup>').join('')
-    +(perso.length?`<optgroup label="Mes modèles">${perso.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('')}</optgroup>`:'')
-    +'<optgroup label="Autre"><option value="__coller">＋ Coller un identifiant fal.ai…</option></optgroup>';
-  const connu=id=>IA_CATALOGUE.some(m=>m.id===id)||perso.some(m=>m.id===id);
+  /* La liste se reconstruit à chaque étoile posée ou retirée : le groupe des favoris doit
+     suivre immédiatement, sinon l'étoile ne prouve rien. La sélection est conservée. */
+  const peindreListe=()=>{
+    const garde=sel.value;
+    const favs=iaFavoris().filter(connu);
+    sel.innerHTML=
+      (favs.length?`<optgroup label="★ Favoris">${favs.map(id=>`<option value="${esc(id)}">${esc(iaModelLabel(id))}</option>`).join('')}</optgroup>`:'')
+      +cats.map(c=>`<optgroup label="${esc(c)}">`+
+        IA_CATALOGUE.filter(m=>m.cat===c).map(m=>`<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('')+
+        '</optgroup>').join('')
+      +(perso.length?`<optgroup label="Mes modèles">${perso.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('')}</optgroup>`:'')
+      +'<optgroup label="Autre"><option value="__coller">＋ Coller un identifiant fal.ai…</option></optgroup>';
+    if(garde&&connu(garde))sel.value=garde;
+  };
+  peindreListe();
+  const peindreEtoile=()=>{
+    const f=iaEstFavori(sel.value);
+    favBtn.textContent=f?'★':'☆';
+    favBtn.setAttribute('aria-pressed',f?'true':'false');
+    favBtn.title=f?'Retirer des favoris':'Mettre en favori — il remontera en tête de la liste';
+    favBtn.setAttribute('aria-label',favBtn.title);
+  };
+  favBtn.addEventListener('click',()=>{
+    if(!connu(sel.value))return;
+    const ajoute=iaToggleFavori(sel.value);
+    peindreListe();peindreEtoile();
+    toast(ajoute?'« '+iaModelLabel(sel.value)+' » ajouté aux favoris':'« '+iaModelLabel(sel.value)+' » retiré des favoris');
+  });
   if(library.iaLastModel&&connu(library.iaLastModel))sel.value=library.iaLastModel;
   if(!sel.value&&connu(iaSettings().modeleDefaut))sel.value=iaSettings().modeleDefaut;
   if(!sel.value)sel.value=IA_CATALOGUE[0].id;
+  peindreEtoile();
   cardM.appendChild(modelRow);
   const note=document.createElement('p');note.className='ia-model-note';
   cardM.appendChild(note);
@@ -7222,6 +7292,7 @@ function buildIaPanel(host){
   cardM.appendChild(det);
   const body=det.querySelector('.ia-params-body');
   host.appendChild(cardM);
+  host.appendChild(card);
 
   /* Tous les modèles ne prennent pas de consigne : un agrandisseur travaille seul. Le
      panneau le dit au lieu d'exiger un texte qui serait ignoré. */
@@ -7304,10 +7375,11 @@ function buildIaPanel(host){
   sel.addEventListener('change',()=>{
     if(sel.value==='__coller'){
       sel.value=library.iaLastModel||IA_CATALOGUE[0].id;
+      peindreEtoile();
       iaAskCustomModel();
       return;
     }
-    library.iaLastModel=sel.value;saveLibraryDebounced();paintModel();
+    library.iaLastModel=sel.value;saveLibraryDebounced();peindreEtoile();paintModel();
   });
   paintModel();
 
@@ -7317,7 +7389,15 @@ function buildIaPanel(host){
     const src=srcSel.value;
     const lancer=()=>applyIaToPhoto(r,p,c,sel.value,go,src);
     if(iaSettings().confirmer){
-      askConfirm('Envoyer « '+photoVersionLabel(p,src)+' » au modèle « '+iaModelLabel(sel.value)+' » ? Cet appel est facturé par le fournisseur, et le résultat s’ajoutera aux versions existantes sans en écraser aucune.',lancer);
+      /* Ce qu'on veut savoir avant d'engager une dépense : quelle version part, à quel
+         modèle, combien ça coûte, et où on en est du plafond. Le coût est une ESTIMATION
+         (coût unitaire réglé dans ⚙ Réglages) — fal.ai ne donne pas le prix réel appel par
+         appel, et le taire ferait prendre ce chiffre pour une facture. */
+      const cu=parseFloat(iaSettings().coutUnitaire)||0;
+      askConfirm('Envoyer « '+photoVersionLabel(p,src)+' » au modèle « '+iaModelLabel(sel.value)+' » ?'
+        +(cu?'\n\nCoût estimé : environ '+cu.toFixed(2).replace('.',',')+' $ pour cette photo. Estimation, pas le prix réel facturé par fal.ai.':'\n\nCet appel est facturé par fal.ai.')
+        +'\n'+iaMoisResume().texte+'.'
+        +'\n\nLe résultat s’ajoutera aux versions existantes, sans en écraser aucune.',lancer);
     }else lancer();
   });
 

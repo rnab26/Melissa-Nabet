@@ -583,6 +583,94 @@ const presets = await page.evaluate(() => {
 check('Consignes toutes prêtes : un appui remplit le champ',
   !!presets && presets.rempli > 40, presets ? presets.titre + ' → ' + presets.rempli + ' caractères' : 'aucune');
 
+// --- L'ORDRE DE L'ÉCRAN EST L'ORDRE DE L'ACTION : avec quel modèle, puis quoi lui demander,
+//     puis lancer. Le bouton était au milieu, le choix du modèle après : on lançait sans avoir
+//     vu avec quoi. Mesuré sur la position réelle à l'écran, pas sur l'ordre du code.
+const ordre = await page.evaluate(() => {
+  const y = s => { const e = document.querySelector('#ed-controls ' + s); return e ? e.getBoundingClientRect().top : null; };
+  const go = document.querySelector('#ed-controls .ia-go');
+  return {
+    modele: y('.ia-model-row'), consigne: y('.ia-prompt'), source: y('.ia-src-sel'),
+    bouton: go ? go.getBoundingClientRect().top : null,
+  };
+});
+check('Le choix du modèle est AU-DESSUS de la consigne',
+  ordre.modele !== null && ordre.consigne !== null && ordre.modele < ordre.consigne,
+  'modèle ' + Math.round(ordre.modele) + 'px, consigne ' + Math.round(ordre.consigne) + 'px');
+// La carte « Versions » vit sous le bouton : c'est de l'historique, pas une étape. Ce qui
+// compte, c'est que RIEN de ce qui alimente l'envoi — le modèle, la consigne, la version de
+// départ — ne se trouve en dessous : c'était le défaut, on lançait sans avoir vu avec quoi.
+check('Rien de ce qui alimente l’envoi ne se trouve sous le gros bouton',
+  ordre.bouton > ordre.consigne && ordre.bouton > ordre.modele
+    && (ordre.source === null || ordre.bouton > ordre.source),
+  'bouton ' + Math.round(ordre.bouton) + 'px, plus bas champ nourricier '
+    + Math.round(Math.max(ordre.consigne, ordre.modele, ordre.source || 0)) + 'px');
+
+// --- FAVORIS. Quatorze modèles au catalogue : on en utilise deux ou trois. L'étoile doit les
+//     faire remonter pour de vrai, et le choix doit survivre à une reconstruction du panneau.
+const favAvant = await page.evaluate(() => {
+  const sel = document.querySelector('#ed-controls .ia-model-row select');
+  sel.value = 'fal-ai/flux-pro/kontext'; sel.dispatchEvent(new Event('change'));
+  return { groupes: [...sel.querySelectorAll('optgroup')].map(g => g.label), etoile: document.querySelector('.ia-model-fav').textContent.trim() };
+});
+check('Sans favori, aucun groupe « Favoris » et l’étoile est vide',
+  favAvant.groupes.indexOf('★ Favoris') < 0 && favAvant.etoile === '☆', favAvant.groupes.join(' | '));
+
+const favApres = await page.evaluate(() => {
+  document.querySelector('.ia-model-fav').click();
+  const sel = document.querySelector('#ed-controls .ia-model-row select');
+  const g = sel.querySelector('optgroup');
+  return {
+    premierGroupe: g ? g.label : null,
+    dedans: g ? [...g.querySelectorAll('option')].map(o => o.value) : [],
+    etoile: document.querySelector('.ia-model-fav').textContent.trim(),
+    choixTenu: sel.value,
+    enBase: (library.iaFavoris || []).slice(),
+  };
+});
+check('L’étoile met le modèle en favori, en TÊTE de liste',
+  favApres.premierGroupe === '★ Favoris' && favApres.dedans.indexOf('fal-ai/flux-pro/kontext') === 0,
+  favApres.premierGroupe + ' → ' + favApres.dedans.join(','));
+check('Mettre en favori ne change pas le modèle choisi',
+  favApres.choixTenu === 'fal-ai/flux-pro/kontext', favApres.choixTenu);
+check('L’étoile est marquée, et le favori est enregistré',
+  favApres.etoile === '★' && favApres.enBase.indexOf('fal-ai/flux-pro/kontext') >= 0, favApres.enBase.join(','));
+
+const favSurvit = await page.evaluate(() => {
+  buildEditorControls();
+  const sel = document.querySelector('#ed-controls .ia-model-row select');
+  const g = sel.querySelector('optgroup');
+  return { groupe: g ? g.label : null, etoile: document.querySelector('.ia-model-fav').textContent.trim() };
+});
+check('Le favori survit à la reconstruction du panneau',
+  favSurvit.groupe === '★ Favoris' && favSurvit.etoile === '★', favSurvit.groupe + ' ' + favSurvit.etoile);
+
+const favRetire = await page.evaluate(() => {
+  document.querySelector('.ia-model-fav').click();
+  const sel = document.querySelector('#ed-controls .ia-model-row select');
+  return { groupes: [...sel.querySelectorAll('optgroup')].map(g => g.label), enBase: (library.iaFavoris || []).slice() };
+});
+check('Retirer le favori le fait disparaître de la tête de liste',
+  favRetire.groupes.indexOf('★ Favoris') < 0 && favRetire.enBase.length === 0, favRetire.groupes.join(' | '));
+
+// --- AVANT D'ENGAGER UNE DÉPENSE, on doit savoir combien et où on en est du plafond. La
+//     confirmation le disait pas : elle annonçait seulement « c'est facturé ».
+const confirme = await page.evaluate(async () => {
+  const st = iaSettings(); window.__confirmerAvant = st.confirmer; st.confirmer = true; library.iaSettings = st;
+  document.querySelector('.ia-prompt').value = 'Test de consigne assez longue pour passer';
+  document.querySelector('#ed-controls .ia-go').click();
+  await new Promise(r => setTimeout(r, 200));
+  const t = (document.getElementById('modal') || {}).textContent || '';
+  const b = document.getElementById('confirm-yes');
+  return { texte: t, aBouton: !!b };
+});
+check('Avant de lancer : le modèle, le coût estimé et le plafond du mois sont annoncés',
+  confirme.aBouton && /\$/.test(confirme.texte) && /[Ee]stimation/.test(confirme.texte) && /mois-ci/.test(confirme.texte),
+  confirme.texte.replace(/\s+/g, ' ').slice(0, 130));
+// Remettre le réglage EXACTEMENT comme on l'a trouvé : le laisser à false désarmait la
+// confirmation pour les tests suivants, qui vérifient justement qu'elle s'affiche.
+await page.evaluate(() => { closeModal(); const st = iaSettings(); st.confirmer = window.__confirmerAvant; library.iaSettings = st; document.querySelector('.ia-prompt').value = ''; });
+
 // --- Le solde du fournisseur s'affiche dans le CRM
 await page.waitForTimeout(700);
 const solde = await page.evaluate(() => (document.querySelector('.ia-solde b') || {}).textContent);
