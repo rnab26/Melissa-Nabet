@@ -176,6 +176,14 @@
   .apropos-txt{max-width:62ch;margin:12px 0 0;font-size:15px;line-height:1.75;}
   /* Un portfolio se parcourt de projet en projet : sans ce lien, il faut remonter tout en
      haut et revenir à la liste. */
+  /* Un projet qui plaît doit pouvoir se transformer en prise de contact, sans quitter la
+     page. Rien ne s'affiche tant qu'aucune coordonnée n'a été renseignée depuis le CRM. */
+  .projet-contact{
+    margin:clamp(26px,4vw,40px) 0 0;padding:18px 0 0;border-top:1px solid var(--hair);
+    font-size:14px;color:var(--stone);
+  }
+  .projet-contact a{color:var(--ink);border-bottom:1px solid var(--hair);text-decoration:none;padding-bottom:2px;}
+  .projet-contact a:hover{border-color:var(--ink);}
   .suivant{
     display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;cursor:pointer;
     background:none;border:none;border-top:1px solid var(--hair);
@@ -220,6 +228,7 @@
     <p class="project-meta" id="d-meta"></p>
     <p class="detail-text" id="d-text" hidden></p>
     <div class="shots" id="d-shots"></div>
+    <p class="projet-contact" id="projet-contact" hidden></p>
     <button class="suivant" id="suivant" hidden>
       <span class="eyebrow">Projet suivant</span>
       <span class="suivant-nom" id="suivant-nom"></span>
@@ -392,6 +401,7 @@ function openProject(i) {
   window.scrollTo({ top: 0, behavior: 'auto' });
   location.hash = 'p-' + current.id;
   peindreSuivant();
+  peindreContactProjet();
   var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
   majSeo(current.title + ' — ' + TITRE_SITE,
     current.texte || [current.lieu, current.surface, current.mission].filter(Boolean).join(' · ') || DESC_SITE,
@@ -400,6 +410,26 @@ function openProject(i) {
 
 /* Le projet suivant est le suivant DANS LA LISTE AFFICHÉE : si un filtre est actif, on
    reste dans la même catégorie plutôt que de sauter ailleurs sans prévenir. */
+/* Les mêmes coordonnées que la section « À propos », rien de plus : une seule source. */
+var infosSite = {};
+function peindreContactProjet() {
+  var p = el('projet-contact');
+  var s = infosSite || {};
+  var lien = null;
+  if (s.tel) {
+    var wa = versWhatsApp(s.tel);
+    if (wa) lien = { href: 'https://wa.me/' + wa, texte: 'écrivez-moi sur WhatsApp', ext: true };
+  }
+  if (!lien && s.email) lien = { href: 'mailto:' + s.email, texte: 'écrivez-moi' };
+  if (!lien) { p.hidden = true; p.textContent = ''; return; }
+  p.hidden = false;
+  p.textContent = 'Un projet de ce genre ? ';
+  var a = document.createElement('a');
+  a.href = lien.href; a.textContent = lien.texte;
+  if (lien.ext) { a.target = '_blank'; a.rel = 'noopener'; }
+  p.appendChild(a);
+  p.appendChild(document.createTextNode('.'));
+}
 function projetSuivant(d) {
   var liste = projetsVisibles();
   if (liste.length < 2 || !current) return null;
@@ -425,8 +455,12 @@ function closeProject() {
   majSeo(TITRE_SITE, DESC_SITE, IMG_SITE);
 }
 
+/* Qui a ouvert le plein écran : au clavier, il faut lui rendre le focus en refermant,
+   sinon on se retrouve renvoyé en haut de page sans savoir où l'on en était. */
+var lbRetour = null;
 function openLightbox(k) {
   if (!current) return;
+  if (!el('lightbox').classList.contains('open')) lbRetour = document.activeElement;
   lbIndex = k;
   var ph = current.photos[k];
   el('lb-rang').textContent = (k + 1) + ' / ' + current.photos.length;
@@ -435,6 +469,8 @@ function openLightbox(k) {
   el('lb-cap').textContent = ph.caption || '';
   el('lb-cap').hidden = !ph.caption;
   el('lightbox').classList.add('open');
+  var fermer = el('lb-close');
+  if (fermer) fermer.focus();
 }
 function stepLightbox(d) {
   if (!current) return;
@@ -444,7 +480,11 @@ function stepLightbox(d) {
   var apres = current.photos[(lbIndex + d + current.photos.length) % current.photos.length];
   if (apres) { var pre = new Image(); pre.src = url(apres.full); }
 }
-function closeLightbox() { el('lightbox').classList.remove('open'); }
+function closeLightbox() {
+  el('lightbox').classList.remove('open');
+  if (lbRetour && document.contains(lbRetour)) lbRetour.focus();
+  lbRetour = null;
+}
 
 /* Sur un téléphone, on fait défiler les photos au doigt : sans ça il faut viser des
    flèches de 46 px, ce que personne ne fait. Un glissement franc et horizontal seulement,
@@ -473,6 +513,18 @@ el('lb-prev').addEventListener('click', function (e) { e.stopPropagation(); step
 el('lb-next').addEventListener('click', function (e) { e.stopPropagation(); stepLightbox(1); });
 el('lightbox').addEventListener('click', function (e) { if (e.target === el('lightbox')) closeLightbox(); });
 document.addEventListener('keydown', function (e) {
+  /* Plein écran ouvert : la tabulation tourne entre ses propres boutons. Sans ça, elle
+     descend dans la page qui est derrière, invisible — on tabule dans le vide. */
+  if (e.key === 'Tab' && el('lightbox').classList.contains('open')) {
+    var focusables = [...el('lightbox').querySelectorAll('button')].filter(function (b) { return b.offsetParent !== null; });
+    if (focusables.length) {
+      var i = focusables.indexOf(document.activeElement);
+      var j = (i + (e.shiftKey ? -1 : 1) + focusables.length) % focusables.length;
+      e.preventDefault();
+      focusables[j === -1 ? 0 : j].focus();
+    }
+    return;
+  }
   if (!el('lightbox').classList.contains('open')) {
     if (e.key === 'Escape' && current) closeProject();
     /* Projet ouvert : les flèches passent d'un projet à l'autre. Elles ne servent à rien
@@ -532,6 +584,7 @@ fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
     if (m.site) {
       if (m.site.title) { el('site-name').textContent = m.site.title; el('footer').textContent = m.site.title + ' — ' + (m.site.subtitle || ''); }
       if (m.site.subtitle) el('site-tagline').textContent = m.site.subtitle;
+      infosSite = m.site;
       renderApropos(m.site);
     }
     projects = (m.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
