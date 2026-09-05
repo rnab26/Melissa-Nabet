@@ -109,6 +109,17 @@
     font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
     font-size:clamp(28px,5vw,40px);margin:0;line-height:1.15;
   }
+  /* Filtres : n'apparaissent que s'il y a vraiment plusieurs catégories à distinguer.
+     Un filtre à un seul bouton n'est pas un filtre, c'est un décor. */
+  .filtres{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;}
+  .filtres button{
+    font-family:'Inter',system-ui,sans-serif;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;font-weight:600;color:var(--stone);
+    background:transparent;border:1px solid var(--hair);border-radius:999px;
+    padding:8px 15px;cursor:pointer;transition:color .2s,border-color .2s,background .2s;
+  }
+  .filtres button:hover{color:var(--ink);border-color:var(--stone-light);}
+  .filtres button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper);}
   .detail .project-meta{margin:8px 0 14px;}
   /* Texte de présentation écrit depuis le CRM. Absent, la ligne disparaît entièrement. */
   .detail-text{max-width:62ch;margin:0 0 34px;font-size:15px;line-height:1.75;color:var(--ink);}
@@ -156,6 +167,7 @@
 
 <main>
   <p class="eyebrow index-head">Réalisations</p>
+  <nav class="filtres" id="filtres" hidden aria-label="Filtrer les réalisations"></nav>
   <div class="projects" id="projects"></div>
   <div class="state" id="state" hidden></div>
 
@@ -186,7 +198,7 @@ var STORAGE = 'https://njaamykxnvohoesrtpvv.supabase.co/storage/v1/object/public
 var OWNER = '797ad2e5-a27a-45c3-a987-d4897d1cadbf';
 
 var el = function (id) { return document.getElementById(id); };
-var projects = [], current = null, lbIndex = 0;
+var projects = [], current = null, lbIndex = 0, filtre = '';
 
 function url(p) { return STORAGE + p; }
 
@@ -198,10 +210,37 @@ function showState(title, text) {
   s.querySelector('p').textContent = text;
 }
 
+/* Le filtre se construit tout seul à partir de ce qui est publié : aucune liste à tenir
+   à jour quelque part, et une catégorie qui disparaît du site disparaît du filtre. */
+function renderFiltres() {
+  var host = el('filtres');
+  var cats = [];
+  projects.forEach(function (p) {
+    var c = (p.categorie || '').trim();
+    if (c && cats.indexOf(c) < 0) cats.push(c);
+  });
+  cats.sort(function (a, b) { return a.localeCompare(b, 'fr'); });
+  if (cats.length < 2) { host.hidden = true; host.innerHTML = ''; filtre = ''; return; }
+  host.hidden = false;
+  host.innerHTML = '';
+  [''].concat(cats).forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    var n = c ? projects.filter(function (p) { return (p.categorie || '').trim() === c; }).length : projects.length;
+    b.textContent = (c || 'Tout') + ' (' + n + ')';
+    b.setAttribute('aria-pressed', filtre === c ? 'true' : 'false');
+    b.addEventListener('click', function () { filtre = c; renderFiltres(); renderIndex(); });
+    host.appendChild(b);
+  });
+}
+function projetsVisibles() {
+  if (!filtre) return projects;
+  return projects.filter(function (p) { return (p.categorie || '').trim() === filtre; });
+}
 function renderIndex() {
   var host = el('projects');
   host.innerHTML = '';
-  projects.forEach(function (p, i) {
+  projetsVisibles().forEach(function (p, i) {
     var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
     if (!cover) return;
     var b = document.createElement('button');
@@ -222,7 +261,7 @@ function renderIndex() {
     var infos = [p.date, p.lieu, p.mission].filter(Boolean);
     if (infos.length < 2) infos.push(p.photos.length + ' photos');
     b.querySelector('.project-meta').textContent = infos.join(' · ');
-    b.addEventListener('click', function () { openProject(i); });
+    b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
     host.appendChild(b);
   });
 }
@@ -256,8 +295,8 @@ function majSeo(titre, description, image) {
 function openProject(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
-  el('d-meta').textContent = [current.date, current.lieu, current.surface, current.mission,
-    current.photos.length + ' photos'].filter(Boolean).join(' · ');
+  el('d-meta').textContent = [current.date, current.categorie, current.lieu, current.surface,
+    current.mission, current.photos.length + ' photos'].filter(Boolean).join(' · ');
   el('d-text').textContent = current.texte || '';
   el('d-text').hidden = !current.texte;
   var host = el('d-shots');
@@ -344,6 +383,7 @@ fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
       showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
       return;
     }
+    renderFiltres();
     renderIndex();
     var h = location.hash.replace('#p-', '');
     if (h) {

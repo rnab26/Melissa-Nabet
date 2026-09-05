@@ -41,9 +41,52 @@ await page.waitForTimeout(500);
 
 check('Titre du site repris du manifeste', (await page.textContent('#site-name')).trim() === 'Melissa Nabet');
 const cards = await page.locator('.project').count();
-check('Une carte par réalisation publiée', cards === 1, cards + ' carte(s)');
+check('Une carte par réalisation publiée', cards === 3, cards + ' carte(s)');
 const coverLoaded = await page.evaluate(() => [...document.querySelectorAll('.project-img img')].filter(i => i.naturalWidth > 0).length);
-check('Vignette de couverture réellement chargée', coverLoaded === 1, coverLoaded + ' chargée(s)');
+check('Vignettes de couverture réellement chargées', coverLoaded >= 2, coverLoaded + ' chargée(s) sur ' + cards);
+
+// --- Filtre par catégorie, construit tout seul à partir de ce qui est publié
+const filtres = await page.evaluate(() => ({
+  visible: !document.getElementById('filtres').hidden,
+  boutons: [...document.querySelectorAll('#filtres button')].map(b => b.textContent),
+  actif: (document.querySelector('#filtres button[aria-pressed="true"]') || {}).textContent || '',
+}));
+check('Filtre : une case par catégorie publiée, avec le décompte',
+  filtres.visible && filtres.boutons.join(' | ') === 'Tout (3) | Appartement (2) | Bureau (1)', filtres.boutons.join(' | '));
+check('Filtre : « Tout » est actif au départ', /^Tout/.test(filtres.actif), filtres.actif);
+const filtre1 = await page.evaluate(async () => {
+  [...document.querySelectorAll('#filtres button')].find(b => /Appartement/.test(b.textContent)).click();
+  await new Promise(r => setTimeout(r, 200));
+  return {
+    cartes: [...document.querySelectorAll('.project-name')].map(n => n.textContent),
+    actif: (document.querySelector('#filtres button[aria-pressed="true"]') || {}).textContent || '',
+  };
+});
+check('Filtre : ne restent que les projets de la catégorie choisie',
+  filtre1.cartes.length === 2 && filtre1.cartes.every(t => /Duplex|Florentin/.test(t)), filtre1.cartes.join(' | '));
+check('Filtre : la case choisie est marquée', /Appartement/.test(filtre1.actif), filtre1.actif);
+// Ouvrir depuis une liste filtrée doit ouvrir LE bon projet, pas celui du même rang
+// dans la liste complète.
+await page.locator('.project').first().click();
+await page.waitForTimeout(500);
+const ouvertFiltre = await page.evaluate(() => ({ titre: (document.getElementById('d-title') || {}).textContent || '', hash: location.hash }));
+check('Filtre : ouvrir depuis une liste filtrée ouvre le bon projet',
+  /Duplex/.test(ouvertFiltre.titre) && ouvertFiltre.hash === '#p-r2', ouvertFiltre.titre + ' ' + ouvertFiltre.hash);
+await page.click('#back'); await page.waitForTimeout(300);
+await page.evaluate(async () => {
+  [...document.querySelectorAll('#filtres button')].find(b => /^Tout/.test(b.textContent)).click();
+  await new Promise(r => setTimeout(r, 200));
+});
+// Une seule catégorie : un filtre à un bouton n'est pas un filtre, il ne s'affiche pas.
+const filtreUn = await page.evaluate(() => {
+  const garde = projects.slice();
+  projects = projects.filter(p => (p.categorie || '') === 'Appartement');
+  renderFiltres(); renderIndex();
+  const cache = document.getElementById('filtres').hidden;
+  projects = garde; renderFiltres(); renderIndex();
+  return cache;
+});
+check('Filtre : une seule catégorie, aucun filtre affiché', filtreUn === true);
 
 await page.locator('.project').first().click();
 await page.waitForTimeout(600);

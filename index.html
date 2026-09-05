@@ -3938,7 +3938,7 @@ const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'R�
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
      et un portfolio : ils partent sur le site avec les photos. */
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',texte:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
@@ -4537,7 +4537,7 @@ function renderRealisationList(host){
     card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
       <div class="rz-cbody">
         <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
-        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.published?' · <span class="rz-live">● en ligne</span>':''}</div>
+        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.categorie?' · '+esc(r.categorie):''}${r.published?' · <span class="rz-live">● en ligne</span>':''}</div>
       </div>`;
     if(cover){
       const im=card.querySelector('img');
@@ -4619,7 +4619,10 @@ function renderRealisationDetail(host,r){
     <label class="fld" style="flex:0 0 120px"><span class="lbl">Surface</span><input type="text" data-f="surface" placeholder="ex. 85 m²" value="${esc(r.surface||'')}"></label>
     <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Type de mission</span>
       <input type="text" data-f="mission" list="rz-missions" placeholder="ex. Rénovation complète" value="${esc(r.mission||'')}">
-      <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>`;
+      <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Catégorie (filtre du site)</span>
+      <input type="text" data-f="categorie" list="rz-cats" placeholder="ex. Appartement" value="${esc(r.categorie||'')}">
+      <datalist id="rz-cats">${rzCatsConnues().map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>`;
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
   head.appendChild(meta);
@@ -4896,6 +4899,16 @@ async function renderThumbInto(p,im,ld){
 }
 /* Missions courantes, proposées sans être imposées : le champ reste libre. */
 const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoration','Agencement sur mesure','Suivi de chantier','Conseil et plans'];
+/* Type de lieu — c'est ce qui sert de filtre au visiteur du site (« Appartement »,
+   « Bureau »…). Champ libre : la liste ci-dessous n'est qu'une proposition, et tout ce qui
+   a déjà été tapé ailleurs vient s'y ajouter. Pas de panneau de réglages à ouvrir pour
+   inventer une catégorie de plus. */
+const RZ_CATS=['Appartement','Maison','Bureau','Commerce','Restaurant','Hôtel','Espace commun'];
+function rzCatsConnues(){
+  const vues=realisations.map(x=>(x.categorie||'').trim()).filter(Boolean);
+  return RZ_CATS.concat(vues.filter(c=>RZ_CATS.indexOf(c)<0))
+    .filter((c,i,t)=>t.indexOf(c)===i);
+}
 
 /* Rédaction assistée du texte de présentation. Passe par la MÊME fonction serveur que le
    bouton « Embellir » des devis (la clé Anthropic reste côté serveur) mais avec `kind`
@@ -6546,7 +6559,7 @@ async function publishRealisation(r){
     man.realisations=man.realisations.filter(x=>x.id!==r.id);
     const fiche={id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()};
     /* Champs vides omis : le site ne doit pas afficher d'étiquette sans valeur. */
-    [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['texte',r.texte]].forEach(([k,v])=>{
+    [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
       if((v||'').trim())fiche[k]=String(v).trim();
     });
     man.realisations.unshift(fiche);

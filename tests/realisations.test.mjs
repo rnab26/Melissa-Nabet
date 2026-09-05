@@ -1755,6 +1755,36 @@ await page.unroute('**/functions/v1/embellish');
 await page.evaluate(() => { _pubLastError = null; renderRealisations(); });
 
 
+// --- Catégorie : champ libre, propositions, et filtre du site
+const categorie = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const el = document.querySelector('#rz-body [data-f="categorie"]');
+  if (!el) return { absent: true };
+  el.value = 'Loft'; el.dispatchEvent(new Event('input'));   // valeur hors liste : acceptée
+  const propositions = [...document.querySelectorAll('#rz-cats option')].map(o => o.value);
+  renderRealisations();
+  const reproposee = [...document.querySelectorAll('#rz-cats option')].map(o => o.value).includes('Loft');
+  const surCarte = (() => { _rzOpenId = null; renderRealisations();
+    const t = [...document.querySelectorAll('.rz-cmeta')].map(x => x.textContent).join(' | ');
+    _rzOpenId = r.id; renderRealisations(); return t; })();
+  return { valeur: r.categorie, propositions, reproposee, surCarte };
+});
+check('Catégorie : le champ existe et accepte une valeur hors liste', categorie.valeur === 'Loft', JSON.stringify(categorie).slice(0, 80));
+check('Catégorie : des types de lieu sont proposés',
+  categorie.propositions && categorie.propositions.includes('Appartement') && categorie.propositions.includes('Bureau'),
+  (categorie.propositions || []).join(', '));
+check('Catégorie : une catégorie inventée est proposée la fois suivante', categorie.reproposee === true);
+check('Catégorie : visible sur la carte de la liste', /Loft/.test(categorie.surCarte || ''), (categorie.surCarte || '').slice(0, 70));
+
+const catManif = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  await publishRealisation(r);
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const fiche = JSON.parse(await window.__files.get(key).text()).realisations.find(x => x.id === r.id);
+  return fiche.categorie || '';
+});
+check('Catégorie : elle part sur le site, c’est elle qui sert de filtre au visiteur', catManif === 'Loft', catManif);
+
 // --- Image d'aperçu du site : écrite à chaque publication, effacée quand plus rien n'est en ligne
 const partage = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);

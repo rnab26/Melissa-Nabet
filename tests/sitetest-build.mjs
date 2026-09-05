@@ -43,12 +43,25 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
   version: 1,
   updatedAt: new Date().toISOString(),
   site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur' },
+  /* Trois projets et deux catégories : c'est le minimum pour que le filtre du site ait un
+     sens et soit vérifiable. Les deux derniers réutilisent les mêmes fichiers d'image —
+     le banc d'essai teste la page, pas les photos. */
   realisations: [{
     id: 'r1', title: 'Bureau Sébastien', date: '2026',
-    lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète',
+    lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète', categorie: 'Bureau',
     texte: 'Un plateau de bureaux cloisonné, ramené à un seul volume traversant. Les rangements ont été redessinés sur mesure pour dégager la vue depuis l’entrée.',
     publishedAt: new Date().toISOString(),
     photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '')],
+  }, {
+    id: 'r2', title: 'Duplex Ben Yehuda', date: '2025',
+    lieu: 'Tel Aviv', categorie: 'Appartement',
+    publishedAt: new Date().toISOString(),
+    photos: [photo(0, ''), photo(1, '')],
+  }, {
+    id: 'r3', title: 'Trois pièces Florentin', date: '2025',
+    categorie: 'Appartement',
+    publishedAt: new Date().toISOString(),
+    photos: [photo(2, '')],
   }],
 }, null, 1));
 
