@@ -2048,6 +2048,84 @@ await page.waitForTimeout(400);
 await page.screenshot({ path: '/tmp/mn-shot-desktop.png' });
 
 // ============================================================================
+//  ÉDITEUR : annuler et rétablir
+// ============================================================================
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(async () => {
+  const r = realisations[0];
+  if (!document.getElementById('ed-modal')) await openPhotoEditor(r.id, r.photos[0].id);
+});
+await page.waitForTimeout(900);
+const annuler = await page.evaluate(async () => {
+  _ed.tab = 'geometrie'; paintEditorTabs(); buildEditorControls();
+  const e = _ed.p.edit;
+  const depart = JSON.parse(JSON.stringify(e));
+  const undo = document.querySelector('#ed-modal [data-undo]');
+  const redo = document.querySelector('#ed-modal [data-redo]');
+  const auDepart = { undo: undo.disabled, redo: redo.disabled };
+  // deux réglages successifs, chacun « terminé » comme le fait un curseur relâché
+  e.persp = 30; edTouch();
+  e.expo = 0.4; edTouch();
+  const apres2 = { persp: e.persp, expo: e.expo, undo: undo.disabled };
+  undo.click();
+  const un = { persp: _ed.p.edit.persp, expo: _ed.p.edit.expo, redo: redo.disabled };
+  undo.click();
+  const zero = { persp: _ed.p.edit.persp, expo: _ed.p.edit.expo, undo: undo.disabled };
+  redo.click(); redo.click();
+  const refait = { persp: _ed.p.edit.persp, expo: _ed.p.edit.expo, redo: redo.disabled };
+  // une nouvelle action après un retour en arrière doit couper la branche « rétablir »
+  undo.click();
+  _ed.p.edit.sat = 0.3; edTouch();
+  const branche = { redo: redo.disabled, sat: _ed.p.edit.sat };
+  return { depart, auDepart, apres2, un, zero, refait, branche, taille: _ed.hist.length };
+});
+check('Éditeur : au départ, rien à annuler ni à rétablir',
+  annuler.auDepart.undo === true && annuler.auDepart.redo === true);
+check('Éditeur : après deux réglages, « Annuler » devient actif',
+  annuler.apres2.persp === 30 && annuler.apres2.expo === 0.4 && annuler.apres2.undo === false);
+check('Éditeur : annuler revient d’UN cran, pas au début',
+  annuler.un.persp === 30 && annuler.un.expo === 0, JSON.stringify(annuler.un));
+check('Éditeur : annuler deux fois revient à l’état de départ',
+  annuler.zero.persp === annuler.depart.persp && annuler.zero.expo === annuler.depart.expo && annuler.zero.undo === true,
+  JSON.stringify(annuler.zero));
+check('Éditeur : rétablir refait les deux réglages',
+  annuler.refait.persp === 30 && annuler.refait.expo === 0.4 && annuler.refait.redo === true,
+  JSON.stringify(annuler.refait));
+check('Éditeur : un nouveau réglage après un retour en arrière coupe la branche « rétablir »',
+  annuler.branche.redo === true && annuler.branche.sat === 0.3, JSON.stringify(annuler.branche));
+
+const clavier = await page.evaluate(async () => {
+  const av = _ed.p.edit.sat;
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+  await new Promise(r => setTimeout(r, 120));
+  const ap = _ed.p.edit.sat;
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }));
+  await new Promise(r => setTimeout(r, 120));
+  return { av, ap, refait: _ed.p.edit.sat };
+});
+check('Éditeur : Ctrl+Z annule, Ctrl+Maj+Z rétablit',
+  clavier.av === 0.3 && clavier.ap === 0 && clavier.refait === 0.3, JSON.stringify(clavier));
+
+const apresFermeture = await page.evaluate(async () => {
+  const r = realisations[0], pid = _ed.p.id;
+  closePhotoEditor();
+  await new Promise(r2 => setTimeout(r2, 200));
+  const restant = document.querySelectorAll('#ed-modal').length;
+  // le raccourci ne doit plus rien faire une fois l'éditeur fermé
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+  const p = r.photos.find(x => x.id === pid);
+  return { restant, sat: p.edit.sat, editeur: !!_ed };
+});
+check('Éditeur : fermé, le raccourci clavier ne touche plus à rien',
+  apresFermeture.restant === 0 && apresFermeture.editeur === false && apresFermeture.sat === 0.3,
+  JSON.stringify(apresFermeture));
+await page.evaluate(async () => {
+  const r = realisations[0];
+  Object.assign(r.photos[0].edit, blankEdit());
+  saveRealisations(); renderRealisations();
+});
+
+// ============================================================================
 //  NAVIGATION SUR TÉLÉPHONE : une barre d'onglets en bas, une barre du haut d'une ligne
 // ============================================================================
 for (const [w, h, nom] of [[375, 812, 'téléphone étroit'], [390, 844, 'téléphone'], [768, 1024, 'tablette portrait']]) {

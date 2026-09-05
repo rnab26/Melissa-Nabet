@@ -5299,6 +5299,10 @@ async function openPhotoEditor(rid,pid){
         </div>
         <div id="ed-photo-acts">
           <div class="ed-acts">
+            <button class="btn btn-onlight" data-undo title="Annuler le dernier réglage">↩ Annuler</button>
+            <button class="btn btn-onlight" data-redo title="Rétablir">↪ Rétablir</button>
+          </div>
+          <div class="ed-acts" style="margin-top:8px">
             <button class="btn btn-onlight" data-auto>✨ Réglage auto</button>
             <button class="btn btn-onlight" data-reset>↺ Réinitialiser</button>
           </div>
@@ -5312,8 +5316,11 @@ async function openPhotoEditor(rid,pid){
   document.body.appendChild(host);
   /* La retouche par consigne écrite est le mode d'entrée : c'est elle qui fait passer une
      photo de téléphone à une photo publiable. Les réglages manuels restent à un doigt. */
-  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
+  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0,
+       hist:[JSON.stringify(p.edit)],histI:0};
   host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
+  host.querySelector('[data-undo]').addEventListener('click',()=>edHistGo(-1));
+  host.querySelector('[data-redo]').addEventListener('click',()=>edHistGo(1));
   host.querySelector('[data-hist]').addEventListener('click',()=>openPhotoHistory(_ed.r,_ed.p));
   host.querySelector('[data-prev]').addEventListener('click',()=>edGoto(-1));
   host.querySelector('[data-next]').addEventListener('click',()=>edGoto(1));
@@ -5361,7 +5368,17 @@ async function openPhotoEditor(rid,pid){
   }));
   ['mousedown','touchstart'].forEach(ev=>cmp.addEventListener(ev,e=>{if(!edHasCompare()){e.preventDefault();showOrig(true);}}));
   ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>cmp.addEventListener(ev,()=>{if(!edHasCompare())showOrig(false);}));
-  paintEditorTabs();buildEditorControls();
+  /* Ctrl+Z / Ctrl+Maj+Z : le réflexe de tout le monde sur un ordinateur. Le raccourci ne
+     vit que le temps de l'éditeur. */
+  _ed.clavier=(ev)=>{
+    if(!_ed)return;
+    if(!(ev.ctrlKey||ev.metaKey))return;
+    const k=(ev.key||'').toLowerCase();
+    if(k==='z'){ev.preventDefault();edHistGo(ev.shiftKey?1:-1);}
+    else if(k==='y'){ev.preventDefault();edHistGo(1);}
+  };
+  document.addEventListener('keydown',_ed.clavier);
+  paintEditorTabs();buildEditorControls();edHistPaint();
   const cv=$('ed-canvas');
   const ctx=cv.getContext('2d');cv.width=600;cv.height=400;
   ctx.fillStyle='#2f2c28';ctx.fillRect(0,0,600,400);
@@ -5387,6 +5404,7 @@ function paintEditorTabs(){
      s'appliquaient à la retouche IA. */
   const acts=$('ed-photo-acts');
   if(acts)acts.style.display=(_ed.tab==='ia')?'none':'';
+  edHistPaint();
 }
 function buildEditorControls(){
   const host=$('ed-controls');if(!host||!_ed)return;
@@ -5517,10 +5535,45 @@ function edPaintLabels(ctx,cv,x){
   if(x>f*5)tag('AVANT',f,'left');
   if(cv.width-x>f*5)tag('APRÈS',cv.width-f,'right');
 }
+/* ---- Annuler / rétablir ----
+   On peut réinitialiser, mais pas revenir d'un cran : sur un réglage tâtonné, c'est ce qui
+   manque le plus. La pile garde des ÉTATS complets de `photo.edit` (un objet minuscule),
+   pas des différences : c'est plus simple et ça ne peut pas dériver. Un état n'est empilé
+   que lorsqu'un geste est TERMINÉ (`edTouch`), jamais à chaque mouvement de curseur. */
+const ED_HIST_MAX=40;
 function edTouch(){
   if(!_ed)return;
   photoTouch(_ed.p,'reglages');
   _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
+  edHistPush();
+}
+function edHistPush(){
+  if(!_ed||!_ed.hist)return;
+  const etat=JSON.stringify(_ed.p.edit);
+  if(etat===_ed.hist[_ed.histI])return;      /* rien n'a bougé : rien à empiler */
+  _ed.hist=_ed.hist.slice(0,_ed.histI+1);    /* on repart d'ici : la branche « rétablir » tombe */
+  _ed.hist.push(etat);
+  if(_ed.hist.length>ED_HIST_MAX)_ed.hist.shift();
+  _ed.histI=_ed.hist.length-1;
+  edHistPaint();
+}
+function edHistGo(d){
+  if(!_ed||!_ed.hist)return;
+  const j=_ed.histI+d;
+  if(j<0||j>=_ed.hist.length)return;
+  _ed.histI=j;
+  /* On écrit DANS l'objet existant : l'éditeur, la vignette et la publication pointent tous
+     sur `photo.edit`, le remplacer les laisserait sur un orphelin. */
+  Object.assign(_ed.p.edit,JSON.parse(_ed.hist[j]));
+  photoTouch(_ed.p,'reglages');
+  _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
+  buildEditorControls();edPaint();edHistPaint();
+}
+function edHistPaint(){
+  const u=document.querySelector('#ed-modal [data-undo]'), r=document.querySelector('#ed-modal [data-redo]');
+  if(!_ed||!u||!r)return;
+  u.disabled=_ed.histI<=0;
+  r.disabled=_ed.histI>=_ed.hist.length-1;
 }
 function applyLightToSeries(){
   if(!_ed)return;
@@ -5586,6 +5639,7 @@ async function edGoto(delta){
 }
 function closePhotoEditor(){
   const host=$('ed-modal');if(host)host.remove();
+  if(_ed&&_ed.clavier)document.removeEventListener('keydown',_ed.clavier);
   _ed=null;_glTexKey='';
   saveRealisations();renderRealisations();
 }
