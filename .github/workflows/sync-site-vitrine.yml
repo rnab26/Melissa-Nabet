@@ -33,7 +33,11 @@ jobs:
         with:
           path: crm
 
-      - name: Vérifier que le jeton est bien configuré
+      # Le jeton est un secret : personne ne peut le relire, pas même pour vérifier sa date
+      # d'expiration. C'est GitHub qui la donne, en en-tête de réponse, à qui présente le
+      # jeton. Seul ce workflow peut donc poser la question — d'où ce contrôle ici. Rien du
+      # jeton lui-même n'est affiché, uniquement sa date de fin de validité.
+      - name: Vérifier le jeton et sa date d'expiration
         env:
           JETON: ${{ secrets.SITE_VITRINE_TOKEN }}
         run: |
@@ -41,6 +45,26 @@ jobs:
             echo "::error::Le secret SITE_VITRINE_TOKEN est absent — le site ne peut pas être mis à jour."
             echo "À créer dans Settings → Secrets and variables → Actions de ce dépôt."
             exit 1
+          fi
+
+          entetes=$(curl -sS -D - -o /dev/null -H "Authorization: Bearer $JETON" https://api.github.com/user)
+          if ! grep -qi '^HTTP/[0-9.]* 200' <<<"$entetes"; then
+            echo "::error::Le jeton est refusé par GitHub (expiré, révoqué ou mal collé). Le site ne sera plus mis à jour tant qu'il n'est pas remplacé."
+            grep -i '^HTTP/' <<<"$entetes"
+            exit 1
+          fi
+
+          fin=$(grep -i '^github-authentication-token-expiration:' <<<"$entetes" | cut -d' ' -f2- | tr -d '\r')
+          if [ -z "$fin" ]; then
+            echo "Jeton valide, sans date d'expiration : la recopie ne s'arrêtera pas d'elle-même."
+            exit 0
+          fi
+
+          echo "Jeton valide, expire le : $fin"
+          reste=$(( ( $(date -u -d "$fin" +%s) - $(date -u +%s) ) / 86400 ))
+          echo "Il reste $reste jours."
+          if [ "$reste" -le 15 ]; then
+            echo "::warning::Le jeton SITE_VITRINE_TOKEN expire dans $reste jours ($fin). Passé cette date, le site ne sera plus mis à jour. À régénérer et recoller dans le secret du dépôt."
           fi
 
       - name: Récupérer le dépôt du site (la destination)
