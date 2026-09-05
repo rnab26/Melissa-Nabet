@@ -79,6 +79,18 @@ function falKey(): string {
   return key;
 }
 
+/** Clé de lecture de la facturation. fal sépare deux portées : API (faire tourner les
+ *  modèles) et ADMIN (API de plateforme, dont le solde). Elles sont donc lues séparément :
+ *  remplacer FAL_KEY par une clé ADMIN pour voir le solde ferait dépendre TOUTE la retouche
+ *  d'une clé plus puissante que nécessaire, et une erreur sur cette clé casserait la
+ *  retouche pour une commodité d'affichage. FAL_ADMIN_KEY est facultative ; sans elle on
+ *  tente avec FAL_KEY, ce qui échouera proprement en 403. */
+function falAdminKey(): { key: string; dediee: boolean } {
+  const admin = Deno.env.get("FAL_ADMIN_KEY");
+  if (admin) return { key: admin, dediee: true };
+  return { key: falKey(), dediee: false };
+}
+
 /** Ramène toute image (URL distante ou data URI) à un data URI utilisable par le navigateur. */
 async function toDataUri(src: string): Promise<string> {
   if (src.startsWith("data:")) return src;
@@ -98,16 +110,20 @@ async function toDataUri(src: string): Promise<string> {
  *  fait refuser ici. Un échec de solde ne dit donc RIEN sur la retouche : c'est une
  *  commodité d'affichage, jamais un pré-requis. */
 async function getBalance() {
+  const { key, dediee } = falAdminKey();
   const res = await fetch("https://api.fal.ai/v1/account/billing?expand=credits", {
-    headers: { Authorization: "Key " + falKey() },
+    headers: { Authorization: "Key " + key },
   });
   const text = await res.text();
   if (!res.ok) {
     console.error("balance: HTTP " + res.status + " " + text.slice(0, 300));
     if (res.status === 401 || res.status === 403) {
       throw new Error(
-        "la clé fal.ai en place n'a pas le droit de lire la facturation (HTTP " + res.status +
-          "). Ce droit demande une clé de portée ADMIN ; la retouche, elle, fonctionne avec la clé actuelle.",
+        dediee
+          ? "la clé FAL_ADMIN_KEY est refusée sur la facturation (HTTP " + res.status +
+            "). Vérifier qu'elle est bien de portée ADMIN et non expirée. La retouche n'est pas concernée."
+          : "aucune clé de portée ADMIN n'est configurée : la clé de retouche n'a pas le droit de lire la facturation (HTTP " +
+            res.status + "). Déposer une clé ADMIN dans FAL_ADMIN_KEY pour afficher le solde ; la retouche, elle, fonctionne déjà.",
       );
     }
     throw new Error("solde indisponible (HTTP " + res.status + ") : " + text.slice(0, 300));
@@ -354,7 +370,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = body.action || "edit";
 
-    if (action === "ping") return json({ ok: true, fal: !!Deno.env.get("FAL_KEY") });
+    if (action === "ping") {
+      return json({ ok: true, fal: !!Deno.env.get("FAL_KEY"), falAdmin: !!Deno.env.get("FAL_ADMIN_KEY") });
+    }
     if (action === "balance") return json(await getBalance());
 
     if (action === "schema") {
