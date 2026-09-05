@@ -12,9 +12,21 @@ images publiques, rien d'autre — elle ne peut, par construction, atteindre auc
 donnée du CRM (clients, devis, documents). Ne jamais y ajouter de clé Supabase, même
 « publishable ».
 
-## Destination
+## Où ce code vit, et où il ne faut pas l'écrire
 
-Ce dossier est la source d'un dépôt distinct : `rnab26/melissa-nabet-site`, servi sur
-`https://rnab26.github.io/melissa-nabet-site/`. Il est gardé ici en attendant, et il est
-exclu du déploiement GitHub Pages du CRM (voir `.github/workflows/pages.yml` à la racine)
-pour ne pas être servi sur le domaine du CRM.
+La **source** est le dossier `site-vitrine/` du dépôt du CRM (`rnab26/melissa-nabet`).
+C'est le seul endroit où modifier le site.
+
+La **copie servie** est le dépôt `rnab26/melissa-nabet-site`, publié sur
+`https://rnab26.github.io/melissa-nabet-site/`. Elle est mise à jour **automatiquement**
+à chaque changement de `site-vitrine/` sur `main`, par le workflow
+`.github/workflows/sync-site-vitrine.yml` du CRM. Ne rien écrire directement dans le
+dépôt du site : la recopie suivante l'effacerait.
+
+Deux choses appartiennent au dépôt du site et ne sont jamais recopiées : son dossier
+`.github/` (son propre déploiement Pages, avec le garde-fou `rm -rf docs`) et son
+dossier `docs/` (son journal interne).
+
+`site-vitrine/` est par ailleurs exclu du déploiement GitHub Pages du CRM (étape
+`rm -rf site-vitrine` dans `.github/workflows/pages.yml` à la racine) pour ne pas être
+servi sur le domaine du CRM.
