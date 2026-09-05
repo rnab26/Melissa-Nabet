@@ -817,7 +817,38 @@
     max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:.15s;}
   .ia-ver:hover{border-color:var(--stone-light);}
   .ia-ver.on{background:var(--oxblood);border-color:var(--oxblood);color:#fff;cursor:default;}
+  .ia-ver[data-enligne]::after{content:' 🌐';font-size:10px;}
   .ia-ver-meta{color:var(--stone);font-size:11.5px!important;line-height:1.5;}
+  .ia-ver-site{color:var(--stone-deep);font-size:11.5px!important;line-height:1.5;margin:2px 0 0!important;}
+  /* ---- Écran de publication : ce qui est en ligne / ce qui part ---- */
+  .pub-resume{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px;}
+  .pub-chip{font-size:11.5px;padding:5px 10px;border-radius:999px;background:var(--travertine);
+    color:var(--stone-deep);border:1px solid var(--panel-edge);}
+  .pub-chip.chg{background:rgba(183,124,52,.14);border-color:rgba(183,124,52,.45);color:#8a5a18;}
+  .pub-chip.neuf{background:rgba(74,124,89,.14);border-color:rgba(74,124,89,.45);color:#33613f;}
+  .pub-chip.ret{background:#fbeee9;border-color:#e8c9bd;color:#8c3f2d;}
+  .pub-liste{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    border:1px solid var(--panel-edge);border-radius:10px;background:var(--paper);}
+  .pub-ligne{padding:10px 11px;border-bottom:1px solid var(--panel-edge);}
+  .pub-ligne:last-child{border-bottom:0;}
+  .pub-ligne.inch{opacity:.62;}
+  .pub-h{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin-bottom:7px;}
+  .pub-h b{font-size:12.5px;color:var(--ink);word-break:break-word;min-width:0;}
+  .pub-why{font-size:11px;color:#8a5a18;line-height:1.45;}
+  .pub-ligne.inch .pub-why{color:var(--stone-light);}
+  .pub-paire{display:grid;grid-template-columns:1fr 18px 1fr;align-items:center;gap:6px;}
+  .pub-cote{min-width:0;}
+  .pub-lbl{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--stone-light);font-weight:700;margin-bottom:3px;}
+  .pub-vue{position:relative;aspect-ratio:4/3;border-radius:7px;overflow:hidden;
+    background:var(--travertine);border:1px solid var(--panel-edge);
+    display:flex;align-items:center;justify-content:center;}
+  .pub-vue img{width:100%;height:100%;object-fit:cover;display:block;}
+  .pub-vue span{font-size:10.5px;color:var(--stone-light);text-align:center;padding:0 6px;line-height:1.3;}
+  .pub-fleche{text-align:center;color:var(--stone-light);font-size:13px;}
+  .pub-note{margin:9px 0 0;font-size:11.5px;color:var(--stone);line-height:1.5;}
+  .pub-vide{padding:18px 14px;text-align:center;font-size:12.5px;color:var(--stone);line-height:1.55;}
+  @media(max-width:420px){.pub-liste{max-height:40vh;}}
   .ia-src{margin-top:10px;}
   .ia-src .lbl{font-size:11px;}
   /* Solde : une pastille discrète dans l'en-tête de carte, pas un bandeau. L'information est
@@ -4448,22 +4479,119 @@ function photoTouch(p,kind,detail){
   p.touchedAt=Date.now();
   if(kind)photoLog(p,kind,detail);
 }
+/* ---- CE QUI EST EN LIGNE, PHOTO PAR PHOTO ----
+   Une photo n'avait pas d'état vis-à-vis du site : une retouche posait une image à côté de
+   l'originale, et rien ne disait laquelle était « celle du site ». Publier ne pouvait donc
+   que deviner, et la date de publication ne dit pas CE QUI a été publié.
+
+   Chaque photo publiée porte maintenant `p.pub` — l'identité exacte de ce qui est en ligne :
+
+     p.pub = {sig, rev, full, thumb, w, h, cap, cover, v, vlabel, at}
+
+   `sig` décrit les PIXELS publiés : la version retenue et les réglages manuels avec
+   lesquels elle a été rendue. Deux publications de même signature écrivent le même fichier :
+   inutile de le réécrire, et son adresse ne bouge pas. Signature différente = adresse
+   différente (`rev`), donc aucun cache ne peut montrer l'ancienne photo. */
+function pubHash(s){
+  /* FNV-1a 32 bits : court, stable d'une session à l'autre, et sans dépendance. Il ne sert
+     qu'à nommer un fichier — aucune propriété cryptographique n'est requise. */
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=(h*0x01000193)>>>0;}
+  return ('0000000'+h.toString(16)).slice(-8);
+}
+/* Signature des pixels publiés. Tout ce qui change l'IMAGE écrite doit y figurer — et rien
+   d'autre : renommer une version ou la photo ne change pas un pixel du site, et ne doit donc
+   pas réclamer une republication (c'est ce que faisait l'ancien repère par date). */
+function photoPubSig(p){
+  const vid=photoActiveId(p), e=p.edit||blankEdit();
+  return [photoVersionKey(p,vid,false),
+    e.persp||0,e.rot||0,e.expo||0,e.contrast||0,e.temp||0,e.tint||0,e.sat||0,e.ratio||'libre',e.pan||0,
+    PUB_FULL,PUB_FULL_Q,PUB_THUMB,PUB_THUMB_Q].join('|');
+}
+/* Nom de fichier PORTÉ PAR LE CONTENU, plus par le rang. Deux conséquences voulues :
+   - une image retouchée part à une NOUVELLE adresse : ni le CDN ni le navigateur ne peuvent
+     servir l'ancienne, ce qui était la panne visible (« ça republie les anciennes photos ») ;
+   - réordonner ne réécrit plus rien : l'ordre du site est celui du manifeste, pas celui des
+     noms de fichiers. */
+function photoPubNames(r,p,sig){
+  const rev=pubHash(sig);
+  return {rev,full:r.id+'/'+p.id+'-'+rev+'.jpg',thumb:r.id+'/'+p.id+'-'+rev+'-t.jpg'};
+}
+/* Ce qui, sur le site, changerait si on republiait maintenant — et POURQUOI, en clair.
+   Chaîne vide = cette photo est déjà en ligne à l'identique. */
+function photoPubChange(r,p){
+  const pub=p.pub;
+  /* Photo mise en ligne AVANT ce mécanisme : on ne sait pas quelle version y est, mais on
+     sait qu'elle y est. La déclarer « nouvelle » ferait crier « à republier » sur tout un
+     chantier déjà à jour — exactement le faux signal qu'on cherche à supprimer. On retombe
+     donc sur l'ancien repère par date. Son fichier sera réécrit à la prochaine publication
+     (son adresse change), et le suivi deviendra exact sans rien demander. */
+  if(!pub||!pub.sig){
+    if(!p.publishedAt)return 'nouvelle';
+    return ((p.touchedAt||0)>p.publishedAt)?'modifiée depuis sa mise en ligne':'';
+  }
+  const raisons=[];
+  if(pub.sig!==photoPubSig(p)){
+    const vid=photoActiveId(p);
+    if((pub.v||'orig')!==vid)raisons.push('« '+photoVersionLabel(p,vid)+' » au lieu de « '+(pub.vlabel||'?')+' »');
+    else raisons.push('réglages de l’image');
+  }
+  if((pub.cap||'')!==((p.caption||'').trim()))raisons.push((p.caption||'').trim()?'légende':'légende retirée');
+  if(!!pub.cover!==(r.cover===p.id))raisons.push(r.cover===p.id?'devient la couverture':'n’est plus la couverture');
+  return raisons.join(' · ');
+}
 /* État vis-à-vis du site public. `r.published` dit si la RÉALISATION est en ligne ; ceci dit
-   si CETTE photo l'est, ce qui n'est pas la même chose dès qu'on en ajoute une après coup. */
+   si CETTE photo l'est, ce qui n'est pas la même chose dès qu'on en ajoute une après coup.
+   Repli par date pour les photos publiées AVANT ce mécanisme : elles n'ont pas de `p.pub`,
+   et on ne va pas les déclarer absentes du site alors qu'elles y sont. */
 function photoPubState(r,p){
   if(!r||!r.published)return 'hors';
-  if(!p.publishedAt)return 'absente';
-  if((p.touchedAt||0)>p.publishedAt)return 'modifiee';
-  return 'enligne';
+  const quoi=photoPubChange(r,p);
+  if(quoi==='nouvelle')return 'absente';
+  return quoi?'modifiee':'enligne';
 }
 const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:''};
 /* Une réalisation en ligne dont une photo a bougé depuis. C'est LA chose qu'on oublie :
    on retouche, on ajoute une photo, et le site garde l'ancienne version sans rien dire. */
 function realisationARepublier(r){
   if(!r||!r.published)return 0;
-  return (r.photos||[]).filter(p=>photoPubState(r,p)!=='enligne').length;
+  return realisationPublishPlan(r).change;
 }
-const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée'};
+/* Le plan de publication : ce qui partirait si on publiait maintenant, photo par photo.
+   C'est LA source unique — le bandeau de la fiche, le compte sur le bouton, l'écran de
+   confirmation et la publication elle-même s'en servent tous. Sans ça, l'écran pourrait
+   annoncer une chose et la publication en faire une autre. */
+function realisationPublishPlan(r){
+  const photos=(r.photos||[]).map((p,i)=>{
+    const sig=photoPubSig(p);
+    const noms=photoPubNames(r,p,sig);
+    const pourquoi=r.published?photoPubChange(r,p):'nouvelle';
+    return {p,i,sig,rev:noms.rev,full:noms.full,thumb:noms.thumb,
+      etat:(pourquoi==='nouvelle'?'nouvelle':(pourquoi?'changee':'inchangee')),pourquoi};
+  });
+  /* L'ordre et la fiche du projet vivent dans le manifeste, pas dans les images : ils
+     changent le site sans qu'aucune photo ne bouge. Il faut donc le dire à part. */
+  const ordreAvant=(r.pub&&Array.isArray(r.pub.order))?r.pub.order.join(','):null;
+  const ordreApres=(r.photos||[]).map(p=>p.id).join(',');
+  const ordre=!!(r.published&&ordreAvant!==null&&ordreAvant!==ordreApres);
+  const ficheAvant=(r.pub&&r.pub.fiche)||'';
+  const ficheApres=realisationFicheSig(r);
+  const fiche=!!(r.published&&r.pub&&ficheAvant!==ficheApres);
+  const retirees=(r.published&&r.pub&&Array.isArray(r.pub.pids))
+    ? r.pub.pids.filter(id=>!(r.photos||[]).some(p=>p.id===id)).length : 0;
+  const nouvelles=photos.filter(x=>x.etat==='nouvelle').length;
+  const changees=photos.filter(x=>x.etat==='changee').length;
+  return {photos,nouvelles,changees,retirees,ordre,fiche,
+    inchangees:photos.filter(x=>x.etat==='inchangee').length,
+    change:nouvelles+changees,
+    rien:!(nouvelles||changees||retirees||ordre||fiche)};
+}
+/* Les champs du projet qui partent dans le manifeste. Le titre de la photo n'y est pas :
+   il ne quitte jamais le CRM. */
+function realisationFicheSig(r){
+  return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||''].join('\u0001');
+}
+const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée',retour:'Retour à la publication précédente'};
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
      et un portfolio : ils partent sur le site avec les photos. */
@@ -4570,7 +4698,10 @@ function photoAllKeys(p){
 /* Ancien format → nouveau. Faite au chargement, sur place, sans rien recopier dans le
    stockage : l'unique retouche existante devient la version 1 et garde sa clé. */
 function migratePhotoVersions(p){
-  if(Array.isArray(p.versions)&&p.edits)return p;
+  /* Le nettoyage des champs de l'ancien format est fait DANS TOUS LES CAS. Constaté en base
+     sur de vraies photos : une fusion venue d'un autre appareil recopiait `ia`/`useIa` sur
+     une photo déjà migrée, et ces champs morts repartaient ensuite à chaque synchronisation. */
+  if(Array.isArray(p.versions)&&p.edits){delete p.ia;delete p.useIa;delete p.editOrig;delete p.editIa;return p;}
   const clone=e=>JSON.parse(JSON.stringify(e||blankEdit()));
   if(!Array.isArray(p.versions))p.versions=[];
   if(!p.edits){
@@ -5243,6 +5374,10 @@ function renderRealisationList(host){
 }
 function renderRealisationDetail(host,r){
   if(!r)return;
+  /* Le plan est calculé UNE fois, avant de dessiner : la barre (le compte sur le bouton) et
+     le bandeau doivent dire la même chose, sinon l'un annoncerait un état déjà périmé. */
+  const plan=realisationPublishPlan(r);
+  _pubEnAttente=r.published?plan.change:0;
   const head=document.createElement('div');
   const back=document.createElement('button');back.className='rz-back';back.textContent='← Toutes les réalisations';
   back.addEventListener('click',()=>{_rzOpenId=null;renderRealisations();});
@@ -5250,7 +5385,7 @@ function renderRealisationDetail(host,r){
   const bar=document.createElement('div');bar.className='rz-detail-head';
   bar.innerHTML=`<h2 style="font-family:'Cormorant Garamond',serif;font-size:23px;font-weight:600;">${esc(r.title||'Réalisation sans titre')}</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn ${r.published?'btn-onlight':'btn-primary'}" data-publish>${r.published?'✓ En ligne — republier':'🌐 Publier sur le site'}</button>
+      <button class="btn ${r.published?(_pubEnAttente>0?'btn-primary':'btn-onlight'):'btn-primary'}" data-publish>${r.published?(_pubEnAttente>0?('⬆ Republier ('+_pubEnAttente+')'):'✓ En ligne — republier'):'🌐 Publier sur le site'}</button>
       ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
       <button class="btn btn-onlight" data-serie>✨ Retoucher plusieurs photos</button>
       <button class="btn btn-onlight" data-order>⇅ Réordonner</button>
@@ -5258,7 +5393,7 @@ function renderRealisationDetail(host,r){
       <button class="btn btn-onlight" data-export>⬇ Tout télécharger</button>
       <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
     </div>`;
-  bar.querySelector('[data-publish]').addEventListener('click',()=>publishRealisation(r));
+  bar.querySelector('[data-publish]').addEventListener('click',()=>askPublishRealisation(r));
   const unpub=bar.querySelector('[data-unpublish]');
   if(unpub)unpub.addEventListener('click',()=>unpublishRealisation(r));
   bar.querySelector('[data-serie]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
@@ -5269,17 +5404,37 @@ function renderRealisationDetail(host,r){
   head.appendChild(bar);
   const site=document.createElement('p');
   site.className='rz-site';
-  /* Compté photo par photo : « en ligne » au niveau du projet ne dit pas si LA photo
-     ajoutée ce matin y est. */
-  const etats=(r.photos||[]).map(p=>photoPubState(r,p));
-  const nb=k=>etats.filter(x=>x===k).length;
-  const aJour=nb('enligne'), aRepublier=nb('modifiee')+nb('absente');
+  /* Compté photo par photo, et par comparaison de ce qui EST en ligne avec ce qui partirait —
+     pas par une date. Renommer une version ne change pas un pixel du site : ça ne doit donc
+     pas réclamer une republication, sinon le rappel ne veut plus rien dire. */
+  const enAttente=[];
+  if(plan.changees)enAttente.push(plan.changees+' modifiée(s)');
+  if(plan.nouvelles)enAttente.push(plan.nouvelles+' nouvelle(s)');
+  if(plan.retirees)enAttente.push(plan.retirees+' retirée(s)');
+  if(plan.ordre)enAttente.push('ordre');
+  if(plan.fiche)enAttente.push('fiche du projet');
   site.innerHTML=r.published
     ? 'Visible sur le site : <a href="'+SITE_URL+'" target="_blank" rel="noopener">'+esc(SITE_URL)+'</a>.'
-      +' <b>'+aJour+'</b> photo(s) à jour en ligne'
-      +(aRepublier?', <b class="rz-warn">'+aRepublier+' en attente</b> (ajoutée ou modifiée depuis la dernière publication) — republiez pour mettre le site à jour.':'.')
+      +' <b>'+plan.inchangees+'</b> photo(s) en ligne à jour'
+      +(enAttente.length?', <b class="rz-warn">en attente : '+esc(enAttente.join(', '))+'</b> — « Republier » montre le détail avant d’envoyer quoi que ce soit.':'.')
     : 'Pas encore sur le site. Rien ne part en ligne tant que vous ne cliquez pas sur « Publier ».';
   head.appendChild(site);
+  /* Le retour en arrière appartient à l'état du site, pas à la barre d'actions : il est
+     rare, il ne se comprend qu'à côté de « ce qui est en ligne », et la barre tenait déjà
+     mal sur un téléphone. Il nomme la date à laquelle il ramène — sinon « précédente » ne
+     veut rien dire. */
+  if(r.published&&r.pubPrev&&r.pubPrev.fiche){
+    const retour=document.createElement('button');
+    retour.className='mini';retour.type='button';retour.dataset.rollback='1';
+    retour.style.marginTop='6px';
+    retour.textContent='↩ Revenir à la publication'+(r.pubPrev.label?' du '+r.pubPrev.label:' précédente');
+    retour.addEventListener('click',()=>askConfirm(
+      'Remettre en ligne la publication du '+(r.pubPrev.label||'pas précédent')+' ?\n\n'
+      +'Le site retrouvera exactement les photos et les textes de ce moment-là. Les images sont'
+      +' toujours en place : rien n’est recalculé, rien n’est refacturé. Vous pourrez revenir à'
+      +' la publication actuelle du même geste.',()=>rollbackRealisation(r)));
+    head.appendChild(retour);
+  }
   if(_pubLastError){
     const err=document.createElement('div');err.className='ia-erreur';
     const t=document.createElement('p');t.textContent=_pubLastError;err.appendChild(t);
@@ -5579,7 +5734,10 @@ async function renderThumbInto(p,im,ld){
     const edit=p.edit||blankEdit();
     if(JSON.stringify(edit)===JSON.stringify(blankEdit())){showBlobIn(blob,im,ld);return;}
     const img=await blobToImage(blob);
-    const cv=glRenderTo(img,edit,REAL_THUMB,'t_'+p.id);
+    /* Clé de texture = l'IMAGE rendue, pas la photo : sinon, après un changement de version,
+       la vignette réutilisait la texture de la version précédente et la grille montrait
+       l'ancienne image — c'est-à-dire l'inverse de ce qu'elle est censée refléter. */
+    const cv=glRenderTo(img,edit,REAL_THUMB,'t_'+photoVersionKey(p,photoActiveId(p),true));
     if(!cv){showBlobIn(blob,im,ld);return;}
     im.src=cv.toDataURL('image/jpeg',0.8);
     im.style.display='block';if(ld)ld.remove();
@@ -7568,6 +7726,11 @@ function buildIaPanel(host){
       b.className='ia-ver'+(v.id===actif?' on':'');
       b.dataset.ver=v.id;
       b.textContent=photoVersionLabel(p,v.id);
+      /* Laquelle est SUR LE SITE : c'est la question qu'on se pose devant cette pile, et
+         elle n'avait aucune réponse. La version affichée n'est pas forcément la publiée.
+         Le repère est posé en CSS (`::after`) : le nom de la version reste le nom de la
+         version, et rien d'autre. */
+      if(p.pub&&p.pub.sig&&(p.pub.v||'orig')===v.id){b.dataset.enligne='1';b.title='C’est cette version qui est sur le site public';}
       b.addEventListener('click',async()=>{
         if(!photoSetActive(p,v.id))return;
         _iaFrom=null;edTouch();buildEditorControls();await reloadEditorImage();
@@ -7581,6 +7744,16 @@ function buildIaPanel(host){
        consigne. Sans ça, « Retouche 3 » ne veut rien dire au bout de trois jours. */
     const v=photoVersion(p,actif);
     const meta=document.createElement('p');meta.className='ia-ver-meta';
+    if(p.pub&&p.pub.sig){
+      /* Classe propre : `.ia-ver-meta` désigne la PROVENANCE de la version affichée. Deux
+         informations différentes ne doivent pas porter le même nom. */
+      const etat=document.createElement('p');etat.className='ia-ver-site';
+      const memeVer=(p.pub.v||'orig')===actif;
+      etat.innerHTML=memeVer
+        ? '🌐 <b>Sur le site :</b> cette version'+(p.pub.sig===photoPubSig(p)?'.':' — mais vos réglages ont changé depuis : republiez pour les envoyer.')
+        : '🌐 <b>Sur le site :</b> « '+esc(p.pub.vlabel||'?')+' ». Republiez pour mettre « '+esc(photoVersionLabel(p,actif))+' » en ligne.';
+      box.appendChild(etat);
+    }
     if(v){
       meta.innerHTML='<b>'+esc(iaModelLabel(v.model))+'</b>'
         +(v.from&&v.from!=='orig'?' · à partir de '+esc(photoVersionLabel(p,v.from)):' · à partir de la photo d’origine')
@@ -7838,6 +8011,7 @@ function iaModelReset(){
    Publier écrit des copies redimensionnées, retouches appliquées. Les originaux ne
    quittent jamais le stockage privé. */
 let _pubLastError=null; /* dernière panne de publication, affichée jusqu'à la prochaine tentative */
+let _pubEnAttente=0;    /* nombre de photos qui partiraient si on republiait maintenant */
 const GALLERY_BUCKET='galerie';
 const PUB_FULL=1600, PUB_FULL_Q=0.85, PUB_THUMB=700, PUB_THUMB_Q=0.8;
 function galleryPublicUrl(path){return SB_URL+'/storage/v1/object/public/'+GALLERY_BUCKET+'/'+path;}
@@ -7961,57 +8135,154 @@ function openSitePanel(){
   document.getElementById('site-push').addEventListener('click',e=>pushSiteInfos(e.target));
 }
 
-async function publishRealisation(r){
+/* ---- AVANT DE PUBLIER : ce qui est en ligne, et ce qui va partir ----
+   Le reproche exact : « je ne sais pas quand je fais republier, ça republie les anciennes
+   photos ». Republier était un saut dans le noir. Cet écran montre, photo par photo, ce que
+   le visiteur voit AUJOURD'HUI et ce qu'il verra après — et rien ne part sans un appui. */
+async function askPublishRealisation(r){
+  if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
+  if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
+  const plan=realisationPublishPlan(r);
+  /* Publiée avant que le CRM ne garde trace des versions : on ne peut pas dire ce qui est en
+     ligne, on ne va donc pas le prétendre. Une réécriture complète remet le suivi d'aplomb. */
+  const ancienne=r.published&&(r.photos||[]).some(p=>!p.pub||!p.pub.sig);
+  const n=plan.change;
+  const chips=[];
+  if(plan.nouvelles)chips.push('<span class="pub-chip neuf">'+plan.nouvelles+' nouvelle(s)</span>');
+  if(plan.changees)chips.push('<span class="pub-chip chg">'+plan.changees+' modifiée(s)</span>');
+  if(plan.retirees)chips.push('<span class="pub-chip ret">'+plan.retirees+' retirée(s) du site</span>');
+  if(plan.ordre)chips.push('<span class="pub-chip chg">ordre modifié</span>');
+  if(plan.fiche)chips.push('<span class="pub-chip chg">fiche du projet modifiée</span>');
+  if(plan.inchangees)chips.push('<span class="pub-chip">'+plan.inchangees+' inchangée(s)</span>');
+
+  openModal('<button class="modal-x" onclick="closeModal()">×</button>'
+    +'<h3>'+(r.published?'Republier':'Publier')+' « '+esc(r.title)+' »</h3>'
+    +'<p class="msub">'+(r.published
+      ? 'À gauche, ce que le visiteur voit en ce moment. À droite, ce qui partira. Rien n’est envoyé tant que vous n’avez pas confirmé.'
+      : 'Ces photos vont devenir publiques sur le site vitrine. Rien n’est envoyé tant que vous n’avez pas confirmé.')+'</p>'
+    +'<div class="pub-resume">'+chips.join('')+'</div>'
+    +(ancienne?'<p class="pub-note">Cette réalisation a été mise en ligne avant que le CRM ne garde trace des versions : on ne peut pas montrer ici ce qui y est en ce moment. Les photos concernées seront réécrites une fois à la prochaine publication, puis le suivi sera exact.</p>':'')
+    +'<div class="pub-liste" id="pub-liste"></div>'
+    +'<p class="pub-note" id="pub-note"></p>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">'
+    +'<button class="mini" onclick="closeModal()">Annuler</button>'
+    +(plan.rien&&r.published?'<button class="mini" id="pub-force">Republier quand même</button>':'')
+    +'<button class="btn btn-primary" id="pub-go">'
+      +(r.published?(n?('Republier ('+n+' photo'+(n>1?'s':'')+')'):'Mettre le site à jour'):'Publier sur le site')
+    +'</button></div>');
+
+  const liste=document.getElementById('pub-liste');
+  const note=document.getElementById('pub-note');
+  const bouges=plan.photos.filter(x=>x.etat!=='inchangee');
+  if(plan.rien){
+    liste.innerHTML='<p class="pub-vide">Rien n’a changé depuis la dernière publication : le site montre déjà ces '
+      +plan.photos.length+' photo(s), dans cet ordre.<br>Publier maintenant n’enverrait rien de nouveau.</p>';
+  }
+  const montrer=(bouges.length?bouges:plan.photos).slice(0,40);
+  montrer.forEach(x=>{
+    const p=x.p;
+    const ligne=document.createElement('div');
+    ligne.className='pub-ligne'+(x.etat==='inchangee'?' inch':'');
+    ligne.innerHTML='<div class="pub-h"><b>'+esc(p.name||'Photo sans titre')+'</b>'
+      +'<span class="pub-why">'+esc(x.etat==='nouvelle'?'pas encore en ligne'
+        :(x.etat==='inchangee'?'déjà en ligne à l’identique':x.pourquoi))+'</span></div>'
+      +'<div class="pub-paire">'
+      +'<div class="pub-cote"><span class="pub-lbl">En ligne</span><div class="pub-vue" data-avant><span>…</span></div></div>'
+      +'<div class="pub-fleche">→</div>'
+      +'<div class="pub-cote"><span class="pub-lbl">Va partir</span><div class="pub-vue" data-apres><span>…</span></div></div>'
+      +'</div>';
+    liste.appendChild(ligne);
+    /* Ce qui est en ligne : l'image PUBLIQUE, à son adresse réelle. C'est la seule preuve
+       honnête — un rendu local montrerait ce que le CRM croit avoir publié. */
+    const avant=ligne.querySelector('[data-avant]');
+    if(p.pub&&p.pub.thumb){
+      const im=document.createElement('img');im.alt='';im.loading='lazy';
+      im.onload=()=>{avant.innerHTML='';avant.appendChild(im);};
+      im.onerror=()=>{avant.innerHTML='<span>introuvable en ligne</span>';};
+      im.src=galleryPublicUrl(ownerId+'/'+p.pub.thumb);
+    }else avant.innerHTML='<span>'+(r.published?'version inconnue':'rien')+'</span>';
+    /* Ce qui va partir : rendu ici, avec exactement la version retenue et ses réglages. */
+    const apres=ligne.querySelector('[data-apres]');
+    const im2=document.createElement('img');im2.alt='';im2.style.display='none';
+    apres.appendChild(im2);
+    renderThumbInto(p,im2,apres.querySelector('span'));
+  });
+  if(bouges.length>40)note.textContent='Les 40 premières photos concernées sont montrées ; les '+(bouges.length-40)+' autres partiront aussi.';
+  else if(bouges.length&&plan.inchangees)note.textContent=plan.inchangees+' photo(s) déjà en ligne à l’identique ne seront pas réécrites.';
+
+  const go=document.getElementById('pub-go');
+  go.addEventListener('click',()=>{closeModal();publishRealisation(r);});
+  const force=document.getElementById('pub-force');
+  if(force)force.addEventListener('click',()=>{closeModal();publishRealisation(r,{tout:true});});
+}
+
+/* Publier, c'est écrire des IMAGES puis un MANIFESTE. Le plan (`realisationPublishPlan`)
+   dit exactement ce qui change ; on n'écrit que ça, et on garde trace de ce qui vient d'être
+   remplacé pour pouvoir y revenir en un geste. */
+async function publishRealisation(r,opts){
   if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
   if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
   if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
+  const tout=!!(opts&&opts.tout);
   const btn=document.querySelector('#rz-body [data-publish]');
   if(btn){btn.disabled=true;btn.textContent='Publication…';}
   try{
     const folder=ownerId+'/'+r.id;
+    const plan=realisationPublishPlan(r);
+    /* Ce que le seau contient VRAIMENT. Une photo « inchangée » dont le fichier a disparu
+       (ménage manuel, publication interrompue) doit être réécrite, sinon le manifeste
+       pointerait sur du vide. On ne se fie pas à ce que le CRM croit savoir. */
+    let presents=null;
+    try{
+      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+      if(existing)presents=new Set(existing.map(f=>f.name));
+    }catch(e){ /* listing indisponible : on réécrit tout, c'est le choix sûr */ }
+
+    const aEcrire=plan.photos.filter(x=>tout||x.etat!=='inchangee'
+      ||!(presents&&presents.has(x.full.split('/').pop())&&presents.has(x.thumb.split('/').pop())));
     const entries=[];
-    let sharePartage=null;
-    for(let i=0;i<r.photos.length;i++){
-      const p=r.photos[i];
-      if(btn)btn.textContent='Publication '+(i+1)+'/'+r.photos.length+'…';
-      const img=await loadPhotoImage(p.id,{thumb:false});
-      if(!img)continue;
-      const edit=p.edit||blankEdit();
-      const big=glRenderTo(img,edit,PUB_FULL,'pub_'+p.id);
-      if(!big)throw new Error('rendu impossible');
-      const bigBlob=await canvasToBlob(big,PUB_FULL_Q);
-      const bw=big.width,bh=big.height;
-      const small=glRenderTo(img,edit,PUB_THUMB,'pub_'+p.id);
-      const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
-      /* Image d'aperçu du site (WhatsApp, Instagram, moteurs) : la couverture de la
-         dernière réalisation publiée, écrite à une adresse FIXE. La page publique porte
-         cette adresse en dur dans ses balises : elle n'a donc jamais à être modifiée, et
-         un lien partagé cesse de s'afficher tout nu. */
-      if(!sharePartage||r.cover===p.id)sharePartage=smallBlob;
-      const fullName=r.id+'/p'+i+'.jpg', thumbName=r.id+'/t'+i+'.jpg';
-      const up=async (name,blob)=>{
-        const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
-        if(error)throw error;
-      };
-      await up(fullName,bigBlob);await up(thumbName,smallBlob);
-      const entry={full:ownerId+'/'+fullName,thumb:ownerId+'/'+thumbName,w:bw,h:bh,cover:r.cover===p.id};
+    let sharePartage=null,ecrites=0;
+    for(const x of plan.photos){
+      const p=x.p;
+      const doit=aEcrire.indexOf(x)>=0;
+      let w=(p.pub&&p.pub.w)||p.w||0,h=(p.pub&&p.pub.h)||p.h||0;
+      if(doit){
+        ecrites++;
+        if(btn)btn.textContent='Publication '+ecrites+'/'+aEcrire.length+'…';
+        const img=await loadPhotoImage(p.id,{thumb:false});
+        /* Sauter en silence une photo illisible renumérotait toute la suite de la galerie :
+           les photos d'après changeaient d'adresse, et le site montrait « les anciennes ».
+           On s'arrête en nommant la photo — le site n'est pas modifié, rien n'est perdu. */
+        if(!img)throw new Error('image illisible pour « '+(p.name||'photo sans titre')+' » — vérifiez la connexion, puis réessayez');
+        const edit=p.edit||blankEdit();
+        /* La texture est mise en cache sous une clé : elle doit désigner l'IMAGE rendue,
+           pas la photo. Avec la photo, republier après une retouche pouvait réutiliser la
+           texture de la version précédente — et publier l'ancienne image. */
+        const tk='pub_'+photoVersionKey(p,photoActiveId(p),false);
+        const big=glRenderTo(img,edit,PUB_FULL,tk);
+        if(!big)throw new Error('rendu impossible');
+        const bigBlob=await canvasToBlob(big,PUB_FULL_Q);
+        w=big.width;h=big.height;
+        const small=glRenderTo(img,edit,PUB_THUMB,tk);
+        const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+        if(!sharePartage||r.cover===p.id)sharePartage=smallBlob;
+        const up=async (name,blob)=>{
+          const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
+          if(error)throw error;
+        };
+        await up(x.full,bigBlob);await up(x.thumb,smallBlob);
+      }
+      const entry={full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:r.cover===p.id};
       /* Seule la LÉGENDE part sur le site. Le titre reste interne : c'est souvent le nom du
          fichier de l'appareil photo, qui n'a rien à faire sur une page publique. */
       if((p.caption||'').trim())entry.caption=p.caption.trim();
       entries.push(entry);
-      /* Daté photo par photo : une photo ajoutée après cette publication n'est pas en ligne,
-         et doit le dire. */
-      p.publishedAt=Date.now();photoLog(p,'publie','');
+      p.pub={sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
+        cap:(p.caption||'').trim(),cover:r.cover===p.id,
+        v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p)),at:Date.now()};
+      p.publishedAt=Date.now();photoLog(p,'publie',p.pub.vlabel);
     }
     _glTexKey='';
-    /* Republication avec moins de photos qu'avant : on retire les fichiers devenus orphelins,
-       sinon ils resteraient publiquement accessibles alors qu'ils ne sont plus dans la galerie. */
-    try{
-      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
-      const keep=new Set(entries.flatMap(e=>[e.full.split('/').pop(),e.thumb.split('/').pop()]));
-      const stale=(existing||[]).map(f=>f.name).filter(n=>!keep.has(n));
-      if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
-    }catch(e){}
 
     /* L'aperçu de partage ne doit jamais faire échouer une publication : la galerie, elle,
        est déjà en ligne à ce stade. */
@@ -8025,6 +8296,7 @@ async function publishRealisation(r){
     const man=await readManifest();
     man.site=emptyManifest().site;
     man.updatedAt=new Date().toISOString();
+    const avant=man.realisations.find(x=>x.id===r.id)||null;
     man.realisations=man.realisations.filter(x=>x.id!==r.id);
     const fiche={id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()};
     /* Champs vides omis : le site ne doit pas afficher d'étiquette sans valeur. */
@@ -8034,19 +8306,89 @@ async function publishRealisation(r){
     man.realisations.unshift(fiche);
     await writeManifest(man);
 
+    /* Le pas d'avant est gardé — un seul, celui auquel « revenir » veut dire quelque chose.
+       Ses fichiers ne sont pas effacés (voir le ménage ci-dessous) : le retour est donc
+       immédiat et ne recalcule ni ne repaie rien. */
+    if(avant&&r.pub){
+      r.pubPrev={at:r.pub.at||Date.now(),fiche:avant,
+        photos:(r.pub.photos||{}),label:r.pub.at?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
+    }
+    r.pub={at:Date.now(),fiche:realisationFicheSig(r),
+      order:(r.photos||[]).map(p=>p.id),pids:(r.photos||[]).map(p=>p.id),
+      photos:Object.fromEntries((r.photos||[]).map(p=>[p.id,p.pub]))};
+
+    /* Ménage : on retire ce qui n'est plus servi NI par la publication actuelle NI par celle
+       à laquelle on peut revenir. Effacer plus large casserait le retour en arrière ;
+       effacer moins laisserait des images publiquement accessibles pour rien. */
+    try{
+      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+      const keep=new Set(entries.flatMap(e=>[e.full.split('/').pop(),e.thumb.split('/').pop()]));
+      if(r.pubPrev&&r.pubPrev.fiche&&Array.isArray(r.pubPrev.fiche.photos))
+        r.pubPrev.fiche.photos.forEach(e=>{keep.add(String(e.full||'').split('/').pop());keep.add(String(e.thumb||'').split('/').pop());});
+      const stale=(existing||[]).map(f=>f.name).filter(n=>!keep.has(n));
+      if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
+    }catch(e){}
+
     r.published=true;r.publishedAt=Date.now();r.updatedAt=Date.now();
     _pubLastError=null;storageInvalidate();
     saveRealisations();renderRealisations();
-    toast('Publié sur le site');
+    toast(ecrites?('Publié — '+ecrites+' photo(s) mise(s) à jour'):'Publié — aucune image à réécrire');
   }catch(e){
     console.error('publication',e);
     /* Une publication dure plusieurs secondes et peut échouer en cours : un message qui
        s'efface au bout de trois secondes se rate. Celui-ci reste jusqu'à la prochaine
        tentative. */
+    /* La texture en cache appartient à la photo sur laquelle on s'est arrêté : on la relâche,
+       sinon un nouvel essai pourrait repartir d'elle. */
+    _glTexKey='';
     _pubLastError='Publication interrompue : '+((e&&e.message)||'erreur')+'. Le site n’a pas été modifié — vous pouvez réessayer.';
     renderRealisations();
     toast('Échec de la publication — le détail reste affiché');
-    if(btn){btn.disabled=false;btn.textContent='🌐 Publier sur le site';}
+    if(btn){btn.disabled=false;btn.textContent=r.published?'✓ En ligne — republier':'🌐 Publier sur le site';}
+  }
+}
+
+/* Revenir à la publication précédente. Les fichiers de ce pas-là n'ont pas été effacés :
+   on réécrit simplement le manifeste avec sa fiche. C'est instantané, gratuit, et ça
+   n'invente rien — on remet en ligne exactement ce qui y était. Le pas qu'on quitte devient
+   le pas de retour : le geste est donc réversible dans les deux sens. */
+async function rollbackRealisation(r){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  if(!(r.pubPrev&&r.pubPrev.fiche))return;
+  const prev=r.pubPrev;
+  const btn=document.querySelector('#rz-body [data-rollback]');
+  if(btn){btn.disabled=true;btn.textContent='Retour…';}
+  try{
+    const man=await readManifest();
+    const courant=man.realisations.find(x=>x.id===r.id)||null;
+    man.realisations=man.realisations.filter(x=>x.id!==r.id);
+    man.site=emptyManifest().site;
+    man.updatedAt=new Date().toISOString();
+    man.realisations.unshift(prev.fiche);
+    await writeManifest(man);
+    /* Les photos reprennent l'identité publiée de ce pas-là : l'écran doit dire la vérité
+       sur ce qui est en ligne juste après le retour, pas rester sur l'état d'avant. */
+    const avant={at:r.pub&&r.pub.at,fiche:courant,photos:(r.pub&&r.pub.photos)||{},
+      label:(r.pub&&r.pub.at)?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
+    (r.photos||[]).forEach(p=>{
+      const pub=(prev.photos||{})[p.id];
+      if(pub){p.pub=pub;p.publishedAt=pub.at||Date.now();photoLog(p,'retour',pub.vlabel||'');}
+      else{delete p.pub;delete p.publishedAt;photoLog(p,'retour','n’était pas en ligne');}
+    });
+    r.pub={at:prev.at||Date.now(),fiche:realisationFicheSig(r),
+      order:(prev.fiche.photos||[]).map((e,i)=>((r.photos||[])[i]||{}).id).filter(Boolean),
+      pids:Object.keys(prev.photos||{}),photos:prev.photos||{}};
+    r.pubPrev=(avant.fiche)?avant:null;
+    if(!r.pubPrev)delete r.pubPrev;
+    r.published=true;r.updatedAt=Date.now();
+    _pubLastError=null;storageInvalidate();
+    saveRealisations();renderRealisations();
+    toast('Publication précédente rétablie');
+  }catch(e){
+    console.error('retour publication',e);
+    _pubLastError='Retour impossible : '+((e&&e.message)||'erreur')+'. Le site n’a pas été modifié.';
+    renderRealisations();
+    toast('Échec du retour — le détail reste affiché');
   }
 }
 
@@ -8063,8 +8405,10 @@ async function unpublishRealisation(r){
       /* Plus rien en ligne : garder l'image d'aperçu ferait afficher, dans un lien partagé,
          la photo d'un chantier qu'on vient justement de retirer du site. */
       if(!man.realisations.length){try{await sb.storage.from(GALLERY_BUCKET).remove([shareImagePath()]);}catch(e){}}
-      r.published=false;delete r.publishedAt;r.updatedAt=Date.now();storageInvalidate();
-      (r.photos||[]).forEach(p=>{delete p.publishedAt;photoLog(p,'depublie','');});
+      /* Les fichiers viennent d'être effacés : garder `pub`/`pubPrev` ferait croire qu'on
+         peut revenir à une publication dont il ne reste rien. */
+      r.published=false;delete r.publishedAt;delete r.pub;delete r.pubPrev;r.updatedAt=Date.now();storageInvalidate();
+      (r.photos||[]).forEach(p=>{delete p.publishedAt;delete p.pub;photoLog(p,'depublie','');});
       saveRealisations();renderRealisations();
       toast('Retiré du site');
     }catch(e){toast('Échec du retrait : '+((e&&e.message)||'erreur'));}

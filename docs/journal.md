@@ -54,6 +54,148 @@ point est plus bas, dans l'ordre chronologique.)*
 
 ---
 
+## 5 septembre 2026 — Quelle version part sur le site (et comment revenir en arrière)
+
+**Branche** `claude/photos-version-publiee-0509`. **Chantier Jarvis** `ae41e91f-1660-4afb-ab23-b0406d0f3ffe`.
+
+**Signalé par Raphaël** : « les photos que je retouche, je ne sais pas quand je fais
+republier, ça republie les anciennes photos. Il faudrait créer une certaine logique des
+photos et de republication des photos sur le site. Parce qu'actuellement il n'y a aucune
+logique pour savoir quelle photo est envoyée sur le site. »
+
+### Ce que disent le code et les vraies données (lu, pas déduit)
+
+Trois causes donnaient le même symptôme. Deux sont écartées **par la mesure** :
+
+1. **« La publication lit l'original »** — non. `publishRealisation` passe par
+   `loadPhotoImage`, qui suit `photoActiveId(p)` : c'est bien la version retenue qui est
+   rendue. *(Deux défauts voisins existaient quand même, corrigés ici : voir plus bas.)*
+2. **« Le fichier déployé n'est pas réécrit »** — non. Relevé dans le vrai seau `galerie` :
+   les six `p*.jpg` de « Bureau Sébastien » portent tous `updated_at = 2026-09-05 20:46`,
+   l'heure de la dernière publication. Ils **sont** réécrits à chaque fois.
+3. **« L'adresse publique ne change pas »** — **oui, et c'est structurel.** Le nom du
+   fichier était positionnel (`p0.jpg`, `t0.jpg`…) : il ne dépendait ni de la version ni des
+   réglages. Rien, dans toute la chaîne, ne distinguait une image neuve d'une ancienne.
+   En-têtes relevés le 5 septembre sur le vrai stockage : les images sont écrites avec
+   `cacheControl: max-age=3600` et servies par Cloudflare (`x-smart-cdn: true`) en
+   `cache-control: no-cache`. Le navigateur doit donc revalider — mais **rien ne garantit**
+   qu'il voie la nouvelle image : l'invalidation du CDN n'est pas instantanée, et toute
+   couche qui respecte le `max-age=3600` stocké sert l'ancienne. *Non vérifié en conditions
+   réelles* : mesurer un écrasement sur le vrai seau demandait une clé de service que le
+   garde-fou de la plateforme a refusé de révéler. Je ne l'ai donc pas contourné.
+
+**Mais la cause profonde est en amont, et c'est celle que Raphaël décrit** : une photo
+n'avait **aucun état vis-à-vis du site**. Le manifeste ne disait pas quelle version il
+servait, et la photo ne gardait qu'une **date** de publication. Republier ne pouvait que
+deviner, et le CRM ne pouvait rien montrer avant d'envoyer.
+
+**Deux faux signaux constatés dans les vraies données**, qui expliquent le « je ne sais
+jamais » :
+
+- « à republier » se déclenchait sur `touchedAt > publishedAt`. Or **renommer** une version
+  ou une photo touche cette date. Au moment du signalement, la photo « The Open Space »
+  était marquée *à republier* pour un simple renommage à 20:48 — alors que le site était
+  parfaitement à jour. On republie, rien ne change à l'écran : « ça republie les anciennes ».
+- Une photo illisible au moment de la publication était **sautée en silence** (`continue`).
+  Comme les noms étaient positionnels, toutes les photos suivantes changeaient d'adresse et
+  la dernière était effacée comme orpheline — sans un mot.
+
+### Ce qui est livré
+
+- **Une photo publiée sait quelle version est en ligne.** `p.pub` porte la signature exacte
+  des pixels publiés (version retenue + réglages + définition de sortie), le nom du fichier,
+  la légende et la couverture. `r.pub` fait de même pour l'ordre et la fiche du projet.
+- **L'adresse publique porte le contenu** : `<idPhoto>-<empreinte>.jpg`. Une retouche part à
+  une **nouvelle adresse** — aucun cache ne peut servir l'ancienne. Rien ne change ⇒ même
+  adresse ⇒ **aucune image réécrite**.
+- **Avant de publier, un écran montre photo par photo ce qui est EN LIGNE et ce qui VA
+  PARTIR**, côte à côte, avec la raison en clair (« Retouche 2 » au lieu de « Retouche 1 »,
+  réglages, légende, couverture) et le compte en tête. Rien ne part sans confirmation. Quand
+  rien n'a changé, il le dit au lieu de faire semblant, et propose quand même de republier.
+- **Retour en arrière en un appui**, sous le bandeau d'état, avec la date à laquelle il
+  ramène. Les images du pas précédent ne sont pas effacées : le retour est **immédiat et
+  gratuit**, et lui-même réversible.
+- **Le rappel « à republier » ne ment plus** : il compare ce qui est en ligne à ce qui
+  partirait. Renommer ne le déclenche plus ; changer de version, régler, légender,
+  réordonner, oui.
+- **La pile de versions dit laquelle est sur le site** (repère 🌐) et l'éditeur l'écrit en
+  toutes lettres.
+- **Réordonner ne réécrit plus aucun fichier** : l'ordre vit dans le manifeste.
+- **Une photo illisible arrête la publication en la nommant** au lieu d'être sautée.
+
+**Corrections trouvées en chemin** (même famille, même symptôme) :
+
+- La texture WebGL était mise en cache sous une clé dérivée de la **photo**, à la
+  publication (`'pub_'+p.id`) comme à la vignette (`'t_'+p.id`). Après un changement de
+  version, le rendu pouvait donc réutiliser la texture de la version précédente — et
+  publier, ou afficher, l'ancienne image. La clé désigne maintenant l'**image** rendue.
+- `migratePhotoVersions` ne nettoyait `ia`/`useIa` que sur une photo non encore migrée. Une
+  fusion venue d'un autre appareil les recopiait après coup : constaté en base sur une vraie
+  photo, qui portait `versions` **et** `ia`. Le nettoyage est maintenant fait dans tous les cas.
+
+### La preuve
+
+`tests/bout-en-bout.test.mjs` : le CRM publie une vraie réalisation, on **retouche** une
+photo (posée exactement comme `iaStoreResult`, **sans appeler le modèle — aucun crédit
+dépensé**), on republie, et on **mesure la couleur des pixels réellement affichés** par la
+page publique servie depuis le stockage écrit par le CRM.
+
+- avant : `rgb(159,148,136)` — le gris chaud de l'originale ;
+- après, **dans le navigateur qui avait déjà ouvert le site** (cache chaud) :
+  `rgb(33,98,183)` — le bleu de la retouche, à une adresse différente ;
+- idem dans un contexte de navigateur entièrement neuf.
+
+**Total : 531 contrôles, 0 échec.** `realisations` 426 (21 nouveaux), `bout-en-bout` 20
+(8 nouveaux), `site` 65, `pont-ia` 20. Parcours réel à 390 px : écran de publication, fiche
+avec le retour en arrière, barre d'actions — aucun débordement horizontal
+(`/tmp/mn-publication-390.png`).
+
+### Ce qu'il ne faut pas casser
+
+- `realisationPublishPlan(r)` est **la source unique** de « ce qui partirait ». Le bandeau,
+  le compte sur le bouton, l'écran de confirmation et la publication s'en servent tous : les
+  faire diverger, c'est annoncer une chose et en publier une autre.
+- `photoPubSig(p)` ne doit contenir **que** ce qui change les pixels écrits. Y ajouter un
+  titre ou un libellé de version ferait revenir le faux « à republier » qui a causé le
+  signalement.
+- Le nom du fichier publié **n'est plus positionnel**. La note du 4 septembre disant que
+  réordonner change l'adresse de toutes les photos suivantes **ne vaut plus** : l'ordre est
+  celui du manifeste.
+- Le ménage des fichiers garde ce qui est servi par la publication **actuelle et par la
+  précédente**. Élargir l'effacement casserait le retour en arrière.
+- Une photo publiée **avant** ce mécanisme n'a pas de `p.pub` : elle retombe sur l'ancien
+  repère par date et reste « en ligne ». Retirer ce repli ferait crier « à republier » sur
+  tous les chantiers déjà à jour.
+- La publication ne doit **jamais** sauter une photo en silence.
+
+### Croisement avec l'autre session
+
+Aucun conflit sur le pont fal.ai ni sur la file d'attente : le chantier est en aval. Les
+seuls points de contact dans `index.html` sont le panneau de versions de l'éditeur (ajout du
+repère « en ligne », classe `.ia-ver-site` distincte de `.ia-ver-meta`) et
+`migratePhotoVersions` (une ligne). Diff volontairement minimal à ces deux endroits.
+
+### Ce qui reste ouvert
+
+- `r.pub` et `r.pubPrev` recopient l'identité publiée de chaque photo et la fiche du
+  manifeste précédent : environ 4 Ko par réalisation de vingt photos, synchronisés avec le
+  reste. Négligeable aujourd'hui, à surveiller si les réalisations se multiplient.
+- **Un seul pas de retour en arrière**, pas un historique. C'est ce que « revenir » veut dire
+  quand une retouche vient d'être publiée ; un vrai historique des publications serait un
+  autre chantier.
+- L'effet réel du CDN Supabase sur un écrasement n'a **pas** été mesuré (clé de service
+  refusée par le garde-fou de la plateforme). Le correctif rend la question sans objet — une
+  image différente a une adresse différente — mais ce n'est pas une mesure.
+
+### À faire côté Raphaël
+
+**Rien.** Le site vitrine (`site-vitrine/index.html`) n'a **pas** été touché : il lit les
+chemins que le manifeste lui donne, quels qu'ils soient. À la première republication d'une
+réalisation ancienne, ses images seront réécrites une fois sous leur nouvelle adresse, et
+les anciens `p0.jpg` retirés du seau.
+
+---
+
 ## 5 septembre 2026 — Savoir ce qu'on regarde (et un geste en moins)
 
 **Branche** `claude/photo-etat-affiche` → fusionnée sur `main`. **Chantier** `ph18`.

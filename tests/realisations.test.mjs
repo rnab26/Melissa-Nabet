@@ -1180,7 +1180,10 @@ const etatsPhotos = await page.evaluate(async () => {
   renderRealisations(); await new Promise(x => setTimeout(x, 400));
   const justePubliees = r.photos.map(p => photoPubState(r, p));
   const tags = lire();
-  // une photo modifiée après la publication
+  // une photo modifiée après la publication. La date ne suffit plus (et c'est voulu :
+  // renommer une version ne change pas un pixel du site) — il faut un vrai changement.
+  const sansChangement = (photoTouch(r.photos[0], 'texte'), photoPubState(r, r.photos[0]));
+  r.photos[0].edit.expo = 0.35;
   photoTouch(r.photos[0], 'reglages');
   const apresRetouche = photoPubState(r, r.photos[0]);
   // une photo ajoutée après la publication n'a jamais été mise en ligne
@@ -1189,21 +1192,26 @@ const etatsPhotos = await page.evaluate(async () => {
   const etatNeuve = photoPubState(r, neuve);
   r.photos.pop();
   renderRealisations(); await new Promise(x => setTimeout(x, 400));
-  return { justePubliees, tags, apresRetouche, etatNeuve, resume: (document.querySelector('.rz-site') || {}).textContent || '' };
+  return { justePubliees, tags, apresRetouche, sansChangement, etatNeuve, resume: (document.querySelector('.rz-site') || {}).textContent || '' };
 });
 check('Chaque photo publiée est datée et marquée « en ligne »',
   etatsPhotos.justePubliees.every(e => e === 'enligne') && etatsPhotos.tags.some(t => /en ligne/.test(t)),
   JSON.stringify(etatsPhotos.justePubliees) + ' · ' + etatsPhotos.tags.join(' | '));
 check('Une photo modifiée après la publication est signalée « à republier »',
   etatsPhotos.apresRetouche === 'modifiee', etatsPhotos.apresRetouche);
+// Le faux positif qui rendait le rappel inutilisable : renommer une photo ou une version
+// marquait « à republier » alors que rien de ce que le visiteur voit n'a bougé.
+check('Renommer sans toucher à l’image ne réclame PAS une republication',
+  etatsPhotos.sansChangement === 'enligne', etatsPhotos.sansChangement);
 check('Une photo ajoutée après la publication est signalée « pas encore en ligne »',
   etatsPhotos.etatNeuve === 'absente', etatsPhotos.etatNeuve);
-check('La fiche annonce combien de photos sont à jour et combien attendent',
-  /photo\(s\) à jour en ligne/.test(etatsPhotos.resume) && /en attente/.test(etatsPhotos.resume),
-  etatsPhotos.resume.slice(0, 140));
+check('La fiche annonce combien de photos sont à jour et ce qui attend',
+  /photo\(s\) en ligne à jour/.test(etatsPhotos.resume) && /en attente :/.test(etatsPhotos.resume)
+  && /modifiée/.test(etatsPhotos.resume),
+  etatsPhotos.resume.slice(0, 160));
 check('Publication : un fichier pleine taille + une vignette par photo',
-  pub.nouveaux.filter(k => /\/p\d+\.jpg$/.test(k)).length === realisationPhotoCount &&
-  pub.nouveaux.filter(k => /\/t\d+\.jpg$/.test(k)).length === realisationPhotoCount,
+  pub.nouveaux.filter(k => /\/[a-z0-9]+-[0-9a-f]{8}\.jpg$/.test(k)).length === realisationPhotoCount &&
+  pub.nouveaux.filter(k => /\/[a-z0-9]+-[0-9a-f]{8}-t\.jpg$/.test(k)).length === realisationPhotoCount,
   pub.nouveaux.join(', '));
 check('Publication : un manifeste est écrit', !!pub.manif && Array.isArray(pub.manif.realisations), JSON.stringify(pub.manif && pub.manif.site));
 check('Publication : le manifeste décrit bien la réalisation',
@@ -1213,6 +1221,291 @@ check('Publication : le manifeste ne contient aucune clé ni jeton',
   !!pub.manif && !/eyJ|sb_secret|service_role|apikey/i.test(JSON.stringify(pub.manif)));
 check('Publication : les fichiers publiés sont bien dans le bucket galerie, pas dans les documents',
   pub.nouveaux.every(k => !k.includes('rp_') && !k.includes('rt_')), pub.nouveaux.join(', '));
+
+// ============================================================================
+//  QUELLE VERSION PART SUR LE SITE — et comment on le sait AVANT d'envoyer
+//  Le défaut signalé : « je ne sais pas quand je fais republier, ça republie les anciennes
+//  photos ». Une photo n'avait aucun état vis-à-vis du site, et son adresse publique ne
+//  changeait jamais : rien, dans toute la chaîne, ne distinguait une image neuve d'une
+//  ancienne. Ces contrôles portent sur les deux moitiés du correctif.
+// ============================================================================
+
+// Le stockage simulé répond « dossier vide » à `list` : la publication ne peut donc pas
+// savoir ce qui est déjà en place. On le rend fidèle le temps de ce bloc — sinon la moitié
+// des règles vérifiées ici (ne pas réécrire l'inchangé, garder le pas précédent) ne
+// pourraient pas s'observer.
+await page.evaluate(() => {
+  const vrai = sb.storage.from;
+  window.__listeVraie = vrai;
+  sb.storage.from = (b) => Object.assign({}, vrai(b), {
+    list: async (prefix) => ({
+      data: [...window.__files.keys()]
+        .filter(k => k.startsWith(prefix + '/'))
+        .map(k => k.slice(prefix.length + 1))
+        .filter(n => n.indexOf('/') < 0)
+        .map(n => ({ name: n, metadata: { size: 1000 } })),
+      error: null,
+    }),
+  });
+});
+
+// Une réalisation dédiée : deux photos, dont une avec une retouche posée exactement comme
+// `iaStoreResult` la pose — mais sans aucun appel au modèle, donc sans un centime dépensé.
+await page.evaluate(async () => {
+  window.__mkPub = async (nom, teinte) => {
+    const cv = document.createElement('canvas'); cv.width = 900; cv.height = 600;
+    const x = cv.getContext('2d');
+    x.fillStyle = teinte; x.fillRect(0, 0, 900, 600);
+    x.fillStyle = '#2f2a24'; x.fillRect(90, 120, 260, 360);
+    const b = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
+    return new File([b], nom, { type: 'image/jpeg' });
+  };
+  window.__poserVersion = async (p, label, teinte) => {
+    const vid = 'v' + Math.random().toString(36).slice(2, 8), key = 'ra_' + p.id + '_' + vid;
+    const f = await window.__mkPub('v.jpg', teinte);
+    await photoStore.save(key, f);
+    if (!p.edits) p.edits = {};
+    p.edits[photoActiveId(p)] = JSON.parse(JSON.stringify(p.edit || blankEdit()));
+    photoVersions(p).push({ id: vid, key, model: 'test', prompt: 'essai', params: {}, from: 'orig', createdAt: Date.now(), label });
+    p.edits[vid] = blankEdit(); p.active = vid; p.edit = blankEdit();
+    photoTouch(p, 'ia', label);
+    return vid;
+  };
+  // Ajoutée EN FIN de liste : `realisations[0]` sert de repère à d'autres contrôles, on ne
+  // le déplace pas. Elle est retirée à la fin du bloc.
+  const r = normalizeRealisation({ id: 'pubtest', title: 'Chantier de publication', date: '2026' });
+  realisations.push(r);
+  await addPhotosToRealisation(r, [await window.__mkPub('salon.jpg', '#b9ada0'), await window.__mkPub('cuisine.jpg', '#9fb0a6')]);
+  r.cover = r.photos[0].id;
+  await window.__poserVersion(r.photos[0], 'Retouche claire', '#e6ded2');
+  window.__rPub = r.id;
+  saveRealisations();
+});
+await page.waitForTimeout(500);
+
+const versionPubliee = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[0];
+  const cheminsDe = () => [...window.__files.keys()].filter(k => k.startsWith('test-user/' + r.id + '/'));
+  // remise à plat : on repart d'une publication propre
+  p.edit = blankEdit();
+  await publishRealisation(r);
+  const apres1 = { chemins: cheminsDe(), pub: JSON.parse(JSON.stringify(p.pub)) };
+
+  // (a) republier sans rien changer : même adresse, et AUCUNE image réécrite
+  const tailleAvant = window.__files.size;
+  const ecritesAvant = new Map([...window.__files.entries()].map(([k, v]) => [k, v]));
+  await publishRealisation(r);
+  const apres2 = { chemins: cheminsDe(), sig: p.pub.sig,
+    memesObjets: cheminsDe().every(k => ecritesAvant.get(k) === window.__files.get(k)),
+    taille: window.__files.size, tailleAvant };
+
+  // (b) changer de version affichée : l'adresse publique DOIT changer
+  const vers = photoVersions(p);
+  const autre = photoActiveId(p) === 'orig' ? (vers[0] && vers[0].id) : 'orig';
+  photoSetActive(p, autre);
+  const planApres = realisationPublishPlan(r);
+  const ligne = planApres.photos.find(x => x.p.id === p.id);
+  const avantChemin = p.pub.full;
+  await publishRealisation(r);
+  const apres3 = { avantChemin, apresChemin: p.pub.full, pourquoi: ligne.pourquoi,
+    change: planApres.change, vlabel: p.pub.vlabel, v: p.pub.v,
+    ancienneImageServie: [...window.__files.keys()].some(k => k.endsWith(avantChemin)) };
+
+  // (c) réordonner ne réécrit plus aucun fichier : l'ordre vit dans le manifeste
+  const objetsAvantOrdre = new Map(cheminsDe().map(k => [k, window.__files.get(k)]));
+  const tmp = r.photos[0]; r.photos[0] = r.photos[1]; r.photos[1] = tmp;
+  const planOrdre = realisationPublishPlan(r);
+  await publishRealisation(r);
+  const manif = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const fiche = manif.realisations.find(x => x.id === r.id);
+  const apres4 = { memesFichiers: r.photos.every(x => objetsAvantOrdre.get('test-user/' + x.pub.full) === window.__files.get('test-user/' + x.pub.full)),
+    ordreAnnonce: planOrdre.ordre, aucunePhotoChangee: planOrdre.change === 0,
+    ordreManifeste: fiche.photos.map(e => e.full.split('/').pop()),
+    ordreAttendu: r.photos.map(x => x.pub.full.split('/').pop()) };
+  return { apres1, apres2, apres3, apres4 };
+});
+
+check('Une photo publiée sait QUELLE version est en ligne',
+  !!versionPubliee.apres1.pub && !!versionPubliee.apres1.pub.sig && !!versionPubliee.apres1.pub.v
+  && typeof versionPubliee.apres1.pub.vlabel === 'string',
+  JSON.stringify(versionPubliee.apres1.pub).slice(0, 120));
+check('Republier sans rien changer ne réécrit aucune image et ne change aucune adresse',
+  versionPubliee.apres2.memesObjets
+  && JSON.stringify(versionPubliee.apres1.chemins.slice().sort()) === JSON.stringify(versionPubliee.apres2.chemins.slice().sort()),
+  'réécrit: ' + (!versionPubliee.apres2.memesObjets) + ' · ' + versionPubliee.apres2.chemins.length + ' fichier(s)');
+// LE point du chantier : sans ça, tout le reste peut être juste et le visiteur verra encore
+// l'ancienne photo, servie par le cache du navigateur ou du CDN à une adresse inchangée.
+check('Changer de version change l’ADRESSE PUBLIQUE de la photo (aucun cache ne peut servir l’ancienne)',
+  versionPubliee.apres3.avantChemin !== versionPubliee.apres3.apresChemin,
+  versionPubliee.apres3.avantChemin + ' → ' + versionPubliee.apres3.apresChemin);
+check('L’ancienne image reste en place : c’est ce qui rend le retour en arrière possible',
+  versionPubliee.apres3.ancienneImageServie);
+check('Le plan de publication nomme la version qui va partir, et celle qu’elle remplace',
+  /au lieu de/.test(versionPubliee.apres3.pourquoi) && versionPubliee.apres3.change === 1,
+  versionPubliee.apres3.pourquoi);
+check('Réordonner ne réécrit plus aucun fichier — l’ordre vit dans le manifeste',
+  versionPubliee.apres4.memesFichiers && versionPubliee.apres4.aucunePhotoChangee
+  && versionPubliee.apres4.ordreAnnonce,
+  JSON.stringify(versionPubliee.apres4).slice(0, 150));
+check('L’ordre du manifeste suit l’ordre de la galerie',
+  JSON.stringify(versionPubliee.apres4.ordreManifeste) === JSON.stringify(versionPubliee.apres4.ordreAttendu),
+  versionPubliee.apres4.ordreManifeste.join(' | '));
+
+// --- L'ÉCRAN DE CONFIRMATION : rien ne part sans qu'il l'ait vu, y compris sur téléphone
+const vueAvantPub = page.viewportSize();
+await page.setViewportSize({ width: 390, height: 844 });
+const ecranPub = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[0];
+  p.edit.expo = 0.42; photoTouch(p, 'reglages');       // une modification réelle
+  r.photos[1].caption = 'Vue depuis l’entrée.';         // une légende, qui change le site aussi
+  _rzOpenId = r.id; renderRealisations();
+  await new Promise(x => setTimeout(x, 300));
+  await askPublishRealisation(r);
+  await new Promise(x => setTimeout(x, 900));
+  const lignes = [...document.querySelectorAll('.pub-ligne')];
+  return {
+    ouvert: !!document.getElementById('pub-liste'),
+    titre: (document.querySelector('#modal h3') || {}).textContent || '',
+    chips: [...document.querySelectorAll('.pub-chip')].map(c => c.textContent.trim()),
+    nLignes: lignes.length,
+    pourquoi: lignes.map(l => (l.querySelector('.pub-why') || {}).textContent || ''),
+    paires: lignes.filter(l => l.querySelector('[data-avant]') && l.querySelector('[data-apres]')).length,
+    bouton: (document.getElementById('pub-go') || {}).textContent || '',
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    listeDebord: (() => { const e = document.getElementById('pub-liste'); return e ? e.scrollWidth - e.clientWidth : 99; })(),
+  };
+});
+await page.screenshot({ path: '/tmp/mn-publication-390.png' });
+check('Publier ouvre un écran qui dit ce qui va partir, avant d’envoyer quoi que ce soit',
+  ecranPub.ouvert && /Republier/.test(ecranPub.titre), ecranPub.titre);
+check('L’écran compte ce qui change, et le bouton porte le nombre',
+  ecranPub.chips.some(c => /modifiée/.test(c)) && /\(2 photos\)/.test(ecranPub.bouton),
+  ecranPub.chips.join(' · ') + ' — ' + ecranPub.bouton);
+check('Chaque photo montre ce qui est EN LIGNE et ce qui VA PARTIR, côte à côte',
+  ecranPub.nLignes === 2 && ecranPub.paires === 2, ecranPub.nLignes + ' ligne(s), ' + ecranPub.paires + ' comparaison(s)');
+check('L’écran dit POURQUOI chaque photo repart (réglages, légende, version)',
+  ecranPub.pourquoi.some(t => /réglages/.test(t)) && ecranPub.pourquoi.some(t => /légende/.test(t)),
+  ecranPub.pourquoi.join(' | '));
+check('L’écran de publication tient à 390 px',
+  ecranPub.debord <= 1 && ecranPub.listeDebord <= 1,
+  'page ' + ecranPub.debord + 'px, liste ' + ecranPub.listeDebord + 'px');
+
+const pubVide = await page.evaluate(async () => {
+  closeModal();
+  const r = realisations.find(x => x.id === window.__rPub);
+  await publishRealisation(r);                    // tout est à jour
+  await askPublishRealisation(r);
+  await new Promise(x => setTimeout(x, 500));
+  const txt = (document.getElementById('pub-liste') || {}).textContent || '';
+  const force = !!document.getElementById('pub-force');
+  closeModal();
+  return { txt, force };
+});
+check('Quand rien n’a changé, l’écran le dit au lieu de faire semblant de publier',
+  /Rien n’a changé/.test(pubVide.txt) && pubVide.force, pubVide.txt.slice(0, 80));
+await page.setViewportSize(vueAvantPub);
+
+// --- REVENIR EN ARRIÈRE : une retouche ratée sur un site public doit se défaire
+const retour = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[0];
+  const cheminAvant = p.pub.full;
+  p.edit.expo = 0.55; photoTouch(p, 'reglages');
+  await publishRealisation(r);
+  const cheminApres = p.pub.full;
+  const peutRevenir = !!(r.pubPrev && r.pubPrev.fiche);
+  await rollbackRealisation(r);
+  const manif = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const fiche = manif.realisations.find(x => x.id === r.id);
+  const servi = fiche.photos.map(e => e.full.split('/').pop());
+  return { cheminAvant, cheminApres, peutRevenir,
+    revenuA: p.pub.full, servi, aNouveauReversible: !!(r.pubPrev && r.pubPrev.fiche),
+    enLigne: r.published, aRepublier: realisationARepublier(r),
+    fichierPresent: window.__files.has('test-user/' + cheminAvant) };
+});
+check('Après publication, un geste ramène la publication précédente',
+  retour.peutRevenir && retour.revenuA === retour.cheminAvant && retour.cheminApres !== retour.cheminAvant,
+  retour.cheminApres + ' → ' + retour.revenuA);
+check('Le manifeste sert bien à nouveau les images d’avant',
+  retour.servi.includes(retour.cheminAvant.split('/').pop()) && retour.fichierPresent,
+  retour.servi.join(' | '));
+check('Le retour est lui-même réversible, et la réalisation reste en ligne',
+  retour.aNouveauReversible && retour.enLigne === true, JSON.stringify(retour).slice(0, 120));
+check('Après un retour, l’écran dit que la version d’après attend d’être republiée',
+  retour.aRepublier === 1, retour.aRepublier + ' photo(s) en attente');
+
+// --- UNE PHOTO ILLISIBLE NE DOIT PLUS ÊTRE SAUTÉE EN SILENCE.
+//     Avant, `continue` renumérotait toute la suite de la galerie : les photos d'après
+//     changeaient d'adresse et le site montrait « les anciennes », sans un mot.
+const illisible = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  const p = r.photos[1];
+  p.edit.expo = 0.9; photoTouch(p, 'reglages');   // il faut qu'elle soit à réécrire
+  p.name = 'photo-cassee.jpg';
+  const cle = 'test-user/' + photoVersionKey(p, photoActiveId(p), false);
+  const sauve = window.__files.get(cle);
+  window.__files.delete(cle);
+  delete photoStore.mem[photoVersionKey(p, photoActiveId(p), false)];   // sinon elle est encore en mémoire
+  _imgCache.clear();
+  const manifAvant = await window.__files.get('test-user/manifest.json').text();
+  await publishRealisation(r);
+  const manifApres = await window.__files.get('test-user/manifest.json').text();
+  const msg = (document.querySelector('#rz-body .ia-erreur, .ia-erreur') || {}).textContent || '';
+  window.__files.set(cle, sauve);
+  _pubLastError = null;
+  await publishRealisation(r);
+  return { msg, siteIntact: manifAvant === manifApres,
+    repare: realisationARepublier(r) === 0 };
+});
+check('Une photo illisible arrête la publication en la nommant, au lieu de la sauter',
+  /photo-cassee\.jpg/.test(illisible.msg) && /Publication interrompue/.test(illisible.msg),
+  illisible.msg.slice(0, 110));
+check('Le site n’est pas modifié par une publication interrompue',
+  illisible.siteIntact && illisible.repare, JSON.stringify({ intact: illisible.siteIntact, repare: illisible.repare }));
+
+// --- LES PHOTOS DÉJÀ EN LIGNE AVANT CE MÉCANISME. Elles n'ont pas d'identité publiée :
+//     les compter comme « à republier » ferait crier l'alerte sur un chantier déjà à jour.
+//     Elles doivent rester « en ligne », et être réécrites une fois à la publication suivante.
+const heritees = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  const t = Date.now();
+  r.photos.forEach(p => { delete p.pub; p.publishedAt = t; p.touchedAt = t - 1000; });
+  delete r.pub; delete r.pubPrev; r.published = true;
+  const etats = r.photos.map(p => photoPubState(r, p));
+  const enAttente = realisationARepublier(r);
+  // Le stockage tel qu'il est vraiment pour une réalisation d'avant : des noms positionnels.
+  [...window.__files.keys()].filter(k => k.startsWith('test-user/' + r.id + '/')).forEach(k => window.__files.delete(k));
+  window.__files.set('test-user/' + r.id + '/p0.jpg', new Blob(['x']));
+  window.__files.set('test-user/' + r.id + '/t0.jpg', new Blob(['x']));
+  window.__files.set('test-user/' + r.id + '/p1.jpg', new Blob(['x']));
+  window.__files.set('test-user/' + r.id + '/t1.jpg', new Blob(['x']));
+  await publishRealisation(r);
+  const ecrites = r.photos.filter(p => window.__files.has('test-user/' + p.pub.full)).length;
+  const positionnelsPartis = ![...window.__files.keys()].some(k => /\/[pt]\d\.jpg$/.test(k));
+  return { etats, enAttente, ecrites, positionnelsPartis,
+    suiviExact: r.photos.every(p => !!(p.pub && p.pub.sig)),
+    puisRien: realisationARepublier(r) };
+});
+check('Une photo publiée avant ce mécanisme reste « en ligne », pas « à republier »',
+  heritees.etats.every(e => e === 'enligne') && heritees.enAttente === 0,
+  JSON.stringify(heritees.etats) + ' · ' + heritees.enAttente + ' en attente');
+check('Elle est réécrite une fois à la publication suivante, et le suivi devient exact',
+  heritees.ecrites === 2 && heritees.suiviExact && heritees.puisRien === 0,
+  JSON.stringify(heritees));
+check('Les anciens fichiers nommés par le rang (p0.jpg…) sont retirés du site',
+  heritees.positionnelsPartis, JSON.stringify(heritees.positionnelsPartis));
+
+await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  if (r) { const y = window.confirm; window.confirm = () => true;
+    await unpublishRealisation(r);
+    const b = document.getElementById('confirm-yes'); if (b) b.click();
+    await new Promise(x => setTimeout(x, 400)); window.confirm = y; }
+  sb.storage.from = window.__listeVraie;
+  realisations = realisations.filter(x => x.id !== window.__rPub);
+  _rzOpenId = realisations[0] && realisations[0].id;
+  saveRealisations(); renderRealisations();
+});
+await page.waitForTimeout(300);
 
 // --- Une publication qui échoue doit laisser un message lisible, pas un toast fugace,
 //     et NE PAS marquer la réalisation en ligne.
@@ -3122,9 +3415,9 @@ check('Recherche : Ctrl+K l’ouvre', rchClavier);
 const rappel = await page.evaluate(async () => {
   const r = realisations.find(x => (x.photos || []).length >= 2) || realisations[0];
   _rzOpenId = null;
-  const t = Date.now() - 10000;
-  r.published = true;
-  r.photos.forEach(p => { p.publishedAt = t; p.touchedAt = t - 1000; });
+  // « À jour » n'est plus une affaire de dates : c'est ce qui est RÉELLEMENT en ligne.
+  // On publie donc pour de vrai (stockage simulé), au lieu d'antidater les photos.
+  await publishRealisation(r);
   renderRealisations();
   const carteDe = () => {
     const cards = [...document.querySelectorAll('.rz-card')];
@@ -3132,7 +3425,8 @@ const rappel = await page.evaluate(async () => {
     return c ? (c.querySelector('.rz-cmeta') || {}).textContent || '' : 'carte introuvable';
   };
   const aJour = { carte: carteDe(), titre: r.title, publiee: r.published, etats: r.photos.map(p => photoPubState(r, p)) };
-  photoTouch(r.photos[1], 'reglages');            // une photo retouchée après publication
+  r.photos[1].edit.expo = 0.4;                    // une photo réglée après publication
+  photoTouch(r.photos[1], 'reglages');
   renderRealisations(); renderDashboard();
   const apres = { carte: carteDe(), dash: (document.getElementById('dash-todos') || {}).textContent || '',
                   n: realisationARepublier(r) };
@@ -3382,7 +3676,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
