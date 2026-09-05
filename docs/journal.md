@@ -56,7 +56,7 @@ point est plus bas, dans l'ordre chronologique.)*
 
 ## 5 septembre 2026 — Quelle version part sur le site (et comment revenir en arrière)
 
-**Branche** `claude/photos-version-publiee-0509`. **Chantier Jarvis** `ae41e91f-1660-4afb-ab23-b0406d0f3ffe`.
+**Branche** `claude/photos-version-publiee-0509` → fusionnée sur `main`. **Chantier Jarvis** `ae41e91f-1660-4afb-ab23-b0406d0f3ffe`.
 
 **Signalé par Raphaël** : « les photos que je retouche, je ne sais pas quand je fais
 republier, ça republie les anciennes photos. Il faudrait créer une certaine logique des
@@ -145,8 +145,8 @@ page publique servie depuis le stockage écrit par le CRM.
   `rgb(33,98,183)` — le bleu de la retouche, à une adresse différente ;
 - idem dans un contexte de navigateur entièrement neuf.
 
-**Total : 531 contrôles, 0 échec.** `realisations` 426 (21 nouveaux), `bout-en-bout` 20
-(8 nouveaux), `site` 65, `pont-ia` 20. Parcours réel à 390 px : écran de publication, fiche
+**Total : 543 contrôles, 0 échec** (après fusion avec les chantiers arrivés entre-temps). `realisations` 430 (21 nouveaux), `bout-en-bout` 20
+(8 nouveaux), `site` 73, `pont-ia` 20. Parcours réel à 390 px : écran de publication, fiche
 avec le retour en arrière, barre d'actions — aucun débordement horizontal
 (`/tmp/mn-publication-390.png`).
 
