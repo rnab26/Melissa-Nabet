@@ -2047,6 +2047,74 @@ await page.evaluate(() => showView('realisations'));
 await page.waitForTimeout(400);
 await page.screenshot({ path: '/tmp/mn-shot-desktop.png' });
 
+// ============================================================================
+//  NAVIGATION SUR TÉLÉPHONE : une barre d'onglets en bas, une barre du haut d'une ligne
+// ============================================================================
+for (const [w, h, nom] of [[375, 812, 'téléphone étroit'], [390, 844, 'téléphone'], [768, 1024, 'tablette portrait']]) {
+  await page.setViewportSize({ width: w, height: h });
+  await page.evaluate(() => showView('realisations'));
+  await page.waitForTimeout(350);
+  const m = await page.evaluate(() => ({
+    haut: Math.round(document.querySelector('.toolbar').getBoundingClientRect().height),
+    bas: Math.round(document.getElementById('navbas').getBoundingClientRect().height),
+    navHaut: getComputedStyle(document.querySelector('.viewnav')).display,
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    actif: [...document.querySelectorAll('#navbas button.active')].map(b => b.dataset.vue),
+  }));
+  check('Menu ' + nom + ' (' + w + 'px) : la barre du haut tient sur une ligne',
+    m.haut <= 60 && m.navHaut === 'none', m.haut + 'px de haut');
+  check('Menu ' + nom + ' : la barre d’onglets est en bas, sous le pouce', m.bas >= 40 && m.bas <= 70, m.bas + 'px');
+  check('Menu ' + nom + ' : l’onglet ouvert est marqué', m.actif.join(',') === 'realisations', m.actif.join(','));
+  check('Menu ' + nom + ' : aucun débordement horizontal', m.debord <= 1, m.debord + 'px');
+}
+// La barre d'actions d'une sélection ne doit pas passer SOUS la barre d'onglets.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); rzToggleSelectMode(true); });
+await page.waitForTimeout(400);
+const barres = await page.evaluate(() => {
+  const sel = document.querySelector('.rz-selbar'), nav = document.getElementById('navbas');
+  if (!sel || !nav) return null;
+  const a = sel.getBoundingClientRect(), b = nav.getBoundingClientRect();
+  return { bas: Math.round(a.bottom), navHaut: Math.round(b.top) };
+});
+check('Menu téléphone : la barre de sélection reste au-dessus des onglets',
+  barres && barres.bas <= barres.navHaut + 1, barres ? (barres.bas + ' vs ' + barres.navHaut) : 'barre absente');
+await page.evaluate(() => rzToggleSelectMode(false));
+
+const menus = await page.evaluate(async () => {
+  menuPlusMobile();
+  const plus = [...document.querySelectorAll('#modal .ph-menu button')].map(b => b.textContent.trim());
+  document.getElementById('plus-sauvegarde').click();
+  await new Promise(r => setTimeout(r, 200));
+  const ouvert = !!document.getElementById('bk-portee');
+  closeModal();
+  devisMenuMobile();
+  const devis = [...document.querySelectorAll('#modal .ph-menu button')].map(b => b.textContent.trim());
+  document.getElementById('dv-mes').click();
+  await new Promise(r => setTimeout(r, 250));
+  const vueDevis = document.querySelector('.stage').style.display !== 'none';
+  closeModal();
+  return { plus, ouvert, devis, vueDevis };
+});
+check('Menu téléphone : « ⋯ » donne accès à la vue, aux réglages, à la sauvegarde et à la synchro',
+  menus.plus.length === 4 && /Réglages/.test(menus.plus.join(' ')) && /Sauvegarde/.test(menus.plus.join(' ')) && /Synchronisation/.test(menus.plus.join(' ')),
+  menus.plus.join(' | '));
+check('Menu téléphone : une entrée du menu ouvre vraiment son panneau', menus.ouvert);
+check('Menu téléphone : « Devis » propose Composer et Mes devis',
+  menus.devis.length === 2 && /Composer/.test(menus.devis[0]), menus.devis.join(' | '));
+check('Menu téléphone : et le choix ouvre bien la vue devis', menus.vueDevis);
+
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(() => showView('realisations'));
+await page.waitForTimeout(300);
+const bureau = await page.evaluate(() => ({
+  bas: getComputedStyle(document.getElementById('navbas')).display,
+  haut: getComputedStyle(document.querySelector('.viewnav')).display,
+  actifHaut: document.getElementById('vn-real').classList.contains('active'),
+}));
+check('Menu ordinateur : rien ne change — barre du haut, pas de barre du bas',
+  bureau.bas === 'none' && bureau.haut !== 'none' && bureau.actifHaut, JSON.stringify(bureau));
+
 // --- Les autres vues fonctionnent toujours
 for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
   await page.evaluate(vv => showView(vv), v);
