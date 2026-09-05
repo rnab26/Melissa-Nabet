@@ -560,3 +560,27 @@ des clients) et **je n'ai rien changé**. Mais ça éclaire la décision du site
 question n'est pas « ces informations peuvent-elles devenir publiques », elles le sont — la
 question est de savoir si vous voulez qu'elles soient **mises en avant** sur la page publique.
 Le panneau « ⚙ Le site public » attend votre choix, il ne présume de rien.
+
+---
+
+## 5 septembre 2026 — Une session qui démarre sait déjà où elle en est
+
+**Branche** `claude/infra-hook-demarrage` → fusionnée sur `main`. **Chantier** `fi03`.
+
+`.claude/hooks/session-start.sh` (+ `.claude/settings.json`) tourne au démarrage de chaque
+session sur ce dépôt :
+
+- il **installe Playwright** si besoin, et seulement dans l'environnement cloud — les tests
+  sont prêts sans que personne y pense ;
+- il **affiche l'état** : les trois documents qui font foi, l'adresse du tableau des
+  chantiers, les dernières entrées du journal, les cinq derniers commits, le travail non
+  commité s'il y en a, et les commandes exactes de vérification.
+
+**Ce qu'il ne fait pas, volontairement** : donner des consignes. L'état se charge, les
+instructions restent dans les fichiers versionnés — relus, et discutables. C'est exactement
+la règle « la base porte l'état, les fichiers portent les instructions ».
+
+Mode **synchrone** : la session démarre un peu plus tard, mais rien ne peut tourner avant que
+les dépendances soient là. On peut passer en asynchrone si l'attente gêne.
+
+**Effet à partir de maintenant** : toute session ouverte sur `main` en bénéficie.
