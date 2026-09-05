@@ -1652,6 +1652,108 @@ const invalid = await page.evaluate(async () => {
 check('Stockage : la mesure est refaite après un import', invalid.apresImport);
 check('Stockage : la mesure est refaite après une suppression', invalid.apresSuppression);
 
+
+// ============================================================================
+//  TEXTES DE PRÉSENTATION : lieu, surface, mission, description
+// ============================================================================
+const presFields = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  const mettre = (f, v) => {
+    const el = document.querySelector('#rz-body [data-f="' + f + '"]');
+    if (!el) return 'champ absent';
+    el.value = v; el.dispatchEvent(new Event('input'));
+    return null;
+  };
+  const manquants = ['lieu', 'surface', 'mission', 'texte'].map(f => mettre(f, {
+    lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète',
+    texte: 'Un appartement cloisonné ramené à un volume traversant.',
+  }[f])).filter(Boolean);
+  const missions = [...document.querySelectorAll('#rz-missions option')].map(o => o.value);
+  return { manquants, lieu: r.lieu, surface: r.surface, mission: r.mission, texte: r.texte,
+           missions, compteur: (document.querySelector('.rz-pres-n') || {}).textContent || '' };
+});
+check('Présentation : les quatre champs existent dans la fiche', presFields.manquants.length === 0, presFields.manquants.join(', '));
+check('Présentation : ce qu’on tape est enregistré',
+  presFields.lieu === 'Tel Aviv' && presFields.surface === '85 m²' && presFields.mission === 'Rénovation complète' && /volume traversant/.test(presFields.texte));
+check('Présentation : des types de mission sont proposés sans être imposés',
+  presFields.missions.length >= 5 && presFields.missions.includes('Rénovation complète'), presFields.missions.join(', '));
+check('Présentation : le texte a un compteur de caractères', /\d+ \/ 900 caractères/.test(presFields.compteur), presFields.compteur);
+
+const presFieldsVides = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  const garde = { lieu: r.lieu, surface: r.surface, mission: r.mission, texte: r.texte };
+  r.lieu = ''; r.surface = ''; r.mission = ''; r.texte = ''; renderRealisations();
+  const t = (document.querySelector('.rz-pres-n') || {}).textContent || '';
+  Object.assign(r, garde); renderRealisations();
+  return t;
+});
+check('Présentation : sans texte, l’écran dit ce que ça change', /le site n’affiche que les photos/.test(presFieldsVides), presFieldsVides);
+
+// --- Ces textes partent dans le manifeste, les presFields vides n'y figurent pas
+const manifTextes = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  await publishRealisation(r);
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const fiche = JSON.parse(await window.__files.get(key).text()).realisations.find(x => x.id === r.id);
+  // une réalisation sans texte : rien ne doit être ajouté
+  const r2 = normalizeRealisation({ title: 'Sans texte', photos: r.photos.map(p => ({ ...p })) });
+  realisations.push(r2);
+  await publishRealisation(r2);
+  const fiche2 = JSON.parse(await window.__files.get(key).text()).realisations.find(x => x.id === r2.id);
+  realisations = realisations.filter(x => x.id !== r2.id);
+  return { fiche, clefs2: Object.keys(fiche2) };
+});
+check('Publication : lieu, surface, mission et texte partent sur le site',
+  manifTextes.fiche.lieu === 'Tel Aviv' && manifTextes.fiche.surface === '85 m²'
+  && manifTextes.fiche.mission === 'Rénovation complète' && /volume traversant/.test(manifTextes.fiche.texte),
+  JSON.stringify({ l: manifTextes.fiche.lieu, s: manifTextes.fiche.surface, m: manifTextes.fiche.mission }));
+check('Publication : un champ vide n’est pas publié du tout (pas d’étiquette sans valeur)',
+  !manifTextes.clefs2.includes('lieu') && !manifTextes.clefs2.includes('texte'), manifTextes.clefs2.join(','));
+
+// --- Rédaction assistée : la même fonction serveur que les devis, mais pour un portfolio
+let embBody = null;
+await page.route('**/functions/v1/embellish', async (route) => {
+  embBody = JSON.parse(route.request().postData() || '{}');
+  await route.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ text: 'Un plateau cloisonné, ramené à un seul volume traversant.' }) });
+});
+const redige = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.texte = '';
+  renderRealisations();
+  const btn = document.querySelector('#rz-body [data-redige]');
+  btn.click();
+  await new Promise(res => setTimeout(res, 400));
+  return { texte: r.texte, zone: (document.querySelector('#rz-body [data-f="texte"]') || {}).value || '',
+           bouton: btn.textContent, actif: !btn.disabled };
+});
+check('Rédaction assistée : le texte revient dans le champ et dans la fiche',
+  /volume traversant/.test(redige.texte) && /volume traversant/.test(redige.zone), redige.texte);
+check('Rédaction assistée : le bouton retrouve son état normal', redige.actif && /Rédiger/.test(redige.bouton), redige.bouton);
+check('Rédaction assistée : c’est bien un texte de portfolio qui est demandé, pas une ligne de devis',
+  embBody && embBody.kind === 'realisation' && embBody.title && embBody.length === 'long',
+  JSON.stringify(embBody && { kind: embBody.kind, length: embBody.length, mission: embBody.mission }));
+check('Rédaction assistée : les légendes des photos sont envoyées comme matière',
+  embBody && Array.isArray(embBody.legendes), JSON.stringify(embBody && embBody.legendes));
+
+await page.unroute('**/functions/v1/embellish');
+await page.route('**/functions/v1/embellish', async (route) => {
+  await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'IA indisponible (HTTP 502)' }) });
+});
+const redigeKo = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.texte = 'texte écrit à la main';
+  renderRealisations();
+  document.querySelector('#rz-body [data-redige]').click();
+  await new Promise(res => setTimeout(res, 400));
+  return { texte: r.texte, message: (document.querySelector('#rz-body .ia-erreur p') || {}).textContent || '' };
+});
+check('Rédaction assistée : un échec ne perd pas le texte déjà écrit', redigeKo.texte === 'texte écrit à la main');
+check('Rédaction assistée : l’échec reste affiché et dit quoi faire',
+  /Rédaction impossible/.test(redigeKo.message) && /à la main/.test(redigeKo.message), redigeKo.message);
+await page.unroute('**/functions/v1/embellish');
+await page.evaluate(() => { _pubLastError = null; renderRealisations(); });
+
 // --- On rend la vue à la réalisation utilisée par les mesures suivantes
 await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
 await page.waitForTimeout(300);
@@ -1741,7 +1843,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé \(HTTP 422\)/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé \(HTTP 422\)|texte réalisation Error: IA indisponible \(HTTP 502\)/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

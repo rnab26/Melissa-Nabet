@@ -49,9 +49,27 @@ await page.locator('.project').first().click();
 await page.waitForTimeout(600);
 check('Ouverture du projet', await page.locator('.detail').isVisible());
 check('Titre du projet affiché', (await page.textContent('#d-title')).trim() === 'Bureau Sébastien');
+// Les photos hors écran sont en chargement paresseux : on parcourt la page comme un
+// visiteur avant de compter, sinon on mesure le lazy-loading, pas le site.
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(700);
 const shots = await page.evaluate(() => [...document.querySelectorAll('.shot img')].filter(i => i.naturalWidth > 0).length);
 check('Les 3 photos du projet se chargent', shots === 3, shots + ' photo(s)');
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(200);
 check('URL partageable (ancre du projet)', (await page.evaluate(() => location.hash)) === '#p-r1');
+
+// --- Textes de présentation écrits depuis le CRM
+const presentation = await page.evaluate(() => ({
+  meta: (document.getElementById('d-meta').textContent || '').trim(),
+  texte: (document.getElementById('d-text').textContent || '').trim(),
+  cache: document.getElementById('d-text').hidden,
+  carte: (document.querySelector('.project-meta') || {}).textContent || '',
+}));
+check('Lieu, surface et mission affichés sous le titre du projet',
+  /2026/.test(presentation.meta) && /Tel Aviv/.test(presentation.meta) && /85 m²/.test(presentation.meta) && /Rénovation complète/.test(presentation.meta),
+  presentation.meta);
+check('Texte de présentation affiché', !presentation.cache && /plateau de bureaux/.test(presentation.texte), presentation.texte.slice(0, 60));
 
 // --- Légendes écrites depuis le CRM
 const legendes = await page.evaluate(() => ({

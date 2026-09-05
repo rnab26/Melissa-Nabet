@@ -41,6 +41,8 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
   site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur' },
   realisations: [{
     id: 'r1', title: 'Bureau Sébastien', date: '2026',
+    lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète',
+    texte: 'Un plateau de bureaux cloisonné, ramené à un seul volume traversant. Les rangements ont été redessinés sur mesure pour dégager la vue depuis l’entrée.',
     publishedAt: new Date().toISOString(),
     photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '')],
   }],

@@ -570,7 +570,11 @@
   .rz-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
   .rz-back{background:transparent;border:none;color:var(--stone);font-family:'Inter';font-size:12.5px;cursor:pointer;padding:0 0 8px;}
   .rz-back:hover{color:var(--oxblood);}
-  .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .rz-pres{margin-bottom:16px;}
+  .rz-pres textarea{min-height:74px;}
+  .rz-pres-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-4px;}
+  .rz-pres-n{font-size:11px;color:var(--stone);}
   .rz-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
   .rz-ph{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:var(--panel);cursor:pointer;}
   /* Le format 3/2 s'applique à la zone image, pas à la tuile : celle-ci porte en plus le
@@ -3932,7 +3936,9 @@ function photoPubState(r,p){
 const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:''};
 const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée'};
 function normalizeRealisation(r){
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
+     et un portfolio : ils partent sur le site avec les photos. */
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',texte:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
@@ -4608,14 +4614,35 @@ function renderRealisationDetail(host,r){
   const meta=document.createElement('div');meta.className='rz-meta';
   meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
     <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Client (optionnel)</span><select data-f="clientId"></select></label>
-    <label class="fld" style="flex:0 0 140px"><span class="lbl">Date</span><input type="text" data-f="date" placeholder="ex. 2026" value="${esc(r.date)}"></label>`;
+    <label class="fld" style="flex:0 0 120px"><span class="lbl">Année</span><input type="text" data-f="date" placeholder="ex. 2026" value="${esc(r.date)}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Lieu</span><input type="text" data-f="lieu" placeholder="ex. Tel Aviv" value="${esc(r.lieu||'')}"></label>
+    <label class="fld" style="flex:0 0 120px"><span class="lbl">Surface</span><input type="text" data-f="surface" placeholder="ex. 85 m²" value="${esc(r.surface||'')}"></label>
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Type de mission</span>
+      <input type="text" data-f="mission" list="rz-missions" placeholder="ex. Rénovation complète" value="${esc(r.mission||'')}">
+      <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>`;
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
-  meta.querySelectorAll('[data-f]').forEach(el=>{
-    el.addEventListener('input',()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();});
-    el.addEventListener('change',()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();});
-  });
   head.appendChild(meta);
+
+  /* Le texte de présentation est publié tel quel sur le site : c'est ce qui transforme une
+     galerie de photos en projet raconté. Il reste facultatif. */
+  const pres=document.createElement('div');pres.className='rz-pres';
+  pres.innerHTML=`<label class="fld"><span class="lbl">Texte de présentation (publié sur le site)</span>
+      <textarea data-f="texte" rows="3" maxlength="900" placeholder="Ce que le chantier a demandé, ce qui a été fait, les partis pris. Deux ou trois phrases suffisent.">${esc(r.texte||'')}</textarea></label>
+    <div class="rz-pres-acts">
+      <button class="mini" data-redige>✨ Rédiger un texte</button>
+      <span class="rz-pres-n"></span>
+    </div>`;
+  const ta=pres.querySelector('[data-f="texte"]'), cpt=pres.querySelector('.rz-pres-n');
+  const majN=()=>{cpt.textContent=(ta.value.length||0)+' / 900 caractères'+(ta.value.trim()?'':' — sans texte, le site n’affiche que les photos');};
+  ta.addEventListener('input',majN);majN();
+  pres.querySelector('[data-redige]').addEventListener('click',e=>redigerTexteRealisation(r,e.target,ta,majN));
+  [...meta.querySelectorAll('[data-f]'),...pres.querySelectorAll('[data-f]')].forEach(el=>{
+    const ecrire=()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();};
+    el.addEventListener('input',ecrire);
+    el.addEventListener('change',ecrire);
+  });
+  head.appendChild(pres);
   host.appendChild(head);
 
   const grid=document.createElement('div');grid.className='rz-photos'+(_rzOrderMode?' rz-ordering':'');
@@ -4866,6 +4893,41 @@ async function renderThumbInto(p,im,ld){
     im.src=cv.toDataURL('image/jpeg',0.8);
     im.style.display='block';if(ld)ld.remove();
   }catch(e){if(ld)ld.textContent='erreur';}
+}
+/* Missions courantes, proposées sans être imposées : le champ reste libre. */
+const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoration','Agencement sur mesure','Suivi de chantier','Conseil et plans'];
+
+/* Rédaction assistée du texte de présentation. Passe par la MÊME fonction serveur que le
+   bouton « Embellir » des devis (la clé Anthropic reste côté serveur) mais avec `kind`
+   = 'realisation' : le texte d'un portfolio ne s'écrit pas comme une ligne de devis.
+   Une fonction serveur plus ancienne, qui ne connaît pas `kind`, rendra simplement un texte
+   de facture — pas une panne, mais un texte à retoucher. */
+async function redigerTexteRealisation(r,btn,ta,apres){
+  if(!(r.title||'').trim()){toast('Donnez d’abord un nom à la réalisation');return;}
+  const vieux=btn.textContent;btn.disabled=true;btn.textContent='Rédaction…';
+  try{
+    const token=await sessionToken();
+    if(!token)throw new Error('session expirée, reconnectez-vous');
+    const legendes=(r.photos||[]).map(p=>(p.caption||'').trim()).filter(Boolean).slice(0,6);
+    const res=await fetch(SB_URL+'/functions/v1/embellish',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+      body:JSON.stringify({kind:'realisation',title:r.title,desc:r.texte||'',proj:r.lieu||'',
+        surf:(r.surface||'').replace(/[^0-9,.]/g,''),mission:r.mission||'',annee:r.date||'',
+        legendes,length:'long'})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+    const txt=(data.text||'').trim();
+    if(!txt)throw new Error('réponse vide');
+    r.texte=txt;ta.value=txt;r.updatedAt=Date.now();saveRealisations();
+    if(apres)apres();
+    toast('Texte rédigé — relisez-le avant de publier');
+  }catch(e){
+    console.error('texte réalisation',e);
+    _pubLastError='Rédaction impossible : '+((e&&e.message)||'erreur')+'. Rien n’a été modifié — vous pouvez écrire le texte à la main.';
+    renderRealisations();
+  }finally{btn.disabled=false;btn.textContent=vieux;}
 }
 function newRealisation(){
   const r=normalizeRealisation({title:'',date:String(new Date().getFullYear())});
@@ -6464,7 +6526,12 @@ async function publishRealisation(r){
     man.site=emptyManifest().site;
     man.updatedAt=new Date().toISOString();
     man.realisations=man.realisations.filter(x=>x.id!==r.id);
-    man.realisations.unshift({id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()});
+    const fiche={id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()};
+    /* Champs vides omis : le site ne doit pas afficher d'étiquette sans valeur. */
+    [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['texte',r.texte]].forEach(([k,v])=>{
+      if((v||'').trim())fiche[k]=String(v).trim();
+    });
+    man.realisations.unshift(fiche);
     await writeManifest(man);
 
     r.published=true;r.publishedAt=Date.now();r.updatedAt=Date.now();

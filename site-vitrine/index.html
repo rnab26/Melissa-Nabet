@@ -90,7 +90,9 @@
     font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
     font-size:clamp(28px,5vw,40px);margin:0;line-height:1.15;
   }
-  .detail .project-meta{margin:8px 0 34px;}
+  .detail .project-meta{margin:8px 0 14px;}
+  /* Texte de présentation écrit depuis le CRM. Absent, la ligne disparaît entièrement. */
+  .detail-text{max-width:62ch;margin:0 0 34px;font-size:15px;line-height:1.75;color:var(--ink);}
   .shots{display:flex;flex-direction:column;gap:clamp(14px,2.5vw,26px);}
   .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;}
   .shot img{width:100%;height:auto;display:block;}
@@ -142,6 +144,7 @@
     <button class="back" id="back">← Toutes les réalisations</button>
     <h2 id="d-title"></h2>
     <p class="project-meta" id="d-meta"></p>
+    <p class="detail-text" id="d-text" hidden></p>
     <div class="shots" id="d-shots"></div>
   </section>
 </main>
@@ -189,7 +192,11 @@ function renderIndex() {
       + '<p class="project-name"></p><p class="project-meta"></p>';
     b.querySelector('img').src = url(cover.thumb);
     b.querySelector('.project-name').textContent = p.title;
-    b.querySelector('.project-meta').textContent = [p.date, p.photos.length + ' photos'].filter(Boolean).join(' · ');
+    // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
+    // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
+    var infos = [p.date, p.lieu, p.mission].filter(Boolean);
+    if (infos.length < 2) infos.push(p.photos.length + ' photos');
+    b.querySelector('.project-meta').textContent = infos.join(' · ');
     b.addEventListener('click', function () { openProject(i); });
     host.appendChild(b);
   });
@@ -198,7 +205,10 @@ function renderIndex() {
 function openProject(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
-  el('d-meta').textContent = [current.date, current.photos.length + ' photos'].filter(Boolean).join(' · ');
+  el('d-meta').textContent = [current.date, current.lieu, current.surface, current.mission,
+    current.photos.length + ' photos'].filter(Boolean).join(' · ');
+  el('d-text').textContent = current.texte || '';
+  el('d-text').hidden = !current.texte;
   var host = el('d-shots');
   host.innerHTML = '';
   current.photos.forEach(function (ph, k) {
