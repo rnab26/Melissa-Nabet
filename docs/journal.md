@@ -9,6 +9,109 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 5 septembre 2026 — La retouche passe par la file d'attente de fal
+
+**Branche** `claude/photo-ia-queue` → fusionnée sur `main`. **Chantier** `ph14`.
+
+**Le problème** : le pont appelait `fal.run` et attendait la fin dans la requête. Sur une
+image lourde ou une file chargée chez fal, la fonction serveur expirait **avant** la
+réponse : l'image était perdue — et facturée quand même, puisque le modèle avait tourné.
+C'est ce qui interdisait le 4K, et ce qui rendait la retouche en série risquée (elle
+multiplie les appels longs).
+
+**Ce qui est livré**
+
+- **Trois temps courts au lieu d'un appel bloquant** : déposer la demande
+  (`POST queue.fal.run/<modèle>`), demander où elle en est (`…/requests/<id>/status`),
+  récupérer l'image (`…/requests/<id>`). Aucun ne dépend de la durée du modèle, donc aucun
+  ne peut expirer.
+- **L'attente se voit** : le bouton dit « En file d'attente · 3ᵉ · 12 s », puis « Le modèle
+  travaille… », puis « Récupération de l'image… ». Sous le bouton : *vous pouvez fermer
+  cette page*.
+- **Annuler** est possible depuis l'éditeur et depuis la série. Tant que la demande n'a pas
+  démarré, elle **n'est pas facturée** et le compteur du mois revient en arrière. Si l'appel
+  a démarré, c'est dit franchement : il sera facturé. Si fal répond « trop tard », la
+  demande est **gardée** — son image est payée, on va la chercher.
+- **Fermer la page ne perd plus rien.** La demande est écrite sur le disque *avant* d'être
+  suivie, et reprise automatiquement à la réouverture, avec un bandeau dans Réalisations qui
+  nomme chaque demande en attente, son modèle et son ancienneté. Boutons « Reprendre
+  maintenant » et « Abandonner » (avec confirmation qui dit que ça reste facturé).
+- **Réglable** dans ⚙ Réglages → *File d'attente* : intervalle de vérification (1-60 s,
+  défaut 3) et temps d'attente maximum (1-120 min, défaut 10). Passé ce délai le CRM cesse
+  de *regarder* — la demande, elle, continue et sera reprise.
+
+**Vérification** : `tests/realisations.test.mjs` → **253 contrôles, 0 échec** (46 nouveaux) ;
+`tests/pont-ia.test.mjs` → **20, 0 échec** (12 nouveaux) ; `tests/site.test.mjs` → 22, 0
+échec. Le pont est intercepté : **aucun crédit dépensé**. Parcours réel en 390 px pendant
+l'attente et sur le bandeau de reprise : aucun débordement. Fonction `photo-ia` déployée en
+**version 6**, et ses deux garde-fous rejoués sur la fonction réellement en ligne : 401
+« authentification requise » sans jeton, 401 « session invalide » avec la clé publiable.
+
+### La contrainte « rester en 2K » — réponse explicite
+
+**La contrainte technique est levée.** Elle venait du délai de la fonction serveur ; il n'y
+a plus d'appel dont la durée dépend du modèle, et une demande déposée n'est plus perdable.
+
+**Mais rester en 2K reste le bon réglage aujourd'hui**, pour trois raisons qui n'ont rien à
+voir avec la file :
+
+1. La photo part au modèle **en 1600 px** (`glRenderTo(…,1600,…)`) : il n'a aucun détail 4K
+   sur quoi travailler.
+2. La publication écrit **en 1600 px** (`PUB_FULL`) : une sortie 4K serait réduite aussitôt.
+3. Le coût à peu près **double** (0,13 → 0,24 $ l'image chez Nano Banana Pro), et la version
+   IA est stockée en pleine taille à côté de l'original — sur un plan Supabase à 1 Go
+   (chantier `fi01`).
+
+**Conditions pour passer en 4K** : monter d'abord la résolution d'envoi ET `PUB_FULL`,
+accepter le coût double et la place occupée. Tant que le site publie en 1600 px, c'est une
+dépense sans effet visible. Le panneau de réglages l'écrit maintenant en clair, au lieu de
+laisser le 4K se choisir sans conséquence apparente.
+
+### Ce qu'il ne faut pas casser
+
+- **`iaStoreResult` reste appelée d'un seul endroit** — désormais `iaCollectJob`, partagée
+  par la retouche d'une photo, la série et la reprise. Trois chemins, une seule règle de
+  pose.
+- **Une demande n'est jetée que si on SAIT qu'il n'y a plus rien à récupérer** : expirée chez
+  fal, annulée, ou échec rendu par le modèle (`e.definitif`). Réseau coupé, serveur muet,
+  délai dépassé : la demande **reste** dans la liste. Ne pas « simplifier » en supprimant sur
+  toute erreur — ce serait jeter des images payées.
+- **La demande est comptée au dépôt**, pas à l'arrivée : sinon le plafond mensuel ne verrait
+  rien d'une série en vol. Elle est décomptée **uniquement** si fal accepte l'annulation
+  alors qu'elle était encore en file.
+- **`sync_mode` ne part pas en mode file** (`buildPayload(..., {sync:false})`) : il ferait
+  renvoyer l'image en base64 dans la réponse stockée, pour rien. En appel synchrone hérité,
+  il reste posé.
+- **Le pont ne suit une URL rendue par fal que si elle est sur `queue.fal.run`**
+  (`safeQueueUrl`), et refuse tout identifiant de modèle ou de demande biscornu. Sans ça, il
+  deviendrait un relais capable d'aller chercher n'importe quelle adresse en présentant la
+  clé du compte. Testé.
+- `library.iaJobs` est **synchronisé** avec le reste de la bibliothèque : une demande déposée
+  depuis le téléphone peut être récupérée depuis l'ordinateur. Revers : deux onglets ouverts
+  peuvent reprendre la même demande et poser deux fois le même résultat (même image, deux
+  lignes d'historique). Pas gênant en pratique, mais c'est connu.
+- L'action `edit` (appel synchrone) est **conservée** dans le pont pour les pages restées
+  ouvertes sur l'ancienne version. Ne pas la retirer sans savoir que plus personne ne l'appelle.
+
+### Ce qui reste ouvert
+
+- **La série reste séquentielle.** La file permettrait de déposer les 20 photos d'un coup et
+  de tout récupérer ensuite (bien plus rapide), mais ça change le sens du plafond et de
+  l'interruption. À faire séparément si l'usage le demande.
+- Pas de **webhook** : le CRM est une page statique, il n'a pas d'adresse publique où fal
+  pourrait pousser le résultat. Le sondage est la bonne réponse ici.
+- **Rien n'a été vérifié contre le vrai fal en exécution** : ce serait une dépense réelle.
+  Les formes HTTP viennent du `openapi.json` réellement publié par fal (vérifié sur trois
+  modèles), pas de la documentation rédigée — qui, elle, donne une URL de résultat
+  différente (`/requests/<id>/response`). Le pont suit d'abord les URL que fal renvoie
+  lui-même à la soumission, ce qui rend le point discutable sans objet.
+
+### À faire côté Raphaël
+
+**Rien.** Fonction serveur déployée (v6), CRM fusionné et déployé.
+
+---
+
 ## 4 septembre 2026 — Galerie : l'ordre, les mots, le remplacement, un import qui se voit
 
 **Branche** `claude/galerie-ordre-legendes` → fusionnée sur `main`.

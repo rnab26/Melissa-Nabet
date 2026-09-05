@@ -4519,6 +4519,11 @@ function renderRealisations(){
   if(!_rzOpenId&&_rzSelMode){_rzSelMode=false;_rzSel.clear();}
   if(!_rzOpenId)_rzOrderMode=false;
   host.innerHTML='';
+  /* Le bandeau de reprise est posé AVANT la liste comme avant la fiche : une demande en
+     attente peut porter sur n'importe quelle réalisation, pas seulement celle qui est
+     ouverte. */
+  const rep=buildIaReprisePanel();
+  if(rep)host.appendChild(rep);
   if(_rzOpenId)renderRealisationDetail(host,findRealisation(_rzOpenId));
   else renderRealisationList(host);
   paintStorageBanner();
@@ -5499,6 +5504,8 @@ const IA_DEFAULTS={
   histMax:30,
   modeleDefaut:'fal-ai/nano-banana-pro/edit',
   confirmer:true,       /* demander confirmation avant chaque envoi facturé */
+  sondageSec:3,         /* à quelle fréquence demander où en est la demande dans la file */
+  attenteMaxMin:10,     /* au bout de combien de temps on cesse de REGARDER (la demande, elle, continue) */
 };
 function iaSettings(){
   library.iaSettings=Object.assign({},IA_DEFAULTS,library.iaSettings||{});
@@ -5616,8 +5623,58 @@ function iaCountCall(){
   library.iaUsage[k]=(library.iaUsage[k]||0)+1;
   saveLibraryDebounced();
 }
+/* Une demande annulée AVANT d'avoir démarré n'est pas facturée : la laisser comptée ferait
+   mentir le plafond dans l'autre sens, et bloquerait des envois qui n'ont rien coûté. */
+function iaUncountCall(){
+  library.iaUsage=library.iaUsage||{};
+  const k=iaSpendKey();
+  library.iaUsage[k]=Math.max(0,(library.iaUsage[k]||0)-1);
+  saveLibraryDebounced();
+}
 
-async function runIaEdit(photo,consigne,modelId){
+/* ============ LA FILE D'ATTENTE DE fal ============
+
+   Avant, le pont appelait `fal.run` et attendait la fin dans la requête. Sur une image
+   lourde ou une file chargée, la fonction serveur expirait AVANT la réponse : l'image était
+   perdue — et facturée quand même, puisque le modèle avait tourné. C'est ce qui interdisait
+   le 4K, et ce qui rendait la retouche en série risquée : elle multiplie les appels longs.
+
+   Maintenant, trois temps courts — déposer la demande, demander où elle en est, récupérer
+   l'image. Aucun ne dépend de la durée du modèle, donc aucun ne peut expirer. Et comme la
+   demande porte un identifiant qu'on écrit AVANT de rendre la main, fermer la page ne la
+   perd plus : elle est reprise à la réouverture. */
+
+function iaJobs(){
+  if(!Array.isArray(library.iaJobs))library.iaJobs=[];
+  return library.iaJobs;
+}
+/* Écriture IMMÉDIATE (`saveLibrary`), jamais différée : entre le dépôt et l'enregistrement,
+   une page fermée perdrait une demande déjà payée. C'est tout l'objet du chantier. */
+function iaJobAdd(job){iaJobs().push(job);return saveLibrary();}
+function iaJobDrop(id){library.iaJobs=iaJobs().filter(j=>j.id!==id);return saveLibrary();}
+
+/* La réalisation qui porte cette photo : une demande reprise dans une AUTRE session doit
+   savoir où reposer son résultat. */
+function iaRealOf(photo){
+  return realisations.find(r=>(r.photos||[]).some(p=>p.id===photo.id))||null;
+}
+
+const iaSleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* Ce qu'on écrit à l'écran pendant l'attente. « En file d'attente · 3ᵉ » et « le modèle
+   travaille » ne veulent pas dire la même chose : le premier peut encore être annulé sans
+   être facturé, le second non. */
+function iaEtatTexte(job){
+  const s=Math.max(0,Math.round((Date.now()-(job.at||Date.now()))/1000));
+  const t=s<60?s+' s':(Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')+' s');
+  if(job.etat==='RECUP')return 'Récupération de l’image… · '+t;
+  if(job.etat==='IN_QUEUE')return 'En file d’attente'+(job.position!=null?' · '+(job.position+1)+'ᵉ':'')+' · '+t;
+  return 'Le modèle travaille… · '+t;
+}
+
+/* Prépare l'image et les réglages, dépose la demande dans la file, et l'inscrit AVANT de
+   rendre la main. */
+async function iaSubmitJob(r,photo,consigne,modelId){
   const img=await loadPhotoImage(photo.id,{thumb:false,original:true});
   if(!img)throw new Error('photo introuvable');
   /* On envoie la photo AVEC les corrections déjà faites (verticales, lumière, cadrage) :
@@ -5641,10 +5698,122 @@ async function runIaEdit(photo,consigne,modelId){
     });
   }catch(e){ /* schéma illisible : on part sans préférence, le modèle prendra ses défauts */ }
   const input=Object.assign(prefs,iaParamsFor(modelId),{prompt:consigne});
-  const data=await iaCall({action:'edit',model:modelId,input,imageDataUri:cv.toDataURL('image/jpeg',0.9)});
-  if(!data.imageDataUri)throw new Error('aucune image renvoyée');
+  const d=await iaCall({action:'submit',model:modelId,input,imageDataUri:cv.toDataURL('image/jpeg',0.9)});
+  if(!d.requestId)throw new Error('fal.ai n’a pas renvoyé d’identifiant de demande');
+  const job={id:uid(),reqId:d.requestId,model:modelId,prompt:consigne,
+    statusUrl:d.statusUrl||'',responseUrl:d.responseUrl||'',cancelUrl:d.cancelUrl||'',
+    realId:r.id,photoId:photo.id,photoName:photo.name||'photo',
+    at:Date.now(),etat:'IN_QUEUE',position:(typeof d.queuePosition==='number'?d.queuePosition:null)};
+  await iaJobAdd(job);
+  /* La file a accepté la demande : le modèle va tourner, donc elle sera facturée. On la
+     compte ICI et pas à l'arrivée — sinon le plafond ne verrait rien d'une série en vol. */
   iaCountCall();
-  return data;
+  return job;
+}
+
+/* Suit une demande jusqu'à son image. Trois issues, qui ne se traitent pas pareil :
+   - terminée → on récupère l'image ;
+   - introuvable chez fal (expirée, annulée) → il n'y a rien à attendre, la demande est jetée ;
+   - toujours en cours au bout du délai réglé → la demande N'EST PAS jetée : elle continue
+     chez fal et sera reprise. C'est la différence entre « on arrête de regarder » et
+     « c'est perdu ». */
+async function iaWaitJob(job,onEtat){
+  const st=iaSettings();
+  const pas=Math.max(1,parseInt(st.sondageSec,10)||3)*1000;
+  /* Le panneau de réglages refuse déjà tout ce qui sort de 1 à 120 min : ce garde-fou-ci ne
+     sert qu'à ne pas partir sur une valeur inutilisable (0, NaN, texte). */
+  const maxMin=Math.max(0.05,parseFloat(st.attenteMaxMin)||10);
+  const limite=Date.now()+maxMin*60000;
+  for(;;){
+    if(job.annule){const e=new Error('Demande annulée.');e.annule=true;e.definitif=true;throw e;}
+    const d=await iaCall({action:'status',model:job.model,requestId:job.reqId,statusUrl:job.statusUrl});
+    job.etat=d.status;job.position=(typeof d.queuePosition==='number')?d.queuePosition:null;
+    if(onEtat)onEtat(job);
+    if(d.status==='COMPLETED')break;
+    if(d.status==='NOT_FOUND'){
+      const e=new Error('Demande introuvable chez fal.ai : elle a expiré ou a été annulée. Il n’y a rien à récupérer.');
+      e.definitif=true;throw e;
+    }
+    if(Date.now()>limite){
+      throw new Error('Toujours pas terminée après '+maxMin+' min. La demande continue chez fal.ai : elle sera reprise à la prochaine ouverture de l’onglet Réalisations, ou par « Reprendre ». Ce délai se règle dans ⚙ Réglages.');
+    }
+    await iaSleep(pas);
+  }
+  job.etat='RECUP';if(onEtat)onEtat(job);
+  let res;
+  try{
+    res=await iaCall({action:'result',model:job.model,requestId:job.reqId,responseUrl:job.responseUrl});
+  }catch(e){
+    /* Le modèle a rendu un échec, ou la demande n'existe plus : il n'y a pas d'image à
+       attendre. Tout le reste (réseau coupé, serveur muet) laisse la demande en place. */
+    if(/a échoué|introuvable/i.test((e&&e.message)||''))e.definitif=true;
+    throw e;
+  }
+  if(!res.imageDataUri){const e=new Error('aucune image renvoyée');e.definitif=true;throw e;}
+  return res;
+}
+
+/* Récupération ET pose. C'est le MÊME chemin pour une retouche lancée à l'instant et pour
+   une retouche reprise après réouverture de la page : `iaStoreResult` reste appelée d'un
+   seul endroit, comme avant. */
+async function iaCollectJob(job,onEtat){
+  const r=findRealisation(job.realId);
+  const photo=r&&(r.photos||[]).find(p=>p.id===job.photoId);
+  if(!r||!photo){
+    await iaJobDrop(job.id);
+    throw new Error('La photo de cette retouche n’existe plus : la demande a été abandonnée.');
+  }
+  let data;
+  try{
+    data=await iaWaitJob(job,onEtat);
+  }catch(e){
+    /* On ne jette une demande QUE si on SAIT qu'il n'y a plus rien à récupérer : expirée
+       chez fal, annulée, ou échec rendu par le modèle. Une coupure réseau, un serveur muet,
+       un délai dépassé ne doivent PAS faire perdre une image déjà payée : la demande reste
+       dans la liste et sera reprise. Le bandeau propose « Abandonner » pour les cas sans
+       espoir — c'est un geste explicite, pas un effet de bord. */
+    if(e.definitif)await iaJobDrop(job.id);
+    throw e;
+  }
+  await iaStoreResult(r,photo,data,job.prompt,job.model);
+  await iaJobDrop(job.id);
+  return {r,photo,data};
+}
+
+/* Annulation. Tant que la demande n'a pas démarré, elle n'est pas facturée — mais c'est fal
+   qui le dit, pas nous : on n'annonce « rien ne sera facturé » que si la demande était
+   encore en file ET que fal a accepté l'annulation. Si l'appel est déjà terminé, la demande
+   est GARDÉE : elle est payée, autant récupérer son image. */
+async function iaCancelJob(job){
+  const enFile=job.etat==='IN_QUEUE';
+  let d;
+  try{
+    d=await iaCall({action:'cancel',model:job.model,requestId:job.reqId,cancelUrl:job.cancelUrl});
+  }catch(e){
+    return {issue:'erreur',msg:'Annulation impossible : '+((e&&e.message)||'erreur')+'. La demande reste suivie.'};
+  }
+  if(d.status==='ALREADY_COMPLETED'){
+    return {issue:'tard',msg:'Trop tard : l’appel est déjà terminé chez fal.ai, il sera facturé. Son image reste récupérable — la demande est gardée et sera reprise.'};
+  }
+  job.annule=true;
+  await iaJobDrop(job.id);
+  if(d.status==='NOT_FOUND')return {issue:'annule',msg:'Demande inconnue chez fal.ai : il n’y avait rien à annuler, elle a été retirée de la liste.'};
+  if(enFile){
+    iaUncountCall();
+    return {issue:'annule',msg:'Demande annulée avant son démarrage : elle ne sera pas facturée.'};
+  }
+  return {issue:'annule',msg:'Annulation demandée. L’appel avait déjà démarré : il sera facturé, mais son image ne sera pas récupérée.'};
+}
+
+/* Retoucher une photo de bout en bout : dépôt, suivi, récupération, pose. Les deux chemins
+   du CRM — une photo seule et la série — passent par ici. */
+async function runIaEdit(photo,consigne,modelId,opts){
+  opts=opts||{};
+  const r=opts.r||iaRealOf(photo);
+  if(!r)throw new Error('cette photo n’appartient à aucune réalisation');
+  const job=await iaSubmitJob(r,photo,consigne,modelId);
+  if(opts.onJob)opts.onJob(job);
+  return await iaCollectJob(job,opts.onEtat);
 }
 
 /* Ce qui part au modèle, ce sont les corrections DÉJÀ APPLIQUÉES (verticales, lumière,
@@ -5679,17 +5848,50 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
     return;
   }
   _iaLastError=null;
-  setBtn('Envoi au modèle…');
+  setBtn('Dépôt de la demande…');
   try{
-    const data=await runIaEdit(photo,consigne,modelId);
-    await iaStoreResult(r,photo,data,consigne,modelId);
+    await runIaEdit(photo,consigne,modelId,{r,
+      /* Le suivi s'écrit là où on vient de cliquer : sur le bouton et juste dessous. On ne
+         reconstruit PAS le panneau à chaque changement d'état — ça détacherait le bouton
+         dont cette retouche tient la référence. */
+      onJob:job=>{_iaEnCours={job};iaWaitPaint();},
+      onEtat:job=>{setBtn(iaEtatTexte(job));iaWaitPaint();}});
     if(_ed&&_ed.p===photo){_ed.img=null;await reloadEditorImage();}
     toast('Retouche appliquée — l’original reste disponible');
   }catch(e){
-    console.error('retouche IA',e);
-    _iaLastError=(e&&e.message)||'erreur inconnue';
-    toast('Échec de la retouche — le détail reste affiché');
-  }finally{ setBtn(null); buildEditorControls(); }
+    if(e&&e.annule){ toast('Demande annulée'); }
+    else{
+      console.error('retouche IA',e);
+      _iaLastError=(e&&e.message)||'erreur inconnue';
+      toast('Échec de la retouche — le détail reste affiché');
+    }
+  }finally{ _iaEnCours=null; setBtn(null); buildEditorControls(); }
+}
+
+/* Ce qui se passe pendant l'attente, écrit sous le bouton, avec de quoi annuler. Sans ça,
+   la file remplacerait « ça a expiré » par « il ne se passe rien », ce qui n'est pas mieux. */
+let _iaEnCours=null;   /* demande en vol depuis l'éditeur : {job} */
+function iaWaitPaint(){
+  const sub=document.querySelector('#ed-controls .ia-sub');
+  if(!sub)return;
+  const vieux=document.querySelector('#ed-controls .ia-annuler');
+  if(!_iaEnCours){ if(vieux)vieux.remove(); sub.textContent=''; return; }
+  /* Le bouton porte déjà l'état et le temps écoulé : répéter la même phrase juste dessous
+     n'apprendrait rien. Cette ligne-ci dit ce qu'on ne peut pas deviner — qu'on a le droit
+     de partir. */
+  sub.textContent='Vous pouvez fermer cette page : la demande est enregistrée chez fal.ai et sera reprise à la réouverture.';
+  if(vieux)return;
+  const b=document.createElement('button');
+  b.className='mini ia-annuler';b.type='button';b.textContent='Annuler cette demande';
+  b.addEventListener('click',async()=>{
+    if(!_iaEnCours)return;
+    b.disabled=true;b.textContent='Annulation…';
+    const res=await iaCancelJob(_iaEnCours.job);
+    _iaLastError=res.msg;
+    toast(res.issue==='annule'?'Demande annulée':'Trop tard pour annuler');
+    buildEditorControls();
+  });
+  sub.parentNode.insertBefore(b,sub.nextSibling);
 }
 
 /* Pose du résultat sur la photo. UNE seule écriture de cette règle : la retouche d'une
@@ -5796,7 +5998,10 @@ function openIaSerieDialog(r,selection){
 }
 function iaSeriePaint(){
   if(!_iaSerie)return;
-  const e=$('serie-etat'); if(e)e.textContent='Photo '+Math.min(_iaSerie.done+1,_iaSerie.total)+' / '+_iaSerie.total+' · '+_iaSerie.nom;
+  const e=$('serie-etat');
+  if(e)e.textContent='Photo '+Math.min(_iaSerie.done+1,_iaSerie.total)+' / '+_iaSerie.total+' · '+_iaSerie.nom
+    +(_iaSerie.job?' — '+iaEtatTexte(_iaSerie.job):'');
+  const a=$('serie-annul'); if(a)a.textContent=_iaSerie.annulMsg||'';
   const b=document.querySelector('#modal .rz-bar i'); if(b)b.style.width=Math.round(_iaSerie.done/_iaSerie.total*100)+'%';
   const ul=$('serie-live');
   if(ul&&ul.childElementCount!==_iaSerie.echecs.length){
@@ -5809,23 +6014,34 @@ function iaSeriePaint(){
   }
 }
 async function runIaSerie(r,photos,consigne,modelId){
-  _iaSerie={total:photos.length,done:0,nom:(photos[0].name||'photo'),stop:false,echecs:[]};
+  _iaSerie={total:photos.length,done:0,nom:(photos[0].name||'photo'),stop:false,echecs:[],job:null,annulMsg:''};
   _iaSerieReport=null;
   openModal(`<h3>Retouche en cours</h3>
     <p class="msub">Une photo à la fois. L’original de chacune est conservé.</p>
     <p class="msub" id="serie-etat"></p>
     <div class="rz-bar"><i style="width:0%"></i></div>
+    <p class="msub" id="serie-annul"></p>
     <ul class="rz-refus" id="serie-live"></ul>
     <div style="display:flex;justify-content:flex-end;margin-top:14px">
       <button class="mini" id="serie-stop">Interrompre</button>
     </div>`);
   const stopBtn=$('serie-stop');
-  stopBtn.addEventListener('click',()=>{
+  stopBtn.addEventListener('click',async()=>{
     if(!_iaSerie)return;
     _iaSerie.stop=true;
-    /* On ne peut pas rappeler un appel déjà parti : il est facturé de toute façon, autant
-       en garder le résultat. On s'arrête donc APRÈS la photo en cours, et on le dit. */
-    stopBtn.disabled=true;stopBtn.textContent='Arrêt après la photo en cours…';
+    stopBtn.disabled=true;stopBtn.textContent='Arrêt en cours…';
+    /* La file change ce qu'on peut promettre. Avant, un appel parti était facturé quoi qu'il
+       arrive : on s'arrêtait donc APRÈS la photo en cours. Maintenant, tant que la demande
+       n'a pas démarré, l'annuler évite vraiment la dépense — et si elle a démarré, elle est
+       facturée, donc on garde son image plutôt que de la jeter. */
+    const j=_iaSerie.job;
+    if(j&&j.etat==='IN_QUEUE'){
+      const res=await iaCancelJob(j);
+      if(_iaSerie)_iaSerie.annulMsg=res.msg;
+    }else if(j){
+      _iaSerie.annulMsg='La photo en cours a déjà démarré chez fal.ai : elle sera facturée, on garde donc son image.';
+    }
+    iaSeriePaint();
   });
   iaSeriePaint();
   let ok=0,plafond=false;
@@ -5834,17 +6050,24 @@ async function runIaSerie(r,photos,consigne,modelId){
     if(iaPlafondAtteint()){plafond=true;break;}
     _iaSerie.nom=p.name||'photo';iaSeriePaint();
     try{
-      const data=await runIaEdit(p,consigne,modelId);
-      await iaStoreResult(r,p,data,consigne,modelId);
+      await runIaEdit(p,consigne,modelId,{r,
+        onJob:job=>{if(_iaSerie){_iaSerie.job=job;iaSeriePaint();}},
+        onEtat:()=>iaSeriePaint()});
       ok++;
     }catch(e){
-      console.error('retouche IA série',e);
-      _iaSerie.echecs.push({name:p.name||'photo',why:(e&&e.message)||'erreur inconnue'});
+      /* Une demande annulée à la demande n'est pas un échec : ne pas la lister comme tel. */
+      if(!(e&&e.annule)){
+        console.error('retouche IA série',e);
+        _iaSerie.echecs.push({name:p.name||'photo',why:(e&&e.message)||'erreur inconnue'});
+      }
     }
-    _iaSerie.done++;iaSeriePaint();
+    if(!_iaSerie)break;
+    _iaSerie.job=null;_iaSerie.done++;iaSeriePaint();
   }
   const bilan={ok,total:photos.length,echecs:_iaSerie.echecs.slice(),
-    interrompu:_iaSerie.stop&&_iaSerie.done<photos.length,plafond};
+    interrompu:_iaSerie.stop&&_iaSerie.done<photos.length,plafond,
+    /* Une demande partie mais pas encore récupérée n'est pas perdue : elle est reprise. */
+    enVol:iaJobs().length};
   _iaSerie=null;
   _iaSerieReport=bilan;
   closeModal();
@@ -5861,6 +6084,7 @@ function buildIaSeriePanel(){
   t.textContent='✨ Série terminée : '+b.ok+' photo(s) retouchée(s) sur '+b.total+'.'
     +(b.interrompu?' Interrompu à votre demande.':'')
     +(b.plafond?' Arrêté sur le plafond du mois : rien n’a été envoyé au-delà, donc rien n’a été facturé.':'')
+    +(b.enVol?' '+b.enVol+' demande(s) sont encore en cours chez fal.ai : elles sont déjà payées et seront récupérées automatiquement.':'')
     +(b.echecs.length?'':' Les originaux restent disponibles : chaque photo peut revenir en arrière depuis son éditeur.');
   box.appendChild(t);
   if(b.echecs.length){
@@ -5875,6 +6099,127 @@ function buildIaSeriePanel(){
   const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
   f.addEventListener('click',()=>{_iaSerieReport=null;renderRealisations();});
   box.appendChild(f);
+  return box;
+}
+
+/* ============ REPRISE : ce qui a été lancé et pas récupéré ============
+   Une demande déposée dans la file est payée. Si la page se ferme entre le dépôt et la
+   récupération — onglet fermé, téléphone verrouillé, réseau coupé, session expirée —,
+   l'image existe quand même chez fal.ai. Elle est reprise ici, toute seule, à la
+   réouverture : on ne demande pas la permission de récupérer ce qui est déjà payé. */
+let _iaReprise=null;   /* {en,total,done,ok,echecs,job} */
+
+function iaReprisePaint(){
+  const n=document.getElementById('ia-reprise-etat');
+  if(n){
+    n.textContent=(_iaReprise&&_iaReprise.job)
+      ?(Math.min(_iaReprise.done+1,_iaReprise.total)+' / '+_iaReprise.total+' · '+_iaReprise.job.photoName+' — '+iaEtatTexte(_iaReprise.job))
+      :'';
+    return;
+  }
+  /* Le bandeau n'est pas à l'écran (autre onglet ouvert) : on ne redessine l'onglet
+     Réalisations que s'il est visible, sinon on repeindrait dans le vide à chaque sondage. */
+  const host=document.getElementById('rz-body');
+  if(host&&host.offsetParent!==null)renderRealisations();
+}
+
+async function iaReprendre(){
+  const jobs=iaJobs().slice();
+  if(!jobs.length||(_iaReprise&&_iaReprise.en))return;
+  _iaReprise={en:true,total:jobs.length,done:0,ok:0,echecs:[],job:null};
+  renderRealisations();
+  for(const j of jobs){
+    if(!iaJobs().some(x=>x.id===j.id))continue;   /* retirée entre-temps */
+    _iaReprise.job=j;iaReprisePaint();
+    try{
+      await iaCollectJob(j,()=>iaReprisePaint());
+      _iaReprise.ok++;
+    }catch(e){
+      console.error('reprise retouche IA',e);
+      _iaReprise.echecs.push({name:j.photoName||'photo',why:(e&&e.message)||'erreur inconnue'});
+    }
+    _iaReprise.done++;_iaReprise.job=null;iaReprisePaint();
+  }
+  _iaReprise.en=false;
+  saveRealisations();renderRealisations();
+  if(_iaReprise.ok)toast(_iaReprise.ok+' retouche(s) récupérée(s)');
+}
+
+/* Au démarrage on ne demande rien, on récupère : ce sont des images déjà payées. Le délai
+   laisse la page finir de se dessiner avant de lancer les appels. */
+function iaRepriseAuto(){
+  try{ if(iaJobs().length)setTimeout(()=>{iaReprendre();},1200); }catch(e){}
+}
+
+function iaJobAge(j){
+  const m=Math.round((Date.now()-(j.at||Date.now()))/60000);
+  return m<1?'à l’instant':(m<60?('il y a '+m+' min'):('il y a '+Math.floor(m/60)+' h'));
+}
+
+/* Le bandeau. Il dit trois choses selon le moment : ce qu'on est en train de récupérer, ce
+   qui reste à récupérer, et ce que la reprise a donné. */
+function buildIaReprisePanel(){
+  const enAttente=iaJobs();
+  if(!_iaReprise&&!enAttente.length)return null;
+  const enCours=!!(_iaReprise&&_iaReprise.en);
+  const fini=_iaReprise&&!_iaReprise.en;
+  const box=document.createElement('div');
+  box.className='ia-erreur rz-reprise-ia'+((fini&&!_iaReprise.echecs.length&&!enAttente.length)?' ia-ok':'');
+
+  const t=document.createElement('p');
+  if(enCours){
+    t.textContent='⏳ Reprise des retouches déjà lancées chez fal.ai. Elles sont payées : on récupère leur image.';
+  }else if(fini){
+    t.textContent='✨ Reprise terminée : '+_iaReprise.ok+' retouche(s) récupérée(s) sur '+_iaReprise.total+'.'
+      +(enAttente.length?' '+enAttente.length+' demande(s) restent en cours chez fal.ai.':'');
+  }else{
+    t.textContent=enAttente.length+' retouche(s) déposée(s) chez fal.ai et pas encore récupérée(s). Elles sont déjà payées : leur image est encore là.';
+  }
+  box.appendChild(t);
+
+  const etat=document.createElement('p');etat.id='ia-reprise-etat';etat.className='msub';
+  box.appendChild(etat);
+
+  const liste=(fini?_iaReprise.echecs:[]);
+  if(liste.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    liste.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  if(!enCours&&enAttente.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    enAttente.slice(0,8).forEach(j=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=j.photoName||'photo';
+      li.querySelector('span').textContent=iaModelLabel(j.model)+' · déposée '+iaJobAge(j);
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+
+  const acts=document.createElement('div');acts.className='ed-acts';acts.style.marginTop='10px';
+  if(!enCours&&enAttente.length){
+    const go=document.createElement('button');go.className='mini rz-reprise-go';go.type='button';
+    go.textContent='↻ Reprendre maintenant';
+    go.addEventListener('click',()=>iaReprendre());
+    acts.appendChild(go);
+    const del=document.createElement('button');del.className='mini rz-reprise-drop';del.type='button';
+    del.textContent='Abandonner ces demandes';
+    del.addEventListener('click',()=>askConfirm(
+      'Abandonner '+enAttente.length+' demande(s) ? Elles resteront facturées par fal.ai et leur image sera définitivement perdue.',
+      async()=>{library.iaJobs=[];await saveLibrary();_iaReprise=null;renderRealisations();toast('Demandes abandonnées');}));
+    acts.appendChild(del);
+  }
+  if(fini){
+    const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+    f.addEventListener('click',()=>{_iaReprise=null;renderRealisations();});
+    acts.appendChild(f);
+  }
+  if(acts.childElementCount)box.appendChild(acts);
   return box;
 }
 
@@ -6211,7 +6556,16 @@ function openIaSettingsPanel(){
         ${opt('2K','2K — recommandé (les photos sont publiées en 1600 px)')}
         ${opt('4K','4K — la plus lourde, parfois plus chère')}
       </select></label>
-    <p class="ias-note">Une sortie 1K republiée en 1600 px est agrandie, donc molle. Si le modèle choisi ne propose pas cette résolution, il garde la sienne.</p>
+    <p class="ias-note">Une sortie 1K republiée en 1600 px est agrandie, donc molle. Si le modèle choisi ne propose pas cette résolution, il garde la sienne. <b>4K ne sert à rien aujourd’hui</b> : la photo part au modèle en 1600 px et est publiée en 1600 px — la sortie serait réduite, pour un coût à peu près doublé.</p>
+
+    <div class="ed-eyebrow">File d’attente</div>
+    <div class="row3">
+      <label class="fld"><span class="lbl">Vérifier l’avancement toutes les (secondes)</span>
+        <input type="number" min="1" max="60" step="1" id="ias-sondage" value="${st.sondageSec}"></label>
+      <label class="fld"><span class="lbl">Attendre au plus (minutes)</span>
+        <input type="number" min="1" max="120" step="1" id="ias-attente" value="${st.attenteMaxMin}"></label>
+    </div>
+    <p class="ias-note">La retouche est <b>déposée</b> dans la file de fal.ai : l’appel ne peut plus expirer, et fermer la page ne le perd plus. Passé le délai ci-dessus, le CRM cesse seulement de <b>regarder</b> — la demande continue chez fal.ai et sera récupérée à la prochaine ouverture de l’onglet Réalisations.</p>
 
     <div class="ed-eyebrow">Dépense</div>
     <div class="row3">
@@ -6241,14 +6595,19 @@ function openIaSettingsPanel(){
     const plafond=parseInt($('ias-plafond').value,10);
     const cout=parseFloat($('ias-cout').value);
     const hist=parseInt($('ias-hist').value,10);
+    const sondage=parseInt($('ias-sondage').value,10);
+    const attente=parseInt($('ias-attente').value,10);
     /* Une valeur invalide est refusée À L'ÉCRAN : sans ça on enregistrerait NaN et le
        plafond ne bloquerait plus rien, sans que personne ne le voie. */
     if(!isFinite(plafond)||plafond<0){msg.textContent='Le plafond doit être un nombre positif (0 = pas de plafond).';return;}
     if(!isFinite(cout)||cout<0){msg.textContent='Le coût par retouche doit être un nombre positif.';return;}
     if(!isFinite(hist)||hist<1||hist>200){msg.textContent='Le nombre d’événements gardés doit être entre 1 et 200.';return;}
+    if(!isFinite(sondage)||sondage<1||sondage>60){msg.textContent='L’intervalle de vérification doit être entre 1 et 60 secondes.';return;}
+    if(!isFinite(attente)||attente<1||attente>120){msg.textContent='Le temps d’attente doit être entre 1 et 120 minutes.';return;}
     const s2=iaSettings();
     s2.resolution=$('ias-reso').value;
     s2.plafondMois=plafond;s2.coutUnitaire=cout;s2.histMax=hist;
+    s2.sondageSec=sondage;s2.attenteMaxMin=attente;
     s2.modeleDefaut=$('ias-modele').value;
     s2.confirmer=$('ias-confirm').checked;
     saveLibrary();
@@ -6579,6 +6938,9 @@ async function loadAll(){
     try{renderClients();render();if(!isEditingRealisations())renderRealisations();}catch(e){}
     setSyncStatus('ok');
     scheduleSyncPush();
+    /* Les demandes en vol vivent dans `library` : c'est ici, une fois la bibliothèque
+       vraiment chargée, qu'on sait s'il y a quelque chose à récupérer. */
+    iaRepriseAuto();
   }catch(e){lastSyncError=(e&&(e.message||e.code))||'lecture impossible';setSyncStatus('err');}
 }
 function subscribeRealtime(){

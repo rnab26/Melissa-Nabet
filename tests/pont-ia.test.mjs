@@ -13,7 +13,7 @@
    Lancer : bun tests/pont-ia.test.mjs   (bun sait exécuter le TypeScript du pont) */
 
 globalThis.Deno = { serve: () => {}, env: { get: () => 'x' } };
-const { buildPayload } = await import('../supabase/functions/photo-ia/index.ts');
+const { buildPayload, queueBase, requestPath, safeQueueUrl } = await import('../supabase/functions/photo-ia/index.ts');
 
 const ok = [], ko = [];
 const check = (n, p, d = '') => { (p ? ok : ko).push(n); console.log((p ? '  OK   ' : '  ECHEC') + ' ' + n + (d ? ' — ' + d : '')); };
@@ -54,6 +54,56 @@ check('Consigne obligatoire mais vide : refus avant de facturer l’appel', /exi
 err = '';
 try { buildPayload(UPSCALER, {}, IMG); } catch (e) { err = e.message; }
 check('Modèle sans consigne : aucun refus, l’appel peut partir', err === '', err);
+
+// --- File d'attente : le mode d'appel normal depuis le chantier ph14. `sync_mode` fait
+//     renvoyer l'image EN BASE64 DANS la réponse : c'est ce qu'il faut pour l'appel
+//     synchrone, et exactement ce qu'il ne faut pas dans la file, où le résultat est stocké
+//     puis relu. Le pont doit donc le retirer, y compris s'il traîne dans les réglages
+//     mémorisés d'un modèle.
+const f = buildPayload(NANO, { prompt: 'x', resolution: '2K' }, IMG, { sync: false });
+check('File d’attente : `sync_mode` n’est PAS envoyé (le résultat est relu, pas renvoyé)',
+  !('sync_mode' in f) && Array.isArray(f.image_urls) && f.resolution === '2K', JSON.stringify(f));
+
+const g = buildPayload(NANO, { prompt: 'x', sync_mode: true }, IMG, { sync: false });
+check('File d’attente : un `sync_mode` mémorisé dans les réglages est retiré',
+  !('sync_mode' in g), JSON.stringify(Object.keys(g)));
+
+const h = buildPayload(NANO, { prompt: 'x' }, IMG);
+check('Appel synchrone (chemin hérité) : `sync_mode` reste posé',
+  h.sync_mode === true, JSON.stringify(Object.keys(h)));
+
+let err2 = '';
+try { buildPayload(NANO, { prompt: '  ' }, IMG, { sync: false }); } catch (e) { err2 = e.message; }
+check('File d’attente : la consigne vide est refusée AVANT de déposer la demande',
+  /exige une consigne/.test(err2), err2);
+
+// --- Les URL de la file. Le CRM rend au pont les URL que fal lui a données à la
+//     soumission ; le pont ne doit les suivre QUE si elles pointent vraiment sur la file de
+//     fal, sinon il deviendrait un relais capable d'aller chercher n'importe quelle adresse
+//     en présentant la clé du compte. Chemins relevés dans le openapi.json réel de fal
+//     (servers: https://queue.fal.run, quatre chemins par modèle).
+const REPLI = requestPath('fal-ai/nano-banana-pro/edit', 'abc-123') + '/status';
+check('File : le chemin construit reprend le chemin complet du modèle',
+  REPLI === 'https://queue.fal.run/fal-ai/nano-banana-pro/edit/requests/abc-123/status', REPLI);
+check('File : l’URL rendue par fal est suivie telle quelle',
+  safeQueueUrl('https://queue.fal.run/fal-ai/flux/dev/requests/xyz/status', REPLI)
+    === 'https://queue.fal.run/fal-ai/flux/dev/requests/xyz/status');
+check('File : une URL sur un AUTRE hôte est ignorée (le pont ne relaie pas n’importe où)',
+  safeQueueUrl('https://exemple-pirate.test/vol', REPLI) === REPLI);
+check('File : une URL en clair (http) est ignorée',
+  safeQueueUrl('http://queue.fal.run/x', REPLI) === REPLI);
+check('File : un hôte qui ressemble à celui de fal est ignoré',
+  safeQueueUrl('https://queue.fal.run.exemple.test/x', REPLI) === REPLI);
+check('File : une URL illisible retombe sur le chemin construit',
+  safeQueueUrl('pas une url', REPLI) === REPLI && safeQueueUrl(null, REPLI) === REPLI);
+
+let errU = '';
+try { queueBase('../../admin'); } catch (e) { errU = e.message; }
+check('File : un identifiant de modèle biscornu est refusé avant d’en faire une URL',
+  /modèle invalide/.test(errU), errU);
+errU = '';
+try { requestPath('fal-ai/x', 'abc/../../secret'); } catch (e) { errU = e.message; }
+check('File : un identifiant de demande biscornu est refusé', /demande invalide/.test(errU), errU);
 
 console.log('\n===== PONT IA : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
 process.exit(ko.length ? 1 : 0);

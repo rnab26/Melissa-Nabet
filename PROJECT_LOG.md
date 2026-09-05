@@ -633,12 +633,93 @@ les garde-fous de coût et l'interface.
   même apparence) : les deux doivent rester distinguables.
 - `console.error('retouche IA série', …)` est volontaire (diagnostic) ; le filtre de bruit
   du test le connaît.
-- Le mode reste synchrone : voir le chantier `ph14` (file d'attente de fal). La série
-  multiplie les appels longs et rend ce chantier plus urgent qu'avant. Ne pas passer la
-  résolution demandée à 4K tant qu'il n'est pas fait.
+- ~~Le mode reste synchrone~~ — **fait** (septembre 2026, chantier `ph14`) : la série passe
+  désormais par la file d'attente de fal, comme la retouche unitaire. Voir la section
+  « Retouche IA — la file d'attente » plus bas. La consigne « rester en 2K » tient toujours,
+  mais pour d'autres raisons (résolution d'envoi et de publication, coût, place).
 
 **Vérification** : 24 contrôles ajoutés dans `tests/realisations.test.mjs` (207 au total),
 avec le pont intercepté — les tests ne dépensent aucun crédit.
+
+## Retouche IA — la file d'attente de fal (septembre 2026)
+
+**État** : livré, testé, déployé. Chantier `ph14`.
+
+**Le défaut corrigé** : le pont appelait `POST fal.run/<modèle>` et attendait la fin dans la
+requête. Sur une image lourde ou une file chargée, la fonction serveur expirait AVANT la
+réponse : l'image était perdue et l'appel facturé quand même — le modèle avait tourné. C'est
+ce qui interdisait le 4K et rendait la série (qui multiplie les appels longs) risquée.
+
+**Formes HTTP — relevées, pas devinées.** Le `openapi.json` que fal publie par modèle
+(`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=…`, déjà utilisé par le pont pour
+les réglages) déclare `servers: [{url:"https://queue.fal.run"}]` et quatre chemins. Vérifié
+sur `fal-ai/nano-banana-pro/edit`, `fal-ai/flux/dev` et `fal-ai/flux-pro/kontext` :
+
+| geste | appel |
+|---|---|
+| déposer | `POST https://queue.fal.run/<modèle>` → `{request_id, status_url, response_url, cancel_url, queue_position}` |
+| suivre | `GET …/requests/<id>/status` → `{status: IN_QUEUE \| IN_PROGRESS \| COMPLETED, queue_position}` |
+| récupérer | `GET …/requests/<id>` |
+| annuler | `PUT …/requests/<id>/cancel` → 202 `CANCELLATION_REQUESTED`, 400 `ALREADY_COMPLETED`, 404 `NOT_FOUND` |
+
+**Attention** : la page de documentation rédigée de fal donne l'URL de résultat en
+`/requests/<id>/response`, le schéma réellement publié dit `/requests/<id>`. Le pont suit
+**en priorité les URL que fal renvoie lui-même à la soumission**, et le chemin construit
+seulement en repli — la contradiction n'a donc pas d'effet.
+
+**Architecture**
+
+- Pont (`supabase/functions/photo-ia`) : quatre actions `submit` / `status` / `result` /
+  `cancel`. Chacune est un aller-retour court : plus rien ne dépend de la durée du modèle.
+  L'action `edit` (synchrone) reste pour les pages ouvertes sur l'ancienne version.
+- `safeQueueUrl(donnée, repli)` : une URL rendue par le CRM n'est suivie que si elle est en
+  `https` sur l'hôte `queue.fal.run`. Sans ce filtre, le pont serait un relais capable
+  d'aller chercher n'importe quelle adresse en présentant la clé du compte. `queueBase` et
+  `requestPath` refusent les identifiants biscornus. Testé dans `tests/pont-ia.test.mjs`.
+- `buildPayload(..., {sync:false})` : `sync_mode` est retiré en mode file (il ferait renvoyer
+  l'image en base64 dans la réponse stockée, pour rien), y compris s'il traîne dans les
+  réglages mémorisés d'un modèle.
+- CRM : `iaSubmitJob` (dépose et **écrit la demande sur le disque avant de rendre la main**),
+  `iaWaitJob` (sonde), `iaCollectJob` (récupère, pose, retire), `iaCancelJob`, `iaReprendre`
+  (reprise après réouverture). `runIaEdit` enchaîne le tout ; la retouche d'une photo et la
+  série passent toutes deux par là.
+- `library.iaJobs` : les demandes en vol, synchronisées avec le reste de la bibliothèque —
+  une demande déposée depuis le téléphone est récupérable depuis l'ordinateur.
+
+**Points de conception**
+
+- **`iaStoreResult` reste écrite une fois**, appelée d'un seul endroit (`iaCollectJob`) pour
+  les trois chemins : photo seule, série, reprise. C'était déjà la règle avec la série ; la
+  reprise ne l'a pas dupliquée.
+- **Une demande n'est jetée que si on SAIT qu'il n'y a plus rien à récupérer** (`e.definitif`)
+  : expirée chez fal, annulée, échec rendu par le modèle. Réseau coupé, serveur muet, délai
+  d'attente dépassé → la demande **reste** et sera reprise. Supprimer sur toute erreur
+  reviendrait à jeter des images payées.
+- **Comptée au dépôt, pas à l'arrivée** : sinon le plafond mensuel ne verrait rien d'une
+  série en vol. Décomptée uniquement si fal accepte l'annulation alors que la demande était
+  encore en file — le seul cas où rien n'est facturé.
+- **L'interruption d'une série a changé de sens.** Avant : « arrêt après la photo en cours »,
+  parce qu'un appel parti était facturé de toute façon. Maintenant : la demande en cours est
+  annulée si elle n'a pas démarré, et l'écran dit lequel des deux cas s'applique.
+- **Le délai d'attente n'est pas un abandon** : passé le délai réglé, le CRM cesse de
+  *regarder*. La demande continue chez fal et sera reprise. L'écran le dit mot pour mot,
+  sinon la file remplacerait « ça a expiré » par « il ne se passe rien ».
+
+**Réglages ajoutés** (`library.iaSettings`) : `sondageSec` (1-60, défaut 3) et
+`attenteMaxMin` (1-120, défaut 10). Refus motivé à l'écran des valeurs hors bornes.
+
+**Déploiement** : `scripts/deploy-fonction.sh photo-ia` (API de gestion Supabase en HTTPS,
+jeton dans l'environnement, `verify_jwt:false` conservé). `photo-ia` est en **version 6**.
+Garde-fous rejoués sur la fonction en ligne : 401 sans jeton, 401 avec la clé publiable.
+
+**Vérification** : `tests/realisations.test.mjs` **253 contrôles** (46 ajoutés ici),
+`tests/pont-ia.test.mjs` **20** (12 ajoutés), `tests/site.test.mjs` 22. Pont intercepté :
+aucun crédit dépensé. Ce qui n'est PAS vérifié : une exécution réelle chez fal — elle coûte
+de l'argent.
+
+**Reste ouvert** : la série est toujours séquentielle (la file permettrait de tout déposer
+d'un coup, mais ça change le sens du plafond et de l'interruption) ; pas de webhook (le CRM
+est une page statique, sans adresse publique où recevoir le résultat).
 
 ## Stockage — alerte de saturation (septembre 2026)
 

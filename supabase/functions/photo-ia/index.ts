@@ -21,6 +21,30 @@
 //   schéma    : GET  https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=<modèle>
 //               public, sans clé — c'est ce qui permet de générer le formulaire de réglages
 //               exactement comme le fait le site de fal.ai.
+//
+// FILE D'ATTENTE (le mode d'appel normal depuis septembre 2026) :
+//   déposer    : POST https://queue.fal.run/<modèle>
+//                → {request_id, status_url, response_url, cancel_url, queue_position}
+//   où ça en est : GET https://queue.fal.run/<modèle>/requests/<id>/status[?logs=1]
+//                → {status: IN_QUEUE | IN_PROGRESS | COMPLETED, queue_position, logs, metrics}
+//   récupérer  : GET https://queue.fal.run/<modèle>/requests/<id>
+//   annuler    : PUT https://queue.fal.run/<modèle>/requests/<id>/cancel
+//                → 202 {status:"CANCELLATION_REQUESTED"} | 400 ALREADY_COMPLETED | 404 NOT_FOUND
+//
+// Ces chemins ne sont PAS devinés : ils sont relevés dans le `openapi.json` que fal publie
+// pour chaque modèle (`servers: [{url:"https://queue.fal.run"}]`, quatre chemins par
+// modèle), vérifié sur `fal-ai/nano-banana-pro/edit`, `fal-ai/flux/dev` et
+// `fal-ai/flux-pro/kontext`. À noter : la page de documentation rédigée de fal montre une
+// URL de résultat en `/requests/<id>/response`, alors que le schéma réellement publié dit
+// `/requests/<id>`. On suit donc EN PRIORITÉ les URL que fal nous a lui-même renvoyées à la
+// soumission, et le chemin du schéma seulement en repli.
+//
+// POURQUOI LA FILE PLUTÔT QUE L'APPEL SYNCHRONE :
+// `fal.run/<modèle>` tient la connexion ouverte pendant toute la génération. Sur une image
+// lourde ou une file chargée, la fonction serveur expire AVANT la réponse : le résultat est
+// perdu, mais l'appel est facturé — le modèle a tourné. Avec la file, chaque appel du pont
+// est court (déposer, demander, récupérer), plus rien ne dépend de la durée du modèle, et la
+// demande porte un identifiant : elle reste récupérable même si la page a été fermée.
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -129,8 +153,9 @@ async function getSchema(model: string) {
   };
 }
 
-/** Exécution. `input` est transmis tel quel : tout paramètre du modèle est donc utilisable
- *  depuis le CRM, y compris ceux ajoutés par fal après l'écriture de ce code. */
+/** Exécution SYNCHRONE — chemin hérité, conservé pour les pages déjà ouvertes qui appellent
+ *  encore `action:'edit'`. Le CRM passe désormais par la file (voir plus bas) : c'est ce
+ *  chemin-ci qui expirait sur une image lourde, en facturant un résultat perdu. */
 async function runModel(model: string, input: Record<string, unknown>) {
   const res = await fetch("https://fal.run/" + model, {
     method: "POST",
@@ -154,6 +179,120 @@ async function runModel(model: string, input: Record<string, unknown>) {
   return { imageDataUri: await toDataUri(first.url), raw: { seed: (data as { seed?: unknown }).seed ?? null } };
 }
 
+/* ============================ FILE D'ATTENTE DE fal ============================ */
+
+const QUEUE = "https://queue.fal.run/";
+
+/** Un identifiant de modèle chez fal ressemble à `fal-ai/nano-banana-pro/edit`. On le valide
+ *  avant d'en faire une URL : ce qui suit part dans un `fetch` émis par le serveur, avec la
+ *  clé du compte dans l'en-tête. */
+export function queueBase(model: string): string { // exportée pour tests/pont-ia.test.mjs
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9._-]+)*$/.test(model)) {
+    throw new Error("identifiant de modèle invalide");
+  }
+  return QUEUE + model;
+}
+
+export function requestPath(model: string, requestId: string): string { // exportée pour tests/pont-ia.test.mjs
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(requestId)) throw new Error("identifiant de demande invalide");
+  return queueBase(model) + "/requests/" + requestId;
+}
+
+/** Le CRM nous rend les URL que fal lui a données à la soumission (`status_url`…). On ne les
+ *  suit QUE si elles pointent vraiment sur la file de fal — sinon le pont deviendrait un
+ *  relais capable d'aller chercher n'importe quelle adresse en présentant la clé du compte.
+ *  Hors de ce cas, on retombe sur le chemin du schéma. */
+export function safeQueueUrl(given: unknown, fallback: string): string { // exportée pour tests/pont-ia.test.mjs
+  if (typeof given !== "string" || !given) return fallback;
+  try {
+    const u = new URL(given);
+    if (u.protocol === "https:" && u.hostname === "queue.fal.run") return u.toString();
+  } catch { /* URL illisible : on garde le repli */ }
+  return fallback;
+}
+
+/** Dépose la demande dans la file. Retour immédiat : rien n'attend la génération. */
+async function submitModel(model: string, input: Record<string, unknown>) {
+  const res = await fetch(queueBase(model), {
+    method: "POST",
+    headers: { Authorization: "Key " + falKey(), "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    console.error("submit " + model + ": HTTP " + res.status + " " + text.slice(0, 500));
+    throw new Error("fal.ai a refusé la demande (HTTP " + res.status + ") : " + text.slice(0, 500));
+  }
+  let d: Record<string, unknown>;
+  try { d = JSON.parse(text); } catch { throw new Error("réponse illisible du fournisseur à la soumission"); }
+  const requestId = d.request_id;
+  if (!requestId || typeof requestId !== "string") {
+    throw new Error("fal.ai n'a pas renvoyé d'identifiant de demande : " + text.slice(0, 300));
+  }
+  return {
+    requestId,
+    statusUrl: typeof d.status_url === "string" ? d.status_url : "",
+    responseUrl: typeof d.response_url === "string" ? d.response_url : "",
+    cancelUrl: typeof d.cancel_url === "string" ? d.cancel_url : "",
+    queuePosition: typeof d.queue_position === "number" ? d.queue_position : null,
+    model,
+  };
+}
+
+/** Où en est la demande. Un 404 n'est PAS une panne : c'est une demande expirée, annulée ou
+ *  inconnue — le CRM doit pouvoir le dire à l'utilisateur au lieu de sonder dans le vide. */
+async function statusModel(model: string, requestId: string, statusUrl: unknown) {
+  const url = safeQueueUrl(statusUrl, requestPath(model, requestId) + "/status");
+  const res = await fetch(url, { headers: { Authorization: "Key " + falKey() } });
+  const text = await res.text();
+  if (res.status === 404) return { status: "NOT_FOUND", requestId, queuePosition: null, error: null };
+  if (!res.ok) {
+    console.error("status " + model + ": HTTP " + res.status + " " + text.slice(0, 300));
+    throw new Error("suivi impossible (HTTP " + res.status + ") : " + text.slice(0, 300));
+  }
+  let d: Record<string, unknown>;
+  try { d = JSON.parse(text); } catch { throw new Error("réponse de suivi illisible"); }
+  return {
+    status: typeof d.status === "string" ? d.status : "IN_PROGRESS",
+    requestId,
+    queuePosition: typeof d.queue_position === "number" ? d.queue_position : null,
+    error: typeof d.error === "string" ? d.error : null,
+  };
+}
+
+/** Récupère le résultat d'une demande terminée et le ramène en data URI, comme le chemin
+ *  synchrone : le reste du CRM ne voit aucune différence entre les deux. */
+async function resultModel(model: string, requestId: string, responseUrl: unknown) {
+  const url = safeQueueUrl(responseUrl, requestPath(model, requestId));
+  const res = await fetch(url, { headers: { Authorization: "Key " + falKey() } });
+  const text = await res.text();
+  if (res.status === 404) throw new Error("demande introuvable chez fal.ai : elle a expiré ou a été annulée");
+  if (!res.ok) {
+    console.error("result " + model + ": HTTP " + res.status + " " + text.slice(0, 500));
+    throw new Error("le modèle a échoué (HTTP " + res.status + ") : " + text.slice(0, 500));
+  }
+  let data: Record<string, unknown>;
+  try { data = JSON.parse(text); } catch { throw new Error("réponse illisible du fournisseur"); }
+  const images = (data.images || data.image || []) as Array<{ url?: string }> | { url?: string };
+  const first = Array.isArray(images) ? images[0] : images;
+  if (!first || !first.url) throw new Error("le modèle n'a renvoyé aucune image : " + text.slice(0, 300));
+  return { imageDataUri: await toDataUri(first.url), raw: { seed: (data as { seed?: unknown }).seed ?? null } };
+}
+
+/** Annulation. Ne lève PAS sur 400/404 : « trop tard » et « inconnue » sont des réponses
+ *  utiles, que le CRM doit pouvoir afficher telles quelles — c'est ce qui décide si l'appel
+ *  sera facturé ou non. */
+async function cancelModel(model: string, requestId: string, cancelUrl: unknown) {
+  const url = safeQueueUrl(cancelUrl, requestPath(model, requestId) + "/cancel");
+  const res = await fetch(url, { method: "PUT", headers: { Authorization: "Key " + falKey() } });
+  const text = await res.text();
+  let d: Record<string, unknown> = {};
+  try { d = JSON.parse(text); } catch { /* certaines réponses sont vides */ }
+  const status = typeof d.status === "string" ? d.status
+    : (res.status === 202 ? "CANCELLATION_REQUESTED" : res.status === 404 ? "NOT_FOUND" : "ALREADY_COMPLETED");
+  return { status, http: res.status };
+}
+
 /** Construit la requête du modèle À PARTIR DE SON SCHÉMA, jamais d'une convention supposée.
  *
  *  C'est le cœur du pont, et ce n'est pas un détail de forme : chez fal, certains modèles
@@ -169,6 +308,7 @@ export function buildPayload( // exportée pour être testable hors ligne (tests
   sc: { properties: Record<string, unknown>; required: string[] },
   input: Record<string, unknown>,
   imageDataUri: string,
+  opts?: { sync?: boolean },
 ): Record<string, unknown> {
   const props = sc.properties || {};
   const required = sc.required || [];
@@ -181,7 +321,14 @@ export function buildPayload( // exportée pour être testable hors ligne (tests
   else if ("image_url" in props) payload.image_url = imageDataUri;
   else throw new Error("ce modèle n'accepte pas d'image en entrée : il ne sert pas à retoucher une photo");
 
-  if ("sync_mode" in props) payload.sync_mode = true;
+  /* `sync_mode` fait renvoyer l'image DANS la réponse, en base64. C'est ce qu'il faut pour
+     l'appel synchrone, et exactement ce qu'il ne faut pas dans la file : le résultat y est
+     stocké puis relu, et une image en base64 dans le corps stocké n'apporte rien qu'un
+     poids de plus. En file, le modèle dépose l'image sur son stockage et le pont la ramène
+     lui-même (toDataUri). */
+  const sync = !opts || opts.sync !== false;
+  if (sync) { if ("sync_mode" in props) payload.sync_mode = true; }
+  else delete payload.sync_mode;
 
   if (!("prompt" in props)) delete payload.prompt;
   else if (required.includes("prompt") && !String(payload.prompt || "").trim()) {
@@ -215,6 +362,8 @@ Deno.serve(async (req) => {
       return json(await getSchemaCached(String(body.model)));
     }
 
+    /* Chemin hérité : appel synchrone. Conservé pour une page restée ouverte sur une
+       version antérieure du CRM — la version courante passe par la file. */
     if (action === "edit") {
       const { model, input, imageDataUri } = body;
       if (!model) return json({ error: "modèle manquant" }, 400);
@@ -225,6 +374,35 @@ Deno.serve(async (req) => {
       const payload = buildPayload(sc, input || {}, String(imageDataUri));
       const out = await runModel(String(model), payload);
       return json({ ...out, model });
+    }
+
+    /* ---- Les trois temps de la file. Chacun est court : aucun ne dépend de la durée du
+       modèle, donc aucun ne peut faire expirer la fonction serveur. ---- */
+    if (action === "submit") {
+      const { model, input, imageDataUri } = body;
+      if (!model) return json({ error: "modèle manquant" }, 400);
+      if (!imageDataUri || !String(imageDataUri).startsWith("data:")) {
+        return json({ error: "image manquante" }, 400);
+      }
+      const sc = await getSchemaCached(String(model));
+      const payload = buildPayload(sc, input || {}, String(imageDataUri), { sync: false });
+      return json(await submitModel(String(model), payload));
+    }
+
+    if (action === "status") {
+      if (!body.model || !body.requestId) return json({ error: "modèle ou demande manquant" }, 400);
+      return json(await statusModel(String(body.model), String(body.requestId), body.statusUrl));
+    }
+
+    if (action === "result") {
+      if (!body.model || !body.requestId) return json({ error: "modèle ou demande manquant" }, 400);
+      const out = await resultModel(String(body.model), String(body.requestId), body.responseUrl);
+      return json({ ...out, model: body.model });
+    }
+
+    if (action === "cancel") {
+      if (!body.model || !body.requestId) return json({ error: "modèle ou demande manquant" }, 400);
+      return json(await cancelModel(String(body.model), String(body.requestId), body.cancelUrl));
     }
 
     return json({ error: "action inconnue : " + action }, 400);

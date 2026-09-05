@@ -5,12 +5,19 @@ Trois suites :
 - `tests/realisations.test.mjs` — l'espace **Réalisations** dans le CRM (import, éditeur,
   rendu, synchronisation, sauvegarde, publication vers le site).
 - `tests/pont-ia.test.mjs` — le **pont `photo-ia`**, côté serveur : la forme exacte de la
-  requête envoyée au fournisseur, sur des schémas relevés sur l'API réelle de fal. Se lance
-  avec `bun tests/pont-ia.test.mjs` (bun exécute le TypeScript du pont). Aucune dépense :
-  `buildPayload` est une fonction pure, aucun appel n'est émis.
+  requête envoyée au fournisseur (sur des schémas relevés sur l'API réelle de fal) et les URL
+  de la **file d'attente** — un pont qui suivrait sans la filtrer une URL rendue par le
+  navigateur irait chercher n'importe quelle adresse avec la clé du compte. Se lance avec
+  `bun tests/pont-ia.test.mjs` (bun exécute le TypeScript du pont). Aucune dépense : ce sont
+  des fonctions pures, aucun appel n'est émis.
 - `tests/site.test.mjs` — le **site vitrine public** (`site-vitrine/index.html`), servi
   depuis un banc d'essai local avec un faux manifeste. Vérifie notamment qu'aucune clé
   d'accès ne figure dans la page publique.
+
+La retouche IA est **entièrement interceptée** dans le test du navigateur : le faux pont
+rejoue les trois temps de la file de fal (déposer, suivre, récupérer), y compris une demande
+qui reste plusieurs sondages en file, une annulation refusée parce que trop tardive, une
+demande expirée et une panne de réseau en cours de suivi. **Aucun crédit n'est dépensé.**
 
 Le test ouvre l'appli dans un vrai navigateur avec WebGL, remplace Supabase par un
 stockage en mémoire (aucun compte réel n'est nécessaire, aucune donnée réelle n'est

@@ -471,11 +471,54 @@ const SCHEMA_REEL = {
     safety_tolerance: { type: 'string', enum: ['1', '2', '3', '4', '5', '6'], default: '4', title: 'Safety Tolerance' },
   },
 };
+// ---- LA FILE D'ATTENTE DE fal, SIMULÉE (chantier ph14) ---------------------------------
+// Une retouche n'est plus un appel qui attend la fin : elle est DÉPOSÉE (`submit`), suivie
+// (`status`), puis récupérée (`result`). Le faux pont reproduit ces trois temps — y compris
+// une demande qui reste plusieurs sondages en file, un résultat en échec, et une annulation
+// refusée parce que l'appel est déjà terminé. Rien ne sort du navigateur : aucun crédit.
+const JPEG_TEST = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+const falQueue = {
+  n: 0, jobs: new Map(),
+  attente: 0,                 // combien de sondages passent « en file » avant COMPLETED
+  echecResultat: null,        // le modèle a tourné et raté : `result` répond en erreur
+  annulationTropTard: false,  // fal refuse l'annulation, l'appel est déjà terminé
+  reset() { this.jobs.clear(); this.n = 0; this.attente = 0; this.echecResultat = null; this.annulationTropTard = false; },
+  url(model, id, suffixe) { return 'https://queue.fal.run/' + model + '/requests/' + id + suffixe; },
+  termine() { this.jobs.forEach(j => { j.reste = 0; }); },   // « ça a fini pendant qu'on ne regardait pas »
+  handle(body) {
+    if (body.action === 'submit') {
+      const id = 'req-' + (++this.n);
+      this.jobs.set(id, { model: body.model, reste: this.attente });
+      return { status: 200, json: { requestId: id, model: body.model, queuePosition: this.attente,
+        statusUrl: this.url(body.model, id, '/status'),
+        responseUrl: this.url(body.model, id, ''),
+        cancelUrl: this.url(body.model, id, '/cancel') } };
+    }
+    const j = this.jobs.get(body.requestId);
+    if (body.action === 'status') {
+      if (!j) return { status: 200, json: { status: 'NOT_FOUND', queuePosition: null } };
+      if (j.reste > 0) { j.reste--; return { status: 200, json: { status: 'IN_QUEUE', queuePosition: j.reste } }; }
+      return { status: 200, json: { status: 'COMPLETED', queuePosition: null } };
+    }
+    if (body.action === 'result') {
+      if (!j) return { status: 502, json: { error: 'demande introuvable chez fal.ai : elle a expiré ou a été annulée' } };
+      if (this.echecResultat) return { status: 502, json: { error: this.echecResultat } };
+      return { status: 200, json: { imageDataUri: JPEG_TEST, model: j.model, raw: { seed: 42 } } };
+    }
+    if (body.action === 'cancel') {
+      if (this.annulationTropTard) return { status: 200, json: { status: 'ALREADY_COMPLETED', http: 400 } };
+      this.jobs.delete(body.requestId);
+      return { status: 200, json: { status: 'CANCELLATION_REQUESTED', http: 202 } };
+    }
+    return null;
+  },
+};
+
 let soldeKo = false; // pour rejouer le cas « le solde ne se lit pas »
 await page.route('**/functions/v1/photo-ia', async (route) => {
   const body = JSON.parse(route.request().postData() || '{}');
   const auth = route.request().headers()['authorization'] || '';
-  iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
+  iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, requestId: body.requestId, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
   if (body.action === 'balance') {
     if (soldeKo) {
       await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: "la clé fal.ai en place n'a pas le droit de lire la facturation (HTTP 403). Ce droit demande une clé de portée ADMIN ; la retouche, elle, fonctionne avec la clé actuelle." }) });
@@ -494,8 +537,10 @@ await page.route('**/functions/v1/photo-ia', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SCHEMA_REEL) });
     return;
   }
-  const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: jpeg, model: body.model, raw: { seed: 42 } }) });
+  const q = falQueue.handle(body);
+  if (q) { await route.fulfill({ status: q.status, contentType: 'application/json', body: JSON.stringify(q.json) }); return; }
+  // chemin hérité `edit` (appel synchrone), conservé côté pont pour les pages déjà ouvertes
+  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: JPEG_TEST, model: body.model, raw: { seed: 42 } }) });
 });
 
 const iaOnglet = await page.evaluate(async () => {
@@ -673,8 +718,8 @@ check('Retouche IA : version enregistrée à côté de l’original', applique.a
 check('Retouche IA : l’original n’est PAS écrasé', applique.originalIntact && applique.nouveauxFichiers === 1);
 check('Retouche IA : la consigne est mémorisée sur la photo', applique.prompt === 'équilibre la lumière', applique.prompt);
 
-const appelEdit = iaCalls.filter(c => c.body.action === 'edit').pop();
-check('Pont IA : appelé avec le modèle, la consigne et une image',
+const appelEdit = iaCalls.filter(c => c.body.action === 'submit').pop();
+check('Pont IA : la demande est DÉPOSÉE avec le modèle, la consigne et une image',
   !!appelEdit && appelEdit.body.model === 'fal-ai/nano-banana-pro/edit'
   && appelEdit.body.input && appelEdit.body.input.prompt === 'équilibre la lumière'
   && appelEdit.body.imgPrefix === 'data:image/', JSON.stringify(appelEdit && appelEdit.body));
@@ -690,7 +735,7 @@ const pref2k = await page.evaluate(async () => {
   await runIaEdit(realisations[0].photos[0], 'test préférence', m);   // pont intercepté
   return { affiche: iaValue(m, 'resolution', sc.properties.resolution), defautModele: sc.properties.resolution.default };
 });
-const appelPref = iaCalls.filter(c => c.body.action === 'edit').pop();
+const appelPref = iaCalls.filter(c => c.body.action === 'submit').pop();
 check('Sans choix explicite : 2K affiché dans les réglages (le modèle propose 1K par défaut)',
   pref2k.affiche === '2K' && pref2k.defautModele === '1K', JSON.stringify(pref2k));
 check('Sans choix explicite : le 2K part réellement au modèle',
@@ -813,8 +858,8 @@ check('Éditeur : un seul bouton pour sortir, et un accès à l’historique',
 //     reconstruit à chaque changement : le message doit survivre à cette reconstruction.
 await page.route('**/functions/v1/photo-ia', async (route) => {
   const body = JSON.parse(route.request().postData() || '{}');
-  if (body.action === 'edit') {
-    await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'fal.ai a refusé (HTTP 422) : image trop lourde' }) });
+  if (body.action === 'submit') {
+    await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'fal.ai a refusé la demande (HTTP 422) : image trop lourde' }) });
     return;
   }
   await route.fallback();
@@ -861,7 +906,7 @@ const plafond = await page.evaluate(async () => {
   return { etatBouton, msg, pied };
 });
 check('Plafond atteint : aucun appel n’est envoyé au fournisseur',
-  iaCalls.filter(c => c.body.action === 'edit').length === iaCalls.filter((c, i) => i < avantPlafond && c.body.action === 'edit').length,
+  iaCalls.filter(c => c.body.action === 'submit').length === iaCalls.filter((c, i) => i < avantPlafond && c.body.action === 'submit').length,
   'appels avant ' + avantPlafond + ', après ' + iaCalls.length);
 check('Plafond atteint : le bouton le dit et refuse de partir',
   /Plafond/.test(plafond.etatBouton.texte) && plafond.etatBouton.desactive === true, JSON.stringify(plafond.etatBouton));
@@ -937,16 +982,17 @@ check('Réglages : les valeurs valides sont enregistrées',
 await page.route('**/functions/v1/photo-ia', async (route) => {
   const body = JSON.parse(route.request().postData() || '{}');
   const auth = route.request().headers()['authorization'] || '';
-  iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
+  iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, requestId: body.requestId, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
   if (body.action === 'schema') { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(SCHEMA_REEL) }); return; }
   if (body.action === 'balance') { await route.fulfill({ status: 200, contentType: 'application/json', body: '{"balance":9.87,"currency":"USD"}' }); return; }
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', model: body.model }) });
+  const q = falQueue.handle(body);
+  await route.fulfill({ status: q.status, contentType: 'application/json', body: JSON.stringify(q.json) });
 });
 await page.evaluate(async () => {
   library.iaParams['fal-ai/nano-banana-pro/edit'] = {};
   await runIaEdit(realisations[0].photos[0], 'test réglage', 'fal-ai/nano-banana-pro/edit');
 });
-const appelRegle = iaCalls.filter(c => c.body.action === 'edit').pop();
+const appelRegle = iaCalls.filter(c => c.body.action === 'submit').pop();
 check('Réglages : la résolution choisie part réellement au modèle',
   !!appelRegle && appelRegle.body.input.resolution === '1K', JSON.stringify(appelRegle && appelRegle.body.input));
 
@@ -1410,16 +1456,18 @@ await page.route('**/functions/v1/photo-ia', async (route) => {
     return;
   }
   if (body.action === 'balance') { await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ balance: 9.87 }) }); return; }
-  serieCalls.push({ model: body.model, prompt: (body.input || {}).prompt });
-  serieEdits++;
-  // Un envoi refusé au milieu d'un lancement : on vérifie que la série continue quand même.
-  await new Promise(res => setTimeout(res, 120));
-  if (serieRate && serieEdits === 2) {
-    await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'fal.ai a refusé (HTTP 422)' }) });
-    return;
+  if (body.action === 'submit') {
+    serieCalls.push({ model: body.model, prompt: (body.input || {}).prompt });
+    serieEdits++;
+    // Un dépôt refusé au milieu d'un lancement : on vérifie que la série continue quand même.
+    await new Promise(res => setTimeout(res, 120));
+    if (serieRate && serieEdits === 2) {
+      await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: 'fal.ai a refusé la demande (HTTP 422)' }) });
+      return;
+    }
   }
-  const jpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAAIAAgBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: jpeg, model: body.model }) });
+  const q = falQueue.handle(body);
+  await route.fulfill({ status: q.status, contentType: 'application/json', body: JSON.stringify(q.json) });
 });
 
 // --- Le dialogue annonce ce qui va être envoyé, et ce que ça coûte
@@ -1513,8 +1561,8 @@ const serieStop = await page.evaluate(async () => {
   return { libelle, faites: r.photos.filter(p => p.ia).length, total: r.photos.length,
            texte: (document.querySelector('.rz-bilan-serie p') || {}).textContent || '' };
 });
-check('Série : « Interrompre » dit que l’arrêt se fait après la photo en cours',
-  /Arrêt après la photo en cours/.test(serieStop.libelle), serieStop.libelle);
+check('Série : « Interrompre » annonce que l’arrêt est en cours',
+  /Arrêt en cours/.test(serieStop.libelle), serieStop.libelle);
 check('Série : l’interruption arrête vraiment les envois suivants',
   serieStop.faites < serieStop.total && serieStop.faites >= 1, serieStop.faites + ' / ' + serieStop.total);
 check('Série : le bilan dit que c’est vous qui avez interrompu', /Interrompu à votre demande/.test(serieStop.texte), serieStop.texte);
@@ -1551,6 +1599,344 @@ check('Série : on est prévenu quand le plafond tombera au milieu de la série'
 
 await page.unroute('**/functions/v1/photo-ia');
 await page.evaluate(() => { _iaSerieReport = null; renderRealisations(); });
+
+
+// ============================================================================
+//  LA FILE D'ATTENTE DE fal (chantier ph14)
+//  Une retouche n'attend plus dans l'appel : elle est déposée, suivie, récupérée.
+//  Le pont est intercepté : aucun crédit n'est dépensé.
+// ============================================================================
+const fileCalls = [];
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  fileCalls.push(body);
+  if (body.action === 'schema') {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ model: body.model, required: ['prompt', 'image_urls'],
+        properties: { prompt: { type: 'string' }, image_urls: { type: 'array' }, sync_mode: { type: 'boolean' },
+                      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K' } } }) });
+    return;
+  }
+  if (body.action === 'balance') { await route.fulfill({ status: 200, contentType: 'application/json', body: '{"balance":9.87}' }); return; }
+  const q = falQueue.handle(body);
+  await route.fulfill({ status: q.status, contentType: 'application/json', body: JSON.stringify(q.json) });
+});
+// La fiche ouverte est remise en place à la fin de la section : les contrôles suivants
+// travaillent dessus.
+const rzOuvertAvant = await page.evaluate(() => {
+  const garde = _rzOpenId;
+  _rzOpenId = null; _iaSerieReport = null; _iaReprise = null; library.iaJobs = [];
+  showView('realisations'); renderRealisations();
+  return garde;
+});
+
+// --- Les trois temps. C'est le cœur du chantier : plus aucun appel ne reste ouvert pendant
+//     que le modèle travaille, donc plus aucun ne peut expirer en étant facturé.
+falQueue.reset(); falQueue.attente = 2;
+const trois = await page.evaluate(async () => {
+  library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10, plafondMois: 0 });
+  const r = realisations[0], p = r.photos[0];
+  delete p.ia; p.useIa = false;
+  const etats = [];
+  await runIaEdit(p, 'passe par la file', IA_CATALOGUE[0].id, { r, onEtat: j => etats.push(j.etat + (j.position != null ? ':' + j.position : '')) });
+  return { etats, aVersionIa: !!p.ia, prompt: p.ia && p.ia.prompt, useIa: p.useIa === true };
+});
+check('File : la demande est déposée, suivie, puis récupérée — et plus jamais en appel bloquant',
+  fileCalls.some(b => b.action === 'submit') && fileCalls.some(b => b.action === 'status')
+  && fileCalls.some(b => b.action === 'result') && !fileCalls.some(b => b.action === 'edit'),
+  fileCalls.map(b => b.action).join(' → '));
+check('File : le suivi passe bien par l’attente en file, puis l’exécution, puis la récupération',
+  /IN_QUEUE:1/.test(trois.etats.join(' ')) && /COMPLETED/.test(trois.etats.join(' ')) && /RECUP/.test(trois.etats.join(' ')),
+  trois.etats.join(' '));
+check('File : le résultat est posé sur la photo par la même règle qu’avant (iaStoreResult)',
+  trois.aVersionIa && trois.prompt === 'passe par la file' && trois.useIa, JSON.stringify(trois));
+
+// --- PARCOURS RÉEL, SUR UN ÉCRAN DE TÉLÉPHONE. La file remplace « ça a expiré » par une
+//     attente : si l'attente ne se voit pas, on a juste remplacé une panne par un écran mort.
+const vueAvant = page.viewportSize();
+await page.setViewportSize({ width: 390, height: 844 });
+falQueue.reset(); falQueue.attente = 6;
+const attenteTel = await page.evaluate(async () => {
+  library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10, confirmer: false, plafondMois: 0 });
+  library.iaJobs = [];
+  const r = realisations[0], p = r.photos[0];
+  delete p.ia; p.useIa = false;
+  _rzOpenId = r.id; renderRealisations();
+  await openPhotoEditor(r.id, p.id);
+  await new Promise(x => setTimeout(x, 700));
+  _ed.tab = 'ia'; buildEditorControls();
+  await new Promise(x => setTimeout(x, 300));
+  document.querySelector('.ia-prompt').value = 'attente visible';
+  document.querySelector('#ed-controls .ia-go').click();
+  await new Promise(x => setTimeout(x, 1600));
+  const btn = document.querySelector('#ed-controls .ia-go');
+  const sub = document.querySelector('#ed-controls .ia-sub');
+  return {
+    bouton: btn ? btn.textContent : '',
+    boutonBloque: btn ? btn.disabled : null,
+    sous: sub ? sub.textContent : '',
+    annulable: !!document.querySelector('#ed-controls .ia-annuler'),
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  };
+});
+await page.screenshot({ path: '/tmp/mn-file-attente-390.png' });
+check('Écran : pendant l’attente, le bouton dit où en est la demande (pas un écran mort)',
+  /file d’attente|modèle travaille|Récupération/.test(attenteTel.bouton) && attenteTel.boutonBloque === true, attenteTel.bouton);
+check('Écran : sous le bouton, on lit qu’on peut fermer la page sans rien perdre',
+  /fermer cette page/.test(attenteTel.sous) && /reprise/.test(attenteTel.sous), attenteTel.sous);
+check('Écran : on peut annuler la demande en cours depuis l’éditeur', attenteTel.annulable);
+check('Écran : rien ne déborde à 390 px pendant l’attente', attenteTel.debord <= 1, 'débordement ' + attenteTel.debord + 'px');
+falQueue.termine();
+const finTel = await page.evaluate(async () => {
+  for (let i = 0; i < 60 && _iaEnCours; i++) await new Promise(x => setTimeout(x, 200));
+  const p = realisations[0].photos[0];
+  const sub = document.querySelector('#ed-controls .ia-sub');
+  return { pose: !!p.ia, restants: iaJobs().length, sousApres: sub ? sub.textContent : '', annulable: !!document.querySelector('#ed-controls .ia-annuler') };
+});
+check('Écran : l’attente se termine sur la pose du résultat, et l’état d’attente laisse la place',
+  finTel.pose && finTel.restants === 0 && !finTel.annulable
+  && !/file d’attente|modèle travaille|Récupération/.test(finTel.sousApres), JSON.stringify(finTel));
+
+// Le bandeau de reprise, lui aussi, doit tenir sur un téléphone.
+const bandeauTel = await page.evaluate(async () => {
+  const r = realisations[0];
+  library.iaJobs = [{ id: 'jt', reqId: 'r-tel', model: IA_CATALOGUE[0].id, prompt: 'x',
+    statusUrl: '', responseUrl: '', cancelUrl: '', realId: r.id, photoId: r.photos[0].id,
+    photoName: 'une-photo-au-nom-plutot-long-comme-en-vrai.jpg', at: Date.now() - 240000, etat: 'IN_QUEUE' }];
+  _iaReprise = null;
+  closePhotoEditor();
+  await new Promise(x => setTimeout(x, 400));
+  renderRealisations();
+  const debord = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  library.iaJobs = []; await saveLibrary();
+  return { debord, visible: !!document.querySelector('.rz-reprise-ia') };
+});
+await page.screenshot({ path: '/tmp/mn-file-reprise-390.png' });
+check('Écran : le bandeau de reprise tient à 390 px, même avec un nom de fichier long',
+  bandeauTel.visible && bandeauTel.debord <= 1, 'débordement ' + bandeauTel.debord + 'px');
+await page.setViewportSize(vueAvant);
+await page.evaluate(() => { library.iaSettings = Object.assign({}, library.iaSettings, { confirmer: true }); });
+
+// --- Le pont reçoit bien l'identifiant de la demande sur le suivi et la récupération :
+//     sans lui, il ne saurait pas quoi aller chercher.
+const suivi = fileCalls.filter(b => b.action === 'status');
+const recup = fileCalls.filter(b => b.action === 'result');
+check('File : le suivi et la récupération portent l’identifiant rendu par fal',
+  suivi.length >= 1 && suivi.every(b => /^req-/.test(b.requestId || '')) && recup.every(b => /^req-/.test(b.requestId || '')),
+  JSON.stringify({ suivi: suivi.length, id: suivi[0] && suivi[0].requestId }));
+
+// --- La demande est ÉCRITE avant d'être suivie. C'est ce qui rend la fermeture de page
+//     rattrapable : on relit le stockage, pas la mémoire.
+falQueue.reset(); falQueue.attente = 99;
+const ecrit = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  library.iaJobs = []; await saveLibrary();
+  const job = await iaSubmitJob(r, p, 'écrite avant tout', IA_CATALOGUE[0].id);
+  const relu = (await store.get(K_LIB)) || {};
+  library.iaJobs = []; await saveLibrary();
+  return { n: (relu.iaJobs || []).length, reqId: (relu.iaJobs || [])[0] && relu.iaJobs[0].reqId, memeReq: job.reqId };
+});
+check('File : la demande est écrite sur le disque AVANT d’être suivie (fermer la page ne la perd plus)',
+  ecrit.n === 1 && ecrit.reqId === ecrit.memeReq, JSON.stringify(ecrit));
+
+// --- Une demande déposée est comptée tout de suite : sinon le plafond ne verrait rien
+//     d'une série en vol. Annulée avant son démarrage, elle n'est pas facturée — et le
+//     compteur doit revenir, sans quoi le plafond bloquerait des envois qui n'ont rien coûté.
+falQueue.reset(); falQueue.attente = 99;
+const annul = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  library.iaJobs = [];
+  const avant = iaSpend();
+  const job = await iaSubmitJob(r, p, 'à annuler', IA_CATALOGUE[0].id);
+  const compte = iaSpend();
+  job.etat = 'IN_QUEUE';
+  const res = await iaCancelJob(job);
+  return { avant, compte, apres: iaSpend(), msg: res.msg, issue: res.issue, restants: iaJobs().length };
+});
+check('File : une demande déposée est comptée tout de suite (le plafond voit la série en vol)',
+  annul.compte === annul.avant + 1, JSON.stringify(annul));
+check('File : annulée avant son démarrage, elle n’est pas facturée — et le compteur revient',
+  annul.issue === 'annule' && annul.apres === annul.avant && /ne sera pas facturée/.test(annul.msg), annul.msg);
+check('File : la demande annulée est retirée de la liste', annul.restants === 0, String(annul.restants));
+
+// --- Trop tard pour annuler : l'appel est terminé, donc facturé. On garde la demande —
+//     jeter une image déjà payée serait le pire des deux mondes.
+falQueue.reset(); falQueue.attente = 99; falQueue.annulationTropTard = true;
+const tard = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  library.iaJobs = [];
+  const job = await iaSubmitJob(r, p, 'trop tard', IA_CATALOGUE[0].id);
+  job.etat = 'IN_QUEUE';
+  const res = await iaCancelJob(job);
+  const restants = iaJobs().length;
+  library.iaJobs = []; await saveLibrary();
+  return { issue: res.issue, msg: res.msg, restants };
+});
+check('File : trop tard pour annuler → c’est dit, et la demande est GARDÉE pour être récupérée',
+  tard.issue === 'tard' && /sera facturé/.test(tard.msg) && tard.restants === 1, tard.msg);
+falQueue.annulationTropTard = false;
+
+// --- Une panne de réseau pendant le suivi ne doit PAS faire perdre une image déjà payée.
+//     C'est la différence entre « on ne sait pas » et « il n'y a rien à récupérer ».
+falQueue.reset(); falQueue.attente = 99;
+// Le dépôt passe, c'est le SUIVI qui tombe : exactement le cas d'un réseau qui lâche
+// pendant que le modèle travaille.
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  if (body.action === 'status') { await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"serveur indisponible"}' }); return; }
+  await route.fallback();
+});
+const coupure = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  library.iaJobs = [];
+  library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10 });
+  const job = await iaSubmitJob(r, p, 'réseau coupé', IA_CATALOGUE[0].id);
+  let msg = '';
+  try { await iaCollectJob(job); } catch (e) { msg = e.message; }
+  return { msg, restants: iaJobs().length, gardee: (iaJobs()[0] || {}).prompt };
+});
+await page.unroute('**/functions/v1/photo-ia');
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  fileCalls.push(body);
+  if (body.action === 'schema') {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ model: body.model, required: ['prompt', 'image_urls'],
+        properties: { prompt: { type: 'string' }, image_urls: { type: 'array' }, sync_mode: { type: 'boolean' },
+                      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K' } } }) });
+    return;
+  }
+  if (body.action === 'balance') { await route.fulfill({ status: 200, contentType: 'application/json', body: '{"balance":9.87}' }); return; }
+  const q = falQueue.handle(body);
+  await route.fulfill({ status: q.status, contentType: 'application/json', body: JSON.stringify(q.json) });
+});
+check('File : une panne pendant le suivi ne fait PAS perdre la demande (elle est déjà payée)',
+  coupure.restants === 1 && coupure.gardee === 'réseau coupé' && /indisponible|500/.test(coupure.msg), JSON.stringify(coupure));
+await page.evaluate(async () => { library.iaJobs = []; await saveLibrary(); });
+
+// --- Passé le délai réglé, le CRM cesse de REGARDER. Il ne jette pas la demande : elle
+//     continue chez fal.ai. C'est toute la différence avec l'ancien mode, où l'expiration
+//     de la fonction serveur perdait vraiment l'image.
+falQueue.reset(); falQueue.attente = 999;
+const delai = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  delete p.ia; p.useIa = false;
+  library.iaJobs = [];
+  library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 0.05 });
+  let msg = '';
+  try { await runIaEdit(p, 'trop long', IA_CATALOGUE[0].id, { r }); } catch (e) { msg = e.message; }
+  return { msg, restants: iaJobs().length, gardee: (iaJobs()[0] || {}).prompt };
+});
+check('File : passé le délai d’attente, la demande n’est PAS jetée — elle reste à récupérer',
+  delai.restants === 1 && delai.gardee === 'trop long', JSON.stringify(delai));
+check('File : et l’écran le dit, au lieu de laisser croire que c’est perdu',
+  /continue chez fal\.ai/.test(delai.msg) && /⚙ Réglages/.test(delai.msg), delai.msg);
+
+// --- REPRISE. La page a été fermée pendant que le modèle travaillait ; la demande de
+//     l'étape précédente est toujours là, et elle a fini entre-temps.
+falQueue.termine();
+const reprise = await page.evaluate(async () => {
+  library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10 });
+  const j = iaJobs()[0];
+  const r = findRealisation(j.realId), p = r.photos.find(x => x.id === j.photoId);
+  delete p.ia; p.useIa = false;
+  _rzOpenId = null; _iaReprise = null; renderRealisations();
+  const bandeauListe = !!document.querySelector('.rz-reprise-ia');
+  const texteAttente = (document.querySelector('.rz-reprise-ia p') || {}).textContent || '';
+  const detail = (document.querySelector('.rz-reprise-ia .rz-refus') || {}).textContent || '';
+  await iaReprendre();
+  await new Promise(x => setTimeout(x, 300));
+  return { bandeauListe, texteAttente, detail, aVersionIa: !!p.ia, prompt: p.ia && p.ia.prompt,
+           restants: iaJobs().length, bilan: (document.querySelector('.rz-reprise-ia p') || {}).textContent || '' };
+});
+check('Reprise : le bandeau se voit hors de la fiche (une demande peut porter sur n’importe quelle réalisation)',
+  reprise.bandeauListe, reprise.texteAttente.slice(0, 80));
+check('Reprise : le bandeau dit que ces retouches sont déjà payées, pas perdues',
+  /déjà payées/.test(reprise.texteAttente), reprise.texteAttente);
+check('Reprise : chaque demande en attente est nommée, avec son modèle et son ancienneté',
+  /déposée/.test(reprise.detail), reprise.detail.slice(0, 90));
+check('Reprise : la retouche laissée en plan est récupérée et posée sur sa photo',
+  reprise.aVersionIa && reprise.prompt === 'trop long', JSON.stringify({ ia: reprise.aVersionIa, p: reprise.prompt }));
+check('Reprise : la demande récupérée est retirée de la liste', reprise.restants === 0, String(reprise.restants));
+check('Reprise : le bilan dit ce qui a été récupéré', /Reprise terminée : 1/.test(reprise.bilan), reprise.bilan);
+
+// --- Une demande expirée chez fal : il n'y a rien à attendre. On le dit, et on cesse de
+//     sonder dans le vide.
+falQueue.reset();
+const perdue = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  library.iaJobs = [{ id: 'jx', reqId: 'req-inconnu', model: IA_CATALOGUE[0].id, prompt: 'expirée',
+    statusUrl: '', responseUrl: '', cancelUrl: '', realId: r.id, photoId: p.id,
+    photoName: 'vieille.jpg', at: Date.now() - 3600000, etat: 'IN_QUEUE' }];
+  await saveLibrary();
+  _iaReprise = null;
+  await iaReprendre();
+  await new Promise(x => setTimeout(x, 300));
+  return { restants: iaJobs().length, texte: (document.querySelector('.rz-reprise-ia') || {}).textContent || '' };
+});
+check('Reprise : une demande expirée chez fal.ai est dite comme telle, pas sondée sans fin',
+  /expiré/.test(perdue.texte) && perdue.restants === 0, perdue.texte.slice(0, 120));
+
+// --- Abandonner : c'est une perte sèche, la confirmation doit le dire.
+const abandon = await page.evaluate(async () => {
+  const r = realisations[0];
+  library.iaJobs = [{ id: 'j1', reqId: 'r1', model: IA_CATALOGUE[0].id, prompt: 'x',
+    statusUrl: '', responseUrl: '', cancelUrl: '', realId: r.id, photoId: r.photos[0].id,
+    photoName: 'a.jpg', at: Date.now(), etat: 'IN_QUEUE' }];
+  await saveLibrary(); _iaReprise = null; renderRealisations();
+  const orig = window.askConfirm; let question = '';
+  window.askConfirm = (m, cb) => { question = m; cb(); };
+  document.querySelector('.rz-reprise-drop').click();
+  await new Promise(x => setTimeout(x, 350));
+  window.askConfirm = orig;
+  return { question, restants: iaJobs().length, bandeau: !!document.querySelector('.rz-reprise-ia') };
+});
+check('Reprise : « Abandonner » prévient que ça reste facturé et que l’image est perdue',
+  /resteront facturées/.test(abandon.question) && /perdue/.test(abandon.question), abandon.question);
+check('Reprise : abandonner vide vraiment la liste et retire le bandeau',
+  abandon.restants === 0 && !abandon.bandeau, JSON.stringify(abandon));
+
+// --- Les réglages de la file sont vraiment réglables, et refusent l'absurde.
+const regFile = await page.evaluate(async () => {
+  openIaSettingsPanel();
+  document.getElementById('ias-sondage').value = '0';
+  document.getElementById('ias-save').click();
+  const refus = document.getElementById('ias-msg').textContent;
+  document.getElementById('ias-sondage').value = '5';
+  document.getElementById('ias-attente').value = '200';
+  document.getElementById('ias-save').click();
+  const refus2 = document.getElementById('ias-msg').textContent;
+  document.getElementById('ias-attente').value = '15';
+  document.getElementById('ias-save').click();
+  await new Promise(x => setTimeout(x, 200));
+  const st = JSON.parse(JSON.stringify(iaSettings()));
+  closeModal();
+  return { refus, refus2, st };
+});
+check('Réglages : l’intervalle de vérification refuse une valeur absurde, à l’écran',
+  /entre 1 et 60 secondes/.test(regFile.refus), regFile.refus);
+check('Réglages : le temps d’attente refuse une valeur absurde, à l’écran',
+  /entre 1 et 120 minutes/.test(regFile.refus2), regFile.refus2);
+check('Réglages : les réglages de la file sont enregistrés',
+  regFile.st.sondageSec === 5 && regFile.st.attenteMaxMin === 15, JSON.stringify({ s: regFile.st.sondageSec, a: regFile.st.attenteMaxMin }));
+
+// --- Le panneau dit pourquoi le 4K ne sert à rien aujourd'hui : la photo part en 1600 px
+//     et est publiée en 1600 px. La file lève la contrainte technique, pas celle-là.
+const note4k = await page.evaluate(() => {
+  openIaSettingsPanel();
+  const t = [...document.querySelectorAll('#modal .ias-note')].map(e => e.textContent).join(' ');
+  closeModal();
+  return t;
+});
+check('Réglages : l’écran explique que 4K ne sert à rien tant que la publication reste en 1600 px',
+  /4K ne sert à rien aujourd’hui/.test(note4k) && /1600 px/.test(note4k), note4k.slice(0, 120));
+
+await page.unroute('**/functions/v1/photo-ia');
+await page.evaluate(async (id) => {
+  library.iaJobs = []; await saveLibrary(); _iaReprise = null;
+  _rzOpenId = id || (realisations[0] && realisations[0].id) || null;
+  renderRealisations();
+}, rzOuvertAvant);
 
 
 // ============================================================================
@@ -1741,7 +2127,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé \(HTTP 422\)/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

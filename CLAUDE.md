@@ -31,6 +31,17 @@ Consignes de travail pour Claude sur ce dépôt. À lire avant toute interventio
 
 Toujours rendre compte en français, de façon concise et directe. Pas de remplissage, pas de tournures commerciales.
 
+## Déployer une fonction serveur
+
+`scripts/deploy-fonction.sh photo-ia` — appelle l'API de gestion Supabase en HTTPS, avec
+`SUPABASE_ACCESS_TOKEN` pris dans l'environnement (jamais dans le dépôt). C'est le chemin à
+utiliser : les outils MCP marqués « exige une interaction humaine » rouvrent un pop-up à
+chaque appel, et aucun réglage ne le supprime.
+
+`verify_jwt` reste **false** pour `photo-ia` et `embellish`, volontairement : la clé
+publiable de l'application est elle-même un JWT valide, la vérification générique de Supabase
+laisserait donc passer n'importe qui. Le vrai contrôle est `requireUser` dans la fonction.
+
 ## Adresses du projet
 
 - **CRM** (privé, connexion obligatoire) : https://rnab26.github.io/Melissa-Nabet/ — dépôt `rnab26/Melissa-Nabet`.
