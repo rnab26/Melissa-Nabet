@@ -1047,3 +1047,72 @@ qui survit à une reconstruction du panneau, le coût annoncé avant l'envoi) et
       Raphaël demandait « vérifier qu'il y a bien les chargements de l'action » — à
       reregarder avec lui sur l'écran réel avant d'y toucher, pour ne pas refaire ce qui
       existe déjà.
+
+## Site vitrine — l'allure devient un réglage (septembre 2026)
+
+**État** : livré et déployé. Le site avait toutes ses fonctions et aucune identité.
+
+**Ce que Raphaël a choisi**, sur la fiche
+https://claude.ai/code/artifact/0a5981ec-e66c-4ec9-86dd-500d76843969
+(réponses en base, collection `reponses`, document `site-theme` — **les relire avant de
+reprendre ce chantier**) : direction **Index**, la grille des projets d'emblée en arrivant,
+mouvement **discret**, sections *réalisations · studio · contact · journal*, et les trois
+langues *français, anglais, hébreu*.
+
+Ses mots, qui commandent la suite : « il y a une section par thème et c'est plutôt
+cohérent, ça serait bien qu'il y ait les sections : commercial, habitation, bureaux,
+réalisation sur mesure » et « le site doit être facilement modulable ».
+
+**Ce qui a été relevé, en vrai, sur cinq références** (menus téléchargés, pas de mémoire) :
+David Chipperfield, Studio KO, Norm Architects, Vincent Van Duysen, Pierre Yovanovitch.
+**Aucun n'a de blog, de tarifs, de témoignages ni de formulaire long.** Ils tiennent tous
+en trois sections : les projets classés par type, un « studio / à propos », un contact.
+Ne pas proposer autre chose sans une raison.
+
+**Comment l'allure circule** : réglage dans le CRM (⚙ Le site public → *Allure du site*) →
+publié dans `manifest.site.theme` par « Mettre à jour le site » → le site pose
+`data-theme` sur `<html>` et tout suit par variables CSS. Aucune clé d'accès ajoutée à la
+page publique. Quatre directions : `index`, `epure`, `atelier`, `nuit`.
+
+**Ne pas casser**
+- `atelier` est le défaut, et c'est **exactement** l'habillage d'avant : un manifeste publié
+  avant cette version ne doit pas changer d'allure tout seul.
+- Un thème absent du catalogue **ne part pas** dans le manifeste, et un `data-theme` inconnu
+  laisse la page sur son défaut. Sinon le choix n'a pas d'effet et rien ne dit pourquoi.
+- **Aucune couleur ni police écrite en dur** dans `site-vitrine/index.html` : tout passe par
+  les jetons (`--ink`, `--paper`, `--titre`, `--texte`, `--nom-*`). Une valeur en dur
+  fabrique un thème qui ne s'applique qu'à moitié — le cas « fond sombre, texte sombre ».
+- **Le piège du mouvement** : la classe `fondu` (opacity:0) n'est posée QUE si un
+  `IntersectionObserver` existe pour la retirer, que le réglage l'autorise, et que le
+  visiteur ne demande pas moins d'animation. Une image parquée invisible sans surveillant,
+  c'est une page blanche pour qui partage le lien. Deux tests gardent ce piège fermé, dont
+  un qui supprime `IntersectionObserver` du navigateur.
+- Le choix d'une direction dans le CRM **n'est pas en ligne** tant que « Mettre à jour le
+  site » n'a pas été cliqué. Le panneau le dit à chaque clic ; ne pas retirer ce rappel.
+
+**Vérification** : `tests/site.test.mjs` (8 nouveaux contrôles — les quatre thèmes, le thème
+inconnu, la mise en page Index mesurée sur les positions réelles, et les deux pièges du
+mouvement) et `tests/realisations.test.mjs` (4 nouveaux — le défaut, le choix publié, le
+thème inventé qui ne part pas, le catalogue).
+
+**Notes / À faire**
+- [x] Le thème devient un réglage du CRM, publié dans le manifeste.
+- [x] Direction « Index » livrée en entier, sur téléphone comme sur ordinateur.
+- [x] Mouvement discret, sans jamais rien laisser d'invisible.
+- [ ] **Les catégories comme structure du site** (`commercial, habitation, bureaux,
+      sur-mesure`). Aujourd'hui la catégorie d'une réalisation est un champ libre avec
+      suggestions : deux fautes de frappe font deux catégories. Il faut une **liste
+      ordonnée, modulable depuis le CRM** — reprendre le patron déjà en place
+      (`chantierCats`, `taskCategories`, `clientStatuses`), ne pas en inventer un autre —
+      et le site doit respecter **cet ordre**, pas l'ordre alphabétique.
+- [ ] **Page « Le studio »** — bloquée sur du contenu réel. Ne rien inventer à la place de
+      Mélissa : ni parcours, ni démarche, ni références. Construire la page vide et prête à
+      recevoir, et lui demander un texte et un portrait.
+- [ ] **Journal / actualités** — demandé par Raphaël, alors qu'aucune des cinq références
+      n'en a (sauf le « KO diary » de Studio KO). Un journal vide ou abandonné fait plus de
+      mal que pas de journal : à ouvrir seulement quand il y a de quoi l'alimenter, et lui
+      poser la question avant de le construire.
+- [ ] **Anglais et hébreu** — l'hébreu retourne toute la mise en page (droite à gauche),
+      c'est le plus lourd des trois chantiers de langue. Et surtout : chaque projet devra
+      être **écrit trois fois** (titre, lieu, mission, texte de présentation). C'est du
+      contenu que Mélissa doit produire, pas du code. À chiffrer avec eux avant de lancer.

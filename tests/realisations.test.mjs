@@ -2669,8 +2669,33 @@ const siteVide = await page.evaluate(() => {
 });
 check('Site public : tout est vide au départ',
   siteVide.apropos === '' && siteVide.email === '' && siteVide.tel === '' && siteVide.insta === '');
-check('Site public : rien de vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle', siteVide.infos.join(','));
+// Rien de VIDE ne part : une coordonnée non remplie afficherait une étiquette creuse sur le
+// site. L'allure, elle, part toujours — ce n'est pas une étiquette, c'est la façon dont la
+// page s'habille, et elle a toujours une valeur.
+check('Site public : aucune coordonnée vide ne part dans le manifeste',
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement', siteVide.infos.join(','));
+
+const siteAllure = await page.evaluate(() => {
+  library.site = null;
+  const parDefaut = siteInfos();
+  siteSettings().theme = 'index'; siteSettings().mouvement = 'aucun';
+  const choisi = siteInfos();
+  siteSettings().theme = 'un-theme-invente';
+  const faux = siteInfos();
+  return { parDefaut: parDefaut.theme, mvtDefaut: parDefaut.mouvement,
+           choisi: choisi.theme, mvtChoisi: choisi.mouvement, faux: faux.theme,
+           catalogue: SITE_THEMES.map(t => t.id) };
+});
+check('Allure : le défaut est l’habillage que le site portait déjà',
+  siteAllure.parDefaut === 'atelier' && siteAllure.mvtDefaut === 'discret', JSON.stringify(siteAllure));
+check('Allure : le choix de Mélissa part bien dans le manifeste',
+  siteAllure.choisi === 'index' && siteAllure.mvtChoisi === 'aucun', JSON.stringify(siteAllure));
+// Un thème absent du site ne doit pas partir : la page retomberait sur son défaut sans que
+// rien n'explique pourquoi le choix n'a rien changé.
+check('Allure : un thème inconnu du catalogue ne part pas',
+  siteAllure.faux === undefined, String(siteAllure.faux));
+check('Allure : les quatre directions sont au catalogue',
+  siteAllure.catalogue.join(',') === 'index,epure,atelier,nuit', siteAllure.catalogue.join(','));
 
 const sitePanel = await page.evaluate(async () => {
   library.branding = Object.assign({}, library.branding, { email: 'contact@exemple.fr', phone: '052 111 22 33' });
