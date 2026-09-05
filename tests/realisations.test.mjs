@@ -514,12 +514,17 @@ const falQueue = {
   },
 };
 
-let soldeKo = false; // pour rejouer le cas « le solde ne se lit pas »
+let soldeKo = false;        // panne réelle : une clé ADMIN est en place mais refusée
+let soldeSansAdmin = false; // choix assumé : aucune clé ADMIN n'est configurée
 await page.route('**/functions/v1/photo-ia', async (route) => {
   const body = JSON.parse(route.request().postData() || '{}');
   const auth = route.request().headers()['authorization'] || '';
   iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, requestId: body.requestId, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
   if (body.action === 'balance') {
+    if (soldeSansAdmin) {
+      await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: "aucune clé de portée ADMIN n'est configurée : la clé de retouche n'a pas le droit de lire la facturation (HTTP 403).", adminManquante: true }) });
+      return;
+    }
     if (soldeKo) {
       await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: "la clé fal.ai en place n'a pas le droit de lire la facturation (HTTP 403). Ce droit demande une clé de portée ADMIN ; la retouche, elle, fonctionne avec la clé actuelle." }) });
       return;
@@ -690,6 +695,29 @@ check('Échec du solde : la raison est lisible à l’écran, pas cachée dans u
   soldeEchec.visible && /ADMIN/.test(soldeEchec.texte) && /retouche/i.test(soldeEchec.texte),
   soldeEchec.texte.slice(0, 90));
 soldeKo = false;
+
+// --- SANS clé ADMIN, le solde n'est pas en panne : il est volontairement désactivé. Afficher
+//     « n/c » et une alerte à CHAQUE ouverture de l'éditeur, pour une fonction que l'on a
+//     choisi de ne pas activer, c'est du bruit permanent sous le bouton principal.
+soldeSansAdmin = true;
+const soldeMuet = await page.evaluate(async () => {
+  _iaBalance = null; buildEditorControls();
+  await new Promise(r => setTimeout(r, 700));
+  const w = document.querySelector('#ed-controls .ia-warn');
+  const s = document.querySelector('#ed-controls .ia-solde');
+  const go = document.querySelector('#ed-controls .ia-go');
+  return {
+    alerte: !!w && w.offsetParent !== null,
+    pastille: !!s && s.offsetParent !== null,
+    boutonUtilisable: !!go && !go.disabled,
+  };
+});
+check('Sans clé ADMIN, ni pastille de solde ni alerte : c’est un choix, pas une panne',
+  !soldeMuet.alerte && !soldeMuet.pastille, JSON.stringify(soldeMuet));
+check('Et la retouche reste utilisable : le solde n’a jamais été un pré-requis',
+  soldeMuet.boutonUtilisable, String(soldeMuet.boutonUtilisable));
+soldeSansAdmin = false;
+
 await page.evaluate(async () => { _iaBalance = null; buildEditorControls(); await new Promise(r => setTimeout(r, 700)); });
 
 // --- LES FENÊTRES OUVERTES DEPUIS L'ÉDITEUR DOIVENT ÊTRE AU-DESSUS DE LUI.

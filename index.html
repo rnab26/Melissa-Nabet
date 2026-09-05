@@ -6388,7 +6388,14 @@ async function iaCall(payload){
     body:JSON.stringify(payload)
   });
   const data=await res.json().catch(()=>({error:'réponse illisible du serveur'}));
-  if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+  if(!res.ok||data.error){
+    /* Le serveur joint parfois des indications à son message (par exemple : cet échec est
+       un choix de configuration, pas une panne). Les perdre obligerait à analyser une
+       phrase française pour les retrouver. */
+    const err=new Error(data.error||('HTTP '+res.status));
+    err.data=data;
+    throw err;
+  }
   return data;
 }
 
@@ -6406,7 +6413,7 @@ async function iaLoadBalance(force){
     _iaBalance={balance:d.balance,currency:d.currency,username:d.username,at:Date.now()};
     return _iaBalance;
   }catch(e){
-    _iaBalance={err:(e&&e.message)||'erreur',at:Date.now()};
+    _iaBalance={err:(e&&e.message)||'erreur',adminManquante:!!(e&&e.data&&e.data.adminManquante),at:Date.now()};
     throw e;
   }
 }
@@ -7201,8 +7208,19 @@ function buildIaPanel(host){
       soldeVal.textContent=(b.balance==null?'—':(Math.round(b.balance*100)/100)+' '+(b.currency||''));
       solde.classList.toggle('bas',typeof b.balance==='number'&&b.balance<1);
     }catch(e){
-      /* Six lignes de gris sous le bouton principal pour une commodité d'affichage, ça
-         noyait le bouton. Une phrase, et le détail à la demande pour qui veut le lire. */
+      /* Aucune clé ADMIN configurée n'est PAS une panne : c'est un choix, et le solde n'est
+         qu'une commodité. Afficher « n/c » et une alerte à chaque ouverture de l'éditeur
+         pour une fonction volontairement désactivée, c'est du bruit permanent sous le
+         bouton principal. Dans ce cas précis, on se tait complètement. `_iaBalance` porte le
+         drapeau, y compris quand la réponse vient du cache. */
+      if(_iaBalance&&_iaBalance.adminManquante){
+        solde.style.display='none';warn.style.display='none';return;
+      }
+      solde.style.display='';
+      /* Toute autre panne — clé ADMIN présente mais refusée, expirée, réseau coupé — se dit.
+         Six lignes de gris noyaient le bouton : une phrase, et le détail à la demande. La
+         RAISON, elle, reste à l'écran : elle avait été mise dans une infobulle,
+         inatteignable au doigt, et le dépôt en a fait une règle. */
       soldeVal.textContent='n/c';
       warn.style.display='';
       warn.innerHTML='';
