@@ -455,3 +455,31 @@ corruption déjà rencontré sur les fiches client.
 
 **Vérification** : 8 contrôles, dont la coupure de branche et le raccourci clavier qui ne
 fait plus rien une fois l'éditeur fermé (l'écouteur est retiré à la fermeture).
+
+---
+
+## 5 septembre 2026 — Le CRM rappelle, et relie
+
+Deux chantiers courts, tous deux fusionnés sur `main`.
+
+**`cr02` — « republier » ne s'oublie plus** (branche `claude/crm-republier`). La carte d'une
+réalisation passe de « ● en ligne » à « ● à republier » dès qu'une photo a bougé depuis la
+mise en ligne, et le **tableau de bord** — l'écran qu'on regarde en premier — porte une ligne
+« À republier sur le site » avec le nombre de photos ; un clic ouvre la réalisation. La règle
+est écrite une fois (`realisationARepublier`) et sert aux deux endroits.
+
+**`cr03` — clients, réalisations et devis reliés dans les deux sens** (branche
+`claude/crm-real-client`). Le champ « Client » d'une réalisation existait mais ne servait à
+rien. Désormais : une carte « Réalisations » dans la fiche client (avec l'état de chacune, et
+un bouton qui crée une réalisation déjà rattachée), et dans la fiche d'une réalisation des
+raccourcis vers la fiche client et vers chacun de ses devis.
+
+### Un bug trouvé en chemin, et corrigé
+
+Un devis dont l'instantané manque (import partiel, sauvegarde d'une ancienne version) faisait
+**disparaître toute la fiche client** : le calcul du total levait une exception au milieu du
+rendu. Il s'affiche maintenant sans montant, avec la mention « contenu illisible », au lieu
+de tout emporter. Trouvé parce qu'un test a fabriqué un devis minimal — c'est exactement le
+genre de cas qu'un import mal terminé produit.
+
+**Vérification** : 300 contrôles au total, 0 échec.
