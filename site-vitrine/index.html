@@ -150,6 +150,17 @@
   .lb-next{right:14px;top:50%;transform:translateY(-50%);}
   .lightbox button:hover{background:rgba(255,255,255,.2);}
 
+  /* À propos et contact : écrits depuis le CRM. Rien de rempli, rien d'affiché — pas de
+     titre orphelin ni de bloc vide en bas de page. */
+  .apropos{border-top:1px solid var(--hair);margin-top:clamp(40px,7vw,80px);padding-top:clamp(26px,4vw,40px);}
+  .apropos-txt{max-width:62ch;margin:12px 0 0;font-size:15px;line-height:1.75;}
+  .liens{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;}
+  .liens a{
+    color:var(--ink);text-decoration:none;font-size:13px;letter-spacing:.02em;
+    border-bottom:1px solid var(--hair);padding-bottom:3px;transition:border-color .2s;
+  }
+  .liens a:hover{border-color:var(--ink);}
+  body.viewing .apropos{display:none;}
   footer{
     border-top:1px solid var(--hair);padding:34px 22px 46px;text-align:center;
     font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-light);
@@ -177,6 +188,11 @@
     <p class="project-meta" id="d-meta"></p>
     <p class="detail-text" id="d-text" hidden></p>
     <div class="shots" id="d-shots"></div>
+  </section>
+  <section class="apropos" id="apropos" hidden>
+    <p class="eyebrow">À propos</p>
+    <p class="apropos-txt" id="apropos-txt" hidden></p>
+    <div class="liens" id="contact"></div>
   </section>
 </main>
 
@@ -371,12 +387,51 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowRight') stepLightbox(1);
 });
 
+/* Le numéro tel qu'on l'écrit en Israël (0xx…) vers le format attendu par WhatsApp. */
+function versWhatsApp(brut) {
+  var d = String(brut || '').replace(/\D/g, '');
+  if (!d) return '';
+  return d.charAt(0) === '0' ? '972' + d.slice(1) : d;
+}
+/* L'adresse e-mail n'est jamais écrite dans le HTML servi : elle vient du manifeste et le
+   lien est fabriqué ici. Ça décourage les robots ordinaires — ça ne rend pas l'adresse
+   secrète pour autant, le manifeste est public. */
+function renderApropos(site) {
+  var s = site || {};
+  var host = el('contact');
+  host.innerHTML = '';
+  var txt = (s.apropos || '').trim();
+  el('apropos-txt').textContent = txt;
+  el('apropos-txt').hidden = !txt;
+  var liens = [];
+  if (s.email) liens.push({ href: 'mailto:' + s.email, texte: s.email });
+  if (s.tel) {
+    var wa = versWhatsApp(s.tel);
+    if (wa) liens.push({ href: 'https://wa.me/' + wa, texte: 'WhatsApp · ' + s.tel, ext: true });
+    else liens.push({ href: 'tel:' + s.tel, texte: s.tel });
+  }
+  if (s.instagram) {
+    var ig = String(s.instagram).trim();
+    var url = /^https?:/i.test(ig) ? ig : 'https://instagram.com/' + ig.replace(/^@/, '');
+    liens.push({ href: url, texte: 'Instagram · ' + (ig.charAt(0) === '@' ? ig : '@' + ig.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '')), ext: true });
+  }
+  liens.forEach(function (l) {
+    var a = document.createElement('a');
+    a.href = l.href;
+    a.textContent = l.texte;
+    if (l.ext) { a.target = '_blank'; a.rel = 'noopener'; }
+    host.appendChild(a);
+  });
+  el('apropos').hidden = !txt && !liens.length;
+}
+
 fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
   .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
   .then(function (m) {
     if (m.site) {
       if (m.site.title) { el('site-name').textContent = m.site.title; el('footer').textContent = m.site.title + ' — ' + (m.site.subtitle || ''); }
       if (m.site.subtitle) el('site-tagline').textContent = m.site.subtitle;
+      renderApropos(m.site);
     }
     projects = (m.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
     if (!projects.length) {

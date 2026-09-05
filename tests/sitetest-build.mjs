@@ -42,7 +42,11 @@ const photo = (i, legende) => {
 writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
   version: 1,
   updatedAt: new Date().toISOString(),
-  site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur' },
+  /* Les coordonnées du banc d'essai sont fictives et n'appartiennent à personne : elles
+     servent à vérifier la forme des liens, pas à publier quoi que ce soit. */
+  site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur',
+          apropos: 'Texte de présentation du banc d’essai.',
+          email: 'essai@example.com', tel: '052 000 00 00', instagram: '@essai' },
   /* Trois projets et deux catégories : c'est le minimum pour que le filtre du site ait un
      sens et soit vérifiable. Les deux derniers réutilisent les mêmes fichiers d'image —
      le banc d'essai teste la page, pas les photos. */

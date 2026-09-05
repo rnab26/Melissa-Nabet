@@ -210,6 +210,31 @@ check('Partage : revenir à la liste rend son titre au site',
 check('Partage : et rend aussi l’image d’aperçu du site (pas celle du projet quitté)',
   /share\.jpg$/.test(seoRetour.image), seoRetour.image);
 
+// --- À propos et contact, écrits depuis le CRM
+const contact = await page.evaluate(() => ({
+  visible: !document.getElementById('apropos').hidden,
+  texte: (document.getElementById('apropos-txt').textContent || '').trim(),
+  liens: [...document.querySelectorAll('#contact a')].map(a => a.getAttribute('href')),
+  libelles: [...document.querySelectorAll('#contact a')].map(a => a.textContent),
+}));
+check('Contact : la section s’affiche quand quelque chose est rempli', contact.visible);
+check('Contact : le texte À propos est repris', /banc d’essai/.test(contact.texte), contact.texte);
+check('Contact : lien e-mail fabriqué', contact.liens.some(h => h === 'mailto:essai@example.com'), contact.liens.join(' | '));
+check('Contact : lien WhatsApp au bon format international',
+  contact.liens.some(h => h === 'https://wa.me/972520000000'), contact.liens.join(' | '));
+check('Contact : lien Instagram', contact.liens.some(h => h === 'https://instagram.com/essai'), contact.liens.join(' | '));
+const mailDansHtml = (await page.content()).includes('essai@example.com');
+check('Contact : l’adresse e-mail n’est pas écrite en clair dans le HTML servi',
+  !(await page.evaluate(() => document.documentElement.outerHTML.split('<script')[0].includes('essai@example.com'))),
+  mailDansHtml ? 'présente après rendu (normal)' : 'absente');
+const contactVide = await page.evaluate(() => {
+  renderApropos({});
+  const cache = document.getElementById('apropos').hidden;
+  renderApropos({ apropos: 'Texte de présentation du banc d’essai.', email: 'essai@example.com', tel: '052 000 00 00', instagram: '@essai' });
+  return cache;
+});
+check('Contact : rien de rempli, aucune section vide en bas de page', contactVide === true);
+
 // Aucun secret dans la page servie
 const html = await page.content();
 const suspects = ['eyJ', 'service_role', 'sb_secret', 'apikey', 'Authorization'];

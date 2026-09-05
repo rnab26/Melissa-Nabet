@@ -1008,6 +1008,7 @@
       <h2>Réalisations</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-onlight" onclick="openShootingMemo()">📷 Bien photographier</button>
+        <button class="btn btn-onlight" onclick="openSitePanel()">⚙ Le site public</button>
         <button class="btn btn-onlight" onclick="window.open(SITE_URL,'_blank')">🌐 Voir le site</button>
       </div>
     </div>
@@ -6486,10 +6487,89 @@ async function writeManifest(man){
   const {error}=await sb.storage.from(GALLERY_BUCKET).upload(manifestPath(),blob,{contentType:'application/json',cacheControl:'60',upsert:true});
   if(error)throw error;
 }
+/* ---- Ce que le site public dit de lui-même ----
+   Tout est VIDE par défaut, et rien ne part en ligne tant que ce n'est pas rempli ici :
+   une adresse e-mail ou un numéro sur une page publique, c'est une décision, pas un
+   réglage technique. Les coordonnées du devis ne sont donc jamais recopiées toutes
+   seules — il y a un bouton pour le faire en un geste, et c'est le geste qui vaut accord. */
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:''};
+function siteSettings(){
+  library.site=Object.assign({},SITE_DEFAULTS,library.site||{});
+  return library.site;
+}
+function siteInfos(){
+  const st=siteSettings();
+  const b=library.branding||{};
+  const o={title:(b.companyName||'Melissa Nabet').trim(),subtitle:(st.sousTitre||'').trim()};
+  ['apropos','email','tel','instagram'].forEach(k=>{
+    const v=(st[k]||'').trim();
+    if(v)o[k]=v;
+  });
+  return o;
+}
 function emptyManifest(){
-  return {version:1,updatedAt:new Date().toISOString(),
-    site:{title:(library.branding&&library.branding.name)||'Melissa Nabet',subtitle:'Architecture d’intérieur'},
-    realisations:[]};
+  return {version:1,updatedAt:new Date().toISOString(),site:siteInfos(),realisations:[]};
+}
+/* Mettre à jour la présentation du site sans republier une réalisation : sinon, corriger
+   une faute dans le texte « À propos » obligerait à republier un chantier. */
+async function pushSiteInfos(btn){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  const dire=t=>{const el=document.getElementById('site-msg');if(el)el.textContent=t;};
+  if(btn){btn.disabled=true;btn.textContent='Envoi…';}
+  try{
+    const man=await readManifest();
+    man.site=siteInfos();
+    man.updatedAt=new Date().toISOString();
+    await writeManifest(man);
+    dire('Mis à jour sur le site. Comptez une minute avant de voir le changement en ligne.');
+    toast('Site mis à jour');
+  }catch(e){
+    console.error('infos du site',e);
+    dire('Échec : '+((e&&e.message)||'erreur')+'. Rien n’a été modifié en ligne.');
+  }finally{ if(btn){btn.disabled=false;btn.textContent='Mettre à jour le site';} }
+}
+function openSitePanel(){
+  const st=siteSettings(), b=library.branding||{};
+  const nb=(realisations||[]).filter(r=>r.published).length;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Le site public</h3>
+    <p class="msub">Ce que le site dit de lui-même, en dehors des projets. <b>Tout ce qui est rempli ici devient public</b> — laissez vide ce que vous ne voulez pas montrer. Les projets, eux, ne partent en ligne que par « Publier sur le site », réalisation par réalisation (${nb} en ligne).</p>
+    <label class="fld"><span class="lbl">Sous-titre, sous le nom</span>
+      <input type="text" id="site-sub" maxlength="60" value="${esc(st.sousTitre||'')}" placeholder="ex. Architecture d’intérieur"></label>
+    <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page</span>
+      <textarea id="site-apropos" rows="4" maxlength="700" placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(st.apropos||'')}</textarea></label>
+    <div class="ed-eyebrow" style="margin-top:14px">Vous joindre</div>
+    <p class="ias-note">Ces coordonnées deviennent visibles par n'importe quel visiteur. Laissez un champ vide et il n'apparaît pas du tout.</p>
+    <div class="row2">
+      <label class="fld"><span class="lbl">E-mail de contact</span>
+        <input type="email" id="site-email" value="${esc(st.email||'')}" placeholder="vide = pas d’e-mail affiché"></label>
+      <label class="fld"><span class="lbl">Téléphone / WhatsApp</span>
+        <input type="text" id="site-tel" value="${esc(st.tel||'')}" placeholder="vide = pas de numéro affiché"></label>
+    </div>
+    <label class="fld"><span class="lbl">Instagram (facultatif)</span>
+      <input type="text" id="site-insta" value="${esc(st.instagram||'')}" placeholder="@nomducompte"></label>
+    <button class="mini" id="site-copier">Reprendre les coordonnées du devis</button>
+    ${(b.email||b.phone)?'<p class="ias-note" style="margin-top:6px">Celles de vos devis : '+esc([b.email,b.phone].filter(Boolean).join(' · '))+'</p>':'<p class="ias-note" style="margin-top:6px">Vos devis ne portent aucune coordonnée à reprendre.</p>'}
+    <p class="ias-msg" id="site-msg"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="mini" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-primary" id="site-push">Mettre à jour le site</button>
+    </div>`);
+  const champs={sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta'};
+  Object.entries(champs).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',()=>{siteSettings()[k]=el.value;saveLibraryDebounced();});
+  });
+  const cop=document.getElementById('site-copier');
+  cop.addEventListener('click',()=>{
+    if(!(b.email||b.phone)){document.getElementById('site-msg').textContent='Aucune coordonnée dans les réglages du devis à reprendre.';return;}
+    if(b.email){siteSettings().email=b.email;document.getElementById('site-email').value=b.email;}
+    if(b.phone){siteSettings().tel=b.phone;document.getElementById('site-tel').value=b.phone;}
+    saveLibraryDebounced();
+    document.getElementById('site-msg').textContent='Coordonnées reprises. Elles ne sont pas encore en ligne : « Mettre à jour le site » pour ça.';
+  });
+  document.getElementById('site-push').addEventListener('click',e=>pushSiteInfos(e.target));
 }
 
 async function publishRealisation(r){

@@ -1755,6 +1755,70 @@ await page.unroute('**/functions/v1/embellish');
 await page.evaluate(() => { _pubLastError = null; renderRealisations(); });
 
 
+// ============================================================================
+//  LE SITE PUBLIC : ce qu'il dit de lui-même. Vide par défaut, publié sur geste.
+// ============================================================================
+const siteVide = await page.evaluate(() => {
+  library.site = null;
+  const st = siteSettings();
+  return { apropos: st.apropos, email: st.email, tel: st.tel, insta: st.instagram,
+           infos: Object.keys(siteInfos()) };
+});
+check('Site public : tout est vide au départ',
+  siteVide.apropos === '' && siteVide.email === '' && siteVide.tel === '' && siteVide.insta === '');
+check('Site public : rien de vide ne part dans le manifeste',
+  siteVide.infos.join(',') === 'title,subtitle', siteVide.infos.join(','));
+
+const sitePanel = await page.evaluate(async () => {
+  library.branding = Object.assign({}, library.branding, { email: 'contact@exemple.fr', phone: '052 111 22 33' });
+  openSitePanel();
+  const avantCopie = { email: siteSettings().email, tel: siteSettings().tel };
+  document.getElementById('site-copier').click();
+  const apresCopie = { email: siteSettings().email, tel: siteSettings().tel,
+                       message: document.getElementById('site-msg').textContent };
+  document.getElementById('site-apropos').value = 'Atelier d’architecture d’intérieur.';
+  document.getElementById('site-apropos').dispatchEvent(new Event('input'));
+  const cleAvant = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const manAvant = cleAvant ? JSON.parse(await window.__files.get(cleAvant).text()).site : null;
+  return { avantCopie, apresCopie, apropos: siteSettings().apropos,
+           enLigneAvantGeste: manAvant && (manAvant.email || manAvant.apropos) ? 'oui' : 'non' };
+});
+check('Site public : les coordonnées du devis ne sont PAS reprises toutes seules',
+  sitePanel.avantCopie.email === '' && sitePanel.avantCopie.tel === '');
+check('Site public : un bouton les reprend en un geste',
+  sitePanel.apresCopie.email === 'contact@exemple.fr' && sitePanel.apresCopie.tel === '052 111 22 33');
+check('Site public : et l’écran dit que ce n’est pas encore en ligne',
+  /pas encore en ligne/.test(sitePanel.apresCopie.message), sitePanel.apresCopie.message);
+check('Site public : le texte À propos est enregistré', /Atelier/.test(sitePanel.apropos), sitePanel.apropos);
+check('Site public : rien n’est parti en ligne avant le geste explicite',
+  sitePanel.enLigneAvantGeste === 'non');
+
+const sitePush = await page.evaluate(async () => {
+  await pushSiteInfos(document.getElementById('site-push'));
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const man = JSON.parse(await window.__files.get(key).text());
+  const msg = document.getElementById('site-msg').textContent;
+  // les projets publiés ne doivent pas bouger d'un pouce
+  return { site: man.site, projets: man.realisations.length, msg };
+});
+check('Site public : « Mettre à jour le site » écrit bien les informations',
+  sitePush.site.email === 'contact@exemple.fr' && /Atelier/.test(sitePush.site.apropos || ''),
+  JSON.stringify(sitePush.site));
+check('Site public : la mise à jour ne touche pas aux projets publiés', sitePush.projets >= 1, sitePush.projets + ' projet(s)');
+check('Site public : l’écran confirme', /Mis à jour/.test(sitePush.msg), sitePush.msg);
+
+const sitePushKo = await page.evaluate(async () => {
+  const vrai = sb.storage.from;
+  sb.storage.from = (b) => Object.assign({}, vrai(b), { upload: async () => ({ error: { message: 'réseau indisponible' } }) });
+  await pushSiteInfos(document.getElementById('site-push'));
+  sb.storage.from = vrai;
+  const msg = document.getElementById('site-msg').textContent;
+  closeModal();
+  return msg;
+});
+check('Site public : un échec le dit, et dit que rien n’a changé en ligne',
+  /Échec/.test(sitePushKo) && /Rien n’a été modifié/.test(sitePushKo), sitePushKo);
+
 // --- Catégorie : champ libre, propositions, et filtre du site
 const categorie = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);
@@ -1901,7 +1965,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé \(HTTP 422\)|texte réalisation Error: IA indisponible \(HTTP 502\)/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé \(HTTP 422\)|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
