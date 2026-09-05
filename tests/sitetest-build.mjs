@@ -9,7 +9,7 @@
      python3 -m http.server 8902 -d /tmp/mn-sitetest
      node tests/site.test.mjs
 */
-import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,6 +29,10 @@ const vide = local.replace("var OWNER = 'u';", "var OWNER = 'pas-encore-publie';
 mkdirSync(join(DIR, 'galerie/u/r1'), { recursive: true });
 writeFileSync(join(DIR, 'index.html'), local);
 writeFileSync(join(DIR, 'vide.html'), vide);
+/* Fichiers servis tels quels : ils sont testés à l'octet près, pas régénérés. */
+for (const f of ['robots.txt', 'sitemap.xml']) {
+  copyFileSync(join(RACINE, 'site-vitrine', f), join(DIR, f));
+}
 
 const photo = (i, legende) => {
   const o = { full: 'u/r1/p' + i + '.jpg', thumb: 'u/r1/t' + i + '.jpg', w: 1600, h: 1067, cover: i === 0 };

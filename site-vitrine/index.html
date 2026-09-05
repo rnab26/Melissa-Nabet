@@ -5,9 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Melissa Nabet — Architecture d'intérieur</title>
 <meta name="description" content="Réalisations d'architecture d'intérieur : chantiers livrés, photographiés et présentés projet par projet.">
+<link rel="canonical" href="https://rnab26.github.io/melissa-nabet-site/">
 <meta property="og:title" content="Melissa Nabet — Architecture d'intérieur">
-<meta property="og:description" content="Réalisations d'architecture d'intérieur.">
+<meta property="og:description" content="Réalisations d'architecture d'intérieur : chantiers livrés, photographiés et présentés projet par projet.">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Melissa Nabet">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:url" content="https://rnab26.github.io/melissa-nabet-site/">
+<!-- Aperçu quand le lien est partagé (WhatsApp, Instagram, Facebook, LinkedIn).
+     Ces robots-là NE LISENT PAS le JavaScript : l'image doit donc être une adresse fixe
+     écrite ici en dur. Le CRM y dépose la couverture de la dernière réalisation publiée
+     à chaque publication, et l'efface quand plus rien n'est en ligne. Si ce chemin change
+     côté CRM (shareImagePath), il faut le changer ici aussi. -->
+<meta property="og:image" content="https://njaamykxnvohoesrtpvv.supabase.co/storage/v1/object/public/galerie/797ad2e5-a27a-45c3-a987-d4897d1cadbf/share.jpg">
+<meta property="og:image:alt" content="Réalisation d'architecture d'intérieur">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#f4efe6">
+<link rel="sitemap" type="application/xml" href="sitemap.xml">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","name":"Melissa Nabet",
+ "url":"https://rnab26.github.io/melissa-nabet-site/","inLanguage":"fr",
+ "description":"Réalisations d'architecture d'intérieur."}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Inter:wght@400;500;600&display=swap">
@@ -190,7 +209,13 @@ function renderIndex() {
     b.type = 'button';
     b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
       + '<p class="project-name"></p><p class="project-meta"></p>';
-    b.querySelector('img').src = url(cover.thumb);
+    var vign = b.querySelector('img');
+    vign.src = url(cover.thumb);
+    vign.decoding = 'async';
+    // Les deux premières cartes sont vues tout de suite ; les suivantes attendent d'être
+    // approchées. Le format de la case est déjà fixé en CSS (4/3), donc rien ne saute
+    // quand une image arrive.
+    vign.loading = i > 1 ? 'lazy' : 'eager';
     b.querySelector('.project-name').textContent = p.title;
     // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
     // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
@@ -202,6 +227,32 @@ function renderIndex() {
   });
 }
 
+/* Un projet ouvert change l'adresse (ancre) : le titre de l'onglet et la description
+   doivent suivre, sinon un lien copié depuis la barre d'adresse arrive avec le titre du
+   site entier. Les robots qui lisent le JavaScript (Google) y gagnent aussi. */
+var TITRE_SITE = document.title;
+var DESC_SITE = (document.querySelector('meta[name="description"]') || {}).content || '';
+/* L'image d'aperçu du site, telle qu'écrite dans la page. Refermer un projet doit la
+   rendre : sinon un lien copié depuis la liste emporte encore la photo du projet qu'on
+   vient de quitter. */
+var IMG_SITE = (document.querySelector('meta[property="og:image"]') || {}).content || '';
+function majSeo(titre, description, image) {
+  document.title = titre;
+  var d = document.querySelector('meta[name="description"]');
+  if (d) d.content = description;
+  var ogt = document.querySelector('meta[property="og:title"]');
+  if (ogt) ogt.content = titre;
+  var ogd = document.querySelector('meta[property="og:description"]');
+  if (ogd) ogd.content = description;
+  var ogu = document.querySelector('meta[property="og:url"]');
+  if (ogu) ogu.content = location.href;
+  var can = document.querySelector('link[rel="canonical"]');
+  if (can) can.href = location.href;
+  if (image) {
+    var ogi = document.querySelector('meta[property="og:image"]');
+    if (ogi) ogi.content = image;
+  }
+}
 function openProject(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
@@ -219,6 +270,8 @@ function openProject(i) {
     var im = document.createElement('img');
     im.src = url(ph.full);
     im.loading = k < 2 ? 'eager' : 'lazy';
+    im.decoding = 'async';
+    if (k === 0) im.setAttribute('fetchpriority', 'high');
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
     im.alt = ph.caption || (current.title + ' — photo ' + (k + 1));
     b.appendChild(im);
@@ -234,12 +287,17 @@ function openProject(i) {
   document.body.classList.add('viewing');
   window.scrollTo({ top: 0, behavior: 'auto' });
   location.hash = 'p-' + current.id;
+  var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
+  majSeo(current.title + ' — ' + TITRE_SITE,
+    current.texte || [current.lieu, current.surface, current.mission].filter(Boolean).join(' · ') || DESC_SITE,
+    couv ? url(couv.full) : '');
 }
 
 function closeProject() {
   document.body.classList.remove('viewing');
   current = null;
   if (location.hash) history.replaceState(null, '', location.pathname);
+  majSeo(TITRE_SITE, DESC_SITE, IMG_SITE);
 }
 
 function openLightbox(k) {

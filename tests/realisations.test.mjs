@@ -1754,6 +1754,34 @@ check('Rédaction assistée : l’échec reste affiché et dit quoi faire',
 await page.unroute('**/functions/v1/embellish');
 await page.evaluate(() => { _pubLastError = null; renderRealisations(); });
 
+
+// --- Image d'aperçu du site : écrite à chaque publication, effacée quand plus rien n'est en ligne
+const partage = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const cle = () => [...window.__files.keys()].find(k => k.endsWith('/share.jpg')) || '';
+  // On repart d'un site vierge : les essais précédents ont laissé dans le manifeste des
+  // réalisations qui n'existent plus côté application, et le cas qu'on veut vérifier est
+  // « la DERNIÈRE réalisation en ligne est retirée ».
+  [...window.__files.keys()].filter(k => k.endsWith('manifest.json') || k.endsWith('/share.jpg'))
+    .forEach(k => window.__files.delete(k));
+  await publishRealisation(r);
+  const apresPublication = cle();
+  const taille = apresPublication ? window.__files.get(apresPublication).size : 0;
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    unpublishRealisation(r);
+  });
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const restantes = JSON.parse(await window.__files.get(key).text()).realisations.length;
+  return { apresPublication, taille, restantes, apresRetrait: cle() };
+});
+check('Partage : la publication écrit l’image d’aperçu à une adresse fixe',
+  /\/share\.jpg$/.test(partage.apresPublication) && partage.taille > 500,
+  partage.apresPublication + ' — ' + partage.taille + ' octets');
+check('Partage : plus rien en ligne, l’image d’aperçu est effacée',
+  partage.restantes === 0 && partage.apresRetrait === '', partage.apresRetrait || 'effacée');
+
 // --- On rend la vue à la réalisation utilisée par les mesures suivantes
 await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
 await page.waitForTimeout(300);

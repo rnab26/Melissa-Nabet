@@ -6439,6 +6439,9 @@ const GALLERY_BUCKET='galerie';
 const PUB_FULL=1600, PUB_FULL_Q=0.85, PUB_THUMB=700, PUB_THUMB_Q=0.8;
 function galleryPublicUrl(path){return SB_URL+'/storage/v1/object/public/'+GALLERY_BUCKET+'/'+path;}
 function manifestPath(){return ownerId+'/manifest.json';}
+/* Adresse FIXE de l'image d'aperçu : la page publique la cite en dur dans ses balises de
+   partage. Changer ce chemin oblige à changer `site-vitrine/index.html` en même temps. */
+function shareImagePath(){return ownerId+'/share.jpg';}
 
 /* Lecture du manifeste par l'API authentifiée, PAS par l'URL publique. Deux raisons, et
    les deux sont des pertes de données silencieuses :
@@ -6485,6 +6488,7 @@ async function publishRealisation(r){
   try{
     const folder=ownerId+'/'+r.id;
     const entries=[];
+    let sharePartage=null;
     for(let i=0;i<r.photos.length;i++){
       const p=r.photos[i];
       if(btn)btn.textContent='Publication '+(i+1)+'/'+r.photos.length+'…';
@@ -6497,6 +6501,11 @@ async function publishRealisation(r){
       const bw=big.width,bh=big.height;
       const small=glRenderTo(img,edit,PUB_THUMB,'pub_'+p.id);
       const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+      /* Image d'aperçu du site (WhatsApp, Instagram, moteurs) : la couverture de la
+         dernière réalisation publiée, écrite à une adresse FIXE. La page publique porte
+         cette adresse en dur dans ses balises : elle n'a donc jamais à être modifiée, et
+         un lien partagé cesse de s'afficher tout nu. */
+      if(!sharePartage||r.cover===p.id)sharePartage=smallBlob;
       const fullName=r.id+'/p'+i+'.jpg', thumbName=r.id+'/t'+i+'.jpg';
       const up=async (name,blob)=>{
         const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
@@ -6521,6 +6530,15 @@ async function publishRealisation(r){
       const stale=(existing||[]).map(f=>f.name).filter(n=>!keep.has(n));
       if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
     }catch(e){}
+
+    /* L'aperçu de partage ne doit jamais faire échouer une publication : la galerie, elle,
+       est déjà en ligne à ce stade. */
+    if(sharePartage){
+      try{
+        await sb.storage.from(GALLERY_BUCKET).upload(shareImagePath(),sharePartage,
+          {contentType:'image/jpeg',cacheControl:'600',upsert:true});
+      }catch(e){console.error('image de partage',e);}
+    }
 
     const man=await readManifest();
     man.site=emptyManifest().site;
@@ -6560,6 +6578,9 @@ async function unpublishRealisation(r){
       man.realisations=man.realisations.filter(x=>x.id!==r.id);
       man.updatedAt=new Date().toISOString();
       await writeManifest(man);
+      /* Plus rien en ligne : garder l'image d'aperçu ferait afficher, dans un lien partagé,
+         la photo d'un chantier qu'on vient justement de retirer du site. */
+      if(!man.realisations.length){try{await sb.storage.from(GALLERY_BUCKET).remove([shareImagePath()]);}catch(e){}}
       r.published=false;delete r.publishedAt;r.updatedAt=Date.now();storageInvalidate();
       (r.photos||[]).forEach(p=>{delete p.publishedAt;photoLog(p,'depublie','');});
       saveRealisations();renderRealisations();

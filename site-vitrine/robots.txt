@@ -1,0 +1,5 @@
+# Site public des réalisations. Tout est indexable : c'est un portfolio.
+User-agent: *
+Allow: /
+
+Sitemap: https://rnab26.github.io/melissa-nabet-site/sitemap.xml

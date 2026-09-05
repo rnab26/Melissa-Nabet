@@ -105,6 +105,68 @@ check('Échap ferme le plein écran', await page.locator('#lightbox.open').count
 await page.click('#back'); await page.waitForTimeout(300);
 check('Retour à la liste', await page.locator('.projects').isVisible());
 
+// --- Partage d'un lien et référencement
+// Page fraîche : ce sont les balises telles que les lit un robot qui n'exécute pas le
+// JavaScript (WhatsApp, Facebook, LinkedIn) qu'on veut vérifier ici.
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(400);
+const seo = await page.evaluate(() => {
+  const m = (sel) => (document.querySelector(sel) || {}).content || '';
+  return {
+    ogImage: m('meta[property="og:image"]'),
+    ogTitre: m('meta[property="og:title"]'),
+    ogType: m('meta[property="og:type"]'),
+    carte: m('meta[name="twitter:card"]'),
+    canonical: (document.querySelector('link[rel="canonical"]') || {}).href || '',
+    jsonld: (document.querySelector('script[type="application/ld+json"]') || {}).textContent || '',
+    titre: document.title,
+  };
+});
+check('Partage : une image d’aperçu est déclarée, à une adresse fixe',
+  /\/galerie\/[0-9a-f-]+\/share\.jpg$/.test(seo.ogImage), seo.ogImage);
+check('Partage : grande vignette sur les réseaux', seo.carte === 'summary_large_image', seo.carte);
+check('Référencement : adresse canonique déclarée', /melissa-nabet-site/.test(seo.canonical), seo.canonical);
+check('Partage : le titre déclaré est celui du site', /Melissa Nabet/.test(seo.ogTitre) && seo.ogType === 'website', seo.ogTitre);
+let jsonldOk = false, jsonldNom = '';
+try { const j = JSON.parse(seo.jsonld); jsonldNom = j.name; jsonldOk = j['@context'] === 'https://schema.org' && !!j.name; } catch (e) {}
+check('Référencement : données structurées valides', jsonldOk, jsonldNom || seo.jsonld.slice(0, 60));
+
+const robots = await page.goto('http://127.0.0.1:8902/robots.txt');
+const robotsTxt = await robots.text();
+check('Référencement : robots.txt servi et ouvert à l’indexation',
+  robots.status() === 200 && /Allow: \//.test(robotsTxt) && /Sitemap:/.test(robotsTxt), robotsTxt.split('\n')[1]);
+const smap = await page.goto('http://127.0.0.1:8902/sitemap.xml');
+const smapTxt = await smap.text();
+check('Référencement : sitemap.xml servi, avec le bon espace de noms',
+  smap.status() === 200 && smapTxt.includes('http://www.sitemaps.org/schemas/sitemap/0.9') && smapTxt.includes('<loc>'),
+  smapTxt.split('\n').find(l => l.includes('xmlns')) || '');
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(400);
+
+// Le titre de l'onglet suit le projet ouvert : un lien copié depuis la barre d'adresse
+// n'arrive plus avec le titre du site entier.
+await page.locator('.project').first().click();
+await page.waitForTimeout(500);
+const seoProjet = await page.evaluate(() => ({
+  titre: document.title,
+  desc: (document.querySelector('meta[name="description"]') || {}).content || '',
+  url: (document.querySelector('meta[property="og:url"]') || {}).content || '',
+}));
+check('Partage : le titre de l’onglet suit le projet ouvert',
+  /^Bureau Sébastien — /.test(seoProjet.titre), seoProjet.titre);
+check('Partage : la description reprend le texte du projet',
+  /plateau de bureaux/.test(seoProjet.desc), seoProjet.desc.slice(0, 60));
+check('Partage : l’adresse partagée est celle du projet', /#p-r1$/.test(seoProjet.url), seoProjet.url);
+await page.click('#back'); await page.waitForTimeout(400);
+const seoRetour = await page.evaluate(() => ({
+  titre: document.title,
+  image: (document.querySelector('meta[property="og:image"]') || {}).content || '',
+}));
+check('Partage : revenir à la liste rend son titre au site',
+  seoRetour.titre === 'Melissa Nabet — Architecture d\'intérieur', seoRetour.titre);
+check('Partage : et rend aussi l’image d’aperçu du site (pas celle du projet quitté)',
+  /share\.jpg$/.test(seoRetour.image), seoRetour.image);
+
 // Aucun secret dans la page servie
 const html = await page.content();
 const suspects = ['eyJ', 'service_role', 'sb_secret', 'apikey', 'Authorization'];
