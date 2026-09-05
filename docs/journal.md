@@ -939,3 +939,26 @@ C'est ce qui manquait pour qu'un portfolio serve à quelque chose commercialemen
 visiteur qui aime un chantier est à un clic d'écrire, sans remonter la page.
 
 **Vérification** : 65 contrôles sur le site (5 nouveaux).
+
+---
+
+## 5 septembre 2026 — Un test qui relie les deux moitiés
+
+**Branche** `claude/test-bout-en-bout` → fusionnée sur `main`. **Initiative.**
+
+**Le trou** : le test du CRM vérifiait ce qu'il écrit dans le manifeste ; le test du site
+vérifiait ce qu'il sait lire — mais avec un manifeste **écrit à la main** au milieu. Les deux
+pouvaient donc diverger sans que rien ne bronche : il suffisait qu'un champ soit renommé d'un
+côté (`categorie` → `category`, `texte` → `description`) pour que le site cesse de l'afficher.
+Le risque n'est pas théorique : deux sessions travaillent en parallèle sur ce dépôt.
+
+**`tests/bout-en-bout.test.mjs`** fait publier une vraie réalisation par le CRM — deux photos,
+une horizontale et une verticale — puis sert **le manifeste et les images réellement écrits**
+dans le stockage, et ouvre le site dessus. Aucun fichier n'est écrit à la main.
+
+Il vérifie que traversent bien la frontière : titre, année, lieu, surface, mission, catégorie,
+texte de présentation, légende d'une photo, **orientation** (qui décide de la mise en page),
+vignette de couverture, et ce que le CRM dit du studio (à propos, contact).
+
+**12 contrôles, 0 échec.** Le test démarre son propre serveur ; il suffit d'avoir celui du CRM
+sur le port 8899. Il est ajouté au mode d'emploi (`tests/README.md`) et au hook de démarrage.
