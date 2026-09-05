@@ -962,3 +962,20 @@ vignette de couverture, et ce que le CRM dit du studio (à propos, contact).
 
 **12 contrôles, 0 échec.** Le test démarre son propre serveur ; il suffit d'avoir celui du CRM
 sur le port 8899. Il est ajouté au mode d'emploi (`tests/README.md`) et au hook de démarrage.
+
+---
+
+## 5 septembre 2026 — L'aperçu d'un devis sur téléphone
+
+**Branche** `claude/crm-apercu-zoom` → fusionnée sur `main`. **Chantier** `qu04`
+(« signalé de longue date, jamais traité »).
+
+La refonte du menu mobile avait déjà fait passer la barre du haut de deux lignes à une
+(87 px → 56 px). Il restait qu'elle **reste collée** pendant qu'on lit un devis : une bande
+de document en moins à chaque écran. En mode aperçu, sur téléphone, elle ne l'est plus. Elle
+revient dès qu'on remonte, et redevient collée dès qu'on repasse au composeur ; la navigation
+reste de toute façon en bas.
+
+**Si ce n'était pas ça, le problème** : dis-le-moi, la description du chantier était courte
+(« la barre de menu mange la vue quand on clique la moitié de l'écran ») et j'ai traité ce que
+j'ai pu constater à l'écran.
