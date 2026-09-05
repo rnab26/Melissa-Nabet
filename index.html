@@ -887,6 +887,22 @@
   .ia-cat-txt b{display:block;color:var(--ink);}
   .ia-cat-txt span{display:block;font-size:11px;color:var(--stone);line-height:1.45;margin-top:2px;}
   .ia-cat-in{font-size:11px;color:var(--stone-light);white-space:nowrap;}
+  /* Choix de l'allure du site : une pastille qui montre vraiment le fond et l'encre du
+     thème, pour ne pas avoir à lire pour comprendre. */
+  .site-themes{display:flex;flex-direction:column;gap:7px;margin-top:8px;}
+  .site-theme{display:flex;gap:11px;align-items:flex-start;text-align:left;width:100%;
+    font-family:'Inter';padding:10px 11px;border:1px solid var(--panel-edge);border-radius:9px;
+    background:var(--paper);color:var(--ink);cursor:pointer;}
+  .site-theme:hover{border-color:var(--stone-light);}
+  .site-theme[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink);}
+  .st-pastille{flex:0 0 auto;width:38px;height:38px;border-radius:7px;border:1px solid var(--panel-edge);
+    display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:15px;}
+  .st-txt{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .st-txt b{font-size:14px;font-weight:600;}
+  .st-txt i{font-style:normal;font-size:11px;color:var(--stone-light);}
+  .st-txt em{font-style:normal;font-size:12px;color:var(--stone);line-height:1.45;}
+  .site-mvt{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;}
+  .site-mvt .mini[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);font-weight:600;}
   .ia-params{margin-top:11px;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);}
   .ia-params>summary{cursor:pointer;padding:10px 12px;font-size:12.5px;font-weight:600;color:var(--stone-deep);}
   .ia-params-body{padding:4px 12px 12px;font-size:12.5px;color:var(--stone);}
@@ -8055,7 +8071,28 @@ async function writeManifest(man){
    une adresse e-mail ou un numéro sur une page publique, c'est une décision, pas un
    réglage technique. Les coordonnées du devis ne sont donc jamais recopiées toutes
    seules — il y a un bouton pour le faire en un geste, et c'est le geste qui vaut accord. */
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:''};
+/* Les quatre directions visuelles du site public. Ce tableau ne sert QU'À CHOISIR : la
+   mise en forme vit dans `site-vitrine/index.html`, qui applique le thème par son
+   identifiant. Ajouter une direction ici sans l'écrire là-bas donnerait un site qui
+   retombe sur le thème par défaut — sans rien casser, mais sans rien changer non plus. */
+const SITE_THEMES=[
+  {id:'index',nom:'Index',ref:'D’après Pierre Yovanovitch et Studio KO',
+   note:'Les projets listés par leur nom, comme un sommaire. Le mieux quand il y en a beaucoup, classés par type.',
+   fond:'#f4f4f4',encre:'#212121'},
+  {id:'epure',nom:'Épure',ref:'D’après David Chipperfield Architects',
+   note:'Blanc pur, aucune couleur, grille dense. Les photos sont la seule matière.',
+   fond:'#ffffff',encre:'#111111'},
+  {id:'atelier',nom:'Atelier',ref:'D’après Norm Architects',
+   note:'Fond crème chaud, titres en garamond, une grande image à la fois. Rythme lent.',
+   fond:'#f5f1e5',encre:'#383839'},
+  {id:'nuit',nom:'Nuit',ref:'D’après Vincent Van Duysen',
+   note:'Fond très sombre, photo plein cadre. Spectaculaire, mais une photo moyenne s’y voit tout de suite.',
+   fond:'#0f0f0f',encre:'#d8d5d0'},
+];
+/* `atelier` par défaut : c'est l'habillage que le site portait avant qu'on puisse choisir.
+   Un manifeste publié avant cette version n'a pas de thème — il ne doit pas changer d'allure
+   tout seul. */
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret'};
 function siteSettings(){
   library.site=Object.assign({},SITE_DEFAULTS,library.site||{});
   return library.site;
@@ -8064,6 +8101,10 @@ function siteInfos(){
   const st=siteSettings();
   const b=library.branding||{};
   const o={title:(b.companyName||'Melissa Nabet').trim(),subtitle:(st.sousTitre||'').trim()};
+  /* Un thème inconnu du catalogue ne part pas : il ferait retomber le site sur son défaut
+     sans que rien ne l'explique. */
+  if(SITE_THEMES.some(t=>t.id===st.theme))o.theme=st.theme;
+  if(st.mouvement==='aucun'||st.mouvement==='discret')o.mouvement=st.mouvement;
   ['apropos','email','tel','instagram'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
@@ -8097,7 +8138,19 @@ function openSitePanel(){
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
     <h3>Le site public</h3>
     <p class="msub">Ce que le site dit de lui-même, en dehors des projets. <b>Tout ce qui est rempli ici devient public</b> — laissez vide ce que vous ne voulez pas montrer. Les projets, eux, ne partent en ligne que par « Publier sur le site », réalisation par réalisation (${nb} en ligne).</p>
-    <label class="fld"><span class="lbl">Sous-titre, sous le nom</span>
+    <div class="ed-eyebrow">Allure du site</div>
+    <p class="ias-note">Change la typographie, les couleurs et la mise en page. Les projets, les textes et les photos ne bougent pas.</p>
+    <div class="site-themes" id="site-themes">${SITE_THEMES.map(t=>`
+      <button type="button" class="site-theme" data-theme="${esc(t.id)}" aria-pressed="${st.theme===t.id?'true':'false'}">
+        <span class="st-pastille" style="background:${esc(t.fond)};color:${esc(t.encre)}">Aa</span>
+        <span class="st-txt"><b>${esc(t.nom)}</b><i>${esc(t.ref)}</i><em>${esc(t.note)}</em></span>
+      </button>`).join('')}</div>
+    <div class="ed-eyebrow" style="margin-top:14px">Mouvement</div>
+    <div class="site-mvt" id="site-mvt">
+      <button type="button" class="mini" data-mvt="discret" aria-pressed="${st.mouvement!=='aucun'?'true':'false'}">Discret — les images apparaissent en douceur</button>
+      <button type="button" class="mini" data-mvt="aucun" aria-pressed="${st.mouvement==='aucun'?'true':'false'}">Aucun — net et immédiat</button>
+    </div>
+    <label class="fld" style="margin-top:14px"><span class="lbl">Sous-titre, sous le nom</span>
       <input type="text" id="site-sub" maxlength="60" value="${esc(st.sousTitre||'')}" placeholder="ex. Architecture d’intérieur"></label>
     <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page</span>
       <textarea id="site-apropos" rows="4" maxlength="700" placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(st.apropos||'')}</textarea></label>
@@ -8123,6 +8176,23 @@ function openSitePanel(){
     const el=document.getElementById(id);
     if(!el)return;
     el.addEventListener('input',()=>{siteSettings()[k]=el.value;saveLibraryDebounced();});
+  });
+  /* Un choix ne vaut rien tant qu'il n'est pas EN LIGNE : le dire ici évite de croire que
+     cliquer sur une direction a changé le site. */
+  const rappel=()=>{document.getElementById('site-msg').textContent='Choix enregistré. Il ne sera en ligne qu’après « Mettre à jour le site ».';};
+  document.querySelectorAll('#site-themes .site-theme').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().theme=b.dataset.theme;saveLibraryDebounced();
+      document.querySelectorAll('#site-themes .site-theme').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-mvt [data-mvt]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().mouvement=b.dataset.mvt;saveLibraryDebounced();
+      document.querySelectorAll('#site-mvt [data-mvt]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
   });
   const cop=document.getElementById('site-copier');
   cop.addEventListener('click',()=>{

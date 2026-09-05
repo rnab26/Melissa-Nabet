@@ -357,6 +357,88 @@ await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' }
 await page.waitForTimeout(500);
 await page.screenshot({ path: '/tmp/site-desktop.png' });
 
+// --- L'ALLURE DU SITE. Le thème arrive du manifeste ; changer d'habillage ne doit rien
+//     changer aux fonctions, et un thème inconnu ne doit pas vider la page de ses couleurs.
+await page.setViewportSize({ width: 1280, height: 900 });
+const poser = async (theme, mouvement) => page.evaluate(([t, m]) => {
+  document.documentElement.removeAttribute('data-theme');
+  appliquerTheme(t, m);
+  const cs = getComputedStyle(document.body);
+  return {
+    attr: document.documentElement.getAttribute('data-theme'),
+    fond: cs.backgroundColor, encre: cs.color,
+    barre: (document.querySelector('meta[name="theme-color"]') || {}).content,
+  };
+}, [theme, mouvement]);
+
+const epure = await poser('epure', 'discret');
+check('Thème « Épure » appliqué : fond blanc pur',
+  epure.attr === 'epure' && epure.fond === 'rgb(255, 255, 255)', JSON.stringify(epure));
+const nuit = await poser('nuit', 'discret');
+check('Thème « Nuit » appliqué : fond sombre ET texte clair — pas un thème à moitié',
+  nuit.fond === 'rgb(15, 15, 15)' && nuit.encre === 'rgb(230, 226, 220)', JSON.stringify(nuit));
+check('Le thème change aussi la barre du navigateur sur téléphone',
+  nuit.barre === '#0f0f0f', String(nuit.barre));
+const inconnu = await poser('theme-qui-nexiste-pas', 'discret');
+check('Un thème inconnu laisse l’habillage par défaut, il ne casse rien',
+  inconnu.attr === null && inconnu.fond === 'rgb(244, 239, 230)', JSON.stringify(inconnu));
+
+// La mise en page « Index » : un sommaire, pas une grille. Mesuré sur la position réelle.
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(400);
+const enIndex = await page.evaluate(async () => {
+  appliquerTheme('index', 'discret');
+  await new Promise(r => setTimeout(r, 250));
+  const c = [...document.querySelectorAll('.project')];
+  if (c.length < 2) return { assez: false };
+  const a = c[0].getBoundingClientRect(), b = c[1].getBoundingClientRect();
+  const vign = c[0].querySelector('.project-img').getBoundingClientRect();
+  const nom = c[0].querySelector('.project-name').getBoundingClientRect();
+  return { assez: true, empiles: b.top >= a.bottom - 1, memeColonne: Math.abs(a.left - b.left) < 1,
+           vignPetite: vign.width <= 80, nomADroite: nom.left > vign.right - 1,
+           cartes: c.length };
+});
+check('Index : les projets sont empilés en lignes, pas en grille',
+  enIndex.assez && enIndex.empiles && enIndex.memeColonne, JSON.stringify(enIndex));
+check('Index : une petite vignette à gauche, le nom à sa droite',
+  enIndex.assez && enIndex.vignPetite && enIndex.nomADroite, JSON.stringify(enIndex));
+
+// --- LE PIÈGE DU MOUVEMENT : une image posée à opacity:0 sans personne pour la révéler,
+//     c'est une page blanche. Ni le réglage « aucun », ni un navigateur sans observateur,
+//     ni « moins d'animation » ne doivent laisser quoi que ce soit d'invisible.
+const visibilite = async (mouvement, reduit) => {
+  const p2 = await browser.newPage({ viewport: { width: 390, height: 844 },
+    reducedMotion: reduit ? 'reduce' : 'no-preference' });
+  await p2.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+  await p2.evaluate(m => appliquerTheme('atelier', m), mouvement);
+  await p2.waitForTimeout(300);
+  await p2.reload({ waitUntil: 'networkidle' });
+  await p2.waitForTimeout(900);
+  const r = await p2.evaluate(() => {
+    const c = [...document.querySelectorAll('.project')];
+    return { total: c.length,
+      invisibles: c.filter(x => parseFloat(getComputedStyle(x).opacity) < 0.05).length };
+  });
+  await p2.close();
+  return r;
+};
+const vMoins = await visibilite('discret', true);
+check('« Moins d’animation » : aucune carte ne reste invisible',
+  vMoins.total > 0 && vMoins.invisibles === 0, JSON.stringify(vMoins));
+
+const sansObs = await browser.newPage({ viewport: { width: 390, height: 844 } });
+await sansObs.addInitScript(() => { delete window.IntersectionObserver; });
+await sansObs.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await sansObs.waitForTimeout(900);
+const rSansObs = await sansObs.evaluate(() => {
+  const c = [...document.querySelectorAll('.project')];
+  return { total: c.length, invisibles: c.filter(x => parseFloat(getComputedStyle(x).opacity) < 0.05).length,
+           marquees: document.querySelectorAll('.fondu').length };
+});
+await sansObs.close();
+check('Navigateur sans observateur : rien n’est marqué, donc rien n’est invisible',
+  rSansObs.total > 0 && rSansObs.invisibles === 0 && rSansObs.marquees === 0, JSON.stringify(rSansObs));
+
 // État vide : rien de publié encore, la page ne doit pas avoir l'air cassée
 await page.goto('http://127.0.0.1:8902/vide.html', { waitUntil: 'networkidle' });
 await page.waitForTimeout(900);

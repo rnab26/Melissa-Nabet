@@ -29,8 +29,14 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Inter:wght@400;500;600&family=Jost:wght@300;400;500&display=swap">
 <style>
+  /* QUATRE HABILLAGES, UN SEUL SITE. Le thème arrive du manifeste, écrit depuis le CRM
+     (Réglages → Le site public). Tout ce qui change d'un thème à l'autre est un jeton
+     ci-dessous : une couleur, une police, une échelle. Écrire une couleur en dur ailleurs
+     dans la feuille, c'est fabriquer un thème qui ne s'applique qu'à moitié.
+     `atelier` est le défaut — c'est exactement l'allure d'avant, pour qu'un manifeste
+     publié plus tôt ne change pas d'apparence tout seul. */
   :root{
     --ink:#3d3934;
     --stone:#8a8074;
@@ -39,12 +45,39 @@
     --paper:#f4efe6;
     --hair:#d3cabb;
     --oxblood:#9a8574;
+    --titre:'Cormorant Garamond',Georgia,serif;
+    --texte:'Inter',system-ui,-apple-system,sans-serif;
+    --nom-poids:500;
+    --nom-taille:22px;
+    --nom-espace:0;
+    --nom-casse:none;
+  }
+  /* ÉPURE — blanc pur, aucune couleur, tout repose sur les photos et l'espace. */
+  html[data-theme="epure"]{
+    --ink:#111111; --stone:#8a8a8a; --stone-light:#b5b5b5;
+    --travertine:#eeeeee; --paper:#ffffff; --hair:#e3e3e3; --oxblood:#111111;
+    --titre:'Jost',system-ui,sans-serif; --texte:'Jost',system-ui,sans-serif;
+    --nom-poids:500; --nom-taille:13px; --nom-espace:.14em; --nom-casse:uppercase;
+  }
+  /* INDEX — les projets se lisent comme un sommaire, l'image vient en appui. */
+  html[data-theme="index"]{
+    --ink:#212121; --stone:#8d8d8d; --stone-light:#a8a8a8;
+    --travertine:#e8e8e8; --paper:#f4f4f4; --hair:#dcdcdc; --oxblood:#212121;
+    --titre:'Cormorant Garamond',Georgia,serif; --texte:'Jost',system-ui,sans-serif;
+    --nom-poids:400; --nom-taille:clamp(21px,3.4vw,29px); --nom-espace:.01em; --nom-casse:none;
+  }
+  /* NUIT — fond très sombre : les intérieurs éclairés ressortent, le texte s'efface. */
+  html[data-theme="nuit"]{
+    --ink:#e6e2dc; --stone:#948e86; --stone-light:#736d66;
+    --travertine:#1d1d1d; --paper:#0f0f0f; --hair:#2a2a2a; --oxblood:#c9b79c;
+    --titre:'Jost',system-ui,sans-serif; --texte:'Jost',system-ui,sans-serif;
+    --nom-poids:300; --nom-taille:19px; --nom-espace:.06em; --nom-casse:none;
   }
   *{box-sizing:border-box;}
   html{scroll-behavior:smooth;}
   body{
     margin:0;background:var(--paper);color:var(--ink);
-    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    font-family:var(--texte);
     font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
   }
   a{color:inherit;}
@@ -54,7 +87,7 @@
     text-align:center;border-bottom:1px solid var(--hair);
   }
   .name{
-    font-family:'Cormorant Garamond',Georgia,serif;
+    font-family:var(--titre);
     font-weight:500;font-size:clamp(29px,7vw,52px);
     letter-spacing:.16em;text-transform:uppercase;margin:0;line-height:1.1;
   }
@@ -86,14 +119,50 @@
   }
   .project:hover .project-img img,.project:focus-visible .project-img img{transform:scale(1.035);}
   .project-name{
-    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
-    font-size:22px;margin:15px 0 0;line-height:1.25;
+    font-family:var(--titre);font-weight:var(--nom-poids);
+    font-size:var(--nom-taille);letter-spacing:var(--nom-espace);text-transform:var(--nom-casse);
+    margin:15px 0 0;line-height:1.25;
   }
   .project-meta{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone);margin:6px 0 0;}
   .project:focus-visible{outline:2px solid var(--oxblood);outline-offset:6px;}
 
+  /* INDEX — un sommaire, pas une grille : on lit la liste des chantiers, la vignette n'est
+     là que pour situer. Aucune balise en plus, seulement une autre mise en page. */
+  html[data-theme="index"] .projects{display:flex;flex-direction:column;gap:0;}
+  html[data-theme="index"] .project{
+    display:grid;grid-template-columns:58px 1fr;align-items:center;
+    column-gap:16px;row-gap:2px;padding:13px 0;border-bottom:1px solid var(--hair);
+  }
+  html[data-theme="index"] .project:first-child{border-top:1px solid var(--hair);}
+  html[data-theme="index"] .project-img{
+    grid-row:1 / span 2;aspect-ratio:1/1;width:58px;align-self:center;
+  }
+  html[data-theme="index"] .project-name{grid-column:2;margin:0;}
+  html[data-theme="index"] .project-meta{grid-column:2;margin:0;}
+  html[data-theme="index"] .project:hover .project-name{color:var(--stone);}
+  /* À partir d'une tablette, la fiche technique se range à droite comme dans un index
+     imprimé — sous cette largeur elle passerait à la ligne au milieu d'un mot. */
+  @media (min-width:680px){
+    html[data-theme="index"] .project{grid-template-columns:64px 1fr auto;}
+    html[data-theme="index"] .project-img{grid-row:1;width:64px;}
+    html[data-theme="index"] .project-name{grid-column:2;grid-row:1;}
+    html[data-theme="index"] .project-meta{grid-column:3;grid-row:1;text-align:right;white-space:nowrap;}
+  }
+  /* ÉPURE — grille plus dense : on voit plus de chantiers d'un coup. */
+  html[data-theme="epure"] .projects{grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:clamp(14px,2vw,22px);}
+  html[data-theme="epure"] .project-name{margin-top:11px;}
+
+  /* Dans un sommaire, le nom en tête annonce — il n'écrase pas la liste qui suit. Épure et
+     Nuit font pareil : c'est le travail qu'on vient voir, pas l'enseigne. */
+  html[data-theme="index"] .name,
+  html[data-theme="epure"] .name,
+  html[data-theme="nuit"] .name{font-size:clamp(17px,3.2vw,23px);letter-spacing:.24em;}
+  html[data-theme="index"] header,
+  html[data-theme="epure"] header,
+  html[data-theme="nuit"] header{padding-top:clamp(26px,5vw,52px);padding-bottom:clamp(20px,3.5vw,32px);}
+
   .state{padding:70px 0;text-align:center;color:var(--stone);}
-  .state h2{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;font-size:25px;color:var(--ink);margin:0 0 10px;}
+  .state h2{font-family:var(--titre);font-weight:500;font-size:25px;color:var(--ink);margin:0 0 10px;}
   .state p{margin:0 auto;max-width:46ch;font-size:14px;}
 
   /* --- Vue projet --- */
@@ -109,14 +178,14 @@
   }
   .back:hover{color:var(--oxblood);}
   .detail h2{
-    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
+    font-family:var(--titre);font-weight:500;
     font-size:clamp(28px,5vw,40px);margin:0;line-height:1.15;
   }
   /* Filtres : n'apparaissent que s'il y a vraiment plusieurs catégories à distinguer.
      Un filtre à un seul bouton n'est pas un filtre, c'est un décor. */
   .filtres{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;}
   .filtres button{
-    font-family:'Inter',system-ui,sans-serif;font-size:11px;letter-spacing:.1em;
+    font-family:var(--texte);font-size:11px;letter-spacing:.1em;
     text-transform:uppercase;font-weight:600;color:var(--stone);
     background:transparent;border:1px solid var(--hair);border-radius:999px;
     padding:8px 15px;cursor:pointer;transition:color .2s,border-color .2s,background .2s;
@@ -190,7 +259,7 @@
     margin-top:clamp(30px,5vw,54px);padding:clamp(22px,3.5vw,34px) 0 0;font-family:inherit;color:inherit;
   }
   .suivant-nom{
-    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
+    font-family:var(--titre);font-weight:500;
     font-size:clamp(22px,3.4vw,30px);line-height:1.2;color:var(--ink);
   }
   .suivant:hover .suivant-nom,.suivant:focus-visible .suivant-nom{color:var(--oxblood);}
@@ -206,7 +275,13 @@
     font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-light);
   }
 
-  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto;}}
+  /* MOUVEMENT. La classe n'est posée QUE si un observateur existe et va la retirer : sans
+     ça, un lien partagé s'ouvrirait sur une page blanche chez qui n'a pas le script. */
+  .fondu{opacity:0;transform:translateY(9px);}
+  .fondu.vu{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.3,1);}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto;}
+    .fondu{opacity:1!important;transform:none!important;}}
 </style>
 </head>
 <body>
@@ -317,6 +392,7 @@ function renderIndex() {
     // approchées. Le format de la case est déjà fixé en CSS (4/3), donc rien ne saute
     // quand une image arrive.
     vign.loading = i > 1 ? 'lazy' : 'eager';
+    guetter(b);
     b.querySelector('.project-name').textContent = p.title;
     // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
     // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
@@ -396,6 +472,9 @@ function openProject(i) {
     }
     b.addEventListener('click', function () { openLightbox(k); });
     host.appendChild(b);
+    /* Les deux premières photos d'un projet sont visibles d'emblée : les faire apparaître
+       en fondu ferait clignoter l'ouverture. Les suivantes se dévoilent au défilement. */
+    if (k > 1) guetter(b);
   });
   document.body.classList.add('viewing');
   window.scrollTo({ top: 0, behavior: 'auto' });
@@ -540,6 +619,45 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowRight') stepLightbox(1);
 });
 
+/* L'ALLURE DU SITE vient du manifeste, choisie depuis le CRM. Un thème inconnu — manifeste
+   plus ancien, faute de frappe — laisse la page sur son habillage par défaut plutôt que de
+   la vider de ses couleurs. */
+var THEMES = { epure: '#ffffff', atelier: '#f4efe6', index: '#f4f4f4', nuit: '#0f0f0f' };
+var animer = false;
+function appliquerTheme(theme, mouvement) {
+  if (theme && THEMES[theme]) {
+    document.documentElement.setAttribute('data-theme', theme);
+    var mc = document.querySelector('meta[name="theme-color"]');
+    if (mc) mc.content = THEMES[theme];
+  }
+  /* Le mouvement ne s'active que si TOUT est réuni : le réglage, un observateur pour
+     retirer la classe, et un visiteur qui ne demande pas moins d'animation. Sinon on
+     n'ajoute rien du tout — une image parquée invisible sans personne pour la révéler est
+     une page blanche. */
+  animer = mouvement !== 'aucun'
+    && typeof IntersectionObserver === 'function'
+    && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+var _guetteur = null;
+function guetter(el) {
+  if (!animer || !el) return;
+  if (!_guetteur) {
+    _guetteur = new IntersectionObserver(function (entrees) {
+      entrees.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        e.target.classList.add('vu');
+        _guetteur.unobserve(e.target);
+      });
+    }, { rootMargin: '0px 0px -8% 0px' });
+  }
+  el.classList.add('fondu');
+  /* Ce qui est déjà à l'écran au chargement ne doit pas attendre un défilement : sur un
+     téléphone, la première carte est visible d'emblée. */
+  var r = el.getBoundingClientRect();
+  if (r.top < (window.innerHeight || 0)) { requestAnimationFrame(function () { el.classList.add('vu'); }); return; }
+  _guetteur.observe(el);
+}
+
 /* Le numéro tel qu'on l'écrit en Israël (0xx…) vers le format attendu par WhatsApp. */
 function versWhatsApp(brut) {
   var d = String(brut || '').replace(/\D/g, '');
@@ -582,6 +700,7 @@ fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
   .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
   .then(function (m) {
     if (m.site) {
+      appliquerTheme(m.site.theme, m.site.mouvement);
       if (m.site.title) { el('site-name').textContent = m.site.title; el('footer').textContent = m.site.title + ' — ' + (m.site.subtitle || ''); }
       if (m.site.subtitle) el('site-tagline').textContent = m.site.subtitle;
       infosSite = m.site;
