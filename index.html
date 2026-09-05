@@ -612,6 +612,7 @@
   .rz-back{background:transparent;border:none;color:var(--stone);font-family:'Inter';font-size:12.5px;cursor:pointer;padding:0 0 8px;}
   .rz-back:hover{color:var(--oxblood);}
   .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .rz-liens{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
   .rz-pres{margin-bottom:16px;}
   .rz-pres textarea{min-height:74px;}
   .rz-pres-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-4px;}
@@ -3028,6 +3029,7 @@ function buildClientDetail(c){
   main.appendChild(cardWrap('💰','Financier',finBody));
 
   main.appendChild(cardWrap('✅','Tâches liées',buildClientTasksBox(c)));
+  main.appendChild(cardWrap('🖼','Réalisations',buildClientRealisationsBox(c)));
   main.appendChild(cardWrap('📎','Documents',buildDocGallery(c)));
 
   const actions=document.createElement('div');actions.className='cl-detail-actions';
@@ -3061,6 +3063,16 @@ function buildClientDevisList(c){
   const list=devisList.filter(d=>d.clientId===c.id).sort((a,b)=>b.updatedAt-a.updatedAt);
   if(list.length){
     list.forEach(d=>{
+      /* Un devis sans instantané ne devrait pas exister — mais s'il en apparaît un (import
+         partiel, sauvegarde d'une ancienne version), il ne doit pas faire disparaître TOUTE
+         la fiche client. On le montre tel quel, sans montant. */
+      if(!d.snapshot){
+        const ko=document.createElement('div');ko.className='list-row';ko.style.marginTop='6px';
+        ko.innerHTML=`<div class="lr-main"><div class="lr-t">${esc(d.title||'Devis')}</div>
+          <div class="lr-s">N°${esc(d.num||'?')} · contenu illisible, montant indisponible</div></div>`;
+        wrap.appendChild(ko);
+        return;
+      }
       const T=computeTotals(d.snapshot,(d.snapshot.services||[]).filter(v=>v.on));
       const dvc=d.snapshot.cur||'₪';
       const r=document.createElement('div');r.className='list-row';r.style.marginTop='6px';
@@ -3212,6 +3224,38 @@ async function attachFiles(c,ligneId,files){
     try{const doc=await readFileAsDoc(file);const id=uid();await docStore.save(id,doc);c.docs=c.docs||[];c.docs.push({id,name:doc.name,type:doc.type,ligneId:ligneId||null});n++;}catch(e){toast('Échec import '+file.name);}
   }
   saveClients();renderClients();if(n)toast(n+' document(s) ajouté(s)');
+}
+/* Le lien client d'une réalisation existait mais ne servait à rien : on ne pouvait pas
+   remonter d'un client vers ses chantiers photographiés. */
+function buildClientRealisationsBox(c){
+  const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
+  const liees=(realisations||[]).filter(r=>r.clientId===c.id);
+  if(liees.length){
+    liees.forEach(r=>{
+      const n=realisationARepublier(r);
+      const etat=r.published?(n?'<span class="rz-warn">● à republier</span>':'<span class="rz-live">● en ligne</span>'):'pas encore publiée';
+      const row=document.createElement('div');row.className='list-row';
+      row.innerHTML=`<div class="lr-main" style="cursor:pointer">
+          <div class="lr-t">${esc(r.title||'Réalisation sans titre')}</div>
+          <div class="lr-s">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''} · ${etat}</div>
+        </div>`;
+      row.querySelector('.lr-main').addEventListener('click',()=>gotoRealisation(r.id));
+      wrap.appendChild(row);
+    });
+  } else {
+    const e=document.createElement('div');e.className='task-empty';
+    e.textContent='Aucune réalisation liée à ce client.';wrap.appendChild(e);
+  }
+  const add=document.createElement('button');add.className='mini';add.style.marginTop='2px';
+  add.textContent='+ Créer une réalisation pour ce client';
+  add.addEventListener('click',()=>{
+    const r=normalizeRealisation({title:c.name||'',clientId:c.id,date:String(new Date().getFullYear())});
+    realisations.push(r);saveRealisations();
+    gotoRealisation(r.id);
+    toast('Réalisation créée pour '+(c.name||'ce client'));
+  });
+  wrap.appendChild(add);
+  return wrap;
 }
 function buildClientTasksBox(c){
   const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
@@ -4929,6 +4973,8 @@ function renderRealisationDetail(host,r){
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
   head.appendChild(meta);
+  const liens=buildRealisationLiens(r);
+  if(liens)head.appendChild(liens);
 
   /* Le texte de présentation est publié tel quel sur le site : c'est ce qui transforme une
      galerie de photos en projet raconté. Il reste facultatif. */
@@ -4946,7 +4992,8 @@ function renderRealisationDetail(host,r){
   [...meta.querySelectorAll('[data-f]'),...pres.querySelectorAll('[data-f]')].forEach(el=>{
     const ecrire=()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();};
     el.addEventListener('input',ecrire);
-    el.addEventListener('change',ecrire);
+    /* Changer de client change les raccourcis affichés juste en dessous : on redessine. */
+    el.addEventListener('change',()=>{ecrire();if(el.dataset.f==='clientId'){saveRealisations();renderRealisations();}});
   });
   head.appendChild(pres);
   host.appendChild(head);
@@ -5200,6 +5247,25 @@ async function renderThumbInto(p,im,ld){
     im.style.display='block';if(ld)ld.remove();
   }catch(e){if(ld)ld.textContent='erreur';}
 }
+/* Depuis une réalisation, retrouver le client et le devis correspondant. Sans ça, le
+   chantier photographié et son dossier commercial vivaient dans deux mondes séparés. */
+function buildRealisationLiens(r){
+  if(!r.clientId)return null;
+  const c=clients.find(x=>x.id===r.clientId);
+  if(!c)return null;
+  const box=document.createElement('div');box.className='rz-liens';
+  const b=document.createElement('button');b.className='mini';b.textContent='👤 Fiche de '+(c.name||'ce client');
+  b.addEventListener('click',()=>gotoClient(c.id));
+  box.appendChild(b);
+  (devisList||[]).filter(d=>d.clientId===c.id).slice(0,4).forEach(d=>{
+    const bd=document.createElement('button');bd.className='mini';
+    bd.textContent='🧾 '+(d.title||'Devis')+(d.num?' n°'+d.num:'');
+    bd.addEventListener('click',()=>editDevis(d.id));
+    box.appendChild(bd);
+  });
+  return box;
+}
+
 /* Missions courantes, proposées sans être imposées : le champ reste libre. */
 const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoration','Agencement sur mesure','Suivi de chantier','Conseil et plans'];
 /* Type de lieu — c'est ce qui sert de filtre au visiteur du site (« Appartement »,

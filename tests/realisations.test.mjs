@@ -2048,6 +2048,56 @@ await page.waitForTimeout(400);
 await page.screenshot({ path: '/tmp/mn-shot-desktop.png' });
 
 // ============================================================================
+//  LIEN CLIENT ↔ RÉALISATION ↔ DEVIS
+// ============================================================================
+const lien = await page.evaluate(async () => {
+  const c = normalizeClient({ id: 'cl-test', name: 'Famille Cohen' });
+  clients.push(c);
+  devisList.push({ id: 'dv-test', clientId: c.id, title: 'Rénovation Cohen', num: '2026-07', status: 'valide', updatedAt: Date.now() });
+  const r = realisations.find(x => (x.photos || []).length >= 2) || realisations[0];
+  r.clientId = c.id;
+  saveRealisations();
+  _rzOpenId = r.id; renderRealisations();
+  const depuisReal = [...document.querySelectorAll('#rz-body .rz-liens button')].map(b => b.textContent);
+  showView('clients'); renderClients();
+  const carte = [...document.querySelectorAll('.cl-group')].find(g => g.textContent.includes('Famille Cohen'));
+  return { depuisReal, aUneFiche: !!carte, rid: r.id };
+});
+check('Lien : depuis une réalisation, on retrouve le client et son devis',
+  lien.depuisReal.some(t => /Famille Cohen/.test(t)) && lien.depuisReal.some(t => /Rénovation Cohen/.test(t)),
+  lien.depuisReal.join(' | '));
+
+const lienClient = await page.evaluate(async () => {
+  // on ouvre la fiche du client pour voir ses réalisations
+  clientOpen['cl-test'] = true; renderClients();
+  const groupe = [...document.querySelectorAll('.cl-group')].find(g => g.dataset.cid === 'cl-test');
+  // on ne regarde QUE la carte « Réalisations » : les devis du client ont des lignes de la
+  // même forme, et un test qui passe pour la mauvaise raison ne vaut rien.
+  const carteReal = groupe ? [...groupe.querySelectorAll('.cl-card')]
+    .find(c2 => /Réalisations/.test((c2.querySelector('.cl-card-bar') || {}).textContent || '')) : null;
+  const lignes = carteReal ? [...carteReal.querySelectorAll('.list-row .lr-t')].map(t => t.textContent) : [];
+  const bouton = carteReal ? [...carteReal.querySelectorAll('button')].find(b => /Créer une réalisation/.test(b.textContent)) : null;
+  const avant = realisations.length;
+  if (bouton) bouton.click();
+  await new Promise(r => setTimeout(r, 250));
+  const devisIllisible = groupe ? /contenu illisible/.test(groupe.textContent) : false;
+  return { devisIllisible, lignes, avait: !!bouton, cree: realisations.length - avant,
+           nouvelle: realisations[realisations.length - 1], vue: document.getElementById('realisations-view').style.display };
+});
+check('Fiche client : un devis au contenu illisible ne fait pas disparaître la fiche',
+  lienClient.devisIllisible, lienClient.devisIllisible ? 'ligne affichée sans montant' : 'ligne absente');
+check('Lien : depuis la fiche client, ses réalisations sont listées',
+  lienClient.lignes.some(t => /Villa Test|Réalisation/.test(t)), lienClient.lignes.join(' | '));
+check('Lien : et on peut en créer une pour ce client en un geste',
+  lienClient.avait && lienClient.cree === 1 && lienClient.nouvelle.clientId === 'cl-test'
+  && lienClient.nouvelle.title === 'Famille Cohen' && lienClient.vue === 'block',
+  JSON.stringify({ cree: lienClient.cree, titre: lienClient.nouvelle && lienClient.nouvelle.title }));
+await page.evaluate(() => {
+  realisations = realisations.filter(r => r.id !== realisations[realisations.length - 1].id || (r.photos || []).length);
+  saveRealisations(); showView('realisations');
+});
+
+// ============================================================================
 //  RAPPEL DE REPUBLICATION : le site ne se met pas à jour tout seul
 // ============================================================================
 const rappel = await page.evaluate(async () => {
