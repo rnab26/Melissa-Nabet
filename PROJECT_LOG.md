@@ -680,3 +680,25 @@ production : 401 sans jeton, 401 avec la clé publiable.
 **Limite assumée** : le texte réellement produit n'a pas pu être jugé (il faut une session
 connectée). Ce qui est testé : la forme de la requête, le retour dans le champ, l'échec
 lisible qui ne détruit pas le texte existant.
+
+## Site vitrine — aperçu de partage et référencement (septembre 2026)
+
+**État** : livré, déployé. Chantier `si05`.
+
+**Le fait qui commande tout** : les robots d'aperçu (WhatsApp, Facebook, LinkedIn,
+Instagram) n'exécutent pas le JavaScript. Une page qui charge ses données au runtime ne peut
+donc pas leur montrer une image « du dernier projet » par du code. D'où le choix : une
+**adresse fixe** (`ownerId/share.jpg`) écrite dans le HTML, et le CRM qui dépose à cette
+adresse la couverture de la réalisation publiée à chaque publication.
+
+- `shareImagePath()` (CRM) et la balise `og:image` (site) doivent rester d'accord.
+- L'upload est dans un `try` : la galerie est déjà publiée quand il a lieu, une panne
+  d'aperçu ne doit pas faire échouer la publication.
+- Le retrait du dernier projet efface l'image : sinon un lien partagé montrerait une photo
+  retirée du site.
+- `majSeo()` met à jour titre, description, og:url et canonique à l'ouverture d'un projet, et
+  restaure ceux du site (image comprise) à la fermeture.
+
+**Non fait, et pourquoi** : un aperçu *par projet* demanderait une page HTML par projet, donc
+un générateur qui republie le dépôt du site à chaque publication — un jeton GitHub à créer et
+à stocker. Écarté : une manip et un secret de plus pour un gain marginal.

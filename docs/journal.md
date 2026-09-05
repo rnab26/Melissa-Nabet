@@ -211,3 +211,53 @@ avec les bons champs, la réponse revient dans le champ et dans la fiche, l'éch
 et la fonction déployée refuse bien tout appel non authentifié. **À faire à ton retour** :
 cliquer « ✨ Rédiger un texte » sur une vraie réalisation et juger le texte. Si le ton ne va
 pas, le prompt est dans `supabase/functions/embellish/index.ts`, branche `kind === 'realisation'`.
+
+---
+
+## 5 septembre 2026 — Un lien partagé qui ne s'affiche plus tout nu
+
+**Branche** `claude/site-seo` → fusionnée sur `main`, site public déployé.
+**Chantier** `si05` (moyenne) — pris en initiative parce qu'il ne demande **aucune action**
+de ta part et qu'il change ce que voient les gens à qui Mélissa envoie le lien.
+
+**Le problème, concret** : un lien vers le site envoyé sur WhatsApp ou Instagram
+n'affichait ni image ni description. Les robots de ces services **ne lisent pas le
+JavaScript** : ils ne voient que le HTML livré, qui n'avait qu'un titre.
+
+**Ce qui est livré**
+
+- **Image d'aperçu.** À chaque publication, le CRM dépose la couverture de la réalisation
+  publiée à une **adresse fixe** (`galerie/<compte>/share.jpg`). La page publique cite cette
+  adresse en dur : elle n'a donc jamais à être modifiée, et un lien partagé montre une vraie
+  photo. Quand plus rien n'est en ligne, l'image est effacée — sinon un lien montrerait la
+  photo d'un chantier qu'on vient justement de retirer du site.
+- **Balises complètes** : og:url, og:site_name, og:locale, grande vignette Twitter, adresse
+  canonique, données structurées schema.org. Rien d'affirmé qu'on ne sache pas : le nom du
+  site, son adresse, sa langue, son objet.
+- **Titre d'onglet et description qui suivent le projet ouvert**, et qui reviennent à ceux du
+  site quand on referme (image d'aperçu comprise).
+- **robots.txt et sitemap.xml** (XML validé, bon espace de noms).
+- **Chargement** : vignettes au-delà des deux premières chargées à l'approche, décodage hors
+  du fil principal, priorité haute sur la première photo d'un projet.
+
+**Vérification** : 237 contrôles au navigateur (2 nouveaux) et 36 sur le site (14 nouveaux),
+dont les balises telles que les lit un robot sans JavaScript, et `robots.txt` / `sitemap.xml`
+réellement servis par un serveur.
+
+### Ce qu'il ne faut pas casser
+
+- L'adresse de l'image d'aperçu est écrite **à deux endroits** : `shareImagePath()` dans le
+  CRM et la balise `og:image` de `site-vitrine/index.html`. Changer l'un oblige à changer
+  l'autre — c'est dit en commentaire des deux côtés.
+- L'écriture de l'image d'aperçu est enveloppée dans un `try` : elle ne doit **jamais** faire
+  échouer une publication, la galerie étant déjà en ligne à ce moment-là.
+- Le test du site relit les balises sur une **page fraîche** : après l'ouverture d'un projet,
+  elles décrivent ce projet, pas le site.
+
+### Ce qui reste hors de portée sans une action de ta part
+
+- **Un aperçu par projet** dans WhatsApp. Il faudrait une page HTML par projet, donc un
+  générateur qui republie le dépôt du site à chaque publication — c'est-à-dire un jeton
+  GitHub à créer et à confier au CRM. Non fait volontairement : ça demande une manip et un
+  secret de plus. L'aperçu actuel (image du dernier projet publié) couvre le cas courant.
+- **Nom de domaine propre** (chantier `si06`) : achat à faire, ~12 €/an.
