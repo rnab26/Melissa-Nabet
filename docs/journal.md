@@ -9,6 +9,47 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+# À ton retour — l'essentiel en une page
+
+*(Écrit le 5 septembre 2026, après une session de nuit menée seule. Le détail de chaque
+point est plus bas, dans l'ordre chronologique.)*
+
+**Tout est en ligne et vérifié.** CRM et site public déployés, CI verte.
+**308 contrôles au navigateur, 52 sur le site public, 8 sur le pont IA — 0 échec.**
+
+## Ce qui a changé, par ordre d'importance pour toi
+
+| | Ce que tu pourras faire à l'ouverture |
+|---|---|
+| **Galerie** | Ranger les photos (glisser-déposer à la souris, ◀ ▶ au doigt), les **renommer et les légender**, **remplacer** une photo sans perdre sa place, voir la **progression d'un import** et la raison exacte de chaque fichier refusé (HEIC d'iPhone compris). Menu ⋯ par vignette, ◀ ▶ dans l'éditeur. |
+| **Retouche IA** | Une consigne, **toute la série** : coût annoncé avant, plafond qui bloque, interruption possible, bilan des échecs. |
+| **Éditeur** | **Annuler / Rétablir** (et Ctrl+Z). |
+| **Site public** | Fiche de projet avec **lieu, surface, mission, texte de présentation** ; **filtre par catégorie** ; **section À propos et contact** (vide, elle t'attend) ; **aperçu correct quand on partage le lien** sur WhatsApp ; balayage au doigt en plein écran. |
+| **Téléphone** | Le menu principal passe **en bas**, la barre du haut ne fait plus qu'une ligne : ~115 px d'écran regagnés. |
+| **Sécurité des données** | **Sauvegarde complète (.zip)** avec les photos en pleine définition, et le **retour en arrière** qui les remet en place. **Alerte** quand le stockage se remplit. |
+| **Au quotidien** | **Recherche globale** (Ctrl+K) sur tout le CRM, jusque dans les légendes. Rappel **« à republier »** sur le tableau de bord. Clients ↔ réalisations ↔ devis enfin **reliés dans les deux sens**. |
+
+## Ce qui t'attend, et rien d'autre
+
+1. **Écrire le texte « À propos »** et choisir les coordonnées publiques du site
+   (onglet Réalisations → « ⚙ Le site public »). Livré **vide** : je n'invente pas de
+   contenu à la place de Mélissa.
+2. **Juger le texte produit par « ✨ Rédiger un texte »** sur une vraie réalisation :
+   il faut une session connectée, je n'ai pas pu le voir.
+3. **Regarder la nouvelle navigation du téléphone** et me dire si elle te va. Tout tient
+   dans un bloc `@media` : la retirer est immédiat.
+
+*Aucune clé, aucun compte, aucune dépense, aucun réglage dans un tableau de bord tiers.*
+
+## Deux choses à savoir
+
+- **`ph14` (file d'attente fal.ai) est devenu plus urgent** : la retouche en série multiplie
+  les appels longs, et le pont attend encore la réponse dans la requête. **Rester en 2K.**
+- Une **autre session** a automatisé la recopie du site vitrine vers son dépôt
+  (`.github/workflows/sync-site-vitrine.yml`). Ne plus recopier à la main.
+
+---
+
 ## 4 septembre 2026 — Galerie : l'ordre, les mots, le remplacement, un import qui se voit
 
 **Branche** `claude/galerie-ordre-legendes` → fusionnée sur `main`.
