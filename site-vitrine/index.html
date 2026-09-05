@@ -138,6 +138,10 @@
   }
   .lightbox.open{display:flex;}
   .lightbox img{max-width:100%;max-height:calc(100% - 54px);object-fit:contain;}
+  /* Rang de la photo : sur un téléphone, on ne sait plus où on en est dans une série
+     de vingt sans ce repère. */
+  .lb-rang{position:absolute;top:22px;left:50%;transform:translateX(-50%);margin:0;
+    font-size:11px;letter-spacing:.14em;color:var(--stone-light);}
   .lb-cap{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
     max-width:min(720px,86vw);margin:0;text-align:center;font-style:italic;
     font-size:13.5px;line-height:1.5;color:var(--paper);}
@@ -201,6 +205,7 @@
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo en plein écran">
   <img id="lb-img" alt="">
   <p class="lb-cap" id="lb-cap" hidden></p>
+  <p class="lb-rang" id="lb-rang" aria-live="polite"></p>
   <button class="lb-close" id="lb-close" aria-label="Fermer">✕</button>
   <button class="lb-prev" id="lb-prev" aria-label="Photo précédente">‹</button>
   <button class="lb-next" id="lb-next" aria-label="Photo suivante">›</button>
@@ -359,6 +364,7 @@ function openLightbox(k) {
   if (!current) return;
   lbIndex = k;
   var ph = current.photos[k];
+  el('lb-rang').textContent = (k + 1) + ' / ' + current.photos.length;
   el('lb-img').src = url(ph.full);
   el('lb-img').alt = ph.caption || (current.title + ' — photo ' + (k + 1));
   el('lb-cap').textContent = ph.caption || '';
@@ -369,8 +375,32 @@ function stepLightbox(d) {
   if (!current) return;
   lbIndex = (lbIndex + d + current.photos.length) % current.photos.length;
   openLightbox(lbIndex);
+  // La suivante est chargée pendant qu'on regarde celle-ci.
+  var apres = current.photos[(lbIndex + d + current.photos.length) % current.photos.length];
+  if (apres) { var pre = new Image(); pre.src = url(apres.full); }
 }
 function closeLightbox() { el('lightbox').classList.remove('open'); }
+
+/* Sur un téléphone, on fait défiler les photos au doigt : sans ça il faut viser des
+   flèches de 46 px, ce que personne ne fait. Un glissement franc et horizontal seulement,
+   pour ne pas confondre avec un défilement de page ou une fermeture. */
+(function () {
+  var x0 = null, y0 = null, t0 = 0;
+  var lb = el('lightbox');
+  lb.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+  }, { passive: true });
+  lb.addEventListener('touchend', function (e) {
+    if (x0 === null) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - x0, dy = t.clientY - y0;
+    x0 = null;
+    if (Date.now() - t0 > 800) return;              // geste trop lent : ce n'est pas un balayage
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    stepLightbox(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 
 el('back').addEventListener('click', closeProject);
 el('lb-close').addEventListener('click', closeLightbox);

@@ -143,6 +143,25 @@ check('Plein écran s’ouvre', await page.locator('#lightbox.open').count() ===
 await page.click('#lb-next'); await page.waitForTimeout(300);
 const lbSrc = await page.getAttribute('#lb-img', 'src');
 check('Navigation entre photos en plein écran', lbSrc.includes('p1.jpg'), lbSrc);
+const rang = await page.evaluate(() => (document.getElementById('lb-rang').textContent || '').trim());
+check('Plein écran : le rang de la photo est affiché', rang === '2 / 3', rang);
+// Balayage au doigt : c'est le geste attendu sur un téléphone, les flèches sont un secours.
+const balayage = await page.evaluate(async () => {
+  const lb = document.getElementById('lightbox');
+  const av = document.getElementById('lb-rang').textContent;
+  const touche = (x, y) => [new Touch({ identifier: 1, target: lb, clientX: x, clientY: y })];
+  lb.dispatchEvent(new TouchEvent('touchstart', { touches: touche(300, 400), bubbles: true }));
+  lb.dispatchEvent(new TouchEvent('touchend', { changedTouches: touche(120, 410), bubbles: true }));
+  await new Promise(r => setTimeout(r, 250));
+  const ap = document.getElementById('lb-rang').textContent;
+  // un glissement vertical ne doit RIEN faire
+  lb.dispatchEvent(new TouchEvent('touchstart', { touches: touche(300, 200), bubbles: true }));
+  lb.dispatchEvent(new TouchEvent('touchend', { changedTouches: touche(288, 500), bubbles: true }));
+  await new Promise(r => setTimeout(r, 250));
+  return { av, ap, apresVertical: document.getElementById('lb-rang').textContent };
+});
+check('Plein écran : un balayage horizontal change de photo', balayage.ap === '3 / 3', balayage.av + ' → ' + balayage.ap);
+check('Plein écran : un glissement vertical ne change rien', balayage.apresVertical === balayage.ap, balayage.apresVertical);
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 check('Échap ferme le plein écran', await page.locator('#lightbox.open').count() === 0);
 await page.click('#back'); await page.waitForTimeout(300);
