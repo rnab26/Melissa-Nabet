@@ -95,9 +95,10 @@ l'appui long montrait la photo brute.
 choix qui n'en est pas un, et qui laissait croire qu'une version manquait. Elle ne s'affiche
 plus qu'à partir de deux.
 
-**Vérification** : `tests/realisations.test.mjs` → **393 contrôles, 0 échec** (7 nouveaux,
-dont le cas exact signalé : une photo sans retouche avec `rot:12` à 390 px) ;
-`tests/pont-ia.test.mjs` → 20 ; `tests/site.test.mjs` → 52.
+**Vérification** (après fusion avec les chantiers arrivés entre-temps) :
+`tests/realisations.test.mjs` → **401 contrôles, 0 échec**, dont 7 ajoutés ici — le cas exact
+signalé, une photo sans retouche portant `rot:12`, rejoué à 390 px ;
+`tests/pont-ia.test.mjs` → 20 ; `tests/site.test.mjs` → 60.
 
 ### Ce qu'il ne faut pas casser
 

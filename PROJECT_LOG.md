@@ -834,9 +834,9 @@ d'un curseur poussé à la main.
 - Ne pas remonter l'indice dans `.ed-bar` (une ligne, 56 px, mesuré à 375 et 390 px).
 - `editResume()` reste la seule façon de nommer un réglage manuel.
 
-**Vérification** : 393 contrôles (7 ajoutés), dont le cas exact signalé rejoué à 390 px — une
-photo sans retouche portant `rot:12`, la ligne d'état, la visibilité de l'indice, la liste
-masquée, et la remise à zéro.
+**Vérification** : 401 contrôles (7 ajoutés ici), dont le cas exact signalé rejoué à 390 px —
+une photo sans retouche portant `rot:12`, la ligne d'état, la visibilité de l'indice, la
+liste masquée, et la remise à zéro.
 
 ## Stockage — alerte de saturation (septembre 2026)
 
