@@ -850,3 +850,23 @@ filtre devenu vide se rouvre tout seul plutôt que de laisser un écran vide san
 
 **Note** : la suite de tests est passée à 393 contrôles — l'autre session travaille en
 parallèle sur le même fichier et y a ajouté les siens. Tout est vert.
+
+---
+
+## 5 septembre 2026 — Clavier, et un projet qui peut mener à un contact
+
+**Branche** `claude/site-clavier-contact` → fusionnée, site déployé. **Initiative.**
+
+- **Plein écran au clavier** : le focus va sur le bouton fermer à l'ouverture, la tabulation
+  tourne à l'intérieur de la fenêtre, et à la fermeture il revient **sur la photo d'où l'on
+  venait**. Avant, on tabulait dans la page invisible derrière et on se retrouvait renvoyé en
+  haut. C'est du confort pour tout le monde et une nécessité pour qui n'utilise pas de souris.
+- **En bas d'un projet** : « Un projet de ce genre ? écrivez-moi » — WhatsApp si un numéro
+  est renseigné, sinon l'e-mail. **Elle n'apparaît que si des coordonnées ont été saisies
+  depuis le CRM.** Tant que rien n'est rempli, la ligne n'existe pas. Mêmes coordonnées que
+  la section « À propos » : une seule source, pas deux endroits à tenir à jour.
+
+C'est ce qui manquait pour qu'un portfolio serve à quelque chose commercialement : le
+visiteur qui aime un chantier est à un clic d'écrire, sans remonter la page.
+
+**Vérification** : 65 contrôles sur le site (5 nouveaux).
