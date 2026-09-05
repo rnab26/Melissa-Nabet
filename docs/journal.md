@@ -336,3 +336,59 @@ L'adresse e-mail n'est pas écrite dans le HTML de la page : le lien est fabriqu
 chargement à partir du manifeste. Ça décourage les robots collecteurs ordinaires. Ça ne rend
 pas l'adresse secrète pour autant — le manifeste est un fichier public. Si Mélissa ne veut
 pas exposer son e-mail du tout, laisser le champ vide et ne mettre que WhatsApp.
+
+---
+
+## 5 septembre 2026 — Sauvegarde complète : les photos aussi
+
+**Branche** `claude/infra-sauvegarde` → fusionnée sur `main`. **Chantier** `fi02` (haute).
+
+**Le risque** : la sauvegarde JSON ne portait que les **vignettes**. Si le compte Supabase
+disparaît, les photos en pleine définition disparaissent avec — c'est-à-dire le travail de
+plusieurs chantiers.
+
+**Livré** : « Sauvegarde complète (.zip) » dans le panneau Sauvegarde. Données + toutes les
+photos en pleine définition + les versions IA, rangées **un dossier par réalisation**, noms
+lisibles, avec un LISEZ-MOI dans l'archive. Le poids est annoncé avant de lancer (calculé sur
+la taille moyenne réelle des fichiers), on peut n'en sauvegarder qu'une réalisation, on peut
+interrompre, et le bilan liste ce qui manquait au lieu de se taire.
+
+**Et le chemin du retour** : « Importer une sauvegarde complète » relit l'archive et remet
+chaque photo à sa place (`photos/_index.json` fait le lien). Une archive recompressée par un
+autre outil est refusée en disant pourquoi.
+
+**Vérification** : 266 contrôles (14 nouveaux), dont **l'archive relue par `unzip`** — pas
+seulement par notre propre code — et un aller-retour complet : tout effacer, réimporter,
+retrouver la photo octet pour octet, version IA comprise.
+
+### Ce qu'il ne faut pas casser
+
+- `donneesSauvegarde()` (ce qu'on écrit) et `appliquerSauvegarde()` (ce qu'on relit) sont
+  **uniques** et partagées par l'export JSON et l'archive complète. Deux copies auraient fini
+  par diverger, et ça ne se voit qu'au moment où l'on restaure — trop tard.
+- `readZip` n'accepte que la méthode « store », celle de `buildZip`. C'est volontaire : le
+  message d'erreur oriente vers la bonne cause (« archive recompressée ») au lieu de rendre
+  des octets faux.
+
+---
+
+## 5 septembre 2026 — Plein écran : balayage au doigt
+
+**Branche** `claude/site-plein-ecran` → fusionnée, site déployé. **Initiative** (hors
+tableau) : c'est le geste que fait tout le monde sur un téléphone, et il manquait.
+
+Balayage horizontal pour changer de photo (franc et horizontal seulement : un glissement
+vertical ne change rien), rang affiché « 3 / 12 » annoncé aussi aux lecteurs d'écran, et la
+photo suivante préchargée pendant qu'on regarde celle-ci.
+
+3 contrôles ajoutés, dont le balayage réel et le glissement vertical qui ne doit rien faire.
+
+---
+
+## Coordination avec l'autre session
+
+Une autre session a ajouté pendant ce temps un **workflow de recopie automatique** de
+`site-vitrine/` vers le dépôt du site (`.github/workflows/sync-site-vitrine.yml`). Il tourne
+et il a réussi. Conséquence pour la suite : **ne plus recopier le site à la main** — pousser
+sur `main` suffit, la recopie se fait toute seule. Mes recopies manuelles antérieures et
+celle-ci écrivent le même contenu, il n'y a pas de conflit.

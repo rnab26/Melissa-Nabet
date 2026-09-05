@@ -726,3 +726,23 @@ Ne pas « simplifier » en synchronisant automatiquement avec `library.branding`
 **Anti-collecte, sans mentir sur sa portée** : le lien `mailto:` est fabriqué au chargement,
 l'adresse n'est pas dans le HTML servi. Le manifeste, lui, est public : ce n'est pas un
 secret, c'est un ralentisseur.
+
+## Sauvegarde complète (septembre 2026)
+
+**État** : livré. Chantier `fi02`.
+
+Archive `.zip` « store » écrite par `buildZip` (déjà là) et relue par `readZip` (nouveau,
+lit le répertoire central — seule table fiable). Contenu : `donnees.json` (la sauvegarde
+JSON habituelle), `LISEZ-MOI.txt`, `photos/<réalisation>/<NN>-<titre>.jpg` (+ `-ia.jpg`), et
+`photos/_index.json` qui relie chaque fichier à sa photo pour la restauration.
+
+- `donneesSauvegarde()` / `appliquerSauvegarde()` : une seule définition de ce qu'on écrit et
+  de ce qu'on relit, partagée avec l'export/import JSON.
+- Le poids annoncé avant de lancer vient de la taille moyenne **réelle** des fichiers
+  (`_storageStat`), pas d'une constante.
+- Export interruptible, `await setTimeout(0)` entre deux photos pour ne pas figer l'écran
+  d'un téléphone.
+- `readZip` refuse une entrée compressée avec un message qui dit la vraie cause.
+
+**Vérification** : l'archive produite est relue par `unzip -t` dans le test (pas seulement
+par notre propre code), puis un aller-retour complet efface tout et restaure.
