@@ -662,3 +662,21 @@ existent.
 
 **Réglages** : `library.storage = {quotaMo, seuil, photoMo}` dans Sauvegarde →
 Synchronisation. Valeurs invalides refusées à l'écran avec leur raison.
+
+## Réalisations — textes de présentation (septembre 2026)
+
+**État** : livré, déployé (CRM, site vitrine, fonction serveur v11). Chantier `si03`.
+
+`normalizeRealisation` porte quatre champs de plus : `lieu`, `surface`, `mission`, `texte`
+(`date` servait déjà d'année). Ils partent dans le manifeste **seulement s'ils sont
+remplis** — le site s'appuie dessus pour n'afficher aucune étiquette vide.
+
+**Rédaction assistée** : `redigerTexteRealisation` appelle `embellish` avec
+`kind:'realisation'`. La fonction serveur porte désormais deux prompts et un seul chemin
+vers Anthropic (`appelAnthropic`) ; `kind` absent = prompt des devis, mot pour mot
+l'ancien. Déployée en version 11 avec `verify_jwt:false` (inchangé), vérifiée sur l'URL de
+production : 401 sans jeton, 401 avec la clé publiable.
+
+**Limite assumée** : le texte réellement produit n'a pas pu être jugé (il faut une session
+connectée). Ce qui est testé : la forme de la requête, le retour dans le champ, l'échec
+lisible qui ne détruit pas le texte existant.

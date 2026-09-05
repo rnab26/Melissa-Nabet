@@ -158,3 +158,56 @@ additionne les deux seaux.
   aussi, sinon la jauge ment jusqu'à l'expiration du cache.
 - Le seuil et la capacité vivent dans `library.storage` : ne pas revenir à des valeurs en
   dur, le plan Supabase peut changer.
+
+---
+
+## 5 septembre 2026 — Lieu, surface, mission et texte de présentation
+
+**Branche** `claude/site-textes` → fusionnée sur `main`. **Chantier** `si03` (haute).
+
+**Le constat du tableau des chantiers** : « un vrai projet a un lieu, une surface, une année,
+une description. Aujourd'hui il n'a qu'un nom et une date : c'est une galerie de photos, pas
+un portfolio. »
+
+**Livré côté CRM** : quatre champs de plus dans la fiche d'une réalisation — lieu, surface,
+type de mission (six missions courantes proposées, champ libre quand même) et un **texte de
+présentation** avec compteur de caractères et un état vide qui dit ce que ça change.
+
+**Rédaction assistée** : bouton « ✨ Rédiger un texte ». Il passe par la **même fonction
+serveur** que le bouton « Embellir » des devis (la clé Anthropic ne quitte jamais le
+serveur), mais avec `kind='realisation'` : un projet de portfolio ne se raconte pas comme
+une ligne de devis. Les légendes des photos partent comme matière. Un échec n'écrase jamais
+le texte déjà écrit et reste affiché avec quoi faire à la place.
+
+**Livré côté site** (dépôt miroir mis à jour et déployé) : année · lieu · surface · mission
+sous le titre du projet, puis le texte en paragraphe. Un champ vide ne s'affiche pas du tout.
+Sur les cartes de la liste, lieu et mission remplacent le décompte de photos — sauf quand ils
+manquent, où l'on retombe sur le décompte.
+
+**Fonction serveur `embellish` déployée en version 11**, `verify_jwt` toujours désactivé
+(volontaire, cf. plus haut dans PROJECT_LOG). **Vérifié en vrai sur l'URL de production** :
+401 « authentification requise » sans jeton, 401 « session invalide ou expirée » avec la clé
+publiable. Le comportement du bouton « Embellir » des devis est strictement inchangé :
+`kind` absent = ancien prompt, mot pour mot.
+
+**Vérification** : 235 contrôles au navigateur (13 nouveaux) et 24 sur le site vitrine
+(3 nouveaux), tous verts.
+
+### Ce qu'il ne faut pas casser
+
+- `kind` absent dans la requête = prompt des devis. Ne pas inverser ce défaut : le bouton
+  « Embellir » des devis passerait à un texte de portfolio sans que personne ne l'ait demandé.
+- Les champs vides ne sont **pas** écrits dans le manifeste : le site s'appuie dessus pour ne
+  rien afficher plutôt que d'afficher une étiquette vide.
+- Le test du site parcourt la page jusqu'en bas avant de compter les photos : elles sont en
+  chargement paresseux, et le texte de présentation les a poussées plus bas. Sans ce
+  défilement, le test mesure le lazy-loading, pas le site.
+
+### Non vérifié, et pourquoi
+
+Le texte réellement produit par le modèle n'a **pas** été vu : il faut une session connectée
+pour appeler la fonction, et cette session n'en a pas. Ce qui est vérifié : la requête part
+avec les bons champs, la réponse revient dans le champ et dans la fiche, l'échec est lisible,
+et la fonction déployée refuse bien tout appel non authentifié. **À faire à ton retour** :
+cliquer « ✨ Rédiger un texte » sur une vraie réalisation et juger le texte. Si le ton ne va
+pas, le prompt est dans `supabase/functions/embellish/index.ts`, branche `kind === 'realisation'`.
