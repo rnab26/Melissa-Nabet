@@ -746,3 +746,24 @@ JSON habituelle), `LISEZ-MOI.txt`, `photos/<réalisation>/<NN>-<titre>.jpg` (+ `
 
 **Vérification** : l'archive produite est relue par `unzip -t` dans le test (pas seulement
 par notre propre code), puis un aller-retour complet efface tout et restaure.
+
+## Navigation mobile — barre d'onglets en bas (septembre 2026)
+
+**État** : livré. Chantier `qu01`.
+
+En dessous de **820 px** : `.viewnav` masquée, `<nav class="navbas">` fixe en bas (48 px),
+`#split-toggle` et `.toolbar-actions` remplacés par un bouton `⋯` (`menuPlusMobile`), menu
+« Devis » posé en fenêtre (`devisMenuMobile`) puisque le menu déroulant du haut est invisible.
+Barre du haut mesurée à **56 px sur une ligne** contre 87 auparavant.
+
+**Ne pas casser**
+
+- `showView()` synchronise les DEUX navigations (haut et bas). Sans ça, un changement de
+  taille d'écran laisse un onglet actif faux.
+- Les sélecteurs `.toolbar #split-toggle`, `.toolbar .toolbar-actions` et
+  `#rz-body .rz-selbar` sont volontairement plus spécifiques : les règles d'origine sont
+  écrites plus bas dans la feuille et gagneraient à spécificité égale.
+- `.rz-selbar` remonte au-dessus de la barre d'onglets sur mobile, sinon ses boutons sont
+  inatteignables. Un test le mesure.
+- `body{padding-bottom:56px+safe-area}` sur mobile : sans ça, le dernier élément de chaque
+  vue passe sous la barre.

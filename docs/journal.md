@@ -392,3 +392,43 @@ Une autre session a ajouté pendant ce temps un **workflow de recopie automatiqu
 et il a réussi. Conséquence pour la suite : **ne plus recopier le site à la main** — pousser
 sur `main` suffit, la recopie se fait toute seule. Mes recopies manuelles antérieures et
 celle-ci écrivent le même contenu, il n'y a pas de conflit.
+
+---
+
+## 5 septembre 2026 — Le menu principal sur téléphone
+
+**Branche** `claude/crm-menu-mobile` → fusionnée sur `main`. **Chantier** `qu01` (haute).
+
+**Le problème, mesuré** : cinq onglets dans la barre du haut, qui passaient sur deux lignes.
+À 375 px, la barre faisait 87 px de haut ; avec les boutons Réglages / Sauvegarde / Vue
+bureau au-dessous, on perdait environ un cinquième de l'écran avant même de voir la première
+information.
+
+**Livré**, en dessous de 820 px (téléphone et tablette en portrait) :
+
+- la navigation devient une **barre d'onglets fixe en bas**, sous le pouce, icône + libellé,
+  onglet ouvert souligné ;
+- « Vue bureau », « Réglages » et « Sauvegarde » passent derrière un bouton **« ⋯ »**, avec
+  la **synchronisation** en plus — elle n'était atteignable que par une pastille de 10 px ;
+- le nom de l'atelier se réduit plutôt que de pousser la pastille de synchro à la ligne.
+
+**Résultat mesuré** : barre du haut à **56 px sur une seule ligne** (au lieu de 87), barre du
+bas 48 px. Au-dessus de 820 px, **rien ne change** : barre du haut classique, pas de barre du
+bas.
+
+**Vérification** : 284 contrôles (18 nouveaux), à 375, 390, 768 et 1280 px.
+
+### Deux pièges rencontrés, et la règle qui en sort
+
+1. **Ordre des feuilles de style.** Les règles d'origine (`#split-toggle`, `.rz-selbar`)
+   étaient écrites **après** ma requête média : à égalité de spécificité, la dernière gagne.
+   D'où des sélecteurs volontairement plus forts (`.toolbar #split-toggle`,
+   `#rz-body .rz-selbar`), avec le commentaire qui dit pourquoi. Ne pas les « simplifier ».
+2. **La barre d'actions d'une sélection de photos** serait passée **sous** la barre
+   d'onglets : le bouton « Supprimer » aurait été inatteignable. Elle remonte, et un test
+   mesure qu'elle reste au-dessus.
+
+### Si le résultat ne te plaît pas
+
+Tout tient dans un seul bloc `@media (max-width:820px)` et un `<nav class="navbas">`.
+Supprimer le bloc rend exactement l'ancien comportement.
