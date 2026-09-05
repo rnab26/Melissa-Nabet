@@ -34,8 +34,11 @@ for (const f of ['robots.txt', 'sitemap.xml']) {
   copyFileSync(join(RACINE, 'site-vitrine', f), join(DIR, f));
 }
 
-const photo = (i, legende) => {
-  const o = { full: 'u/r1/p' + i + '.jpg', thumb: 'u/r1/t' + i + '.jpg', w: 1600, h: 1067, cover: i === 0 };
+/* `portrait` ne change que les dimensions DÉCLARÉES : c'est là-dessus que la page décide
+   de mettre deux photos côte à côte, et c'est donc ça qu'il faut éprouver. */
+const photo = (i, legende, portrait) => {
+  const o = { full: 'u/r1/p' + i + '.jpg', thumb: 'u/r1/t' + i + '.jpg',
+              w: portrait ? 1067 : 1600, h: portrait ? 1600 : 1067, cover: i === 0 };
   if (legende) o.caption = legende;
   return o;
 };
@@ -55,7 +58,7 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
     lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète', categorie: 'Bureau',
     texte: 'Un plateau de bureaux cloisonné, ramené à un seul volume traversant. Les rangements ont été redessinés sur mesure pour dégager la vue depuis l’entrée.',
     publishedAt: new Date().toISOString(),
-    photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '')],
+    photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '', true)],
   }, {
     id: 'r2', title: 'Duplex Ben Yehuda', date: '2025',
     lieu: 'Tel Aviv', categorie: 'Appartement',

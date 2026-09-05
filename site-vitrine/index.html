@@ -98,7 +98,10 @@
 
   /* --- Vue projet --- */
   .detail{display:none;}
-  body.viewing .projects,body.viewing .index-head{display:none;}
+  /* Un projet ouvert : la liste, son titre et ses filtres n'ont plus rien à y faire —
+     ils appartiennent à l'index. `hidden` seul ne suffit pas pour les filtres, qui sont
+     affichés en `flex` dès qu'il y a plusieurs catégories. */
+  body.viewing .projects,body.viewing .index-head,body.viewing .filtres{display:none;}
   body.viewing .detail{display:block;}
   .back{
     background:none;border:none;padding:0 0 24px;cursor:pointer;font-family:inherit;
@@ -123,9 +126,22 @@
   .detail .project-meta{margin:8px 0 14px;}
   /* Texte de présentation écrit depuis le CRM. Absent, la ligne disparaît entièrement. */
   .detail-text{max-width:62ch;margin:0 0 34px;font-size:15px;line-height:1.75;color:var(--ink);}
-  .shots{display:flex;flex-direction:column;gap:clamp(14px,2.5vw,26px);}
-  .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;}
-  .shot img{width:100%;height:auto;display:block;}
+  /* Les photos verticales occupaient toute la largeur : sur un écran d'ordinateur, une
+     porte-fenêtre en portrait faisait deux mètres de haut et cassait la lecture. Elles se
+     mettent maintenant par deux, les horizontales gardent la pleine largeur. C'est la mise
+     en page de n'importe quel portfolio de photographe. */
+  .shots{display:grid;grid-template-columns:repeat(2,1fr);gap:clamp(14px,2.5vw,26px);align-items:start;}
+  .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;
+    grid-column:span 2;}
+  .shot.portrait{grid-column:span 1;}
+  @media (max-width:700px){
+    .shots{grid-template-columns:1fr;}
+    .shot,.shot.portrait{grid-column:span 1;}
+  }
+  /* Les images apparaissent en fondu au lieu de « sauter » d'un coup. Le fond de la case
+     tient la place avant : rien ne bouge. */
+  .shot img{width:100%;height:auto;display:block;opacity:0;transition:opacity .45s ease;}
+  .shot img.chargee{opacity:1;}
   /* Légende écrite depuis le CRM. Absente, rien ne s'affiche : une photo sans légende ne
      doit pas laisser un blanc sous elle. */
   .shot-cap{display:block;padding:9px 2px 0;text-align:left;font-size:13px;line-height:1.55;
@@ -158,6 +174,18 @@
      titre orphelin ni de bloc vide en bas de page. */
   .apropos{border-top:1px solid var(--hair);margin-top:clamp(40px,7vw,80px);padding-top:clamp(26px,4vw,40px);}
   .apropos-txt{max-width:62ch;margin:12px 0 0;font-size:15px;line-height:1.75;}
+  /* Un portfolio se parcourt de projet en projet : sans ce lien, il faut remonter tout en
+     haut et revenir à la liste. */
+  .suivant{
+    display:flex;flex-direction:column;gap:6px;width:100%;text-align:left;cursor:pointer;
+    background:none;border:none;border-top:1px solid var(--hair);
+    margin-top:clamp(30px,5vw,54px);padding:clamp(22px,3.5vw,34px) 0 0;font-family:inherit;color:inherit;
+  }
+  .suivant-nom{
+    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
+    font-size:clamp(22px,3.4vw,30px);line-height:1.2;color:var(--ink);
+  }
+  .suivant:hover .suivant-nom,.suivant:focus-visible .suivant-nom{color:var(--oxblood);}
   .liens{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;}
   .liens a{
     color:var(--ink);text-decoration:none;font-size:13px;letter-spacing:.02em;
@@ -192,6 +220,10 @@
     <p class="project-meta" id="d-meta"></p>
     <p class="detail-text" id="d-text" hidden></p>
     <div class="shots" id="d-shots"></div>
+    <button class="suivant" id="suivant" hidden>
+      <span class="eyebrow">Projet suivant</span>
+      <span class="suivant-nom" id="suivant-nom"></span>
+    </button>
   </section>
   <section class="apropos" id="apropos" hidden>
     <p class="eyebrow">À propos</p>
@@ -327,13 +359,25 @@ function openProject(i) {
     b.className = 'shot';
     b.type = 'button';
     b.setAttribute('aria-label', 'Agrandir la photo ' + (k + 1));
+    var portrait = !!(ph.w && ph.h && ph.h > ph.w);
+    if (portrait) b.className = 'shot portrait';
     var im = document.createElement('img');
     im.src = url(ph.full);
+    /* Deux tailles existent déjà dans le stockage (1600 px et 700 px) : autant laisser le
+       navigateur prendre la plus petite quand elle suffit, plutôt qu'un fichier de 400 Ko
+       pour une image affichée sur 350 px. Aucune image supplémentaire n'est produite. */
+    if (ph.thumb) {
+      im.srcset = url(ph.thumb) + ' 700w, ' + url(ph.full) + ' 1600w';
+      im.sizes = portrait ? '(max-width:700px) 100vw, 45vw' : '(max-width:700px) 100vw, 90vw';
+    }
     im.loading = k < 2 ? 'eager' : 'lazy';
     im.decoding = 'async';
     if (k === 0) im.setAttribute('fetchpriority', 'high');
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
     im.alt = ph.caption || (current.title + ' — photo ' + (k + 1));
+    // `complete` couvre le cas d'une image déjà en cache : l'événement `load` serait déjà passé.
+    if (im.complete) im.classList.add('chargee');
+    else im.addEventListener('load', function () { im.classList.add('chargee'); });
     b.appendChild(im);
     if (ph.caption) {
       var cap = document.createElement('span');
@@ -347,11 +391,32 @@ function openProject(i) {
   document.body.classList.add('viewing');
   window.scrollTo({ top: 0, behavior: 'auto' });
   location.hash = 'p-' + current.id;
+  peindreSuivant();
   var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
   majSeo(current.title + ' — ' + TITRE_SITE,
     current.texte || [current.lieu, current.surface, current.mission].filter(Boolean).join(' · ') || DESC_SITE,
     couv ? url(couv.full) : '');
 }
+
+/* Le projet suivant est le suivant DANS LA LISTE AFFICHÉE : si un filtre est actif, on
+   reste dans la même catégorie plutôt que de sauter ailleurs sans prévenir. */
+function projetSuivant(d) {
+  var liste = projetsVisibles();
+  if (liste.length < 2 || !current) return null;
+  var i = liste.indexOf(current);
+  if (i < 0) return null;
+  return liste[(i + (d || 1) + liste.length) % liste.length];
+}
+function peindreSuivant() {
+  var b = el('suivant'), p = projetSuivant(1);
+  if (!p) { b.hidden = true; return; }
+  b.hidden = false;
+  el('suivant-nom').textContent = p.title;
+}
+el('suivant').addEventListener('click', function () {
+  var p = projetSuivant(1);
+  if (p) openProject(projects.indexOf(p));
+});
 
 function closeProject() {
   document.body.classList.remove('viewing');
@@ -410,6 +475,12 @@ el('lightbox').addEventListener('click', function (e) { if (e.target === el('lig
 document.addEventListener('keydown', function (e) {
   if (!el('lightbox').classList.contains('open')) {
     if (e.key === 'Escape' && current) closeProject();
+    /* Projet ouvert : les flèches passent d'un projet à l'autre. Elles ne servent à rien
+       d'autre à ce moment-là, et c'est le geste attendu dans un portfolio. */
+    if (current && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      var p = projetSuivant(e.key === 'ArrowRight' ? 1 : -1);
+      if (p) { e.preventDefault(); openProject(projects.indexOf(p)); }
+    }
     return;
   }
   if (e.key === 'Escape') closeLightbox();

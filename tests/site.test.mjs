@@ -102,6 +102,45 @@ await page.evaluate(() => window.scrollTo(0, 0));
 await page.waitForTimeout(200);
 check('URL partageable (ancre du projet)', (await page.evaluate(() => location.hash)) === '#p-r1');
 
+// --- Mise en page des photos : les verticales par deux, les horizontales pleine largeur
+const miseEnPage = await page.evaluate(() => ({
+  total: document.querySelectorAll('.shot').length,
+  portraits: document.querySelectorAll('.shot.portrait').length,
+  colonnes: getComputedStyle(document.querySelector('.shots')).gridTemplateColumns.split(' ').length,
+  srcset: (document.querySelector('.shot img') || {}).srcset || '',
+  fondu: [...document.querySelectorAll('.shot img')].filter(i => i.classList.contains('chargee')).length,
+}));
+check('Photos : les verticales sont repérées comme telles',
+  miseEnPage.portraits === 1 && miseEnPage.total === 3, miseEnPage.portraits + ' verticale(s) sur ' + miseEnPage.total);
+check('Photos : deux colonnes sur un écran large', miseEnPage.colonnes === 2, miseEnPage.colonnes + ' colonne(s)');
+check('Photos : deux tailles proposées au navigateur, aucune image supplémentaire produite',
+  /700w/.test(miseEnPage.srcset) && /1600w/.test(miseEnPage.srcset), miseEnPage.srcset.slice(0, 80));
+check('Photos : les images chargées apparaissent en fondu (classe posée)', miseEnPage.fondu >= 1, miseEnPage.fondu + ' image(s)');
+
+// --- Projet suivant : on parcourt le portfolio sans remonter à la liste
+const suivant = await page.evaluate(async () => {
+  const b = document.getElementById('suivant');
+  const visible = !b.hidden;
+  const nom = (document.getElementById('suivant-nom').textContent || '').trim();
+  b.click();
+  await new Promise(r => setTimeout(r, 400));
+  const apres = (document.getElementById('d-title').textContent || '').trim();
+  // flèche du clavier
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await new Promise(r => setTimeout(r, 400));
+  const apresFleche = (document.getElementById('d-title').textContent || '').trim();
+  return { visible, nom, apres, apresFleche };
+});
+check('Projet suivant : le lien est proposé en bas de page', suivant.visible && !!suivant.nom, suivant.nom);
+const filtresCaches = await page.evaluate(() => getComputedStyle(document.getElementById('filtres')).display);
+check('Projet ouvert : les filtres de la liste ne s’affichent plus', filtresCaches === 'none', filtresCaches);
+check('Projet suivant : il ouvre bien le projet annoncé', suivant.apres === suivant.nom, suivant.nom + ' → ' + suivant.apres);
+check('Projet suivant : la flèche du clavier fait la même chose',
+  suivant.apresFleche !== suivant.apres, suivant.apres + ' → ' + suivant.apresFleche);
+await page.evaluate(async () => { closeProject(); await new Promise(r => setTimeout(r, 200)); });
+await page.locator('.project').first().click();
+await page.waitForTimeout(500);
+
 // --- Textes de présentation écrits depuis le CRM
 const presentation = await page.evaluate(() => ({
   meta: (document.getElementById('d-meta').textContent || '').trim(),
