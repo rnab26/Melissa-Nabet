@@ -9,7 +9,7 @@
      python3 -m http.server 8902 -d /tmp/mn-sitetest
      node tests/site.test.mjs
 */
-import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,6 +29,10 @@ const vide = local.replace("var OWNER = 'u';", "var OWNER = 'pas-encore-publie';
 mkdirSync(join(DIR, 'galerie/u/r1'), { recursive: true });
 writeFileSync(join(DIR, 'index.html'), local);
 writeFileSync(join(DIR, 'vide.html'), vide);
+/* Fichiers servis tels quels : ils sont testés à l'octet près, pas régénérés. */
+for (const f of ['robots.txt', 'sitemap.xml']) {
+  copyFileSync(join(RACINE, 'site-vitrine', f), join(DIR, f));
+}
 
 const photo = (i, legende) => {
   const o = { full: 'u/r1/p' + i + '.jpg', thumb: 'u/r1/t' + i + '.jpg', w: 1600, h: 1067, cover: i === 0 };
@@ -38,11 +42,30 @@ const photo = (i, legende) => {
 writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
   version: 1,
   updatedAt: new Date().toISOString(),
-  site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur' },
+  /* Les coordonnées du banc d'essai sont fictives et n'appartiennent à personne : elles
+     servent à vérifier la forme des liens, pas à publier quoi que ce soit. */
+  site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur',
+          apropos: 'Texte de présentation du banc d’essai.',
+          email: 'essai@example.com', tel: '052 000 00 00', instagram: '@essai' },
+  /* Trois projets et deux catégories : c'est le minimum pour que le filtre du site ait un
+     sens et soit vérifiable. Les deux derniers réutilisent les mêmes fichiers d'image —
+     le banc d'essai teste la page, pas les photos. */
   realisations: [{
     id: 'r1', title: 'Bureau Sébastien', date: '2026',
+    lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète', categorie: 'Bureau',
+    texte: 'Un plateau de bureaux cloisonné, ramené à un seul volume traversant. Les rangements ont été redessinés sur mesure pour dégager la vue depuis l’entrée.',
     publishedAt: new Date().toISOString(),
     photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '')],
+  }, {
+    id: 'r2', title: 'Duplex Ben Yehuda', date: '2025',
+    lieu: 'Tel Aviv', categorie: 'Appartement',
+    publishedAt: new Date().toISOString(),
+    photos: [photo(0, ''), photo(1, '')],
+  }, {
+    id: 'r3', title: 'Trois pièces Florentin', date: '2025',
+    categorie: 'Appartement',
+    publishedAt: new Date().toISOString(),
+    photos: [photo(2, '')],
   }],
 }, null, 1));
 

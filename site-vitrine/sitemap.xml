@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Le site est une page unique : les projets vivent derrière une ancre (#p-…), qui
+     n'est pas une URL distincte pour un moteur. Une seule entrée, donc. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://rnab26.github.io/melissa-nabet-site/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

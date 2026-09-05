@@ -41,17 +41,78 @@ await page.waitForTimeout(500);
 
 check('Titre du site repris du manifeste', (await page.textContent('#site-name')).trim() === 'Melissa Nabet');
 const cards = await page.locator('.project').count();
-check('Une carte par réalisation publiée', cards === 1, cards + ' carte(s)');
+check('Une carte par réalisation publiée', cards === 3, cards + ' carte(s)');
 const coverLoaded = await page.evaluate(() => [...document.querySelectorAll('.project-img img')].filter(i => i.naturalWidth > 0).length);
-check('Vignette de couverture réellement chargée', coverLoaded === 1, coverLoaded + ' chargée(s)');
+check('Vignettes de couverture réellement chargées', coverLoaded >= 2, coverLoaded + ' chargée(s) sur ' + cards);
+
+// --- Filtre par catégorie, construit tout seul à partir de ce qui est publié
+const filtres = await page.evaluate(() => ({
+  visible: !document.getElementById('filtres').hidden,
+  boutons: [...document.querySelectorAll('#filtres button')].map(b => b.textContent),
+  actif: (document.querySelector('#filtres button[aria-pressed="true"]') || {}).textContent || '',
+}));
+check('Filtre : une case par catégorie publiée, avec le décompte',
+  filtres.visible && filtres.boutons.join(' | ') === 'Tout (3) | Appartement (2) | Bureau (1)', filtres.boutons.join(' | '));
+check('Filtre : « Tout » est actif au départ', /^Tout/.test(filtres.actif), filtres.actif);
+const filtre1 = await page.evaluate(async () => {
+  [...document.querySelectorAll('#filtres button')].find(b => /Appartement/.test(b.textContent)).click();
+  await new Promise(r => setTimeout(r, 200));
+  return {
+    cartes: [...document.querySelectorAll('.project-name')].map(n => n.textContent),
+    actif: (document.querySelector('#filtres button[aria-pressed="true"]') || {}).textContent || '',
+  };
+});
+check('Filtre : ne restent que les projets de la catégorie choisie',
+  filtre1.cartes.length === 2 && filtre1.cartes.every(t => /Duplex|Florentin/.test(t)), filtre1.cartes.join(' | '));
+check('Filtre : la case choisie est marquée', /Appartement/.test(filtre1.actif), filtre1.actif);
+// Ouvrir depuis une liste filtrée doit ouvrir LE bon projet, pas celui du même rang
+// dans la liste complète.
+await page.locator('.project').first().click();
+await page.waitForTimeout(500);
+const ouvertFiltre = await page.evaluate(() => ({ titre: (document.getElementById('d-title') || {}).textContent || '', hash: location.hash }));
+check('Filtre : ouvrir depuis une liste filtrée ouvre le bon projet',
+  /Duplex/.test(ouvertFiltre.titre) && ouvertFiltre.hash === '#p-r2', ouvertFiltre.titre + ' ' + ouvertFiltre.hash);
+await page.click('#back'); await page.waitForTimeout(300);
+await page.evaluate(async () => {
+  [...document.querySelectorAll('#filtres button')].find(b => /^Tout/.test(b.textContent)).click();
+  await new Promise(r => setTimeout(r, 200));
+});
+// Une seule catégorie : un filtre à un bouton n'est pas un filtre, il ne s'affiche pas.
+const filtreUn = await page.evaluate(() => {
+  const garde = projects.slice();
+  projects = projects.filter(p => (p.categorie || '') === 'Appartement');
+  renderFiltres(); renderIndex();
+  const cache = document.getElementById('filtres').hidden;
+  projects = garde; renderFiltres(); renderIndex();
+  return cache;
+});
+check('Filtre : une seule catégorie, aucun filtre affiché', filtreUn === true);
 
 await page.locator('.project').first().click();
 await page.waitForTimeout(600);
 check('Ouverture du projet', await page.locator('.detail').isVisible());
 check('Titre du projet affiché', (await page.textContent('#d-title')).trim() === 'Bureau Sébastien');
+// Les photos hors écran sont en chargement paresseux : on parcourt la page comme un
+// visiteur avant de compter, sinon on mesure le lazy-loading, pas le site.
+await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+await page.waitForTimeout(700);
 const shots = await page.evaluate(() => [...document.querySelectorAll('.shot img')].filter(i => i.naturalWidth > 0).length);
 check('Les 3 photos du projet se chargent', shots === 3, shots + ' photo(s)');
+await page.evaluate(() => window.scrollTo(0, 0));
+await page.waitForTimeout(200);
 check('URL partageable (ancre du projet)', (await page.evaluate(() => location.hash)) === '#p-r1');
+
+// --- Textes de présentation écrits depuis le CRM
+const presentation = await page.evaluate(() => ({
+  meta: (document.getElementById('d-meta').textContent || '').trim(),
+  texte: (document.getElementById('d-text').textContent || '').trim(),
+  cache: document.getElementById('d-text').hidden,
+  carte: (document.querySelector('.project-meta') || {}).textContent || '',
+}));
+check('Lieu, surface et mission affichés sous le titre du projet',
+  /2026/.test(presentation.meta) && /Tel Aviv/.test(presentation.meta) && /85 m²/.test(presentation.meta) && /Rénovation complète/.test(presentation.meta),
+  presentation.meta);
+check('Texte de présentation affiché', !presentation.cache && /plateau de bureaux/.test(presentation.texte), presentation.texte.slice(0, 60));
 
 // --- Légendes écrites depuis le CRM
 const legendes = await page.evaluate(() => ({
@@ -82,10 +143,116 @@ check('Plein écran s’ouvre', await page.locator('#lightbox.open').count() ===
 await page.click('#lb-next'); await page.waitForTimeout(300);
 const lbSrc = await page.getAttribute('#lb-img', 'src');
 check('Navigation entre photos en plein écran', lbSrc.includes('p1.jpg'), lbSrc);
+const rang = await page.evaluate(() => (document.getElementById('lb-rang').textContent || '').trim());
+check('Plein écran : le rang de la photo est affiché', rang === '2 / 3', rang);
+// Balayage au doigt : c'est le geste attendu sur un téléphone, les flèches sont un secours.
+const balayage = await page.evaluate(async () => {
+  const lb = document.getElementById('lightbox');
+  const av = document.getElementById('lb-rang').textContent;
+  const touche = (x, y) => [new Touch({ identifier: 1, target: lb, clientX: x, clientY: y })];
+  lb.dispatchEvent(new TouchEvent('touchstart', { touches: touche(300, 400), bubbles: true }));
+  lb.dispatchEvent(new TouchEvent('touchend', { changedTouches: touche(120, 410), bubbles: true }));
+  await new Promise(r => setTimeout(r, 250));
+  const ap = document.getElementById('lb-rang').textContent;
+  // un glissement vertical ne doit RIEN faire
+  lb.dispatchEvent(new TouchEvent('touchstart', { touches: touche(300, 200), bubbles: true }));
+  lb.dispatchEvent(new TouchEvent('touchend', { changedTouches: touche(288, 500), bubbles: true }));
+  await new Promise(r => setTimeout(r, 250));
+  return { av, ap, apresVertical: document.getElementById('lb-rang').textContent };
+});
+check('Plein écran : un balayage horizontal change de photo', balayage.ap === '3 / 3', balayage.av + ' → ' + balayage.ap);
+check('Plein écran : un glissement vertical ne change rien', balayage.apresVertical === balayage.ap, balayage.apresVertical);
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 check('Échap ferme le plein écran', await page.locator('#lightbox.open').count() === 0);
 await page.click('#back'); await page.waitForTimeout(300);
 check('Retour à la liste', await page.locator('.projects').isVisible());
+
+// --- Partage d'un lien et référencement
+// Page fraîche : ce sont les balises telles que les lit un robot qui n'exécute pas le
+// JavaScript (WhatsApp, Facebook, LinkedIn) qu'on veut vérifier ici.
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(400);
+const seo = await page.evaluate(() => {
+  const m = (sel) => (document.querySelector(sel) || {}).content || '';
+  return {
+    ogImage: m('meta[property="og:image"]'),
+    ogTitre: m('meta[property="og:title"]'),
+    ogType: m('meta[property="og:type"]'),
+    carte: m('meta[name="twitter:card"]'),
+    canonical: (document.querySelector('link[rel="canonical"]') || {}).href || '',
+    jsonld: (document.querySelector('script[type="application/ld+json"]') || {}).textContent || '',
+    titre: document.title,
+  };
+});
+check('Partage : une image d’aperçu est déclarée, à une adresse fixe',
+  /\/galerie\/[0-9a-f-]+\/share\.jpg$/.test(seo.ogImage), seo.ogImage);
+check('Partage : grande vignette sur les réseaux', seo.carte === 'summary_large_image', seo.carte);
+check('Référencement : adresse canonique déclarée', /melissa-nabet-site/.test(seo.canonical), seo.canonical);
+check('Partage : le titre déclaré est celui du site', /Melissa Nabet/.test(seo.ogTitre) && seo.ogType === 'website', seo.ogTitre);
+let jsonldOk = false, jsonldNom = '';
+try { const j = JSON.parse(seo.jsonld); jsonldNom = j.name; jsonldOk = j['@context'] === 'https://schema.org' && !!j.name; } catch (e) {}
+check('Référencement : données structurées valides', jsonldOk, jsonldNom || seo.jsonld.slice(0, 60));
+
+const robots = await page.goto('http://127.0.0.1:8902/robots.txt');
+const robotsTxt = await robots.text();
+check('Référencement : robots.txt servi et ouvert à l’indexation',
+  robots.status() === 200 && /Allow: \//.test(robotsTxt) && /Sitemap:/.test(robotsTxt), robotsTxt.split('\n')[1]);
+const smap = await page.goto('http://127.0.0.1:8902/sitemap.xml');
+const smapTxt = await smap.text();
+check('Référencement : sitemap.xml servi, avec le bon espace de noms',
+  smap.status() === 200 && smapTxt.includes('http://www.sitemaps.org/schemas/sitemap/0.9') && smapTxt.includes('<loc>'),
+  smapTxt.split('\n').find(l => l.includes('xmlns')) || '');
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(400);
+
+// Le titre de l'onglet suit le projet ouvert : un lien copié depuis la barre d'adresse
+// n'arrive plus avec le titre du site entier.
+await page.locator('.project').first().click();
+await page.waitForTimeout(500);
+const seoProjet = await page.evaluate(() => ({
+  titre: document.title,
+  desc: (document.querySelector('meta[name="description"]') || {}).content || '',
+  url: (document.querySelector('meta[property="og:url"]') || {}).content || '',
+}));
+check('Partage : le titre de l’onglet suit le projet ouvert',
+  /^Bureau Sébastien — /.test(seoProjet.titre), seoProjet.titre);
+check('Partage : la description reprend le texte du projet',
+  /plateau de bureaux/.test(seoProjet.desc), seoProjet.desc.slice(0, 60));
+check('Partage : l’adresse partagée est celle du projet', /#p-r1$/.test(seoProjet.url), seoProjet.url);
+await page.click('#back'); await page.waitForTimeout(400);
+const seoRetour = await page.evaluate(() => ({
+  titre: document.title,
+  image: (document.querySelector('meta[property="og:image"]') || {}).content || '',
+}));
+check('Partage : revenir à la liste rend son titre au site',
+  seoRetour.titre === 'Melissa Nabet — Architecture d\'intérieur', seoRetour.titre);
+check('Partage : et rend aussi l’image d’aperçu du site (pas celle du projet quitté)',
+  /share\.jpg$/.test(seoRetour.image), seoRetour.image);
+
+// --- À propos et contact, écrits depuis le CRM
+const contact = await page.evaluate(() => ({
+  visible: !document.getElementById('apropos').hidden,
+  texte: (document.getElementById('apropos-txt').textContent || '').trim(),
+  liens: [...document.querySelectorAll('#contact a')].map(a => a.getAttribute('href')),
+  libelles: [...document.querySelectorAll('#contact a')].map(a => a.textContent),
+}));
+check('Contact : la section s’affiche quand quelque chose est rempli', contact.visible);
+check('Contact : le texte À propos est repris', /banc d’essai/.test(contact.texte), contact.texte);
+check('Contact : lien e-mail fabriqué', contact.liens.some(h => h === 'mailto:essai@example.com'), contact.liens.join(' | '));
+check('Contact : lien WhatsApp au bon format international',
+  contact.liens.some(h => h === 'https://wa.me/972520000000'), contact.liens.join(' | '));
+check('Contact : lien Instagram', contact.liens.some(h => h === 'https://instagram.com/essai'), contact.liens.join(' | '));
+const mailDansHtml = (await page.content()).includes('essai@example.com');
+check('Contact : l’adresse e-mail n’est pas écrite en clair dans le HTML servi',
+  !(await page.evaluate(() => document.documentElement.outerHTML.split('<script')[0].includes('essai@example.com'))),
+  mailDansHtml ? 'présente après rendu (normal)' : 'absente');
+const contactVide = await page.evaluate(() => {
+  renderApropos({});
+  const cache = document.getElementById('apropos').hidden;
+  renderApropos({ apropos: 'Texte de présentation du banc d’essai.', email: 'essai@example.com', tel: '052 000 00 00', instagram: '@essai' });
+  return cache;
+});
+check('Contact : rien de rempli, aucune section vide en bas de page', contactVide === true);
 
 // Aucun secret dans la page servie
 const html = await page.content();

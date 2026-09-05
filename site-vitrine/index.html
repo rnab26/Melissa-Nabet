@@ -5,9 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Melissa Nabet — Architecture d'intérieur</title>
 <meta name="description" content="Réalisations d'architecture d'intérieur : chantiers livrés, photographiés et présentés projet par projet.">
+<link rel="canonical" href="https://rnab26.github.io/melissa-nabet-site/">
 <meta property="og:title" content="Melissa Nabet — Architecture d'intérieur">
-<meta property="og:description" content="Réalisations d'architecture d'intérieur.">
+<meta property="og:description" content="Réalisations d'architecture d'intérieur : chantiers livrés, photographiés et présentés projet par projet.">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Melissa Nabet">
+<meta property="og:locale" content="fr_FR">
+<meta property="og:url" content="https://rnab26.github.io/melissa-nabet-site/">
+<!-- Aperçu quand le lien est partagé (WhatsApp, Instagram, Facebook, LinkedIn).
+     Ces robots-là NE LISENT PAS le JavaScript : l'image doit donc être une adresse fixe
+     écrite ici en dur. Le CRM y dépose la couverture de la dernière réalisation publiée
+     à chaque publication, et l'efface quand plus rien n'est en ligne. Si ce chemin change
+     côté CRM (shareImagePath), il faut le changer ici aussi. -->
+<meta property="og:image" content="https://njaamykxnvohoesrtpvv.supabase.co/storage/v1/object/public/galerie/797ad2e5-a27a-45c3-a987-d4897d1cadbf/share.jpg">
+<meta property="og:image:alt" content="Réalisation d'architecture d'intérieur">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#f4efe6">
+<link rel="sitemap" type="application/xml" href="sitemap.xml">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","name":"Melissa Nabet",
+ "url":"https://rnab26.github.io/melissa-nabet-site/","inLanguage":"fr",
+ "description":"Réalisations d'architecture d'intérieur."}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Inter:wght@400;500;600&display=swap">
@@ -90,7 +109,20 @@
     font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
     font-size:clamp(28px,5vw,40px);margin:0;line-height:1.15;
   }
-  .detail .project-meta{margin:8px 0 34px;}
+  /* Filtres : n'apparaissent que s'il y a vraiment plusieurs catégories à distinguer.
+     Un filtre à un seul bouton n'est pas un filtre, c'est un décor. */
+  .filtres{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;}
+  .filtres button{
+    font-family:'Inter',system-ui,sans-serif;font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;font-weight:600;color:var(--stone);
+    background:transparent;border:1px solid var(--hair);border-radius:999px;
+    padding:8px 15px;cursor:pointer;transition:color .2s,border-color .2s,background .2s;
+  }
+  .filtres button:hover{color:var(--ink);border-color:var(--stone-light);}
+  .filtres button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--paper);}
+  .detail .project-meta{margin:8px 0 14px;}
+  /* Texte de présentation écrit depuis le CRM. Absent, la ligne disparaît entièrement. */
+  .detail-text{max-width:62ch;margin:0 0 34px;font-size:15px;line-height:1.75;color:var(--ink);}
   .shots{display:flex;flex-direction:column;gap:clamp(14px,2.5vw,26px);}
   .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;}
   .shot img{width:100%;height:auto;display:block;}
@@ -106,6 +138,10 @@
   }
   .lightbox.open{display:flex;}
   .lightbox img{max-width:100%;max-height:calc(100% - 54px);object-fit:contain;}
+  /* Rang de la photo : sur un téléphone, on ne sait plus où on en est dans une série
+     de vingt sans ce repère. */
+  .lb-rang{position:absolute;top:22px;left:50%;transform:translateX(-50%);margin:0;
+    font-size:11px;letter-spacing:.14em;color:var(--stone-light);}
   .lb-cap{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
     max-width:min(720px,86vw);margin:0;text-align:center;font-style:italic;
     font-size:13.5px;line-height:1.5;color:var(--paper);}
@@ -118,6 +154,17 @@
   .lb-next{right:14px;top:50%;transform:translateY(-50%);}
   .lightbox button:hover{background:rgba(255,255,255,.2);}
 
+  /* À propos et contact : écrits depuis le CRM. Rien de rempli, rien d'affiché — pas de
+     titre orphelin ni de bloc vide en bas de page. */
+  .apropos{border-top:1px solid var(--hair);margin-top:clamp(40px,7vw,80px);padding-top:clamp(26px,4vw,40px);}
+  .apropos-txt{max-width:62ch;margin:12px 0 0;font-size:15px;line-height:1.75;}
+  .liens{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;}
+  .liens a{
+    color:var(--ink);text-decoration:none;font-size:13px;letter-spacing:.02em;
+    border-bottom:1px solid var(--hair);padding-bottom:3px;transition:border-color .2s;
+  }
+  .liens a:hover{border-color:var(--ink);}
+  body.viewing .apropos{display:none;}
   footer{
     border-top:1px solid var(--hair);padding:34px 22px 46px;text-align:center;
     font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-light);
@@ -135,6 +182,7 @@
 
 <main>
   <p class="eyebrow index-head">Réalisations</p>
+  <nav class="filtres" id="filtres" hidden aria-label="Filtrer les réalisations"></nav>
   <div class="projects" id="projects"></div>
   <div class="state" id="state" hidden></div>
 
@@ -142,7 +190,13 @@
     <button class="back" id="back">← Toutes les réalisations</button>
     <h2 id="d-title"></h2>
     <p class="project-meta" id="d-meta"></p>
+    <p class="detail-text" id="d-text" hidden></p>
     <div class="shots" id="d-shots"></div>
+  </section>
+  <section class="apropos" id="apropos" hidden>
+    <p class="eyebrow">À propos</p>
+    <p class="apropos-txt" id="apropos-txt" hidden></p>
+    <div class="liens" id="contact"></div>
   </section>
 </main>
 
@@ -151,6 +205,7 @@
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo en plein écran">
   <img id="lb-img" alt="">
   <p class="lb-cap" id="lb-cap" hidden></p>
+  <p class="lb-rang" id="lb-rang" aria-live="polite"></p>
   <button class="lb-close" id="lb-close" aria-label="Fermer">✕</button>
   <button class="lb-prev" id="lb-prev" aria-label="Photo précédente">‹</button>
   <button class="lb-next" id="lb-next" aria-label="Photo suivante">›</button>
@@ -164,7 +219,7 @@ var STORAGE = 'https://njaamykxnvohoesrtpvv.supabase.co/storage/v1/object/public
 var OWNER = '797ad2e5-a27a-45c3-a987-d4897d1cadbf';
 
 var el = function (id) { return document.getElementById(id); };
-var projects = [], current = null, lbIndex = 0;
+var projects = [], current = null, lbIndex = 0, filtre = '';
 
 function url(p) { return STORAGE + p; }
 
@@ -176,10 +231,37 @@ function showState(title, text) {
   s.querySelector('p').textContent = text;
 }
 
+/* Le filtre se construit tout seul à partir de ce qui est publié : aucune liste à tenir
+   à jour quelque part, et une catégorie qui disparaît du site disparaît du filtre. */
+function renderFiltres() {
+  var host = el('filtres');
+  var cats = [];
+  projects.forEach(function (p) {
+    var c = (p.categorie || '').trim();
+    if (c && cats.indexOf(c) < 0) cats.push(c);
+  });
+  cats.sort(function (a, b) { return a.localeCompare(b, 'fr'); });
+  if (cats.length < 2) { host.hidden = true; host.innerHTML = ''; filtre = ''; return; }
+  host.hidden = false;
+  host.innerHTML = '';
+  [''].concat(cats).forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    var n = c ? projects.filter(function (p) { return (p.categorie || '').trim() === c; }).length : projects.length;
+    b.textContent = (c || 'Tout') + ' (' + n + ')';
+    b.setAttribute('aria-pressed', filtre === c ? 'true' : 'false');
+    b.addEventListener('click', function () { filtre = c; renderFiltres(); renderIndex(); });
+    host.appendChild(b);
+  });
+}
+function projetsVisibles() {
+  if (!filtre) return projects;
+  return projects.filter(function (p) { return (p.categorie || '').trim() === filtre; });
+}
 function renderIndex() {
   var host = el('projects');
   host.innerHTML = '';
-  projects.forEach(function (p, i) {
+  projetsVisibles().forEach(function (p, i) {
     var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
     if (!cover) return;
     var b = document.createElement('button');
@@ -187,18 +269,57 @@ function renderIndex() {
     b.type = 'button';
     b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
       + '<p class="project-name"></p><p class="project-meta"></p>';
-    b.querySelector('img').src = url(cover.thumb);
+    var vign = b.querySelector('img');
+    vign.src = url(cover.thumb);
+    vign.decoding = 'async';
+    // Les deux premières cartes sont vues tout de suite ; les suivantes attendent d'être
+    // approchées. Le format de la case est déjà fixé en CSS (4/3), donc rien ne saute
+    // quand une image arrive.
+    vign.loading = i > 1 ? 'lazy' : 'eager';
     b.querySelector('.project-name').textContent = p.title;
-    b.querySelector('.project-meta').textContent = [p.date, p.photos.length + ' photos'].filter(Boolean).join(' · ');
-    b.addEventListener('click', function () { openProject(i); });
+    // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
+    // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
+    var infos = [p.date, p.lieu, p.mission].filter(Boolean);
+    if (infos.length < 2) infos.push(p.photos.length + ' photos');
+    b.querySelector('.project-meta').textContent = infos.join(' · ');
+    b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
     host.appendChild(b);
   });
 }
 
+/* Un projet ouvert change l'adresse (ancre) : le titre de l'onglet et la description
+   doivent suivre, sinon un lien copié depuis la barre d'adresse arrive avec le titre du
+   site entier. Les robots qui lisent le JavaScript (Google) y gagnent aussi. */
+var TITRE_SITE = document.title;
+var DESC_SITE = (document.querySelector('meta[name="description"]') || {}).content || '';
+/* L'image d'aperçu du site, telle qu'écrite dans la page. Refermer un projet doit la
+   rendre : sinon un lien copié depuis la liste emporte encore la photo du projet qu'on
+   vient de quitter. */
+var IMG_SITE = (document.querySelector('meta[property="og:image"]') || {}).content || '';
+function majSeo(titre, description, image) {
+  document.title = titre;
+  var d = document.querySelector('meta[name="description"]');
+  if (d) d.content = description;
+  var ogt = document.querySelector('meta[property="og:title"]');
+  if (ogt) ogt.content = titre;
+  var ogd = document.querySelector('meta[property="og:description"]');
+  if (ogd) ogd.content = description;
+  var ogu = document.querySelector('meta[property="og:url"]');
+  if (ogu) ogu.content = location.href;
+  var can = document.querySelector('link[rel="canonical"]');
+  if (can) can.href = location.href;
+  if (image) {
+    var ogi = document.querySelector('meta[property="og:image"]');
+    if (ogi) ogi.content = image;
+  }
+}
 function openProject(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
-  el('d-meta').textContent = [current.date, current.photos.length + ' photos'].filter(Boolean).join(' · ');
+  el('d-meta').textContent = [current.date, current.categorie, current.lieu, current.surface,
+    current.mission, current.photos.length + ' photos'].filter(Boolean).join(' · ');
+  el('d-text').textContent = current.texte || '';
+  el('d-text').hidden = !current.texte;
   var host = el('d-shots');
   host.innerHTML = '';
   current.photos.forEach(function (ph, k) {
@@ -209,6 +330,8 @@ function openProject(i) {
     var im = document.createElement('img');
     im.src = url(ph.full);
     im.loading = k < 2 ? 'eager' : 'lazy';
+    im.decoding = 'async';
+    if (k === 0) im.setAttribute('fetchpriority', 'high');
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
     im.alt = ph.caption || (current.title + ' — photo ' + (k + 1));
     b.appendChild(im);
@@ -224,18 +347,24 @@ function openProject(i) {
   document.body.classList.add('viewing');
   window.scrollTo({ top: 0, behavior: 'auto' });
   location.hash = 'p-' + current.id;
+  var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
+  majSeo(current.title + ' — ' + TITRE_SITE,
+    current.texte || [current.lieu, current.surface, current.mission].filter(Boolean).join(' · ') || DESC_SITE,
+    couv ? url(couv.full) : '');
 }
 
 function closeProject() {
   document.body.classList.remove('viewing');
   current = null;
   if (location.hash) history.replaceState(null, '', location.pathname);
+  majSeo(TITRE_SITE, DESC_SITE, IMG_SITE);
 }
 
 function openLightbox(k) {
   if (!current) return;
   lbIndex = k;
   var ph = current.photos[k];
+  el('lb-rang').textContent = (k + 1) + ' / ' + current.photos.length;
   el('lb-img').src = url(ph.full);
   el('lb-img').alt = ph.caption || (current.title + ' — photo ' + (k + 1));
   el('lb-cap').textContent = ph.caption || '';
@@ -246,8 +375,32 @@ function stepLightbox(d) {
   if (!current) return;
   lbIndex = (lbIndex + d + current.photos.length) % current.photos.length;
   openLightbox(lbIndex);
+  // La suivante est chargée pendant qu'on regarde celle-ci.
+  var apres = current.photos[(lbIndex + d + current.photos.length) % current.photos.length];
+  if (apres) { var pre = new Image(); pre.src = url(apres.full); }
 }
 function closeLightbox() { el('lightbox').classList.remove('open'); }
+
+/* Sur un téléphone, on fait défiler les photos au doigt : sans ça il faut viser des
+   flèches de 46 px, ce que personne ne fait. Un glissement franc et horizontal seulement,
+   pour ne pas confondre avec un défilement de page ou une fermeture. */
+(function () {
+  var x0 = null, y0 = null, t0 = 0;
+  var lb = el('lightbox');
+  lb.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+  }, { passive: true });
+  lb.addEventListener('touchend', function (e) {
+    if (x0 === null) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - x0, dy = t.clientY - y0;
+    x0 = null;
+    if (Date.now() - t0 > 800) return;              // geste trop lent : ce n'est pas un balayage
+    if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    stepLightbox(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 
 el('back').addEventListener('click', closeProject);
 el('lb-close').addEventListener('click', closeLightbox);
@@ -264,18 +417,58 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'ArrowRight') stepLightbox(1);
 });
 
+/* Le numéro tel qu'on l'écrit en Israël (0xx…) vers le format attendu par WhatsApp. */
+function versWhatsApp(brut) {
+  var d = String(brut || '').replace(/\D/g, '');
+  if (!d) return '';
+  return d.charAt(0) === '0' ? '972' + d.slice(1) : d;
+}
+/* L'adresse e-mail n'est jamais écrite dans le HTML servi : elle vient du manifeste et le
+   lien est fabriqué ici. Ça décourage les robots ordinaires — ça ne rend pas l'adresse
+   secrète pour autant, le manifeste est public. */
+function renderApropos(site) {
+  var s = site || {};
+  var host = el('contact');
+  host.innerHTML = '';
+  var txt = (s.apropos || '').trim();
+  el('apropos-txt').textContent = txt;
+  el('apropos-txt').hidden = !txt;
+  var liens = [];
+  if (s.email) liens.push({ href: 'mailto:' + s.email, texte: s.email });
+  if (s.tel) {
+    var wa = versWhatsApp(s.tel);
+    if (wa) liens.push({ href: 'https://wa.me/' + wa, texte: 'WhatsApp · ' + s.tel, ext: true });
+    else liens.push({ href: 'tel:' + s.tel, texte: s.tel });
+  }
+  if (s.instagram) {
+    var ig = String(s.instagram).trim();
+    var url = /^https?:/i.test(ig) ? ig : 'https://instagram.com/' + ig.replace(/^@/, '');
+    liens.push({ href: url, texte: 'Instagram · ' + (ig.charAt(0) === '@' ? ig : '@' + ig.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, '')), ext: true });
+  }
+  liens.forEach(function (l) {
+    var a = document.createElement('a');
+    a.href = l.href;
+    a.textContent = l.texte;
+    if (l.ext) { a.target = '_blank'; a.rel = 'noopener'; }
+    host.appendChild(a);
+  });
+  el('apropos').hidden = !txt && !liens.length;
+}
+
 fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
   .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
   .then(function (m) {
     if (m.site) {
       if (m.site.title) { el('site-name').textContent = m.site.title; el('footer').textContent = m.site.title + ' — ' + (m.site.subtitle || ''); }
       if (m.site.subtitle) el('site-tagline').textContent = m.site.subtitle;
+      renderApropos(m.site);
     }
     projects = (m.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
     if (!projects.length) {
       showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
       return;
     }
+    renderFiltres();
     renderIndex();
     var h = location.hash.replace('#p-', '');
     if (h) {

@@ -712,8 +712,8 @@ seulement en repli — la contradiction n'a donc pas d'effet.
 jeton dans l'environnement, `verify_jwt:false` conservé). `photo-ia` est en **version 6**.
 Garde-fous rejoués sur la fonction en ligne : 401 sans jeton, 401 avec la clé publiable.
 
-**Vérification** : `tests/realisations.test.mjs` **253 contrôles** (46 ajoutés ici),
-`tests/pont-ia.test.mjs` **20** (12 ajoutés), `tests/site.test.mjs` 22. Pont intercepté :
+**Vérification** : `tests/realisations.test.mjs` **345 contrôles** (46 ajoutés ici),
+`tests/pont-ia.test.mjs` **20** (12 ajoutés), `tests/site.test.mjs` 52. Pont intercepté :
 aucun crédit dépensé. Ce qui n'est PAS vérifié : une exécution réelle chez fal — elle coûte
 de l'argent.
 
@@ -743,3 +743,108 @@ existent.
 
 **Réglages** : `library.storage = {quotaMo, seuil, photoMo}` dans Sauvegarde →
 Synchronisation. Valeurs invalides refusées à l'écran avec leur raison.
+
+## Réalisations — textes de présentation (septembre 2026)
+
+**État** : livré, déployé (CRM, site vitrine, fonction serveur v11). Chantier `si03`.
+
+`normalizeRealisation` porte quatre champs de plus : `lieu`, `surface`, `mission`, `texte`
+(`date` servait déjà d'année). Ils partent dans le manifeste **seulement s'ils sont
+remplis** — le site s'appuie dessus pour n'afficher aucune étiquette vide.
+
+**Rédaction assistée** : `redigerTexteRealisation` appelle `embellish` avec
+`kind:'realisation'`. La fonction serveur porte désormais deux prompts et un seul chemin
+vers Anthropic (`appelAnthropic`) ; `kind` absent = prompt des devis, mot pour mot
+l'ancien. Déployée en version 11 avec `verify_jwt:false` (inchangé), vérifiée sur l'URL de
+production : 401 sans jeton, 401 avec la clé publiable.
+
+**Limite assumée** : le texte réellement produit n'a pas pu être jugé (il faut une session
+connectée). Ce qui est testé : la forme de la requête, le retour dans le champ, l'échec
+lisible qui ne détruit pas le texte existant.
+
+## Site vitrine — aperçu de partage et référencement (septembre 2026)
+
+**État** : livré, déployé. Chantier `si05`.
+
+**Le fait qui commande tout** : les robots d'aperçu (WhatsApp, Facebook, LinkedIn,
+Instagram) n'exécutent pas le JavaScript. Une page qui charge ses données au runtime ne peut
+donc pas leur montrer une image « du dernier projet » par du code. D'où le choix : une
+**adresse fixe** (`ownerId/share.jpg`) écrite dans le HTML, et le CRM qui dépose à cette
+adresse la couverture de la réalisation publiée à chaque publication.
+
+- `shareImagePath()` (CRM) et la balise `og:image` (site) doivent rester d'accord.
+- L'upload est dans un `try` : la galerie est déjà publiée quand il a lieu, une panne
+  d'aperçu ne doit pas faire échouer la publication.
+- Le retrait du dernier projet efface l'image : sinon un lien partagé montrerait une photo
+  retirée du site.
+- `majSeo()` met à jour titre, description, og:url et canonique à l'ouverture d'un projet, et
+  restaure ceux du site (image comprise) à la fermeture.
+
+**Non fait, et pourquoi** : un aperçu *par projet* demanderait une page HTML par projet, donc
+un générateur qui republie le dépôt du site à chaque publication — un jeton GitHub à créer et
+à stocker. Écarté : une manip et un secret de plus pour un gain marginal.
+
+## Site vitrine — catégories, à propos, contact (septembre 2026)
+
+**État** : livré, déployé. Chantiers `si02` et `si04`.
+
+**Catégories** (`r.categorie`) : champ libre avec propositions (`RZ_CATS` + tout ce qui a
+déjà été tapé, via `rzCatsConnues()`). Publié dans le manifeste ; le site en fait un filtre
+qui se construit tout seul et disparaît sous deux catégories. Distinct du **type de
+mission** : on filtre par lieu, on décrit par mission.
+
+**Ce que le site dit de lui-même** (`library.site`, panneau « ⚙ Le site public ») :
+sous-titre, à propos, e-mail, téléphone, Instagram. `siteInfos()` n'écrit que les champs
+remplis ; `emptyManifest()` s'en sert, donc une publication de réalisation les rafraîchit
+aussi. `pushSiteInfos()` met à jour **le seul bloc `site` du manifeste** — corriger un texte
+n'oblige pas à republier un chantier.
+
+**Règle de conduite inscrite dans le code** : aucune coordonnée n'est recopiée depuis les
+devis sans un clic explicite, et rien n'est publié sans le bouton « Mettre à jour le site ».
+Publier un e-mail ou un numéro est une décision de l'utilisatrice, pas un défaut technique.
+Ne pas « simplifier » en synchronisant automatiquement avec `library.branding`.
+
+**Anti-collecte, sans mentir sur sa portée** : le lien `mailto:` est fabriqué au chargement,
+l'adresse n'est pas dans le HTML servi. Le manifeste, lui, est public : ce n'est pas un
+secret, c'est un ralentisseur.
+
+## Sauvegarde complète (septembre 2026)
+
+**État** : livré. Chantier `fi02`.
+
+Archive `.zip` « store » écrite par `buildZip` (déjà là) et relue par `readZip` (nouveau,
+lit le répertoire central — seule table fiable). Contenu : `donnees.json` (la sauvegarde
+JSON habituelle), `LISEZ-MOI.txt`, `photos/<réalisation>/<NN>-<titre>.jpg` (+ `-ia.jpg`), et
+`photos/_index.json` qui relie chaque fichier à sa photo pour la restauration.
+
+- `donneesSauvegarde()` / `appliquerSauvegarde()` : une seule définition de ce qu'on écrit et
+  de ce qu'on relit, partagée avec l'export/import JSON.
+- Le poids annoncé avant de lancer vient de la taille moyenne **réelle** des fichiers
+  (`_storageStat`), pas d'une constante.
+- Export interruptible, `await setTimeout(0)` entre deux photos pour ne pas figer l'écran
+  d'un téléphone.
+- `readZip` refuse une entrée compressée avec un message qui dit la vraie cause.
+
+**Vérification** : l'archive produite est relue par `unzip -t` dans le test (pas seulement
+par notre propre code), puis un aller-retour complet efface tout et restaure.
+
+## Navigation mobile — barre d'onglets en bas (septembre 2026)
+
+**État** : livré. Chantier `qu01`.
+
+En dessous de **820 px** : `.viewnav` masquée, `<nav class="navbas">` fixe en bas (48 px),
+`#split-toggle` et `.toolbar-actions` remplacés par un bouton `⋯` (`menuPlusMobile`), menu
+« Devis » posé en fenêtre (`devisMenuMobile`) puisque le menu déroulant du haut est invisible.
+Barre du haut mesurée à **56 px sur une ligne** contre 87 auparavant.
+
+**Ne pas casser**
+
+- `showView()` synchronise les DEUX navigations (haut et bas). Sans ça, un changement de
+  taille d'écran laisse un onglet actif faux.
+- Les sélecteurs `.toolbar #split-toggle`, `.toolbar .toolbar-actions` et
+  `#rz-body .rz-selbar` sont volontairement plus spécifiques : les règles d'origine sont
+  écrites plus bas dans la feuille et gagneraient à spécificité égale.
+- `.rz-selbar` remonte au-dessus de la barre d'onglets sur mobile, sinon ses boutons sont
+  inatteignables. Un test le mesure.
+- `body{padding-bottom:56px+safe-area}` sur mobile : sans ça, le dernier élément de chaque
+  vue passe sous la barre.

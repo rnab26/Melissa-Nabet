@@ -161,6 +161,64 @@
   .viewnav{display:flex;gap:4px;margin-left:6px;flex-wrap:wrap;min-width:0;}
   .vnav{font-size:12px;letter-spacing:.06em;padding:8px 14px;border:1px solid var(--stone);color:var(--stone-light);background:transparent;cursor:pointer;border-radius:2px;}
   .vnav.active{background:var(--paper);color:var(--ink);border-color:var(--paper);}
+  /* --- Barre d'onglets du bas (téléphone) --- */
+  .navbas{display:none;position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:var(--ink);border-top:1px solid rgba(255,255,255,.09);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    box-shadow:0 -4px 18px rgba(0,0,0,.22);}
+  .navbas button{
+    flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:transparent;border:none;cursor:pointer;padding:8px 2px 9px;
+    font-family:'Inter';font-size:9.5px;letter-spacing:.02em;color:var(--stone-light);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .navbas button span{font-size:17px;line-height:1;}
+  .navbas button.active{color:var(--paper);}
+  .navbas button.active span{transform:translateY(-1px);}
+  .navbas button.active::after{content:'';position:absolute;bottom:0;width:22px;height:2px;background:var(--oxblood);border-radius:2px;}
+  .navbas button{position:relative;}
+  .toolbar-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  #toolbar-search{padding:8px 12px;}
+  /* Recherche globale : une seule liste, groupée par nature, du plus probable au moins. */
+  .rch-input{width:100%;font-size:16px;padding:11px 12px;}
+  .rch-res{max-height:52vh;overflow-y:auto;margin-top:12px;}
+  .rch-grp{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--stone-light);
+    font-weight:700;margin:12px 0 5px;}
+  .rch-grp:first-child{margin-top:2px;}
+  .rch-row{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--panel-edge);
+    border-radius:6px;padding:9px 11px;margin-bottom:6px;cursor:pointer;font-family:'Inter';}
+  .rch-row:hover,.rch-row:focus-visible{border-color:var(--oxblood);}
+  .rch-t{font-size:13.5px;color:var(--ink);}
+  .rch-s{font-size:11.5px;color:var(--stone);margin-top:2px;}
+  .rch-vide{font-size:12.5px;color:var(--stone);padding:14px 2px;line-height:1.6;}
+  #toolbar-plus{display:none;}
+  /* 820 px : au-dessous, la barre du haut passait de toute façon sur deux lignes (mesuré
+     à 768 px : 106 px de haut au lieu de 56). Une tablette en portrait est un téléphone
+     large, elle gagne aussi la barre du bas. */
+  @media (max-width:820px){
+    .navbas{display:flex;}
+    .viewnav{display:none;}
+    #toolbar-plus{display:inline-block;padding:8px 14px;}
+    /* Ces sélecteurs sont volontairement plus « forts » que ceux d'origine
+       (`#split-toggle` seul, plus bas dans la feuille) : sans ça, la règle de la
+       requête média à 900 px, écrite après, les réafficherait. Même raison pour
+       `#rz-body .rz-selbar` : `.rz-selbar{bottom:0}` est déclarée plus bas. */
+    .toolbar #split-toggle,.toolbar .toolbar-actions{display:none;}
+    #rz-body .rz-selbar{bottom:calc(56px + env(safe-area-inset-bottom,0px));}
+    /* À 375 px, « MELISSA NABET · local » passait sur deux lignes et rendait 30 px de
+       barre du haut. Le nom se réduit plutôt que de pousser le reste à la ligne. */
+    /* Une seule ligne, quoi qu'il arrive : c'est le nom qui se raccourcit, pas la barre qui
+       s'épaissit. Sans `nowrap`, un libellé un peu plus long (état de synchro, nom d'atelier
+       plus long) suffisait à faire passer un bouton à la ligne. */
+    .toolbar{flex-wrap:nowrap;}
+    .toolbar .brand{font-size:18px;letter-spacing:.10em!important;min-width:0;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap;}
+    .toolbar .sync-badge{flex-shrink:0;}
+    #toolbar-plus,#toolbar-search{flex-shrink:0;}
+    /* La barre du bas recouvre 56 px : tout ce qui vivait au ras du bas remonte. */
+    body{padding-bottom:calc(56px + env(safe-area-inset-bottom,0px));}
+    #devis-tab-fab{bottom:calc(70px + env(safe-area-inset-bottom,0px));}
+  }
   #clients-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
   .cl-wrap{max-width:1040px;margin:0 auto;}
   #dashboard-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
@@ -570,7 +628,12 @@
   .rz-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
   .rz-back{background:transparent;border:none;color:var(--stone);font-family:'Inter';font-size:12.5px;cursor:pointer;padding:0 0 8px;}
   .rz-back:hover{color:var(--oxblood);}
-  .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+  .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .rz-liens{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
+  .rz-pres{margin-bottom:16px;}
+  .rz-pres textarea{min-height:74px;}
+  .rz-pres-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-4px;}
+  .rz-pres-n{font-size:11px;color:var(--stone);}
   .rz-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
   .rz-ph{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:var(--panel);cursor:pointer;}
   /* Le format 3/2 s'applique à la zone image, pas à la tuile : celle-ci porte en plus le
@@ -839,12 +902,28 @@
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
   <div class="spacer"></div>
   <button class="btn" id="split-toggle" style="flex-shrink:0;" onclick="toggleSplitView()">🖥 Vue bureau</button>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+  <div class="toolbar-actions">
     <button class="btn" onclick="openSettingsPanel()">⚙ Réglages</button>
     <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
   </div>
+  <!-- Sur téléphone, ces trois boutons faisaient une ligne de plus dans la barre du haut :
+       ils passent derrière un seul bouton, et la barre tient sur une ligne. -->
+  <button class="btn" id="toolbar-search" onclick="openRecherche()" title="Rechercher (Ctrl+K)" aria-label="Rechercher">🔍</button>
+  <button class="btn" id="toolbar-plus" onclick="menuPlusMobile()" aria-label="Plus d’actions">⋯</button>
 </div>
 <button class="btn" id="devis-tab-fab" onclick="toggleDevisTab()">👁 Aperçu</button>
+
+<!-- Navigation principale sur téléphone. La barre du haut portait cinq onglets qui
+     passaient sur deux lignes et mangeaient l'écran ; ici elle est en bas, sous le pouce,
+     comme dans n'importe quelle application mobile. Elle n'existe qu'en dessous de 760 px :
+     au-delà, la barre du haut suffit et rien ne change. -->
+<nav class="navbas" id="navbas" aria-label="Navigation principale">
+  <button data-vue="dashboard" onclick="showView('dashboard')"><span>◫</span>Tableau</button>
+  <button data-vue="devis" onclick="devisMenuMobile()"><span>📝</span>Devis</button>
+  <button data-vue="clients" onclick="showView('clients')"><span>👤</span>Clients</button>
+  <button data-vue="chantier" onclick="showView('chantier')"><span>📐</span>Estimation</button>
+  <button data-vue="realisations" onclick="showView('realisations')"><span>🖼</span>Réalisations</button>
+</nav>
 
 <div class="stage">
   <div class="editor">
@@ -1004,6 +1083,7 @@
       <h2>Réalisations</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-onlight" onclick="openShootingMemo()">📷 Bien photographier</button>
+        <button class="btn btn-onlight" onclick="openSitePanel()">⚙ Le site public</button>
         <button class="btn btn-onlight" onclick="window.open(SITE_URL,'_blank')">🌐 Voir le site</button>
       </div>
     </div>
@@ -2967,6 +3047,7 @@ function buildClientDetail(c){
   main.appendChild(cardWrap('💰','Financier',finBody));
 
   main.appendChild(cardWrap('✅','Tâches liées',buildClientTasksBox(c)));
+  main.appendChild(cardWrap('🖼','Réalisations',buildClientRealisationsBox(c)));
   main.appendChild(cardWrap('📎','Documents',buildDocGallery(c)));
 
   const actions=document.createElement('div');actions.className='cl-detail-actions';
@@ -3000,6 +3081,16 @@ function buildClientDevisList(c){
   const list=devisList.filter(d=>d.clientId===c.id).sort((a,b)=>b.updatedAt-a.updatedAt);
   if(list.length){
     list.forEach(d=>{
+      /* Un devis sans instantané ne devrait pas exister — mais s'il en apparaît un (import
+         partiel, sauvegarde d'une ancienne version), il ne doit pas faire disparaître TOUTE
+         la fiche client. On le montre tel quel, sans montant. */
+      if(!d.snapshot){
+        const ko=document.createElement('div');ko.className='list-row';ko.style.marginTop='6px';
+        ko.innerHTML=`<div class="lr-main"><div class="lr-t">${esc(d.title||'Devis')}</div>
+          <div class="lr-s">N°${esc(d.num||'?')} · contenu illisible, montant indisponible</div></div>`;
+        wrap.appendChild(ko);
+        return;
+      }
       const T=computeTotals(d.snapshot,(d.snapshot.services||[]).filter(v=>v.on));
       const dvc=d.snapshot.cur||'₪';
       const r=document.createElement('div');r.className='list-row';r.style.marginTop='6px';
@@ -3151,6 +3242,38 @@ async function attachFiles(c,ligneId,files){
     try{const doc=await readFileAsDoc(file);const id=uid();await docStore.save(id,doc);c.docs=c.docs||[];c.docs.push({id,name:doc.name,type:doc.type,ligneId:ligneId||null});n++;}catch(e){toast('Échec import '+file.name);}
   }
   saveClients();renderClients();if(n)toast(n+' document(s) ajouté(s)');
+}
+/* Le lien client d'une réalisation existait mais ne servait à rien : on ne pouvait pas
+   remonter d'un client vers ses chantiers photographiés. */
+function buildClientRealisationsBox(c){
+  const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
+  const liees=(realisations||[]).filter(r=>r.clientId===c.id);
+  if(liees.length){
+    liees.forEach(r=>{
+      const n=realisationARepublier(r);
+      const etat=r.published?(n?'<span class="rz-warn">● à republier</span>':'<span class="rz-live">● en ligne</span>'):'pas encore publiée';
+      const row=document.createElement('div');row.className='list-row';
+      row.innerHTML=`<div class="lr-main" style="cursor:pointer">
+          <div class="lr-t">${esc(r.title||'Réalisation sans titre')}</div>
+          <div class="lr-s">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''} · ${etat}</div>
+        </div>`;
+      row.querySelector('.lr-main').addEventListener('click',()=>gotoRealisation(r.id));
+      wrap.appendChild(row);
+    });
+  } else {
+    const e=document.createElement('div');e.className='task-empty';
+    e.textContent='Aucune réalisation liée à ce client.';wrap.appendChild(e);
+  }
+  const add=document.createElement('button');add.className='mini';add.style.marginTop='2px';
+  add.textContent='+ Créer une réalisation pour ce client';
+  add.addEventListener('click',()=>{
+    const r=normalizeRealisation({title:c.name||'',clientId:c.id,date:String(new Date().getFullYear())});
+    realisations.push(r);saveRealisations();
+    gotoRealisation(r.id);
+    toast('Réalisation créée pour '+(c.name||'ce client'));
+  });
+  wrap.appendChild(add);
+  return wrap;
 }
 function buildClientTasksBox(c){
   const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
@@ -3309,10 +3432,145 @@ function showView(v){
   $('vn-dash').classList.toggle('active',dash);
   $('vn-chantier').classList.toggle('active',ch);
   $('vn-real').classList.toggle('active',rz);
+  /* Les deux navigations disent la même chose : celle du haut (bureau) et celle du bas
+     (téléphone). Une seule des deux est visible à la fois, mais l'état suit dans les deux
+     cas — sinon un changement de taille d'écran affiche un onglet actif faux. */
+  document.querySelectorAll('#navbas button[data-vue]').forEach(b=>b.classList.toggle('active',b.dataset.vue===v));
   if(cli)renderClients();
   if(dash)renderDashboard();
   if(ch)renderChantier();
   if(rz)renderRealisations();
+}
+/* Sur téléphone, le menu déroulant « Devis » de la barre du haut est invisible (cette
+   barre est masquée) : on pose la même question dans une fenêtre, au même endroit que
+   toutes les autres questions de l'appli. */
+/* Réglages, Sauvegarde et Vue bureau, sur téléphone. Le libellé de la vue reprend celui
+   du bouton d'origine (il change quand on bascule) : une seule vérité affichée. */
+function menuPlusMobile(){
+  const vue=($('split-toggle')||{}).textContent||'🖥 Vue bureau';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Plus</h3>
+    <div class="ph-menu">
+      <button class="mini" id="plus-vue">${esc(vue)}</button>
+      <button class="mini" id="plus-reglages">⚙ Réglages</button>
+      <button class="mini" id="plus-sauvegarde">💾 Sauvegarde</button>
+      <button class="mini" id="plus-sync">🔄 Synchronisation</button>
+    </div>`);
+  const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
+  go('plus-vue',toggleSplitView);
+  go('plus-reglages',openSettingsPanel);
+  go('plus-sauvegarde',openBackupPanel);
+  go('plus-sync',openSyncPanel);
+}
+function devisMenuMobile(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Devis</h3>
+    <div class="ph-menu">
+      <button class="mini" id="dv-composer">📝 Composer un devis</button>
+      <button class="mini" id="dv-mes">📂 Mes devis</button>
+    </div>`);
+  const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
+  go('dv-composer',gotoComposer);
+  go('dv-mes',gotoMesDevis);
+}
+/* ============ RECHERCHE GLOBALE ============
+   Un seul champ pour les clients, les devis, les tâches et les réalisations. Sans ça, il
+   faut se souvenir de l'onglet où vit la chose qu'on cherche. */
+function rchNorm(v){
+  return (v==null?'':String(v)).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function rechercher(q){
+  const t=rchNorm(q).trim();
+  if(t.length<2)return null;         /* une seule lettre renverrait tout : ce n'est pas une recherche */
+  const mots=t.split(/\s+/);
+  const colle=(...morceaux)=>rchNorm(morceaux.filter(Boolean).join(' '));
+  const tous=(champ)=>mots.every(m=>champ.indexOf(m)>=0);
+  const res={clients:[],devis:[],taches:[],realisations:[]};
+  (clients||[]).forEach(c=>{
+    if(tous(colle(c.name,c.contact,c.phone,c.email,c.ville,c.commentaire)))res.clients.push(c);
+  });
+  (devisList||[]).forEach(d=>{
+    const snap=d.snapshot||{};
+    if(tous(colle(d.title,d.num,snap.proj,snap.raison,clientName(d.clientId))))res.devis.push(d);
+  });
+  (tasks||[]).forEach(k=>{
+    if(tous(colle(k.title,k.note,clientName(k.clientId))))res.taches.push(k);
+  });
+  (realisations||[]).forEach(r=>{
+    const photos=(r.photos||[]).map(p=>(p.name||'')+' '+(p.caption||'')).join(' ');
+    if(tous(colle(r.title,r.lieu,r.mission,r.categorie,r.texte,r.date,photos,clientName(r.clientId))))res.realisations.push(r);
+  });
+  return res;
+}
+function openRecherche(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Rechercher</h3>
+    <p class="msub">Clients, devis, tâches et réalisations — tout en même temps.</p>
+    <input type="search" id="rch-q" class="rch-input" placeholder="Nom, ville, n° de devis, titre de chantier…" autocomplete="off">
+    <div class="rch-res" id="rch-res"></div>`);
+  const inp=$('rch-q');
+  inp.addEventListener('input',()=>peindreRecherche(inp.value));
+  inp.addEventListener('keydown',e=>{
+    if(e.key!=='Enter')return;
+    const premier=document.querySelector('#rch-res .rch-row');
+    if(premier)premier.click();
+  });
+  peindreRecherche('');
+  setTimeout(()=>inp.focus(),60);
+}
+function peindreRecherche(q){
+  const host=$('rch-res');if(!host)return;
+  host.innerHTML='';
+  const res=rechercher(q);
+  if(!res){
+    const v=document.createElement('p');v.className='rch-vide';
+    v.textContent='Tapez au moins deux lettres. La recherche regarde les noms, les villes, les numéros de devis, les titres de chantier et jusqu’aux légendes des photos.';
+    host.appendChild(v);return;
+  }
+  const total=res.clients.length+res.devis.length+res.taches.length+res.realisations.length;
+  if(!total){
+    const v=document.createElement('p');v.className='rch-vide';
+    v.textContent='Rien trouvé pour « '+q.trim()+' ».';
+    host.appendChild(v);return;
+  }
+  const groupe=(titre,items,ligne)=>{
+    if(!items.length)return;
+    const h=document.createElement('div');h.className='rch-grp';h.textContent=titre+' ('+items.length+')';
+    host.appendChild(h);
+    items.slice(0,8).forEach(x=>{
+      const {t,sub,go}=ligne(x);
+      const b=document.createElement('button');b.type='button';b.className='rch-row';
+      b.innerHTML='<span class="rch-t"></span><span class="rch-s"></span>';
+      b.querySelector('.rch-t').textContent=t;
+      b.querySelector('.rch-s').textContent=sub;
+      b.addEventListener('click',()=>{closeModal();go();});
+      host.appendChild(b);
+    });
+    if(items.length>8){
+      const p=document.createElement('p');p.className='rch-vide';p.style.padding='2px 2px 6px';
+      p.textContent='… et '+(items.length-8)+' autre(s). Précisez la recherche.';
+      host.appendChild(p);
+    }
+  };
+  groupe('Clients',res.clients,c=>({t:c.name||'Client',sub:[c.ville,c.phone,c.email].filter(Boolean).join(' · '),go:()=>gotoClient(c.id)}));
+  groupe('Devis',res.devis,d=>({t:(d.title||'Devis')+(d.num?' n°'+d.num:''),sub:[clientName(d.clientId),d.status].filter(Boolean).join(' · '),go:()=>editDevis(d.id)}));
+  groupe('Réalisations',res.realisations,r=>({t:r.title||'Réalisation sans titre',
+    sub:[(r.photos||[]).length+' photo(s)',r.lieu,r.categorie,r.published?'en ligne':''].filter(Boolean).join(' · '),
+    go:()=>gotoRealisation(r.id)}));
+  groupe('Tâches',res.taches,k=>({t:k.title||'Tâche',sub:[clientName(k.clientId),k.done?'faite':'à faire'].filter(Boolean).join(' · '),go:()=>openClientTaskInDashboard(k.id)}));
+}
+/* Ctrl+K / ⌘K : le raccourci attendu partout. */
+document.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey))return;
+  if((e.key||'').toLowerCase()!=='k')return;
+  e.preventDefault();
+  if(!document.getElementById('rch-q'))openRecherche();
+});
+
+function gotoRealisation(id){
+  _rzOpenId=id;
+  showView('realisations');
+  window.scrollTo(0,0);
 }
 function gotoClient(id){
   clientOpen[id]=true;
@@ -3699,20 +3957,24 @@ function computeTodos(){
   const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
   const brouillons=devisList.filter(d=>d.status==='brouillon').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
   const enAttente=devisList.filter(d=>d.status==='valide'&&(d.clientStatus||'attente')==='attente').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
-  return {relances,brouillons,enAttente};
+  /* Le site ne se met pas à jour tout seul : une réalisation retouchée reste en ligne dans
+     sa version précédente jusqu'à ce qu'on republie. Personne n'y pense — d'où ce rappel
+     là où l'on regarde en premier. */
+  const republier=(realisations||[]).map(r=>({r,n:realisationARepublier(r)})).filter(x=>x.n>0);
+  return {relances,brouillons,enAttente,republier};
 }
 function renderDashboard(){
   const kpiRoot=$('dash-kpi'),todoRoot=$('dash-todos');
   if(!kpiRoot||!todoRoot)return;
   renderTaskList();
-  const {relances,brouillons,enAttente}=computeTodos();
+  const {relances,brouillons,enAttente,republier}=computeTodos();
   const gt=globalTotals(clients);
   kpiRoot.innerHTML=`
     <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.montant)} ₪</div><div class="dash-kpi-lbl">Facturé (total)</div></div>
     <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.recu)} ₪</div><div class="dash-kpi-lbl">Reçu</div></div>
     <div class="dash-kpi-item"><div class="dash-kpi-val ${gt.reste>0?'due':'ok'}">${fmt(gt.reste)} ₪</div><div class="dash-kpi-lbl">Reste dû</div></div>
     <div class="dash-kpi-item"><div class="dash-kpi-val">${brouillons.length}</div><div class="dash-kpi-lbl">Devis en brouillon</div></div>`;
-  if(!relances.length&&!brouillons.length&&!enAttente.length){
+  if(!relances.length&&!brouillons.length&&!enAttente.length&&!republier.length){
     todoRoot.innerHTML=`<div class="empty">Rien à signaler pour l'instant — tout est à jour.</div>`;
     return;
   }
@@ -3724,6 +3986,10 @@ function renderDashboard(){
   if(enAttente.length){
     html+=`<div class="dash-sec-title">📨 Devis en attente de réponse (${enAttente.length})</div>`;
     html+=enAttente.map(d=>`<div class="dash-todo" onclick="editDevis('${d.id}')"><span class="dash-todo-main">${esc(clientName(d.clientId))} · ${esc(d.title||'Devis')}</span><span class="dash-todo-amt">${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</span></div>`).join('');
+  }
+  if(republier.length){
+    html+=`<div class="dash-sec-title">🖼 À republier sur le site (${republier.length})</div>`;
+    html+=republier.map(({r,n})=>`<div class="dash-todo" onclick="gotoRealisation('${r.id}')"><span class="dash-todo-main">${esc(r.title||'Réalisation sans titre')}</span><span class="dash-todo-amt due">${n} photo(s)</span></div>`).join('');
   }
   if(brouillons.length){
     html+=`<div class="dash-sec-title">📝 Devis à finaliser (${brouillons.length})</div>`;
@@ -3742,22 +4008,207 @@ function openBackupPanel(){
       <button class="btn btn-onlight" onclick="document.getElementById('import-file').click()">⬆ Importer une sauvegarde</button>
       <input type="file" id="import-file" accept="application/json,.json" style="display:none">
     </div>
-    <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>`);
+    <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>
+
+    <div class="ed-eyebrow" style="margin-top:18px">Sauvegarde complète, photos comprises</div>
+    <p class="ias-note">Le fichier ci-dessus ne contient que les <b>vignettes</b> des photos : les originaux vivent dans le cloud. Cette archive-ci contient les <b>photos en pleine définition</b>, versions retouchées par l'IA comprises. C'est elle qui protège vraiment vos réalisations.</p>
+    <label class="fld"><span class="lbl">Que sauvegarder</span><select id="bk-portee"></select></label>
+    <p class="msub" id="bk-taille"></p>
+    <div id="bk-prog" hidden><div class="rz-bar"><i style="width:0%"></i></div><p class="msub" id="bk-prog-txt"></p></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
+      <button class="btn btn-primary" id="bk-go">⬇ Sauvegarde complète (.zip)</button>
+      <button class="btn btn-onlight" onclick="document.getElementById('bk-file').click()">⬆ Importer une sauvegarde complète (.zip)</button>
+      <input type="file" id="bk-file" accept=".zip,application/zip" style="display:none">
+    </div>
+    <p class="ias-msg" id="bk-msg"></p>`);
   const f=$('import-file');if(f)f.addEventListener('change',()=>{if(f.files&&f.files[0])importData(f.files[0]);});
+  const sel=$('bk-portee');
+  if(sel){
+    const total=realisations.reduce((a,r)=>a+(r.photos||[]).length,0);
+    sel.innerHTML='<option value="">Toutes les réalisations ('+total+' photo(s))</option>'
+      +realisations.map(r=>'<option value="'+r.id+'">'+esc(r.title||'Réalisation sans titre')+' ('+((r.photos||[]).length)+' photo(s))</option>').join('');
+    const majTaille=()=>{
+      const liste=sel.value?realisations.filter(r=>r.id===sel.value):realisations;
+      const n=liste.reduce((a,r)=>a+(r.photos||[]).length+((r.photos||[]).filter(p=>p.ia).length),0);
+      const st=_storageStat;
+      const moyen=(st&&st.files>3)?(st.bytes/st.files):1200000;
+      $('bk-taille').textContent=n?('Environ '+moLisible(n*moyen)+' à télécharger ('+n+' fichier(s)). Sur téléphone, préférez une réalisation à la fois si l’archive dépasse quelques centaines de Mo.')
+        :'Aucune photo à sauvegarder pour l’instant.';
+      $('bk-go').disabled=!n;
+    };
+    sel.addEventListener('change',majTaille);
+    majTaille();
+    if(!_storageStat)loadStorageStat().then(()=>{if($('bk-taille'))majTaille();});
+    $('bk-go').addEventListener('click',()=>exportComplet(sel.value));
+  }
+  const bf=$('bk-file');
+  if(bf)bf.addEventListener('change',()=>{if(bf.files&&bf.files[0])importComplet(bf.files[0]);});
 }
-async function exportData(){
-  toast('Préparation de la sauvegarde…');
+
+/* ============ SAUVEGARDE COMPLÈTE (données + photos) ============
+   La sauvegarde JSON ne porte que les vignettes : elle ne suffit pas à retrouver une
+   galerie si le compte Supabase disparaît. Celle-ci embarque les fichiers en pleine
+   définition, dans une archive lisible à la main (un dossier par réalisation) ET
+   réimportable telle quelle. */
+let _bkStop=false;
+function bkProgres(fait,total,texte){
+  const box=$('bk-prog');if(!box)return;
+  box.hidden=false;
+  const b=box.querySelector('i');if(b)b.style.width=Math.round(fait/Math.max(total,1)*100)+'%';
+  const t=$('bk-prog-txt');if(t)t.textContent=texte;
+}
+function bkDire(t){const el=$('bk-msg');if(el)el.textContent=t||'';}
+const BK_README=[
+'SAUVEGARDE COMPLÈTE — CRM Melissa Nabet','',
+'Ce que contient cette archive :','',
+'  donnees.json        toutes vos données (clients, devis, tâches, réalisations,',
+'                      réglages) et les vignettes des photos.',
+'  photos/             les photos en pleine définition, un dossier par réalisation.',
+'                      Les fichiers « -ia » sont les versions retouchées par l’IA ;',
+'                      l’original est toujours conservé à côté.',
+'  photos/_index.json  ce qui permet à l’application de remettre chaque photo à sa',
+'                      place. Ne pas le supprimer si vous comptez réimporter.','',
+'Pour tout retrouver sur un nouvel appareil :',
+'  ouvrir l’application, se connecter, puis Sauvegarde →',
+'  « Importer une sauvegarde complète (.zip) » et choisir CE fichier.','',
+'Les photos sont aussi lisibles directement : ouvrez le dossier photos/.',
+'Ne recompressez pas l’archive avec un autre outil si vous comptez la réimporter.',
+''].join('\n');
+
+async function exportComplet(rid){
+  if(!(sb&&sbUser&&ownerId)){bkDire('Connexion requise : les photos en pleine définition sont dans le cloud.');return;}
+  const liste=rid?realisations.filter(r=>r.id===rid):realisations.slice();
+  const taches=[];
+  liste.forEach(r=>{
+    (r.photos||[]).forEach((p,i)=>{
+      /* On retire l'extension du titre avant d'en faire un nom de fichier : sinon
+         « salon.jpg » donne « salon-jpg.jpg ». */
+      const titre=(p.name||'photo').replace(/\.[a-z0-9]{2,5}$/i,'');
+      const base='photos/'+slugify(r.title||'realisation')+'/'+String(i+1).padStart(2,'0')+'-'+slugify(titre);
+      taches.push({key:fullKey(p.id),name:base+'.jpg',rid:r.id,pid:p.id,type:'original'});
+      if(p.ia)taches.push({key:iaKey(p.id),name:base+'-ia.jpg',rid:r.id,pid:p.id,type:'ia'});
+    });
+  });
+  _bkStop=false;
+  const btn=$('bk-go');
+  if(btn){btn.disabled=true;btn.textContent='Arrêter';btn.onclick=()=>{_bkStop=true;bkDire('Arrêt demandé…');};}
+  bkDire('');
+  const entries=[],index=[],absents=[];
+  const enc=new TextEncoder();
+  try{
+    for(let i=0;i<taches.length;i++){
+      if(_bkStop)break;
+      const t=taches[i];
+      bkProgres(i,taches.length,'Photo '+(i+1)+' sur '+taches.length+'…');
+      const blob=await photoStore.get(t.key);
+      if(!blob){absents.push(t.name);continue;}
+      entries.push({name:t.name,bytes:new Uint8Array(await blob.arrayBuffer())});
+      index.push({fichier:t.name,realisation:t.rid,photo:t.pid,type:t.type});
+      await new Promise(res=>setTimeout(res,0)); /* laisse l'écran respirer sur téléphone */
+    }
+    if(_bkStop){bkDire('Sauvegarde interrompue : aucun fichier n’a été téléchargé.');return;}
+    bkProgres(taches.length,taches.length,'Assemblage de l’archive…');
+    const data=await donneesSauvegarde();
+    entries.unshift({name:'donnees.json',bytes:enc.encode(JSON.stringify(data))});
+    entries.unshift({name:'LISEZ-MOI.txt',bytes:enc.encode(BK_README)});
+    entries.push({name:'photos/_index.json',bytes:enc.encode(JSON.stringify(index))});
+    const zip=buildZip(entries);
+    const nom='sauvegarde-complete-'+(rid?slugify((liste[0]||{}).title||'realisation')+'-':'')+new Date().toISOString().slice(0,10)+'.zip';
+    downloadBlob(zip,nom);
+    bkDire('Archive téléchargée : '+moLisible(zip.size)+', '+index.length+' photo(s)'
+      +(absents.length?' · '+absents.length+' introuvable(s) dans le cloud : '+absents.slice(0,3).join(', '):'')+'.');
+  }catch(e){
+    console.error('sauvegarde complète',e);
+    bkDire('Échec : '+((e&&e.message)||'erreur')+'. Essayez une réalisation à la fois — l’archive était peut-être trop lourde pour cet appareil.');
+  }finally{
+    const b=$('bk-go');
+    if(b){b.disabled=false;b.textContent='⬇ Sauvegarde complète (.zip)';b.onclick=null;
+      const sel=$('bk-portee');b.addEventListener('click',()=>exportComplet(sel?sel.value:''));}
+    const box=$('bk-prog');if(box)box.hidden=true;
+  }
+}
+/* Les mêmes données que l'export JSON : une seule définition de ce qu'est une sauvegarde. */
+async function donneesSauvegarde(){
   const docs={};
   for(const c of clients){for(const d of (c.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
   for(const t of tasks){for(const d of (t.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
-  /* Les réalisations sont exportées avec leurs retouches et leurs VIGNETTES seulement :
-     inclure les photos en pleine définition ferait un JSON de plusieurs centaines de Mo,
-     impossible à produire depuis un téléphone. Les fichiers pleine définition vivent dans
-     le stockage Supabase (lié au compte, donc insensible à un vidage de cache du navigateur)
-     et se récupèrent via « Exporter pour le site ». */
   const realThumbs={};
   for(const r of realisations){for(const p of (r.photos||[])){try{const b=await photoStore.get(thumbKey(p.id));if(b)realThumbs[thumbKey(p.id)]=await blobToDataUri(b);}catch(e){}}}
-  const data={app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,realThumbs,docs};
+  return {app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,realThumbs,docs};
+}
+
+/* ---- Lecture d'une archive .zip écrite par `buildZip` (méthode « store ») ----
+   On lit le répertoire central, seule table fiable : les en-têtes locaux peuvent porter
+   des tailles à zéro quand l'archive a été écrite en flux. */
+function readZip(buf){
+  const u=new Uint8Array(buf), dv=new DataView(buf);
+  let eocd=-1;
+  for(let i=u.length-22;i>=Math.max(0,u.length-66000);i--){
+    if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}
+  }
+  if(eocd<0)throw new Error('ce fichier n’est pas une archive .zip lisible');
+  const nb=dv.getUint16(eocd+10,true), cdOff=dv.getUint32(eocd+16,true);
+  const out=new Map();
+  let p=cdOff;
+  for(let k=0;k<nb;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)throw new Error('archive abîmée (répertoire central)');
+    const methode=dv.getUint16(p+10,true);
+    const taille=dv.getUint32(p+24,true);
+    const nLen=dv.getUint16(p+28,true), eLen=dv.getUint16(p+30,true), cLen=dv.getUint16(p+32,true);
+    const lOff=dv.getUint32(p+42,true);
+    const nom=new TextDecoder().decode(u.slice(p+46,p+46+nLen));
+    if(methode!==0)throw new Error('archive recompressée par un autre outil : réimportez le .zip tel qu’il a été téléchargé');
+    const lnLen=dv.getUint16(lOff+26,true), leLen=dv.getUint16(lOff+28,true);
+    const debut=lOff+30+lnLen+leLen;
+    out.set(nom,u.slice(debut,debut+taille));
+    p+=46+nLen+eLen+cLen;
+  }
+  return out;
+}
+async function importComplet(file){
+  bkDire('Lecture de l’archive…');
+  let fichiers;
+  try{ fichiers=readZip(await file.arrayBuffer()); }
+  catch(e){ bkDire('Impossible de lire cette archive : '+((e&&e.message)||'erreur')); return; }
+  const json=fichiers.get('donnees.json');
+  if(!json){bkDire('Cette archive ne contient pas donnees.json : ce n’est pas une sauvegarde complète du CRM.');return;}
+  let data,index=[];
+  try{ data=JSON.parse(new TextDecoder().decode(json)); }
+  catch(e){ bkDire('Le fichier donnees.json de l’archive est illisible.'); return; }
+  try{ const idx=fichiers.get('photos/_index.json'); if(idx)index=JSON.parse(new TextDecoder().decode(idx)); }catch(e){}
+  if(!data||!Array.isArray(data.clients)){bkDire('Sauvegarde invalide (données manquantes).');return;}
+  const nbPhotos=index.length;
+  askConfirm('Importer cette sauvegarde complète ? Elle remplacera les données de cet appareil, et renverra '+nbPhotos+' photo(s) dans le cloud.',async()=>{
+    try{
+      await appliquerSauvegarde(data);
+      let ok=0;const rates=[];
+      for(let i=0;i<index.length;i++){
+        const e=index[i];
+        bkProgres(i,index.length,'Photo '+(i+1)+' sur '+index.length+'…');
+        const bytes=fichiers.get(e.fichier);
+        if(!bytes){rates.push(e.fichier);continue;}
+        try{
+          await photoStore.save(e.type==='ia'?iaKey(e.photo):fullKey(e.photo),new Blob([bytes],{type:'image/jpeg'}));
+          ok++;
+        }catch(err){rates.push(e.fichier);}
+      }
+      storageInvalidate();
+      render();renderClients();renderTaskList();renderRealisations();
+      const box=$('bk-prog');if(box)box.hidden=true;
+      bkDire('Sauvegarde restaurée : '+ok+' photo(s) remises en place'+(rates.length?' · '+rates.length+' en échec ('+rates.slice(0,2).join(', ')+')':'')+'.');
+      toast('Sauvegarde complète importée');
+    }catch(e){
+      console.error('import complet',e);
+      bkDire('Échec de l’import : '+((e&&e.message)||'erreur'));
+    }
+  });
+}
+async function exportData(){
+  toast('Préparation de la sauvegarde…');
+  /* Ce fichier-ci ne porte que les VIGNETTES des photos : inclure les originaux ferait un
+     JSON de plusieurs centaines de Mo, impossible à produire depuis un téléphone. Pour les
+     originaux, c'est « Sauvegarde complète (.zip) » juste en dessous. */
+  const data=await donneesSauvegarde();
   try{
     const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
@@ -3766,19 +4217,24 @@ async function exportData(){
     toast('Sauvegarde téléchargée');
   }catch(e){toast('Échec export : '+e.message);}
 }
+/* Écrit une sauvegarde dans l'application. Partagé par l'import JSON et l'import de
+   l'archive complète : deux copies de cette règle finiraient par diverger. */
+async function appliquerSauvegarde(data){
+  if(data.library&&data.library.sections){library=data.library;await store.set(K_LIB,library);}
+  clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
+  devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
+  if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
+  if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
+  if(data.realThumbs){for(const k in data.realThumbs){try{await photoStore.save(k,dataUriToBlob(data.realThumbs[k]));}catch(e){}}}
+  if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
+}
 async function importData(file){
   try{
     const text=await file.text();
     const data=JSON.parse(text);
     if(!data||!Array.isArray(data.clients)){toast('Fichier de sauvegarde invalide');return;}
     askConfirm('Importer cette sauvegarde ? Elle remplacera les données de cet appareil.',async()=>{
-      if(data.library&&data.library.sections){library=data.library;await store.set(K_LIB,library);}
-      clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
-      devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
-      if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
-      if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
-      if(data.realThumbs){for(const k in data.realThumbs){try{await photoStore.save(k,dataUriToBlob(data.realThumbs[k]));}catch(e){}}}
-      if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
+      await appliquerSauvegarde(data);
       render();renderClients();renderTaskList();renderRealisations();toast('Données importées');
     });
   }catch(e){toast('Échec import : '+e.message);}
@@ -3930,9 +4386,17 @@ function photoPubState(r,p){
   return 'enligne';
 }
 const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:''};
+/* Une réalisation en ligne dont une photo a bougé depuis. C'est LA chose qu'on oublie :
+   on retouche, on ajoute une photo, et le site garde l'ancienne version sans rien dire. */
+function realisationARepublier(r){
+  if(!r||!r.published)return 0;
+  return (r.photos||[]).filter(p=>photoPubState(r,p)!=='enligne').length;
+}
 const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée'};
 function normalizeRealisation(r){
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
+     et un portfolio : ils partent sur le site avec les photos. */
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
@@ -4536,7 +5000,8 @@ function renderRealisationList(host){
     card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
       <div class="rz-cbody">
         <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
-        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.published?' · <span class="rz-live">● en ligne</span>':''}</div>
+        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.categorie?' · '+esc(r.categorie):''}${
+          r.published?(realisationARepublier(r)?' · <span class="rz-warn">● à republier</span>':' · <span class="rz-live">● en ligne</span>'):''}</div>
       </div>`;
     if(cover){
       const im=card.querySelector('img');
@@ -4613,14 +5078,41 @@ function renderRealisationDetail(host,r){
   const meta=document.createElement('div');meta.className='rz-meta';
   meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
     <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Client (optionnel)</span><select data-f="clientId"></select></label>
-    <label class="fld" style="flex:0 0 140px"><span class="lbl">Date</span><input type="text" data-f="date" placeholder="ex. 2026" value="${esc(r.date)}"></label>`;
+    <label class="fld" style="flex:0 0 120px"><span class="lbl">Année</span><input type="text" data-f="date" placeholder="ex. 2026" value="${esc(r.date)}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Lieu</span><input type="text" data-f="lieu" placeholder="ex. Tel Aviv" value="${esc(r.lieu||'')}"></label>
+    <label class="fld" style="flex:0 0 120px"><span class="lbl">Surface</span><input type="text" data-f="surface" placeholder="ex. 85 m²" value="${esc(r.surface||'')}"></label>
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Type de mission</span>
+      <input type="text" data-f="mission" list="rz-missions" placeholder="ex. Rénovation complète" value="${esc(r.mission||'')}">
+      <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Catégorie (filtre du site)</span>
+      <input type="text" data-f="categorie" list="rz-cats" placeholder="ex. Appartement" value="${esc(r.categorie||'')}">
+      <datalist id="rz-cats">${rzCatsConnues().map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>`;
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
-  meta.querySelectorAll('[data-f]').forEach(el=>{
-    el.addEventListener('input',()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();});
-    el.addEventListener('change',()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();});
-  });
   head.appendChild(meta);
+  const liens=buildRealisationLiens(r);
+  if(liens)head.appendChild(liens);
+
+  /* Le texte de présentation est publié tel quel sur le site : c'est ce qui transforme une
+     galerie de photos en projet raconté. Il reste facultatif. */
+  const pres=document.createElement('div');pres.className='rz-pres';
+  pres.innerHTML=`<label class="fld"><span class="lbl">Texte de présentation (publié sur le site)</span>
+      <textarea data-f="texte" rows="3" maxlength="900" placeholder="Ce que le chantier a demandé, ce qui a été fait, les partis pris. Deux ou trois phrases suffisent.">${esc(r.texte||'')}</textarea></label>
+    <div class="rz-pres-acts">
+      <button class="mini" data-redige>✨ Rédiger un texte</button>
+      <span class="rz-pres-n"></span>
+    </div>`;
+  const ta=pres.querySelector('[data-f="texte"]'), cpt=pres.querySelector('.rz-pres-n');
+  const majN=()=>{cpt.textContent=(ta.value.length||0)+' / 900 caractères'+(ta.value.trim()?'':' — sans texte, le site n’affiche que les photos');};
+  ta.addEventListener('input',majN);majN();
+  pres.querySelector('[data-redige]').addEventListener('click',e=>redigerTexteRealisation(r,e.target,ta,majN));
+  [...meta.querySelectorAll('[data-f]'),...pres.querySelectorAll('[data-f]')].forEach(el=>{
+    const ecrire=()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();};
+    el.addEventListener('input',ecrire);
+    /* Changer de client change les raccourcis affichés juste en dessous : on redessine. */
+    el.addEventListener('change',()=>{ecrire();if(el.dataset.f==='clientId'){saveRealisations();renderRealisations();}});
+  });
+  head.appendChild(pres);
   host.appendChild(head);
 
   const grid=document.createElement('div');grid.className='rz-photos'+(_rzOrderMode?' rz-ordering':'');
@@ -4872,6 +5364,70 @@ async function renderThumbInto(p,im,ld){
     im.style.display='block';if(ld)ld.remove();
   }catch(e){if(ld)ld.textContent='erreur';}
 }
+/* Depuis une réalisation, retrouver le client et le devis correspondant. Sans ça, le
+   chantier photographié et son dossier commercial vivaient dans deux mondes séparés. */
+function buildRealisationLiens(r){
+  if(!r.clientId)return null;
+  const c=clients.find(x=>x.id===r.clientId);
+  if(!c)return null;
+  const box=document.createElement('div');box.className='rz-liens';
+  const b=document.createElement('button');b.className='mini';b.textContent='👤 Fiche de '+(c.name||'ce client');
+  b.addEventListener('click',()=>gotoClient(c.id));
+  box.appendChild(b);
+  (devisList||[]).filter(d=>d.clientId===c.id).slice(0,4).forEach(d=>{
+    const bd=document.createElement('button');bd.className='mini';
+    bd.textContent='🧾 '+(d.title||'Devis')+(d.num?' n°'+d.num:'');
+    bd.addEventListener('click',()=>editDevis(d.id));
+    box.appendChild(bd);
+  });
+  return box;
+}
+
+/* Missions courantes, proposées sans être imposées : le champ reste libre. */
+const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoration','Agencement sur mesure','Suivi de chantier','Conseil et plans'];
+/* Type de lieu — c'est ce qui sert de filtre au visiteur du site (« Appartement »,
+   « Bureau »…). Champ libre : la liste ci-dessous n'est qu'une proposition, et tout ce qui
+   a déjà été tapé ailleurs vient s'y ajouter. Pas de panneau de réglages à ouvrir pour
+   inventer une catégorie de plus. */
+const RZ_CATS=['Appartement','Maison','Bureau','Commerce','Restaurant','Hôtel','Espace commun'];
+function rzCatsConnues(){
+  const vues=realisations.map(x=>(x.categorie||'').trim()).filter(Boolean);
+  return RZ_CATS.concat(vues.filter(c=>RZ_CATS.indexOf(c)<0))
+    .filter((c,i,t)=>t.indexOf(c)===i);
+}
+
+/* Rédaction assistée du texte de présentation. Passe par la MÊME fonction serveur que le
+   bouton « Embellir » des devis (la clé Anthropic reste côté serveur) mais avec `kind`
+   = 'realisation' : le texte d'un portfolio ne s'écrit pas comme une ligne de devis.
+   Une fonction serveur plus ancienne, qui ne connaît pas `kind`, rendra simplement un texte
+   de facture — pas une panne, mais un texte à retoucher. */
+async function redigerTexteRealisation(r,btn,ta,apres){
+  if(!(r.title||'').trim()){toast('Donnez d’abord un nom à la réalisation');return;}
+  const vieux=btn.textContent;btn.disabled=true;btn.textContent='Rédaction…';
+  try{
+    const token=await sessionToken();
+    if(!token)throw new Error('session expirée, reconnectez-vous');
+    const legendes=(r.photos||[]).map(p=>(p.caption||'').trim()).filter(Boolean).slice(0,6);
+    const res=await fetch(SB_URL+'/functions/v1/embellish',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+      body:JSON.stringify({kind:'realisation',title:r.title,desc:r.texte||'',proj:r.lieu||'',
+        surf:(r.surface||'').replace(/[^0-9,.]/g,''),mission:r.mission||'',annee:r.date||'',
+        legendes,length:'long'})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+    const txt=(data.text||'').trim();
+    if(!txt)throw new Error('réponse vide');
+    r.texte=txt;ta.value=txt;r.updatedAt=Date.now();saveRealisations();
+    if(apres)apres();
+    toast('Texte rédigé — relisez-le avant de publier');
+  }catch(e){
+    console.error('texte réalisation',e);
+    _pubLastError='Rédaction impossible : '+((e&&e.message)||'erreur')+'. Rien n’a été modifié — vous pouvez écrire le texte à la main.';
+    renderRealisations();
+  }finally{btn.disabled=false;btn.textContent=vieux;}
+}
 function newRealisation(){
   const r=normalizeRealisation({title:'',date:String(new Date().getFullYear())});
   realisations.push(r);saveRealisations();
@@ -4946,6 +5502,10 @@ async function openPhotoEditor(rid,pid){
         </div>
         <div id="ed-photo-acts">
           <div class="ed-acts">
+            <button class="btn btn-onlight" data-undo title="Annuler le dernier réglage">↩ Annuler</button>
+            <button class="btn btn-onlight" data-redo title="Rétablir">↪ Rétablir</button>
+          </div>
+          <div class="ed-acts" style="margin-top:8px">
             <button class="btn btn-onlight" data-auto>✨ Réglage auto</button>
             <button class="btn btn-onlight" data-reset>↺ Réinitialiser</button>
           </div>
@@ -4959,8 +5519,11 @@ async function openPhotoEditor(rid,pid){
   document.body.appendChild(host);
   /* La retouche par consigne écrite est le mode d'entrée : c'est elle qui fait passer une
      photo de téléphone à une photo publiable. Les réglages manuels restent à un doigt. */
-  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0};
+  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0,
+       hist:[JSON.stringify(p.edit)],histI:0};
   host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
+  host.querySelector('[data-undo]').addEventListener('click',()=>edHistGo(-1));
+  host.querySelector('[data-redo]').addEventListener('click',()=>edHistGo(1));
   host.querySelector('[data-hist]').addEventListener('click',()=>openPhotoHistory(_ed.r,_ed.p));
   host.querySelector('[data-prev]').addEventListener('click',()=>edGoto(-1));
   host.querySelector('[data-next]').addEventListener('click',()=>edGoto(1));
@@ -4980,7 +5543,7 @@ async function openPhotoEditor(rid,pid){
     _ed.r.cover=_ed.p.id;edTouch();toast('Photo de couverture définie');
   });
   host.querySelectorAll('.ed-tab').forEach(b=>b.addEventListener('click',()=>{
-    _ed.tab=b.dataset.tab;paintEditorTabs();buildEditorControls();
+    _ed.tab=b.dataset.tab;paintEditorTabs();buildEditorControls();edPaintHint();
   }));
   const cmp=host.querySelector('[data-cmp]'),stage=host.querySelector('.ed-stage');
   const showOrig=on=>{_ed.showOrig=on;edPaint();};
@@ -4995,20 +5558,43 @@ async function openPhotoEditor(rid,pid){
     _ed.split=Math.max(0,Math.min(1,(cx-r.left)/r.width));
     edPaint();
   };
-  let glisse=false;
+  let glisse=false,cadre=null;
+  /* Trois gestes sur la photo, et jamais deux en même temps :
+     - onglet Cadrage avec un format imposé → on FAIT GLISSER LA PHOTO pour choisir ce que
+       le cadre garde (le curseur « Position » fait la même chose, au doigt près) ;
+     - sinon, une version IA existe → curseur avant/après ;
+     - sinon → appui long pour voir la photo sans réglages. */
   ['mousedown','touchstart'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(edCadrageDeplacable()){
+      const pt=(e.touches&&e.touches[0])||e;
+      cadre={x:pt.clientX,y:pt.clientY,pan:_ed.p.edit.pan||0};
+      if(e.cancelable)e.preventDefault();
+      return;
+    }
     if(edHasCompare()){glisse=true;posSplit(e);if(e.cancelable)e.preventDefault();}
     else showOrig(true);
   },{passive:false}));
   ['mousemove','touchmove'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(cadre){edCadrageGlisse(e,cadre);if(e.cancelable)e.preventDefault();return;}
     if(glisse){posSplit(e);if(e.cancelable)e.preventDefault();}
   },{passive:false}));
   ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>stage.addEventListener(ev,()=>{
+    if(cadre){cadre=null;buildEditorControls();edTouch();return;}   /* un geste = un cran d'annulation */
     glisse=false;if(!edHasCompare())showOrig(false);
   }));
   ['mousedown','touchstart'].forEach(ev=>cmp.addEventListener(ev,e=>{if(!edHasCompare()){e.preventDefault();showOrig(true);}}));
   ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>cmp.addEventListener(ev,()=>{if(!edHasCompare())showOrig(false);}));
-  paintEditorTabs();buildEditorControls();
+  /* Ctrl+Z / Ctrl+Maj+Z : le réflexe de tout le monde sur un ordinateur. Le raccourci ne
+     vit que le temps de l'éditeur. */
+  _ed.clavier=(ev)=>{
+    if(!_ed)return;
+    if(!(ev.ctrlKey||ev.metaKey))return;
+    const k=(ev.key||'').toLowerCase();
+    if(k==='z'){ev.preventDefault();edHistGo(ev.shiftKey?1:-1);}
+    else if(k==='y'){ev.preventDefault();edHistGo(1);}
+  };
+  document.addEventListener('keydown',_ed.clavier);
+  paintEditorTabs();buildEditorControls();edHistPaint();
   const cv=$('ed-canvas');
   const ctx=cv.getContext('2d');cv.width=600;cv.height=400;
   ctx.fillStyle='#2f2c28';ctx.fillRect(0,0,600,400);
@@ -5021,11 +5607,42 @@ async function openPhotoEditor(rid,pid){
   await edLoadAlt();          /* de quoi comparer avant/après s'il existe une version IA */
   if(_ed){edPaintHint();edPaint();}
 }
+/* Le cadrage ne se déplace que s'il y a de quoi : un format imposé, donc une partie de la
+   photo laissée dehors. En « libre », la photo entière est gardée, il n'y a rien à bouger. */
+function edCadrageDeplacable(){
+  return !!(_ed&&_ed.tab==='cadrage'&&(_ed.p.edit.ratio||'libre')!=='libre'&&_ed.img);
+}
+/* L'axe qui a du jeu : une photo paysage dans un cadre carré se déplace horizontalement,
+   une photo portrait verticalement. Jamais les deux — cropWindow n'en laisse qu'un libre. */
+function edCadrageAxe(){
+  if(!_ed||!_ed.img)return null;
+  const asp=_ed.img.width/_ed.img.height;
+  const def=REAL_RATIOS.find(r=>r.id===(_ed.p.edit.ratio||'libre'));
+  const t=def?def.v:0;
+  if(!t)return null;
+  return (t<=asp)?'x':'y';
+}
+function edCadrageGlisse(e,depart){
+  const cv=$('ed-canvas');if(!cv||!_ed)return;
+  const axe=edCadrageAxe();if(!axe)return;
+  const pt=(e.touches&&e.touches[0])||e;
+  const box=cv.getBoundingClientRect();
+  const taille=(axe==='x')?box.width:box.height;
+  if(!taille)return;
+  const d=(axe==='x')?(pt.clientX-depart.x):(pt.clientY-depart.y);
+  /* On tire la PHOTO : la fenêtre de cadrage va donc dans l'autre sens. */
+  const pan=depart.pan-(d/taille)*2;
+  _ed.p.edit.pan=Math.max(-1,Math.min(1,pan));
+  edPaint();
+}
+
 /* La barre du haut dit quel geste est actif : ils ne coexistent pas. */
 function edPaintHint(){
   const el=document.querySelector('#ed-modal [data-cmp]');
   if(!el)return;
-  el.textContent=edHasCompare()?'faire glisser sur la photo : avant / après':'maintenir pour voir l’original';
+  el.textContent=edCadrageDeplacable()?'faire glisser la photo : choisir le cadrage'
+    :edHasCompare()?'faire glisser sur la photo : avant / après'
+    :'maintenir pour voir l’original';
 }
 function paintEditorTabs(){
   document.querySelectorAll('#ed-modal .ed-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===_ed.tab));
@@ -5034,6 +5651,7 @@ function paintEditorTabs(){
      s'appliquaient à la retouche IA. */
   const acts=$('ed-photo-acts');
   if(acts)acts.style.display=(_ed.tab==='ia')?'none':'';
+  edHistPaint();
 }
 function buildEditorControls(){
   const host=$('ed-controls');if(!host||!_ed)return;
@@ -5042,7 +5660,7 @@ function buildEditorControls(){
   if(_ed.tab==='ia'){ buildIaPanel(host); return; }
   if(_ed.tab==='cadrage'){
     const hint=document.createElement('p');hint.className='ed-hint';
-    hint.textContent='Un format identique sur toutes les photos d’une réalisation, c’est ce qui donne une galerie propre. Le curseur déplace le cadrage dans la photo.';
+    hint.textContent='Un format identique sur toutes les photos d’une réalisation, c’est ce qui donne une galerie propre. Faites glisser la photo pour choisir ce que le cadre garde — le curseur ci-dessous fait la même chose, au doigt près.';
     host.appendChild(hint);
     const rats=document.createElement('div');rats.className='ed-ratios';
     REAL_RATIOS.forEach(rt=>{
@@ -5164,10 +5782,45 @@ function edPaintLabels(ctx,cv,x){
   if(x>f*5)tag('AVANT',f,'left');
   if(cv.width-x>f*5)tag('APRÈS',cv.width-f,'right');
 }
+/* ---- Annuler / rétablir ----
+   On peut réinitialiser, mais pas revenir d'un cran : sur un réglage tâtonné, c'est ce qui
+   manque le plus. La pile garde des ÉTATS complets de `photo.edit` (un objet minuscule),
+   pas des différences : c'est plus simple et ça ne peut pas dériver. Un état n'est empilé
+   que lorsqu'un geste est TERMINÉ (`edTouch`), jamais à chaque mouvement de curseur. */
+const ED_HIST_MAX=40;
 function edTouch(){
   if(!_ed)return;
   photoTouch(_ed.p,'reglages');
   _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
+  edHistPush();
+}
+function edHistPush(){
+  if(!_ed||!_ed.hist)return;
+  const etat=JSON.stringify(_ed.p.edit);
+  if(etat===_ed.hist[_ed.histI])return;      /* rien n'a bougé : rien à empiler */
+  _ed.hist=_ed.hist.slice(0,_ed.histI+1);    /* on repart d'ici : la branche « rétablir » tombe */
+  _ed.hist.push(etat);
+  if(_ed.hist.length>ED_HIST_MAX)_ed.hist.shift();
+  _ed.histI=_ed.hist.length-1;
+  edHistPaint();
+}
+function edHistGo(d){
+  if(!_ed||!_ed.hist)return;
+  const j=_ed.histI+d;
+  if(j<0||j>=_ed.hist.length)return;
+  _ed.histI=j;
+  /* On écrit DANS l'objet existant : l'éditeur, la vignette et la publication pointent tous
+     sur `photo.edit`, le remplacer les laisserait sur un orphelin. */
+  Object.assign(_ed.p.edit,JSON.parse(_ed.hist[j]));
+  photoTouch(_ed.p,'reglages');
+  _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
+  buildEditorControls();edPaint();edHistPaint();
+}
+function edHistPaint(){
+  const u=document.querySelector('#ed-modal [data-undo]'), r=document.querySelector('#ed-modal [data-redo]');
+  if(!_ed||!u||!r)return;
+  u.disabled=_ed.histI<=0;
+  r.disabled=_ed.histI>=_ed.hist.length-1;
 }
 function applyLightToSeries(){
   if(!_ed)return;
@@ -5233,6 +5886,7 @@ async function edGoto(delta){
 }
 function closePhotoEditor(){
   const host=$('ed-modal');if(host)host.remove();
+  if(_ed&&_ed.clavier)document.removeEventListener('keydown',_ed.clavier);
   _ed=null;_glTexKey='';
   saveRealisations();renderRealisations();
 }
@@ -6736,6 +7390,9 @@ const GALLERY_BUCKET='galerie';
 const PUB_FULL=1600, PUB_FULL_Q=0.85, PUB_THUMB=700, PUB_THUMB_Q=0.8;
 function galleryPublicUrl(path){return SB_URL+'/storage/v1/object/public/'+GALLERY_BUCKET+'/'+path;}
 function manifestPath(){return ownerId+'/manifest.json';}
+/* Adresse FIXE de l'image d'aperçu : la page publique la cite en dur dans ses balises de
+   partage. Changer ce chemin oblige à changer `site-vitrine/index.html` en même temps. */
+function shareImagePath(){return ownerId+'/share.jpg';}
 
 /* Lecture du manifeste par l'API authentifiée, PAS par l'URL publique. Deux raisons, et
    les deux sont des pertes de données silencieuses :
@@ -6767,10 +7424,89 @@ async function writeManifest(man){
   const {error}=await sb.storage.from(GALLERY_BUCKET).upload(manifestPath(),blob,{contentType:'application/json',cacheControl:'60',upsert:true});
   if(error)throw error;
 }
+/* ---- Ce que le site public dit de lui-même ----
+   Tout est VIDE par défaut, et rien ne part en ligne tant que ce n'est pas rempli ici :
+   une adresse e-mail ou un numéro sur une page publique, c'est une décision, pas un
+   réglage technique. Les coordonnées du devis ne sont donc jamais recopiées toutes
+   seules — il y a un bouton pour le faire en un geste, et c'est le geste qui vaut accord. */
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:''};
+function siteSettings(){
+  library.site=Object.assign({},SITE_DEFAULTS,library.site||{});
+  return library.site;
+}
+function siteInfos(){
+  const st=siteSettings();
+  const b=library.branding||{};
+  const o={title:(b.companyName||'Melissa Nabet').trim(),subtitle:(st.sousTitre||'').trim()};
+  ['apropos','email','tel','instagram'].forEach(k=>{
+    const v=(st[k]||'').trim();
+    if(v)o[k]=v;
+  });
+  return o;
+}
 function emptyManifest(){
-  return {version:1,updatedAt:new Date().toISOString(),
-    site:{title:(library.branding&&library.branding.name)||'Melissa Nabet',subtitle:'Architecture d’intérieur'},
-    realisations:[]};
+  return {version:1,updatedAt:new Date().toISOString(),site:siteInfos(),realisations:[]};
+}
+/* Mettre à jour la présentation du site sans republier une réalisation : sinon, corriger
+   une faute dans le texte « À propos » obligerait à republier un chantier. */
+async function pushSiteInfos(btn){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  const dire=t=>{const el=document.getElementById('site-msg');if(el)el.textContent=t;};
+  if(btn){btn.disabled=true;btn.textContent='Envoi…';}
+  try{
+    const man=await readManifest();
+    man.site=siteInfos();
+    man.updatedAt=new Date().toISOString();
+    await writeManifest(man);
+    dire('Mis à jour sur le site. Comptez une minute avant de voir le changement en ligne.');
+    toast('Site mis à jour');
+  }catch(e){
+    console.error('infos du site',e);
+    dire('Échec : '+((e&&e.message)||'erreur')+'. Rien n’a été modifié en ligne.');
+  }finally{ if(btn){btn.disabled=false;btn.textContent='Mettre à jour le site';} }
+}
+function openSitePanel(){
+  const st=siteSettings(), b=library.branding||{};
+  const nb=(realisations||[]).filter(r=>r.published).length;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Le site public</h3>
+    <p class="msub">Ce que le site dit de lui-même, en dehors des projets. <b>Tout ce qui est rempli ici devient public</b> — laissez vide ce que vous ne voulez pas montrer. Les projets, eux, ne partent en ligne que par « Publier sur le site », réalisation par réalisation (${nb} en ligne).</p>
+    <label class="fld"><span class="lbl">Sous-titre, sous le nom</span>
+      <input type="text" id="site-sub" maxlength="60" value="${esc(st.sousTitre||'')}" placeholder="ex. Architecture d’intérieur"></label>
+    <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page</span>
+      <textarea id="site-apropos" rows="4" maxlength="700" placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(st.apropos||'')}</textarea></label>
+    <div class="ed-eyebrow" style="margin-top:14px">Vous joindre</div>
+    <p class="ias-note">Ces coordonnées deviennent visibles par n'importe quel visiteur. Laissez un champ vide et il n'apparaît pas du tout.</p>
+    <div class="row2">
+      <label class="fld"><span class="lbl">E-mail de contact</span>
+        <input type="email" id="site-email" value="${esc(st.email||'')}" placeholder="vide = pas d’e-mail affiché"></label>
+      <label class="fld"><span class="lbl">Téléphone / WhatsApp</span>
+        <input type="text" id="site-tel" value="${esc(st.tel||'')}" placeholder="vide = pas de numéro affiché"></label>
+    </div>
+    <label class="fld"><span class="lbl">Instagram (facultatif)</span>
+      <input type="text" id="site-insta" value="${esc(st.instagram||'')}" placeholder="@nomducompte"></label>
+    <button class="mini" id="site-copier">Reprendre les coordonnées du devis</button>
+    ${(b.email||b.phone)?'<p class="ias-note" style="margin-top:6px">Celles de vos devis : '+esc([b.email,b.phone].filter(Boolean).join(' · '))+'</p>':'<p class="ias-note" style="margin-top:6px">Vos devis ne portent aucune coordonnée à reprendre.</p>'}
+    <p class="ias-msg" id="site-msg"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="mini" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-primary" id="site-push">Mettre à jour le site</button>
+    </div>`);
+  const champs={sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta'};
+  Object.entries(champs).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.addEventListener('input',()=>{siteSettings()[k]=el.value;saveLibraryDebounced();});
+  });
+  const cop=document.getElementById('site-copier');
+  cop.addEventListener('click',()=>{
+    if(!(b.email||b.phone)){document.getElementById('site-msg').textContent='Aucune coordonnée dans les réglages du devis à reprendre.';return;}
+    if(b.email){siteSettings().email=b.email;document.getElementById('site-email').value=b.email;}
+    if(b.phone){siteSettings().tel=b.phone;document.getElementById('site-tel').value=b.phone;}
+    saveLibraryDebounced();
+    document.getElementById('site-msg').textContent='Coordonnées reprises. Elles ne sont pas encore en ligne : « Mettre à jour le site » pour ça.';
+  });
+  document.getElementById('site-push').addEventListener('click',e=>pushSiteInfos(e.target));
 }
 
 async function publishRealisation(r){
@@ -6782,6 +7518,7 @@ async function publishRealisation(r){
   try{
     const folder=ownerId+'/'+r.id;
     const entries=[];
+    let sharePartage=null;
     for(let i=0;i<r.photos.length;i++){
       const p=r.photos[i];
       if(btn)btn.textContent='Publication '+(i+1)+'/'+r.photos.length+'…';
@@ -6794,6 +7531,11 @@ async function publishRealisation(r){
       const bw=big.width,bh=big.height;
       const small=glRenderTo(img,edit,PUB_THUMB,'pub_'+p.id);
       const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+      /* Image d'aperçu du site (WhatsApp, Instagram, moteurs) : la couverture de la
+         dernière réalisation publiée, écrite à une adresse FIXE. La page publique porte
+         cette adresse en dur dans ses balises : elle n'a donc jamais à être modifiée, et
+         un lien partagé cesse de s'afficher tout nu. */
+      if(!sharePartage||r.cover===p.id)sharePartage=smallBlob;
       const fullName=r.id+'/p'+i+'.jpg', thumbName=r.id+'/t'+i+'.jpg';
       const up=async (name,blob)=>{
         const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
@@ -6819,11 +7561,25 @@ async function publishRealisation(r){
       if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
     }catch(e){}
 
+    /* L'aperçu de partage ne doit jamais faire échouer une publication : la galerie, elle,
+       est déjà en ligne à ce stade. */
+    if(sharePartage){
+      try{
+        await sb.storage.from(GALLERY_BUCKET).upload(shareImagePath(),sharePartage,
+          {contentType:'image/jpeg',cacheControl:'600',upsert:true});
+      }catch(e){console.error('image de partage',e);}
+    }
+
     const man=await readManifest();
     man.site=emptyManifest().site;
     man.updatedAt=new Date().toISOString();
     man.realisations=man.realisations.filter(x=>x.id!==r.id);
-    man.realisations.unshift({id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()});
+    const fiche={id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()};
+    /* Champs vides omis : le site ne doit pas afficher d'étiquette sans valeur. */
+    [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
+      if((v||'').trim())fiche[k]=String(v).trim();
+    });
+    man.realisations.unshift(fiche);
     await writeManifest(man);
 
     r.published=true;r.publishedAt=Date.now();r.updatedAt=Date.now();
@@ -6852,6 +7608,9 @@ async function unpublishRealisation(r){
       man.realisations=man.realisations.filter(x=>x.id!==r.id);
       man.updatedAt=new Date().toISOString();
       await writeManifest(man);
+      /* Plus rien en ligne : garder l'image d'aperçu ferait afficher, dans un lien partagé,
+         la photo d'un chantier qu'on vient justement de retirer du site. */
+      if(!man.realisations.length){try{await sb.storage.from(GALLERY_BUCKET).remove([shareImagePath()]);}catch(e){}}
       r.published=false;delete r.publishedAt;r.updatedAt=Date.now();storageInvalidate();
       (r.photos||[]).forEach(p=>{delete p.publishedAt;photoLog(p,'depublie','');});
       saveRealisations();renderRealisations();

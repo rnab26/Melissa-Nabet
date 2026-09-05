@@ -1621,6 +1621,11 @@ await page.route('**/functions/v1/photo-ia', async (route) => {
   const q = falQueue.handle(body);
   await route.fulfill({ status: q.status, contentType: 'application/json', body: JSON.stringify(q.json) });
 });
+// Cette section retouche pour de vrai des photos déjà publiées plus haut : une retouche
+// marque la photo « à republier », ce que les contrôles suivants comptent. On relève donc
+// l'état de publication avant, et on le remet après — la file n'a rien à dire là-dessus.
+const etatPubAvant = await page.evaluate(() =>
+  realisations[0].photos.map(p => ({ id: p.id, publishedAt: p.publishedAt || null, touchedAt: p.touchedAt || null })));
 // La fiche ouverte est remise en place à la fin de la section : les contrôles suivants
 // travaillent dessus.
 const rzOuvertAvant = await page.evaluate(() => {
@@ -1932,11 +1937,18 @@ check('Réglages : l’écran explique que 4K ne sert à rien tant que la public
   /4K ne sert à rien aujourd’hui/.test(note4k) && /1600 px/.test(note4k), note4k.slice(0, 120));
 
 await page.unroute('**/functions/v1/photo-ia');
-await page.evaluate(async (id) => {
+await page.evaluate(async (arg) => {
   library.iaJobs = []; await saveLibrary(); _iaReprise = null;
-  _rzOpenId = id || (realisations[0] && realisations[0].id) || null;
+  const r = realisations[0];
+  arg.pub.forEach(x => {
+    const p = (r.photos || []).find(y => y.id === x.id);
+    if (!p) return;
+    if (x.publishedAt === null) delete p.publishedAt; else p.publishedAt = x.publishedAt;
+    if (x.touchedAt === null) delete p.touchedAt; else p.touchedAt = x.touchedAt;
+  });
+  _rzOpenId = arg.id || (realisations[0] && realisations[0].id) || null;
   renderRealisations();
-}, rzOuvertAvant);
+}, { id: rzOuvertAvant, pub: etatPubAvant });
 
 
 // ============================================================================
@@ -2038,6 +2050,325 @@ const invalid = await page.evaluate(async () => {
 check('Stockage : la mesure est refaite après un import', invalid.apresImport);
 check('Stockage : la mesure est refaite après une suppression', invalid.apresSuppression);
 
+
+// ============================================================================
+//  TEXTES DE PRÉSENTATION : lieu, surface, mission, description
+// ============================================================================
+const presFields = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  const mettre = (f, v) => {
+    const el = document.querySelector('#rz-body [data-f="' + f + '"]');
+    if (!el) return 'champ absent';
+    el.value = v; el.dispatchEvent(new Event('input'));
+    return null;
+  };
+  const manquants = ['lieu', 'surface', 'mission', 'texte'].map(f => mettre(f, {
+    lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète',
+    texte: 'Un appartement cloisonné ramené à un volume traversant.',
+  }[f])).filter(Boolean);
+  const missions = [...document.querySelectorAll('#rz-missions option')].map(o => o.value);
+  return { manquants, lieu: r.lieu, surface: r.surface, mission: r.mission, texte: r.texte,
+           missions, compteur: (document.querySelector('.rz-pres-n') || {}).textContent || '' };
+});
+check('Présentation : les quatre champs existent dans la fiche', presFields.manquants.length === 0, presFields.manquants.join(', '));
+check('Présentation : ce qu’on tape est enregistré',
+  presFields.lieu === 'Tel Aviv' && presFields.surface === '85 m²' && presFields.mission === 'Rénovation complète' && /volume traversant/.test(presFields.texte));
+check('Présentation : des types de mission sont proposés sans être imposés',
+  presFields.missions.length >= 5 && presFields.missions.includes('Rénovation complète'), presFields.missions.join(', '));
+check('Présentation : le texte a un compteur de caractères', /\d+ \/ 900 caractères/.test(presFields.compteur), presFields.compteur);
+
+const presFieldsVides = await page.evaluate(() => {
+  const r = findRealisation(_rzOpenId);
+  const garde = { lieu: r.lieu, surface: r.surface, mission: r.mission, texte: r.texte };
+  r.lieu = ''; r.surface = ''; r.mission = ''; r.texte = ''; renderRealisations();
+  const t = (document.querySelector('.rz-pres-n') || {}).textContent || '';
+  Object.assign(r, garde); renderRealisations();
+  return t;
+});
+check('Présentation : sans texte, l’écran dit ce que ça change', /le site n’affiche que les photos/.test(presFieldsVides), presFieldsVides);
+
+// --- Ces textes partent dans le manifeste, les presFields vides n'y figurent pas
+const manifTextes = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  await publishRealisation(r);
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const fiche = JSON.parse(await window.__files.get(key).text()).realisations.find(x => x.id === r.id);
+  // une réalisation sans texte : rien ne doit être ajouté
+  const r2 = normalizeRealisation({ title: 'Sans texte', photos: r.photos.map(p => ({ ...p })) });
+  realisations.push(r2);
+  await publishRealisation(r2);
+  const fiche2 = JSON.parse(await window.__files.get(key).text()).realisations.find(x => x.id === r2.id);
+  realisations = realisations.filter(x => x.id !== r2.id);
+  return { fiche, clefs2: Object.keys(fiche2) };
+});
+check('Publication : lieu, surface, mission et texte partent sur le site',
+  manifTextes.fiche.lieu === 'Tel Aviv' && manifTextes.fiche.surface === '85 m²'
+  && manifTextes.fiche.mission === 'Rénovation complète' && /volume traversant/.test(manifTextes.fiche.texte),
+  JSON.stringify({ l: manifTextes.fiche.lieu, s: manifTextes.fiche.surface, m: manifTextes.fiche.mission }));
+check('Publication : un champ vide n’est pas publié du tout (pas d’étiquette sans valeur)',
+  !manifTextes.clefs2.includes('lieu') && !manifTextes.clefs2.includes('texte'), manifTextes.clefs2.join(','));
+
+// --- Rédaction assistée : la même fonction serveur que les devis, mais pour un portfolio
+let embBody = null;
+await page.route('**/functions/v1/embellish', async (route) => {
+  embBody = JSON.parse(route.request().postData() || '{}');
+  await route.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ text: 'Un plateau cloisonné, ramené à un seul volume traversant.' }) });
+});
+const redige = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.texte = '';
+  renderRealisations();
+  const btn = document.querySelector('#rz-body [data-redige]');
+  btn.click();
+  await new Promise(res => setTimeout(res, 400));
+  return { texte: r.texte, zone: (document.querySelector('#rz-body [data-f="texte"]') || {}).value || '',
+           bouton: btn.textContent, actif: !btn.disabled };
+});
+check('Rédaction assistée : le texte revient dans le champ et dans la fiche',
+  /volume traversant/.test(redige.texte) && /volume traversant/.test(redige.zone), redige.texte);
+check('Rédaction assistée : le bouton retrouve son état normal', redige.actif && /Rédiger/.test(redige.bouton), redige.bouton);
+check('Rédaction assistée : c’est bien un texte de portfolio qui est demandé, pas une ligne de devis',
+  embBody && embBody.kind === 'realisation' && embBody.title && embBody.length === 'long',
+  JSON.stringify(embBody && { kind: embBody.kind, length: embBody.length, mission: embBody.mission }));
+check('Rédaction assistée : les légendes des photos sont envoyées comme matière',
+  embBody && Array.isArray(embBody.legendes), JSON.stringify(embBody && embBody.legendes));
+
+await page.unroute('**/functions/v1/embellish');
+await page.route('**/functions/v1/embellish', async (route) => {
+  await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: 'IA indisponible (HTTP 502)' }) });
+});
+const redigeKo = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.texte = 'texte écrit à la main';
+  renderRealisations();
+  document.querySelector('#rz-body [data-redige]').click();
+  await new Promise(res => setTimeout(res, 400));
+  return { texte: r.texte, message: (document.querySelector('#rz-body .ia-erreur p') || {}).textContent || '' };
+});
+check('Rédaction assistée : un échec ne perd pas le texte déjà écrit', redigeKo.texte === 'texte écrit à la main');
+check('Rédaction assistée : l’échec reste affiché et dit quoi faire',
+  /Rédaction impossible/.test(redigeKo.message) && /à la main/.test(redigeKo.message), redigeKo.message);
+await page.unroute('**/functions/v1/embellish');
+await page.evaluate(() => { _pubLastError = null; renderRealisations(); });
+
+
+// ============================================================================
+//  LE SITE PUBLIC : ce qu'il dit de lui-même. Vide par défaut, publié sur geste.
+// ============================================================================
+const siteVide = await page.evaluate(() => {
+  library.site = null;
+  const st = siteSettings();
+  return { apropos: st.apropos, email: st.email, tel: st.tel, insta: st.instagram,
+           infos: Object.keys(siteInfos()) };
+});
+check('Site public : tout est vide au départ',
+  siteVide.apropos === '' && siteVide.email === '' && siteVide.tel === '' && siteVide.insta === '');
+check('Site public : rien de vide ne part dans le manifeste',
+  siteVide.infos.join(',') === 'title,subtitle', siteVide.infos.join(','));
+
+const sitePanel = await page.evaluate(async () => {
+  library.branding = Object.assign({}, library.branding, { email: 'contact@exemple.fr', phone: '052 111 22 33' });
+  openSitePanel();
+  const avantCopie = { email: siteSettings().email, tel: siteSettings().tel };
+  document.getElementById('site-copier').click();
+  const apresCopie = { email: siteSettings().email, tel: siteSettings().tel,
+                       message: document.getElementById('site-msg').textContent };
+  document.getElementById('site-apropos').value = 'Atelier d’architecture d’intérieur.';
+  document.getElementById('site-apropos').dispatchEvent(new Event('input'));
+  const cleAvant = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const manAvant = cleAvant ? JSON.parse(await window.__files.get(cleAvant).text()).site : null;
+  return { avantCopie, apresCopie, apropos: siteSettings().apropos,
+           enLigneAvantGeste: manAvant && (manAvant.email || manAvant.apropos) ? 'oui' : 'non' };
+});
+check('Site public : les coordonnées du devis ne sont PAS reprises toutes seules',
+  sitePanel.avantCopie.email === '' && sitePanel.avantCopie.tel === '');
+check('Site public : un bouton les reprend en un geste',
+  sitePanel.apresCopie.email === 'contact@exemple.fr' && sitePanel.apresCopie.tel === '052 111 22 33');
+check('Site public : et l’écran dit que ce n’est pas encore en ligne',
+  /pas encore en ligne/.test(sitePanel.apresCopie.message), sitePanel.apresCopie.message);
+check('Site public : le texte À propos est enregistré', /Atelier/.test(sitePanel.apropos), sitePanel.apropos);
+check('Site public : rien n’est parti en ligne avant le geste explicite',
+  sitePanel.enLigneAvantGeste === 'non');
+
+const sitePush = await page.evaluate(async () => {
+  await pushSiteInfos(document.getElementById('site-push'));
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const man = JSON.parse(await window.__files.get(key).text());
+  const msg = document.getElementById('site-msg').textContent;
+  // les projets publiés ne doivent pas bouger d'un pouce
+  return { site: man.site, projets: man.realisations.length, msg };
+});
+check('Site public : « Mettre à jour le site » écrit bien les informations',
+  sitePush.site.email === 'contact@exemple.fr' && /Atelier/.test(sitePush.site.apropos || ''),
+  JSON.stringify(sitePush.site));
+check('Site public : la mise à jour ne touche pas aux projets publiés', sitePush.projets >= 1, sitePush.projets + ' projet(s)');
+check('Site public : l’écran confirme', /Mis à jour/.test(sitePush.msg), sitePush.msg);
+
+const sitePushKo = await page.evaluate(async () => {
+  const vrai = sb.storage.from;
+  sb.storage.from = (b) => Object.assign({}, vrai(b), { upload: async () => ({ error: { message: 'réseau indisponible' } }) });
+  await pushSiteInfos(document.getElementById('site-push'));
+  sb.storage.from = vrai;
+  const msg = document.getElementById('site-msg').textContent;
+  closeModal();
+  return msg;
+});
+check('Site public : un échec le dit, et dit que rien n’a changé en ligne',
+  /Échec/.test(sitePushKo) && /Rien n’a été modifié/.test(sitePushKo), sitePushKo);
+
+// --- Catégorie : champ libre, propositions, et filtre du site
+const categorie = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const el = document.querySelector('#rz-body [data-f="categorie"]');
+  if (!el) return { absent: true };
+  el.value = 'Loft'; el.dispatchEvent(new Event('input'));   // valeur hors liste : acceptée
+  const propositions = [...document.querySelectorAll('#rz-cats option')].map(o => o.value);
+  renderRealisations();
+  const reproposee = [...document.querySelectorAll('#rz-cats option')].map(o => o.value).includes('Loft');
+  const surCarte = (() => { _rzOpenId = null; renderRealisations();
+    const t = [...document.querySelectorAll('.rz-cmeta')].map(x => x.textContent).join(' | ');
+    _rzOpenId = r.id; renderRealisations(); return t; })();
+  return { valeur: r.categorie, propositions, reproposee, surCarte };
+});
+check('Catégorie : le champ existe et accepte une valeur hors liste', categorie.valeur === 'Loft', JSON.stringify(categorie).slice(0, 80));
+check('Catégorie : des types de lieu sont proposés',
+  categorie.propositions && categorie.propositions.includes('Appartement') && categorie.propositions.includes('Bureau'),
+  (categorie.propositions || []).join(', '));
+check('Catégorie : une catégorie inventée est proposée la fois suivante', categorie.reproposee === true);
+check('Catégorie : visible sur la carte de la liste', /Loft/.test(categorie.surCarte || ''), (categorie.surCarte || '').slice(0, 70));
+
+const catManif = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  await publishRealisation(r);
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const fiche = JSON.parse(await window.__files.get(key).text()).realisations.find(x => x.id === r.id);
+  return fiche.categorie || '';
+});
+check('Catégorie : elle part sur le site, c’est elle qui sert de filtre au visiteur', catManif === 'Loft', catManif);
+
+// --- Image d'aperçu du site : écrite à chaque publication, effacée quand plus rien n'est en ligne
+const partage = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const cle = () => [...window.__files.keys()].find(k => k.endsWith('/share.jpg')) || '';
+  // On repart d'un site vierge : les essais précédents ont laissé dans le manifeste des
+  // réalisations qui n'existent plus côté application, et le cas qu'on veut vérifier est
+  // « la DERNIÈRE réalisation en ligne est retirée ».
+  [...window.__files.keys()].filter(k => k.endsWith('manifest.json') || k.endsWith('/share.jpg'))
+    .forEach(k => window.__files.delete(k));
+  await publishRealisation(r);
+  const apresPublication = cle();
+  const taille = apresPublication ? window.__files.get(apresPublication).size : 0;
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    unpublishRealisation(r);
+  });
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const restantes = JSON.parse(await window.__files.get(key).text()).realisations.length;
+  return { apresPublication, taille, restantes, apresRetrait: cle() };
+});
+check('Partage : la publication écrit l’image d’aperçu à une adresse fixe',
+  /\/share\.jpg$/.test(partage.apresPublication) && partage.taille > 500,
+  partage.apresPublication + ' — ' + partage.taille + ' octets');
+check('Partage : plus rien en ligne, l’image d’aperçu est effacée',
+  partage.restantes === 0 && partage.apresRetrait === '', partage.apresRetrait || 'effacée');
+
+// ============================================================================
+//  SAUVEGARDE COMPLÈTE : les photos en pleine définition, et le retour en arrière
+// ============================================================================
+const bkZip = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.photos[0].ia = { model: 'test/modele', prompt: 'essai' };
+  await photoStore.save(iaKey(r.photos[0].id), new Blob(['fausse-image-ia'], { type: 'image/jpeg' }));
+  openBackupPanel();
+  const portees = [...document.querySelectorAll('#bk-portee option')].map(o => o.textContent);
+  const taille = document.getElementById('bk-taille').textContent;
+  // on capte l'archive au lieu de la télécharger
+  let zip = null, nom = '';
+  const vrai = window.downloadBlob;
+  window.downloadBlob = (b, n) => { zip = b; nom = n; };
+  await exportComplet('');
+  window.downloadBlob = vrai;
+  const buf = zip ? await zip.arrayBuffer() : new ArrayBuffer(0);
+  const u8 = new Uint8Array(buf);
+  const noms = zip ? [...readZip(buf).keys()] : [];
+  // par tranches : String.fromCharCode(...tout) fait sauter la pile sur une archive réelle
+  let brut = '';
+  for (let i = 0; i < u8.length; i += 8192) brut += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+  return { portees, taille, nom, octets: u8.length, noms,
+           message: document.getElementById('bk-msg').textContent, b64: btoa(brut) };
+});
+check('Sauvegarde complète : on peut choisir tout ou une seule réalisation',
+  bkZip.portees.length >= 2 && /Toutes les réalisations/.test(bkZip.portees[0]), bkZip.portees.join(' | '));
+check('Sauvegarde complète : le poids est annoncé avant de lancer',
+  /Environ .* à télécharger/.test(bkZip.taille), bkZip.taille);
+check('Sauvegarde complète : l’archive contient les données, le mode d’emploi et l’index',
+  ['donnees.json', 'LISEZ-MOI.txt', 'photos/_index.json'].every(n => bkZip.noms.includes(n)),
+  bkZip.noms.slice(0, 6).join(' | '));
+check('Sauvegarde complète : un dossier par réalisation, lisible à la main',
+  bkZip.noms.some(n => /^photos\/[a-z0-9-]+\/\d\d-[a-z0-9-]+\.jpg$/.test(n)),
+  bkZip.noms.filter(n => n.startsWith('photos/')).slice(0, 3).join(' | '));
+check('Sauvegarde complète : la version IA est là, à côté de l’original (pas à sa place)',
+  bkZip.noms.some(n => /-ia\.jpg$/.test(n)) && bkZip.noms.filter(n => /\.jpg$/.test(n)).length >= 2,
+  bkZip.noms.filter(n => /\.jpg$/.test(n)).length + ' fichier(s) photo');
+check('Sauvegarde complète : le nom du fichier porte la date', /^sauvegarde-complete-\d{4}-\d\d-\d\d\.zip$/.test(bkZip.nom), bkZip.nom);
+check('Sauvegarde complète : le bilan dit ce qui a été écrit', /Archive téléchargée/.test(bkZip.message), bkZip.message);
+
+// L'archive est-elle un vrai .zip ? On la fait relire par unzip, pas par notre propre code.
+writeFileSync('/tmp/mn-sauvegarde.zip', Buffer.from(bkZip.b64, 'base64'));
+let unzipOk = false, unzipListe = '';
+try {
+  execFileSync('unzip', ['-t', '/tmp/mn-sauvegarde.zip'], { stdio: 'pipe' });
+  unzipListe = execFileSync('unzip', ['-Z1', '/tmp/mn-sauvegarde.zip'], { encoding: 'utf8' }).trim().split('\n').length + ' entrée(s)';
+  unzipOk = true;
+} catch (e) { unzipListe = String(e.message).slice(0, 80); }
+check('Sauvegarde complète : archive relue par unzip, pas seulement par notre code', unzipOk, unzipListe);
+
+// --- Restauration : on efface tout, puis on réimporte l'archive
+const bkRestore = await page.evaluate(async (b64) => {
+  const bin = atob(b64);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const r = findRealisation(_rzOpenId);
+  const pid = r.photos[0].id;
+  const avant = (await photoStore.get(fullKey(pid))).size;
+  // table rase : plus aucune réalisation, plus aucun fichier
+  realisations = [];
+  photoStore.mem = {};
+  window.__files.clear();
+  await store.set(K_REAL, []);
+  const fichier = new File([u], 'sauvegarde.zip', { type: 'application/zip' });
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    importComplet(fichier);
+  });
+  const rev = realisations.find(x => x.id === r.id);
+  const photo = rev && rev.photos.find(p => p.id === pid);
+  const blob = await photoStore.get(fullKey(pid));
+  const ia = await photoStore.get(iaKey(rev.photos[0].id));
+  return { nbReal: realisations.length, retrouvee: !!rev, titre: rev && rev.title,
+           memePhoto: !!photo, memeTaille: blob ? blob.size : 0, avant, ia: !!ia,
+           message: document.getElementById('bk-msg') ? document.getElementById('bk-msg').textContent : '' };
+}, bkZip.b64);
+check('Restauration : les réalisations sont revenues', bkRestore.nbReal >= 1 && bkRestore.retrouvee, bkRestore.nbReal + ' réalisation(s)');
+check('Restauration : la photo est revenue, octet pour octet',
+  bkRestore.memePhoto && bkRestore.memeTaille === bkRestore.avant, bkRestore.avant + ' → ' + bkRestore.memeTaille);
+check('Restauration : la version IA aussi', bkRestore.ia);
+check('Restauration : le bilan dit combien de photos sont remises en place',
+  /photo\(s\) remises en place/.test(bkRestore.message), bkRestore.message);
+
+const bkKo = await page.evaluate(async () => {
+  openBackupPanel();
+  await importComplet(new File([new Blob(['ceci n est pas un zip'])], 'faux.zip', { type: 'application/zip' }));
+  const m1 = document.getElementById('bk-msg').textContent;
+  return m1;
+});
+check('Sauvegarde : un fichier qui n’est pas une archive le dit clairement',
+  /Impossible de lire cette archive/.test(bkKo), bkKo);
+await page.evaluate(() => closeModal());
+
 // --- On rend la vue à la réalisation utilisée par les mesures suivantes
 await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
 await page.waitForTimeout(300);
@@ -2114,6 +2445,350 @@ await page.evaluate(() => showView('realisations'));
 await page.waitForTimeout(400);
 await page.screenshot({ path: '/tmp/mn-shot-desktop.png' });
 
+// ============================================================================
+//  LIEN CLIENT ↔ RÉALISATION ↔ DEVIS
+// ============================================================================
+const lien = await page.evaluate(async () => {
+  const c = normalizeClient({ id: 'cl-test', name: 'Famille Cohen' });
+  clients.push(c);
+  devisList.push({ id: 'dv-test', clientId: c.id, title: 'Rénovation Cohen', num: '2026-07', status: 'valide', updatedAt: Date.now() });
+  const r = realisations.find(x => (x.photos || []).length >= 2) || realisations[0];
+  r.clientId = c.id;
+  saveRealisations();
+  _rzOpenId = r.id; renderRealisations();
+  const depuisReal = [...document.querySelectorAll('#rz-body .rz-liens button')].map(b => b.textContent);
+  showView('clients'); renderClients();
+  const carte = [...document.querySelectorAll('.cl-group')].find(g => g.textContent.includes('Famille Cohen'));
+  return { depuisReal, aUneFiche: !!carte, rid: r.id };
+});
+check('Lien : depuis une réalisation, on retrouve le client et son devis',
+  lien.depuisReal.some(t => /Famille Cohen/.test(t)) && lien.depuisReal.some(t => /Rénovation Cohen/.test(t)),
+  lien.depuisReal.join(' | '));
+
+const lienClient = await page.evaluate(async () => {
+  // on ouvre la fiche du client pour voir ses réalisations
+  clientOpen['cl-test'] = true; renderClients();
+  const groupe = [...document.querySelectorAll('.cl-group')].find(g => g.dataset.cid === 'cl-test');
+  // on ne regarde QUE la carte « Réalisations » : les devis du client ont des lignes de la
+  // même forme, et un test qui passe pour la mauvaise raison ne vaut rien.
+  const carteReal = groupe ? [...groupe.querySelectorAll('.cl-card')]
+    .find(c2 => /Réalisations/.test((c2.querySelector('.cl-card-bar') || {}).textContent || '')) : null;
+  const lignes = carteReal ? [...carteReal.querySelectorAll('.list-row .lr-t')].map(t => t.textContent) : [];
+  const bouton = carteReal ? [...carteReal.querySelectorAll('button')].find(b => /Créer une réalisation/.test(b.textContent)) : null;
+  const avant = realisations.length;
+  if (bouton) bouton.click();
+  await new Promise(r => setTimeout(r, 250));
+  const devisIllisible = groupe ? /contenu illisible/.test(groupe.textContent) : false;
+  return { devisIllisible, lignes, avait: !!bouton, cree: realisations.length - avant,
+           nouvelle: realisations[realisations.length - 1], vue: document.getElementById('realisations-view').style.display };
+});
+check('Fiche client : un devis au contenu illisible ne fait pas disparaître la fiche',
+  lienClient.devisIllisible, lienClient.devisIllisible ? 'ligne affichée sans montant' : 'ligne absente');
+check('Lien : depuis la fiche client, ses réalisations sont listées',
+  lienClient.lignes.some(t => /Villa Test|Réalisation/.test(t)), lienClient.lignes.join(' | '));
+check('Lien : et on peut en créer une pour ce client en un geste',
+  lienClient.avait && lienClient.cree === 1 && lienClient.nouvelle.clientId === 'cl-test'
+  && lienClient.nouvelle.title === 'Famille Cohen' && lienClient.vue === 'block',
+  JSON.stringify({ cree: lienClient.cree, titre: lienClient.nouvelle && lienClient.nouvelle.title }));
+await page.evaluate(() => {
+  realisations = realisations.filter(r => r.id !== realisations[realisations.length - 1].id || (r.photos || []).length);
+  saveRealisations(); showView('realisations');
+});
+
+// ============================================================================
+//  RECHERCHE GLOBALE
+// ============================================================================
+const rch = await page.evaluate(async () => {
+  const r = realisations.find(x => (x.photos || []).length >= 2) || realisations[0];
+  r.title = 'Villa Test'; r.lieu = 'Herzliya';
+  r.photos[1].caption = 'Verrière en acier noir';
+  saveRealisations();
+  openRecherche();
+  const q = document.getElementById('rch-q');
+  const lire = () => ({
+    groupes: [...document.querySelectorAll('#rch-res .rch-grp')].map(g => g.textContent),
+    lignes: [...document.querySelectorAll('#rch-res .rch-t')].map(t => t.textContent),
+    vide: (document.querySelector('#rch-res .rch-vide') || {}).textContent || '',
+  });
+  const depart = lire();
+  q.value = 'h'; q.dispatchEvent(new Event('input'));
+  const uneLettre = lire();
+  q.value = 'herzliya'; q.dispatchEvent(new Event('input'));
+  const parLieu = lire();
+  q.value = 'verrière acier'; q.dispatchEvent(new Event('input'));   // deux mots, dans une légende
+  const parLegende = lire();
+  q.value = 'cohen'; q.dispatchEvent(new Event('input'));
+  const parClient = lire();
+  q.value = 'zzzznexistepas'; q.dispatchEvent(new Event('input'));
+  const rien = lire();
+  q.value = 'villa test'; q.dispatchEvent(new Event('input'));
+  const premier = document.querySelector('#rch-res .rch-row');
+  premier.click();
+  await new Promise(res => setTimeout(res, 250));
+  return { depart, uneLettre, parLieu, parLegende, parClient, rien,
+           ouvert: _rzOpenId === r.id, vue: document.getElementById('realisations-view').style.display,
+           modaleFermee: !document.getElementById('overlay').classList.contains('open') };
+});
+check('Recherche : au départ, l’écran explique quoi taper', /au moins deux lettres/.test(rch.depart.vide), rch.depart.vide.slice(0, 60));
+check('Recherche : une seule lettre ne renvoie pas tout', /au moins deux lettres/.test(rch.uneLettre.vide));
+check('Recherche : trouve une réalisation par son lieu',
+  rch.parLieu.lignes.includes('Villa Test'), rch.parLieu.lignes.join(' | '));
+check('Recherche : trouve jusque dans la légende d’une photo, avec deux mots',
+  rch.parLegende.lignes.includes('Villa Test'), rch.parLegende.lignes.join(' | '));
+check('Recherche : trouve un client et ses devis',
+  rch.parClient.groupes.some(g => /^Clients/.test(g)) && rch.parClient.lignes.some(t => /Famille Cohen/.test(t)),
+  rch.parClient.groupes.join(' | ') + ' → ' + rch.parClient.lignes.join(' | '));
+check('Recherche : rien trouvé, l’écran le dit avec le mot cherché',
+  /Rien trouvé pour « zzzznexistepas »/.test(rch.rien.vide), rch.rien.vide);
+check('Recherche : cliquer un résultat ouvre la bonne chose et referme la fenêtre',
+  rch.ouvert && rch.vue === 'block' && rch.modaleFermee, JSON.stringify({ o: rch.ouvert, v: rch.vue, f: rch.modaleFermee }));
+
+const rchClavier = await page.evaluate(async () => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+  await new Promise(r => setTimeout(r, 200));
+  const ouverte = !!document.getElementById('rch-q');
+  closeModal();
+  return ouverte;
+});
+check('Recherche : Ctrl+K l’ouvre', rchClavier);
+
+// ============================================================================
+//  RAPPEL DE REPUBLICATION : le site ne se met pas à jour tout seul
+// ============================================================================
+const rappel = await page.evaluate(async () => {
+  const r = realisations.find(x => (x.photos || []).length >= 2) || realisations[0];
+  _rzOpenId = null;
+  const t = Date.now() - 10000;
+  r.published = true;
+  r.photos.forEach(p => { p.publishedAt = t; p.touchedAt = t - 1000; });
+  renderRealisations();
+  const carteDe = () => {
+    const cards = [...document.querySelectorAll('.rz-card')];
+    const c = cards.find(x => (x.querySelector('.rz-ctitle') || {}).textContent === (r.title || 'Réalisation sans titre'));
+    return c ? (c.querySelector('.rz-cmeta') || {}).textContent || '' : 'carte introuvable';
+  };
+  const aJour = { carte: carteDe(), titre: r.title, publiee: r.published, etats: r.photos.map(p => photoPubState(r, p)) };
+  photoTouch(r.photos[1], 'reglages');            // une photo retouchée après publication
+  renderRealisations(); renderDashboard();
+  const apres = { carte: carteDe(), dash: (document.getElementById('dash-todos') || {}).textContent || '',
+                  n: realisationARepublier(r) };
+  return { aJour, apres, rid: r.id };
+});
+check('Republier : une réalisation à jour est marquée « en ligne »',
+  /● en ligne/.test(rappel.aJour.carte) && !/à republier/.test(rappel.aJour.carte),
+  JSON.stringify(rappel.aJour).slice(0, 160));
+check('Republier : une photo retouchée fait passer la carte à « à republier »',
+  /● à republier/.test(rappel.apres.carte) && rappel.apres.n === 1, rappel.apres.carte.slice(0, 90));
+check('Republier : le tableau de bord le rappelle, avec le nombre de photos',
+  /À republier sur le site \(1\)/.test(rappel.apres.dash) && /1 photo\(s\)/.test(rappel.apres.dash),
+  rappel.apres.dash.replace(/\s+/g, ' ').slice(0, 110));
+const rappelClic = await page.evaluate((rid) => {
+  gotoRealisation(rid);
+  return { vue: document.getElementById('realisations-view').style.display, ouverte: _rzOpenId === rid };
+}, rappel.rid);
+check('Republier : le rappel ouvre directement la bonne réalisation',
+  rappelClic.vue === 'block' && rappelClic.ouverte, JSON.stringify(rappelClic));
+
+// ============================================================================
+//  ÉDITEUR : déplacer le cadrage au doigt
+// ============================================================================
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(async () => {
+  const r = realisations[0];
+  if (!document.getElementById('ed-modal')) await openPhotoEditor(r.id, r.photos[0].id);
+});
+await page.waitForTimeout(900);
+const cadrage = await page.evaluate(async () => {
+  _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaintHint();
+  const e = _ed.p.edit;
+  e.ratio = 'libre'; e.pan = 0;
+  const enLibre = { deplacable: edCadrageDeplacable(), axe: edCadrageAxe() };
+  // format carré sur une photo paysage : le jeu est horizontal
+  e.ratio = REAL_RATIOS.find(x => x.v === 1) ? REAL_RATIOS.find(x => x.v === 1).id : '1:1';
+  buildEditorControls(); edPaintHint();
+  const enCarre = { deplacable: edCadrageDeplacable(), axe: edCadrageAxe(),
+                    aide: (document.querySelector('#ed-modal [data-cmp]') || {}).textContent || '' };
+  const stage = document.querySelector('#ed-modal .ed-stage');
+  const cv = document.getElementById('ed-canvas');
+  const box = cv.getBoundingClientRect();
+  const souris = (type, x, y) => stage.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  souris('mousedown', box.left + box.width / 2, box.top + box.height / 2);
+  souris('mousemove', box.left + box.width / 2 - box.width / 4, box.top + box.height / 2);
+  const pendant = _ed.p.edit.pan;
+  souris('mouseup', box.left + box.width / 4, box.top + box.height / 2);
+  await new Promise(r => setTimeout(r, 150));
+  const apres = { pan: _ed.p.edit.pan, cransAnnulation: _ed.hist.length };
+  // tirer très loin ne doit pas sortir des bornes
+  souris('mousedown', box.left + 10, box.top + 10);
+  souris('mousemove', box.left + box.width * 3, box.top + 10);
+  souris('mouseup', box.left + box.width * 3, box.top + 10);
+  const borne = _ed.p.edit.pan;
+  return { enLibre, enCarre, pendant, apres, borne };
+});
+check('Cadrage : en format libre, il n’y a rien à déplacer',
+  cadrage.enLibre.deplacable === false && cadrage.enLibre.axe === null);
+check('Cadrage : avec un format imposé, la photo se déplace sur l’axe qui a du jeu',
+  cadrage.enCarre.deplacable === true && cadrage.enCarre.axe === 'x', JSON.stringify(cadrage.enCarre.axe));
+check('Cadrage : la barre du haut annonce le geste actif',
+  /choisir le cadrage/.test(cadrage.enCarre.aide), cadrage.enCarre.aide);
+check('Cadrage : tirer la photo déplace vraiment le cadre, dans le bon sens',
+  cadrage.pendant > 0 && Math.abs(cadrage.pendant - 0.5) < 0.2, 'pan = ' + cadrage.pendant);
+check('Cadrage : un geste complet = un seul cran d’annulation',
+  cadrage.apres.cransAnnulation === 2, cadrage.apres.cransAnnulation + ' état(s) empilé(s)');
+check('Cadrage : on ne peut pas tirer au-delà de la photo', cadrage.borne >= -1 && cadrage.borne <= 1, 'pan = ' + cadrage.borne);
+await page.evaluate(async () => {
+  Object.assign(_ed.p.edit, blankEdit());
+  _ed.tab = 'geometrie'; paintEditorTabs(); buildEditorControls();
+  closePhotoEditor();
+});
+await page.waitForTimeout(300);
+
+// ============================================================================
+//  ÉDITEUR : annuler et rétablir
+// ============================================================================
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(async () => {
+  const r = realisations[0];
+  if (!document.getElementById('ed-modal')) await openPhotoEditor(r.id, r.photos[0].id);
+});
+await page.waitForTimeout(900);
+const annuler = await page.evaluate(async () => {
+  _ed.tab = 'geometrie'; paintEditorTabs(); buildEditorControls();
+  const e = _ed.p.edit;
+  const depart = JSON.parse(JSON.stringify(e));
+  const undo = document.querySelector('#ed-modal [data-undo]');
+  const redo = document.querySelector('#ed-modal [data-redo]');
+  const auDepart = { undo: undo.disabled, redo: redo.disabled };
+  // deux réglages successifs, chacun « terminé » comme le fait un curseur relâché
+  e.persp = 30; edTouch();
+  e.expo = 0.4; edTouch();
+  const apres2 = { persp: e.persp, expo: e.expo, undo: undo.disabled };
+  undo.click();
+  const un = { persp: _ed.p.edit.persp, expo: _ed.p.edit.expo, redo: redo.disabled };
+  undo.click();
+  const zero = { persp: _ed.p.edit.persp, expo: _ed.p.edit.expo, undo: undo.disabled };
+  redo.click(); redo.click();
+  const refait = { persp: _ed.p.edit.persp, expo: _ed.p.edit.expo, redo: redo.disabled };
+  // une nouvelle action après un retour en arrière doit couper la branche « rétablir »
+  undo.click();
+  _ed.p.edit.sat = 0.3; edTouch();
+  const branche = { redo: redo.disabled, sat: _ed.p.edit.sat };
+  return { depart, auDepart, apres2, un, zero, refait, branche, taille: _ed.hist.length };
+});
+check('Éditeur : au départ, rien à annuler ni à rétablir',
+  annuler.auDepart.undo === true && annuler.auDepart.redo === true);
+check('Éditeur : après deux réglages, « Annuler » devient actif',
+  annuler.apres2.persp === 30 && annuler.apres2.expo === 0.4 && annuler.apres2.undo === false);
+check('Éditeur : annuler revient d’UN cran, pas au début',
+  annuler.un.persp === 30 && annuler.un.expo === 0, JSON.stringify(annuler.un));
+check('Éditeur : annuler deux fois revient à l’état de départ',
+  annuler.zero.persp === annuler.depart.persp && annuler.zero.expo === annuler.depart.expo && annuler.zero.undo === true,
+  JSON.stringify(annuler.zero));
+check('Éditeur : rétablir refait les deux réglages',
+  annuler.refait.persp === 30 && annuler.refait.expo === 0.4 && annuler.refait.redo === true,
+  JSON.stringify(annuler.refait));
+check('Éditeur : un nouveau réglage après un retour en arrière coupe la branche « rétablir »',
+  annuler.branche.redo === true && annuler.branche.sat === 0.3, JSON.stringify(annuler.branche));
+
+const clavier = await page.evaluate(async () => {
+  const av = _ed.p.edit.sat;
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+  await new Promise(r => setTimeout(r, 120));
+  const ap = _ed.p.edit.sat;
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, shiftKey: true, bubbles: true }));
+  await new Promise(r => setTimeout(r, 120));
+  return { av, ap, refait: _ed.p.edit.sat };
+});
+check('Éditeur : Ctrl+Z annule, Ctrl+Maj+Z rétablit',
+  clavier.av === 0.3 && clavier.ap === 0 && clavier.refait === 0.3, JSON.stringify(clavier));
+
+const apresFermeture = await page.evaluate(async () => {
+  const r = realisations[0], pid = _ed.p.id;
+  closePhotoEditor();
+  await new Promise(r2 => setTimeout(r2, 200));
+  const restant = document.querySelectorAll('#ed-modal').length;
+  // le raccourci ne doit plus rien faire une fois l'éditeur fermé
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+  const p = r.photos.find(x => x.id === pid);
+  return { restant, sat: p.edit.sat, editeur: !!_ed };
+});
+check('Éditeur : fermé, le raccourci clavier ne touche plus à rien',
+  apresFermeture.restant === 0 && apresFermeture.editeur === false && apresFermeture.sat === 0.3,
+  JSON.stringify(apresFermeture));
+await page.evaluate(async () => {
+  const r = realisations[0];
+  Object.assign(r.photos[0].edit, blankEdit());
+  saveRealisations(); renderRealisations();
+});
+
+// ============================================================================
+//  NAVIGATION SUR TÉLÉPHONE : une barre d'onglets en bas, une barre du haut d'une ligne
+// ============================================================================
+for (const [w, h, nom] of [[375, 812, 'téléphone étroit'], [390, 844, 'téléphone'], [768, 1024, 'tablette portrait']]) {
+  await page.setViewportSize({ width: w, height: h });
+  await page.evaluate(() => showView('realisations'));
+  await page.waitForTimeout(350);
+  const m = await page.evaluate(() => ({
+    haut: Math.round(document.querySelector('.toolbar').getBoundingClientRect().height),
+    bas: Math.round(document.getElementById('navbas').getBoundingClientRect().height),
+    navHaut: getComputedStyle(document.querySelector('.viewnav')).display,
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    actif: [...document.querySelectorAll('#navbas button.active')].map(b => b.dataset.vue),
+  }));
+  check('Menu ' + nom + ' (' + w + 'px) : la barre du haut tient sur une ligne',
+    m.haut <= 60 && m.navHaut === 'none', m.haut + 'px de haut');
+  check('Menu ' + nom + ' : la barre d’onglets est en bas, sous le pouce', m.bas >= 40 && m.bas <= 70, m.bas + 'px');
+  check('Menu ' + nom + ' : l’onglet ouvert est marqué', m.actif.join(',') === 'realisations', m.actif.join(','));
+  check('Menu ' + nom + ' : aucun débordement horizontal', m.debord <= 1, m.debord + 'px');
+}
+// La barre d'actions d'une sélection ne doit pas passer SOUS la barre d'onglets.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); rzToggleSelectMode(true); });
+await page.waitForTimeout(400);
+const barres = await page.evaluate(() => {
+  const sel = document.querySelector('.rz-selbar'), nav = document.getElementById('navbas');
+  if (!sel || !nav) return null;
+  const a = sel.getBoundingClientRect(), b = nav.getBoundingClientRect();
+  return { bas: Math.round(a.bottom), navHaut: Math.round(b.top) };
+});
+check('Menu téléphone : la barre de sélection reste au-dessus des onglets',
+  barres && barres.bas <= barres.navHaut + 1, barres ? (barres.bas + ' vs ' + barres.navHaut) : 'barre absente');
+await page.evaluate(() => rzToggleSelectMode(false));
+
+const menus = await page.evaluate(async () => {
+  menuPlusMobile();
+  const plus = [...document.querySelectorAll('#modal .ph-menu button')].map(b => b.textContent.trim());
+  document.getElementById('plus-sauvegarde').click();
+  await new Promise(r => setTimeout(r, 200));
+  const ouvert = !!document.getElementById('bk-portee');
+  closeModal();
+  devisMenuMobile();
+  const devis = [...document.querySelectorAll('#modal .ph-menu button')].map(b => b.textContent.trim());
+  document.getElementById('dv-mes').click();
+  await new Promise(r => setTimeout(r, 250));
+  const vueDevis = document.querySelector('.stage').style.display !== 'none';
+  closeModal();
+  return { plus, ouvert, devis, vueDevis };
+});
+check('Menu téléphone : « ⋯ » donne accès à la vue, aux réglages, à la sauvegarde et à la synchro',
+  menus.plus.length === 4 && /Réglages/.test(menus.plus.join(' ')) && /Sauvegarde/.test(menus.plus.join(' ')) && /Synchronisation/.test(menus.plus.join(' ')),
+  menus.plus.join(' | '));
+check('Menu téléphone : une entrée du menu ouvre vraiment son panneau', menus.ouvert);
+check('Menu téléphone : « Devis » propose Composer et Mes devis',
+  menus.devis.length === 2 && /Composer/.test(menus.devis[0]), menus.devis.join(' | '));
+check('Menu téléphone : et le choix ouvre bien la vue devis', menus.vueDevis);
+
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(() => showView('realisations'));
+await page.waitForTimeout(300);
+const bureau = await page.evaluate(() => ({
+  bas: getComputedStyle(document.getElementById('navbas')).display,
+  haut: getComputedStyle(document.querySelector('.viewnav')).display,
+  actifHaut: document.getElementById('vn-real').classList.contains('active'),
+}));
+check('Menu ordinateur : rien ne change — barre du haut, pas de barre du bas',
+  bureau.bas === 'none' && bureau.haut !== 'none' && bureau.actifHaut, JSON.stringify(bureau));
+
 // --- Les autres vues fonctionnent toujours
 for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
   await page.evaluate(vv => showView(vv), v);
@@ -2127,7 +2802,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
