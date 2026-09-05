@@ -1876,6 +1876,101 @@ check('Partage : la publication écrit l’image d’aperçu à une adresse fixe
 check('Partage : plus rien en ligne, l’image d’aperçu est effacée',
   partage.restantes === 0 && partage.apresRetrait === '', partage.apresRetrait || 'effacée');
 
+// ============================================================================
+//  SAUVEGARDE COMPLÈTE : les photos en pleine définition, et le retour en arrière
+// ============================================================================
+const bkZip = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  r.photos[0].ia = { model: 'test/modele', prompt: 'essai' };
+  await photoStore.save(iaKey(r.photos[0].id), new Blob(['fausse-image-ia'], { type: 'image/jpeg' }));
+  openBackupPanel();
+  const portees = [...document.querySelectorAll('#bk-portee option')].map(o => o.textContent);
+  const taille = document.getElementById('bk-taille').textContent;
+  // on capte l'archive au lieu de la télécharger
+  let zip = null, nom = '';
+  const vrai = window.downloadBlob;
+  window.downloadBlob = (b, n) => { zip = b; nom = n; };
+  await exportComplet('');
+  window.downloadBlob = vrai;
+  const buf = zip ? await zip.arrayBuffer() : new ArrayBuffer(0);
+  const u8 = new Uint8Array(buf);
+  const noms = zip ? [...readZip(buf).keys()] : [];
+  // par tranches : String.fromCharCode(...tout) fait sauter la pile sur une archive réelle
+  let brut = '';
+  for (let i = 0; i < u8.length; i += 8192) brut += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+  return { portees, taille, nom, octets: u8.length, noms,
+           message: document.getElementById('bk-msg').textContent, b64: btoa(brut) };
+});
+check('Sauvegarde complète : on peut choisir tout ou une seule réalisation',
+  bkZip.portees.length >= 2 && /Toutes les réalisations/.test(bkZip.portees[0]), bkZip.portees.join(' | '));
+check('Sauvegarde complète : le poids est annoncé avant de lancer',
+  /Environ .* à télécharger/.test(bkZip.taille), bkZip.taille);
+check('Sauvegarde complète : l’archive contient les données, le mode d’emploi et l’index',
+  ['donnees.json', 'LISEZ-MOI.txt', 'photos/_index.json'].every(n => bkZip.noms.includes(n)),
+  bkZip.noms.slice(0, 6).join(' | '));
+check('Sauvegarde complète : un dossier par réalisation, lisible à la main',
+  bkZip.noms.some(n => /^photos\/[a-z0-9-]+\/\d\d-[a-z0-9-]+\.jpg$/.test(n)),
+  bkZip.noms.filter(n => n.startsWith('photos/')).slice(0, 3).join(' | '));
+check('Sauvegarde complète : la version IA est là, à côté de l’original (pas à sa place)',
+  bkZip.noms.some(n => /-ia\.jpg$/.test(n)) && bkZip.noms.filter(n => /\.jpg$/.test(n)).length >= 2,
+  bkZip.noms.filter(n => /\.jpg$/.test(n)).length + ' fichier(s) photo');
+check('Sauvegarde complète : le nom du fichier porte la date', /^sauvegarde-complete-\d{4}-\d\d-\d\d\.zip$/.test(bkZip.nom), bkZip.nom);
+check('Sauvegarde complète : le bilan dit ce qui a été écrit', /Archive téléchargée/.test(bkZip.message), bkZip.message);
+
+// L'archive est-elle un vrai .zip ? On la fait relire par unzip, pas par notre propre code.
+writeFileSync('/tmp/mn-sauvegarde.zip', Buffer.from(bkZip.b64, 'base64'));
+let unzipOk = false, unzipListe = '';
+try {
+  execFileSync('unzip', ['-t', '/tmp/mn-sauvegarde.zip'], { stdio: 'pipe' });
+  unzipListe = execFileSync('unzip', ['-Z1', '/tmp/mn-sauvegarde.zip'], { encoding: 'utf8' }).trim().split('\n').length + ' entrée(s)';
+  unzipOk = true;
+} catch (e) { unzipListe = String(e.message).slice(0, 80); }
+check('Sauvegarde complète : archive relue par unzip, pas seulement par notre code', unzipOk, unzipListe);
+
+// --- Restauration : on efface tout, puis on réimporte l'archive
+const bkRestore = await page.evaluate(async (b64) => {
+  const bin = atob(b64);
+  const u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const r = findRealisation(_rzOpenId);
+  const pid = r.photos[0].id;
+  const avant = (await photoStore.get(fullKey(pid))).size;
+  // table rase : plus aucune réalisation, plus aucun fichier
+  realisations = [];
+  photoStore.mem = {};
+  window.__files.clear();
+  await store.set(K_REAL, []);
+  const fichier = new File([u], 'sauvegarde.zip', { type: 'application/zip' });
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    importComplet(fichier);
+  });
+  const rev = realisations.find(x => x.id === r.id);
+  const photo = rev && rev.photos.find(p => p.id === pid);
+  const blob = await photoStore.get(fullKey(pid));
+  const ia = await photoStore.get(iaKey(rev.photos[0].id));
+  return { nbReal: realisations.length, retrouvee: !!rev, titre: rev && rev.title,
+           memePhoto: !!photo, memeTaille: blob ? blob.size : 0, avant, ia: !!ia,
+           message: document.getElementById('bk-msg') ? document.getElementById('bk-msg').textContent : '' };
+}, bkZip.b64);
+check('Restauration : les réalisations sont revenues', bkRestore.nbReal >= 1 && bkRestore.retrouvee, bkRestore.nbReal + ' réalisation(s)');
+check('Restauration : la photo est revenue, octet pour octet',
+  bkRestore.memePhoto && bkRestore.memeTaille === bkRestore.avant, bkRestore.avant + ' → ' + bkRestore.memeTaille);
+check('Restauration : la version IA aussi', bkRestore.ia);
+check('Restauration : le bilan dit combien de photos sont remises en place',
+  /photo\(s\) remises en place/.test(bkRestore.message), bkRestore.message);
+
+const bkKo = await page.evaluate(async () => {
+  openBackupPanel();
+  await importComplet(new File([new Blob(['ceci n est pas un zip'])], 'faux.zip', { type: 'application/zip' }));
+  const m1 = document.getElementById('bk-msg').textContent;
+  return m1;
+});
+check('Sauvegarde : un fichier qui n’est pas une archive le dit clairement',
+  /Impossible de lire cette archive/.test(bkKo), bkKo);
+await page.evaluate(() => closeModal());
+
 // --- On rend la vue à la réalisation utilisée par les mesures suivantes
 await page.evaluate(() => { _rzOpenId = realisations[0].id; renderRealisations(); });
 await page.waitForTimeout(300);

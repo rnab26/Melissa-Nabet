@@ -3747,22 +3747,207 @@ function openBackupPanel(){
       <button class="btn btn-onlight" onclick="document.getElementById('import-file').click()">⬆ Importer une sauvegarde</button>
       <input type="file" id="import-file" accept="application/json,.json" style="display:none">
     </div>
-    <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>`);
+    <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>
+
+    <div class="ed-eyebrow" style="margin-top:18px">Sauvegarde complète, photos comprises</div>
+    <p class="ias-note">Le fichier ci-dessus ne contient que les <b>vignettes</b> des photos : les originaux vivent dans le cloud. Cette archive-ci contient les <b>photos en pleine définition</b>, versions retouchées par l'IA comprises. C'est elle qui protège vraiment vos réalisations.</p>
+    <label class="fld"><span class="lbl">Que sauvegarder</span><select id="bk-portee"></select></label>
+    <p class="msub" id="bk-taille"></p>
+    <div id="bk-prog" hidden><div class="rz-bar"><i style="width:0%"></i></div><p class="msub" id="bk-prog-txt"></p></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
+      <button class="btn btn-primary" id="bk-go">⬇ Sauvegarde complète (.zip)</button>
+      <button class="btn btn-onlight" onclick="document.getElementById('bk-file').click()">⬆ Importer une sauvegarde complète (.zip)</button>
+      <input type="file" id="bk-file" accept=".zip,application/zip" style="display:none">
+    </div>
+    <p class="ias-msg" id="bk-msg"></p>`);
   const f=$('import-file');if(f)f.addEventListener('change',()=>{if(f.files&&f.files[0])importData(f.files[0]);});
+  const sel=$('bk-portee');
+  if(sel){
+    const total=realisations.reduce((a,r)=>a+(r.photos||[]).length,0);
+    sel.innerHTML='<option value="">Toutes les réalisations ('+total+' photo(s))</option>'
+      +realisations.map(r=>'<option value="'+r.id+'">'+esc(r.title||'Réalisation sans titre')+' ('+((r.photos||[]).length)+' photo(s))</option>').join('');
+    const majTaille=()=>{
+      const liste=sel.value?realisations.filter(r=>r.id===sel.value):realisations;
+      const n=liste.reduce((a,r)=>a+(r.photos||[]).length+((r.photos||[]).filter(p=>p.ia).length),0);
+      const st=_storageStat;
+      const moyen=(st&&st.files>3)?(st.bytes/st.files):1200000;
+      $('bk-taille').textContent=n?('Environ '+moLisible(n*moyen)+' à télécharger ('+n+' fichier(s)). Sur téléphone, préférez une réalisation à la fois si l’archive dépasse quelques centaines de Mo.')
+        :'Aucune photo à sauvegarder pour l’instant.';
+      $('bk-go').disabled=!n;
+    };
+    sel.addEventListener('change',majTaille);
+    majTaille();
+    if(!_storageStat)loadStorageStat().then(()=>{if($('bk-taille'))majTaille();});
+    $('bk-go').addEventListener('click',()=>exportComplet(sel.value));
+  }
+  const bf=$('bk-file');
+  if(bf)bf.addEventListener('change',()=>{if(bf.files&&bf.files[0])importComplet(bf.files[0]);});
 }
-async function exportData(){
-  toast('Préparation de la sauvegarde…');
+
+/* ============ SAUVEGARDE COMPLÈTE (données + photos) ============
+   La sauvegarde JSON ne porte que les vignettes : elle ne suffit pas à retrouver une
+   galerie si le compte Supabase disparaît. Celle-ci embarque les fichiers en pleine
+   définition, dans une archive lisible à la main (un dossier par réalisation) ET
+   réimportable telle quelle. */
+let _bkStop=false;
+function bkProgres(fait,total,texte){
+  const box=$('bk-prog');if(!box)return;
+  box.hidden=false;
+  const b=box.querySelector('i');if(b)b.style.width=Math.round(fait/Math.max(total,1)*100)+'%';
+  const t=$('bk-prog-txt');if(t)t.textContent=texte;
+}
+function bkDire(t){const el=$('bk-msg');if(el)el.textContent=t||'';}
+const BK_README=[
+'SAUVEGARDE COMPLÈTE — CRM Melissa Nabet','',
+'Ce que contient cette archive :','',
+'  donnees.json        toutes vos données (clients, devis, tâches, réalisations,',
+'                      réglages) et les vignettes des photos.',
+'  photos/             les photos en pleine définition, un dossier par réalisation.',
+'                      Les fichiers « -ia » sont les versions retouchées par l’IA ;',
+'                      l’original est toujours conservé à côté.',
+'  photos/_index.json  ce qui permet à l’application de remettre chaque photo à sa',
+'                      place. Ne pas le supprimer si vous comptez réimporter.','',
+'Pour tout retrouver sur un nouvel appareil :',
+'  ouvrir l’application, se connecter, puis Sauvegarde →',
+'  « Importer une sauvegarde complète (.zip) » et choisir CE fichier.','',
+'Les photos sont aussi lisibles directement : ouvrez le dossier photos/.',
+'Ne recompressez pas l’archive avec un autre outil si vous comptez la réimporter.',
+''].join('\n');
+
+async function exportComplet(rid){
+  if(!(sb&&sbUser&&ownerId)){bkDire('Connexion requise : les photos en pleine définition sont dans le cloud.');return;}
+  const liste=rid?realisations.filter(r=>r.id===rid):realisations.slice();
+  const taches=[];
+  liste.forEach(r=>{
+    (r.photos||[]).forEach((p,i)=>{
+      /* On retire l'extension du titre avant d'en faire un nom de fichier : sinon
+         « salon.jpg » donne « salon-jpg.jpg ». */
+      const titre=(p.name||'photo').replace(/\.[a-z0-9]{2,5}$/i,'');
+      const base='photos/'+slugify(r.title||'realisation')+'/'+String(i+1).padStart(2,'0')+'-'+slugify(titre);
+      taches.push({key:fullKey(p.id),name:base+'.jpg',rid:r.id,pid:p.id,type:'original'});
+      if(p.ia)taches.push({key:iaKey(p.id),name:base+'-ia.jpg',rid:r.id,pid:p.id,type:'ia'});
+    });
+  });
+  _bkStop=false;
+  const btn=$('bk-go');
+  if(btn){btn.disabled=true;btn.textContent='Arrêter';btn.onclick=()=>{_bkStop=true;bkDire('Arrêt demandé…');};}
+  bkDire('');
+  const entries=[],index=[],absents=[];
+  const enc=new TextEncoder();
+  try{
+    for(let i=0;i<taches.length;i++){
+      if(_bkStop)break;
+      const t=taches[i];
+      bkProgres(i,taches.length,'Photo '+(i+1)+' sur '+taches.length+'…');
+      const blob=await photoStore.get(t.key);
+      if(!blob){absents.push(t.name);continue;}
+      entries.push({name:t.name,bytes:new Uint8Array(await blob.arrayBuffer())});
+      index.push({fichier:t.name,realisation:t.rid,photo:t.pid,type:t.type});
+      await new Promise(res=>setTimeout(res,0)); /* laisse l'écran respirer sur téléphone */
+    }
+    if(_bkStop){bkDire('Sauvegarde interrompue : aucun fichier n’a été téléchargé.');return;}
+    bkProgres(taches.length,taches.length,'Assemblage de l’archive…');
+    const data=await donneesSauvegarde();
+    entries.unshift({name:'donnees.json',bytes:enc.encode(JSON.stringify(data))});
+    entries.unshift({name:'LISEZ-MOI.txt',bytes:enc.encode(BK_README)});
+    entries.push({name:'photos/_index.json',bytes:enc.encode(JSON.stringify(index))});
+    const zip=buildZip(entries);
+    const nom='sauvegarde-complete-'+(rid?slugify((liste[0]||{}).title||'realisation')+'-':'')+new Date().toISOString().slice(0,10)+'.zip';
+    downloadBlob(zip,nom);
+    bkDire('Archive téléchargée : '+moLisible(zip.size)+', '+index.length+' photo(s)'
+      +(absents.length?' · '+absents.length+' introuvable(s) dans le cloud : '+absents.slice(0,3).join(', '):'')+'.');
+  }catch(e){
+    console.error('sauvegarde complète',e);
+    bkDire('Échec : '+((e&&e.message)||'erreur')+'. Essayez une réalisation à la fois — l’archive était peut-être trop lourde pour cet appareil.');
+  }finally{
+    const b=$('bk-go');
+    if(b){b.disabled=false;b.textContent='⬇ Sauvegarde complète (.zip)';b.onclick=null;
+      const sel=$('bk-portee');b.addEventListener('click',()=>exportComplet(sel?sel.value:''));}
+    const box=$('bk-prog');if(box)box.hidden=true;
+  }
+}
+/* Les mêmes données que l'export JSON : une seule définition de ce qu'est une sauvegarde. */
+async function donneesSauvegarde(){
   const docs={};
   for(const c of clients){for(const d of (c.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
   for(const t of tasks){for(const d of (t.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
-  /* Les réalisations sont exportées avec leurs retouches et leurs VIGNETTES seulement :
-     inclure les photos en pleine définition ferait un JSON de plusieurs centaines de Mo,
-     impossible à produire depuis un téléphone. Les fichiers pleine définition vivent dans
-     le stockage Supabase (lié au compte, donc insensible à un vidage de cache du navigateur)
-     et se récupèrent via « Exporter pour le site ». */
   const realThumbs={};
   for(const r of realisations){for(const p of (r.photos||[])){try{const b=await photoStore.get(thumbKey(p.id));if(b)realThumbs[thumbKey(p.id)]=await blobToDataUri(b);}catch(e){}}}
-  const data={app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,realThumbs,docs};
+  return {app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,realThumbs,docs};
+}
+
+/* ---- Lecture d'une archive .zip écrite par `buildZip` (méthode « store ») ----
+   On lit le répertoire central, seule table fiable : les en-têtes locaux peuvent porter
+   des tailles à zéro quand l'archive a été écrite en flux. */
+function readZip(buf){
+  const u=new Uint8Array(buf), dv=new DataView(buf);
+  let eocd=-1;
+  for(let i=u.length-22;i>=Math.max(0,u.length-66000);i--){
+    if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}
+  }
+  if(eocd<0)throw new Error('ce fichier n’est pas une archive .zip lisible');
+  const nb=dv.getUint16(eocd+10,true), cdOff=dv.getUint32(eocd+16,true);
+  const out=new Map();
+  let p=cdOff;
+  for(let k=0;k<nb;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)throw new Error('archive abîmée (répertoire central)');
+    const methode=dv.getUint16(p+10,true);
+    const taille=dv.getUint32(p+24,true);
+    const nLen=dv.getUint16(p+28,true), eLen=dv.getUint16(p+30,true), cLen=dv.getUint16(p+32,true);
+    const lOff=dv.getUint32(p+42,true);
+    const nom=new TextDecoder().decode(u.slice(p+46,p+46+nLen));
+    if(methode!==0)throw new Error('archive recompressée par un autre outil : réimportez le .zip tel qu’il a été téléchargé');
+    const lnLen=dv.getUint16(lOff+26,true), leLen=dv.getUint16(lOff+28,true);
+    const debut=lOff+30+lnLen+leLen;
+    out.set(nom,u.slice(debut,debut+taille));
+    p+=46+nLen+eLen+cLen;
+  }
+  return out;
+}
+async function importComplet(file){
+  bkDire('Lecture de l’archive…');
+  let fichiers;
+  try{ fichiers=readZip(await file.arrayBuffer()); }
+  catch(e){ bkDire('Impossible de lire cette archive : '+((e&&e.message)||'erreur')); return; }
+  const json=fichiers.get('donnees.json');
+  if(!json){bkDire('Cette archive ne contient pas donnees.json : ce n’est pas une sauvegarde complète du CRM.');return;}
+  let data,index=[];
+  try{ data=JSON.parse(new TextDecoder().decode(json)); }
+  catch(e){ bkDire('Le fichier donnees.json de l’archive est illisible.'); return; }
+  try{ const idx=fichiers.get('photos/_index.json'); if(idx)index=JSON.parse(new TextDecoder().decode(idx)); }catch(e){}
+  if(!data||!Array.isArray(data.clients)){bkDire('Sauvegarde invalide (données manquantes).');return;}
+  const nbPhotos=index.length;
+  askConfirm('Importer cette sauvegarde complète ? Elle remplacera les données de cet appareil, et renverra '+nbPhotos+' photo(s) dans le cloud.',async()=>{
+    try{
+      await appliquerSauvegarde(data);
+      let ok=0;const rates=[];
+      for(let i=0;i<index.length;i++){
+        const e=index[i];
+        bkProgres(i,index.length,'Photo '+(i+1)+' sur '+index.length+'…');
+        const bytes=fichiers.get(e.fichier);
+        if(!bytes){rates.push(e.fichier);continue;}
+        try{
+          await photoStore.save(e.type==='ia'?iaKey(e.photo):fullKey(e.photo),new Blob([bytes],{type:'image/jpeg'}));
+          ok++;
+        }catch(err){rates.push(e.fichier);}
+      }
+      storageInvalidate();
+      render();renderClients();renderTaskList();renderRealisations();
+      const box=$('bk-prog');if(box)box.hidden=true;
+      bkDire('Sauvegarde restaurée : '+ok+' photo(s) remises en place'+(rates.length?' · '+rates.length+' en échec ('+rates.slice(0,2).join(', ')+')':'')+'.');
+      toast('Sauvegarde complète importée');
+    }catch(e){
+      console.error('import complet',e);
+      bkDire('Échec de l’import : '+((e&&e.message)||'erreur'));
+    }
+  });
+}
+async function exportData(){
+  toast('Préparation de la sauvegarde…');
+  /* Ce fichier-ci ne porte que les VIGNETTES des photos : inclure les originaux ferait un
+     JSON de plusieurs centaines de Mo, impossible à produire depuis un téléphone. Pour les
+     originaux, c'est « Sauvegarde complète (.zip) » juste en dessous. */
+  const data=await donneesSauvegarde();
   try{
     const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
     const url=URL.createObjectURL(blob);
@@ -3771,19 +3956,24 @@ async function exportData(){
     toast('Sauvegarde téléchargée');
   }catch(e){toast('Échec export : '+e.message);}
 }
+/* Écrit une sauvegarde dans l'application. Partagé par l'import JSON et l'import de
+   l'archive complète : deux copies de cette règle finiraient par diverger. */
+async function appliquerSauvegarde(data){
+  if(data.library&&data.library.sections){library=data.library;await store.set(K_LIB,library);}
+  clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
+  devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
+  if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
+  if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
+  if(data.realThumbs){for(const k in data.realThumbs){try{await photoStore.save(k,dataUriToBlob(data.realThumbs[k]));}catch(e){}}}
+  if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
+}
 async function importData(file){
   try{
     const text=await file.text();
     const data=JSON.parse(text);
     if(!data||!Array.isArray(data.clients)){toast('Fichier de sauvegarde invalide');return;}
     askConfirm('Importer cette sauvegarde ? Elle remplacera les données de cet appareil.',async()=>{
-      if(data.library&&data.library.sections){library=data.library;await store.set(K_LIB,library);}
-      clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
-      devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
-      if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
-      if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
-      if(data.realThumbs){for(const k in data.realThumbs){try{await photoStore.save(k,dataUriToBlob(data.realThumbs[k]));}catch(e){}}}
-      if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
+      await appliquerSauvegarde(data);
       render();renderClients();renderTaskList();renderRealisations();toast('Données importées');
     });
   }catch(e){toast('Échec import : '+e.message);}
