@@ -924,3 +924,74 @@ Barre du haut mesurée à **56 px sur une ligne** contre 87 auparavant.
   inatteignables. Un test le mesure.
 - `body{padding-bottom:56px+safe-area}` sur mobile : sans ça, le dernier élément de chaque
   vue passe sous la barre.
+
+## Retouche IA — l'écran remis dans l'ordre de l'action (septembre 2026)
+
+**État** : livré et déployé. Retours de Raphaël après un vrai passage sur son téléphone,
+sur des photos de bureaux réelles.
+
+**Ce qui n'allait pas** : « je n'arrive toujours pas à comprendre où est le grand bouton
+principal ». Le panneau était construit dans l'ordre du code — consigne, puis bouton, puis
+choix du modèle — donc on lançait une dépense avant d'avoir vu avec quoi, et le bouton se
+retrouvait au milieu de l'écran, noyé sous six lignes de gris expliquant que le solde
+n'était pas lisible.
+
+**Ce qui a changé**
+- L'écran suit l'ordre de l'action : le **modèle d'abord**, la consigne ensuite, le gros
+  bouton après tout ce qui l'alimente.
+- **Favoris** : une étoile à côté de la liste ; les modèles étoilés remontent dans un
+  groupe « ★ Favoris » en tête. Ils restent aussi dans leur rubrique — déplacer un modèle
+  qu'on avait appris à trouver ailleurs coûte plus cher que de le voir deux fois.
+- La **confirmation annonce la dépense** : quelle version part, à quel modèle, le coût
+  estimé, et où on en est du plafond du mois.
+- Le message de solde tient en une phrase ; le mode d'emploi passe derrière un bouton.
+- `askInfo` : une explication qu'on lit puis qu'on ferme, distincte d'`askConfirm` (un
+  `askConfirm` à un seul bouton ferait croire qu'on valide quelque chose).
+
+**Le solde : la cause est traitée, il reste une manip.** Le pont lit désormais une clé
+**dédiée** `FAL_ADMIN_KEY` pour la facturation, séparée de `FAL_KEY` qui fait tourner les
+modèles. fal sépare deux portées : API (consommer les modèles) et ADMIN (plateforme, dont
+le solde). Remplacer `FAL_KEY` par une clé ADMIN aurait fait dépendre TOUTE la retouche
+d'une clé plus puissante que nécessaire, et une erreur dessus aurait cassé la retouche pour
+un chiffre d'affichage. Fonction `photo-ia` déployée en **version 7**, vérifiée en ligne :
+elle refuse toujours les appels anonymes (HTTP 401).
+
+**Ne pas casser**
+- La **raison** d'un échec de solde doit rester lisible À L'ÉCRAN, pas derrière un geste.
+  Elle avait été mise dans une infobulle, inatteignable au doigt ; un test l'impose
+  (il exige les mots « ADMIN » et « retouche » dans le texte visible). Le mode d'emploi de
+  la réparation, lui, peut être derrière un bouton — ce n'est pas la raison.
+- `FAL_ADMIN_KEY` est **facultative**. Son absence ne doit jamais empêcher la retouche :
+  sans elle, le pont retombe sur `FAL_KEY`, échoue proprement en 403 et le dit en clair.
+- Un favori ne doit pas retirer le modèle de sa rubrique d'origine.
+- Le test remet le réglage `confirmer` **exactement comme il l'a trouvé** : le laisser à
+  `false` désarmait la confirmation pour les tests suivants, qui vérifient justement
+  qu'elle s'affiche. Une première version l'a fait, et a fait échouer un test sans rapport.
+
+**Déjà en place, donc non refait** : les réglages proposés sous « Réglages avancés du
+modèle » sont **déjà** construits à partir du schéma du modèle choisi, lu chez fal.ai à
+chaque changement de modèle (`iaSchema`). Un modèle qui ne prend pas de consigne désactive
+le champ texte et le dit, au lieu d'exiger un texte qui serait ignoré. La question « est-ce
+que les champs sont les mêmes pour chaque modèle ou spécifiques ? » a donc déjà sa réponse
+dans le code : ils sont spécifiques et dynamiques.
+
+**Vérification** : `tests/realisations.test.mjs` (9 nouveaux contrôles — l'ordre mesuré sur
+la position réelle à l'écran, l'étoile qui remonte vraiment le modèle en tête, le favori
+qui survit à une reconstruction du panneau, le coût annoncé avant l'envoi) et
+`tests/pont-ia.test.mjs`, 20 contrôles. Aucun crédit dépensé : le pont est intercepté.
+
+**Notes / À faire**
+- [x] Favoris de modèles.
+- [x] Choix du modèle remonté au-dessus de la consigne.
+- [x] Coût et plafond annoncés avant l'envoi.
+- [x] Champs dynamiques par modèle — déjà en place, vérifié.
+- [x] Clé ADMIN séparée pour le solde, côté serveur, déployée.
+- [ ] **Manip utilisateur, non automatisable** : créer sur fal.ai une clé de portée ADMIN
+      (fal.ai → Keys → scope ADMIN) et la déposer dans Supabase → Edge Functions → Secrets
+      sous le nom `FAL_ADMIN_KEY`. Ne pas toucher à `FAL_KEY`. Rien à redéployer ensuite.
+      Tant que ce n'est pas fait, le solde affiche « n/c » — sans effet sur la retouche.
+- [ ] Suivi d'avancement pendant la génération : la file d'attente vient d'être livrée par
+      une autre session (état sur le bouton, annulation possible, reprise à la réouverture).
+      Raphaël demandait « vérifier qu'il y a bien les chargements de l'action » — à
+      reregarder avec lui sur l'écran réel avant d'y toucher, pour ne pas refaire ce qui
+      existe déjà.
