@@ -1,0 +1,75 @@
+name: Publier le site vitrine
+
+# Le dossier `site-vitrine/` de ce dépôt est la SOURCE du site public. Le dépôt
+# `rnab26/melissa-nabet-site` en est la copie servie sur GitHub Pages. Cette recopie
+# était faite à la main : ce workflow la fait tout seul, pour que le code servi ne
+# puisse plus diverger du code versionné.
+#
+# Ce qui n'est PAS recopié, et vit uniquement dans le dépôt du site :
+#   - `.github/`  : le workflow de déploiement Pages du site, avec son garde-fou
+#                   `rm -rf docs` qu'une recopie écraserait. Le jeton n'a d'ailleurs
+#                   pas le droit d'écrire des workflows, volontairement.
+#   - `docs/`     : le journal interne du dépôt du site.
+# Tout le reste est mis à l'identique, suppressions comprises.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site-vitrine/**'
+      - '.github/workflows/sync-site-vitrine.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: sync-site-vitrine
+  cancel-in-progress: false
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer ce dépôt (la source)
+        uses: actions/checkout@v4
+        with:
+          path: crm
+
+      - name: Vérifier que le jeton est bien configuré
+        env:
+          JETON: ${{ secrets.SITE_VITRINE_TOKEN }}
+        run: |
+          if [ -z "$JETON" ]; then
+            echo "::error::Le secret SITE_VITRINE_TOKEN est absent — le site ne peut pas être mis à jour."
+            echo "À créer dans Settings → Secrets and variables → Actions de ce dépôt."
+            exit 1
+          fi
+
+      - name: Récupérer le dépôt du site (la destination)
+        uses: actions/checkout@v4
+        with:
+          repository: rnab26/melissa-nabet-site
+          token: ${{ secrets.SITE_VITRINE_TOKEN }}
+          path: site
+
+      - name: Recopier site-vitrine/ par-dessus le site
+        run: |
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='docs/' \
+            crm/site-vitrine/ site/
+
+      - name: Pousser, seulement si quelque chose a changé
+        working-directory: site
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Le site est déjà à jour — rien à pousser."
+            exit 0
+          fi
+          echo "Changements à publier :"
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Site vitrine : recopie depuis le CRM (${GITHUB_SHA:0:7})" \
+                     -m "Copie automatique du dossier site-vitrine/ de rnab26/melissa-nabet. Ne pas modifier ce dépôt à la main : la source est là-bas."
+          git push
