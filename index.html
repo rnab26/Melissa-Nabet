@@ -178,6 +178,19 @@
   .navbas button.active::after{content:'';position:absolute;bottom:0;width:22px;height:2px;background:var(--oxblood);border-radius:2px;}
   .navbas button{position:relative;}
   .toolbar-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  #toolbar-search{padding:8px 12px;}
+  /* Recherche globale : une seule liste, groupée par nature, du plus probable au moins. */
+  .rch-input{width:100%;font-size:16px;padding:11px 12px;}
+  .rch-res{max-height:52vh;overflow-y:auto;margin-top:12px;}
+  .rch-grp{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--stone-light);
+    font-weight:700;margin:12px 0 5px;}
+  .rch-grp:first-child{margin-top:2px;}
+  .rch-row{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--panel-edge);
+    border-radius:6px;padding:9px 11px;margin-bottom:6px;cursor:pointer;font-family:'Inter';}
+  .rch-row:hover,.rch-row:focus-visible{border-color:var(--oxblood);}
+  .rch-t{font-size:13.5px;color:var(--ink);}
+  .rch-s{font-size:11.5px;color:var(--stone);margin-top:2px;}
+  .rch-vide{font-size:12.5px;color:var(--stone);padding:14px 2px;line-height:1.6;}
   #toolbar-plus{display:none;}
   /* 820 px : au-dessous, la barre du haut passait de toute façon sur deux lignes (mesuré
      à 768 px : 106 px de haut au lieu de 56). Une tablette en portrait est un téléphone
@@ -194,10 +207,14 @@
     #rz-body .rz-selbar{bottom:calc(56px + env(safe-area-inset-bottom,0px));}
     /* À 375 px, « MELISSA NABET · local » passait sur deux lignes et rendait 30 px de
        barre du haut. Le nom se réduit plutôt que de pousser le reste à la ligne. */
+    /* Une seule ligne, quoi qu'il arrive : c'est le nom qui se raccourcit, pas la barre qui
+       s'épaissit. Sans `nowrap`, un libellé un peu plus long (état de synchro, nom d'atelier
+       plus long) suffisait à faire passer un bouton à la ligne. */
+    .toolbar{flex-wrap:nowrap;}
     .toolbar .brand{font-size:18px;letter-spacing:.10em!important;min-width:0;overflow:hidden;
       text-overflow:ellipsis;white-space:nowrap;}
     .toolbar .sync-badge{flex-shrink:0;}
-    #toolbar-plus{flex-shrink:0;}
+    #toolbar-plus,#toolbar-search{flex-shrink:0;}
     /* La barre du bas recouvre 56 px : tout ce qui vivait au ras du bas remonte. */
     body{padding-bottom:calc(56px + env(safe-area-inset-bottom,0px));}
     #devis-tab-fab{bottom:calc(70px + env(safe-area-inset-bottom,0px));}
@@ -891,6 +908,7 @@
   </div>
   <!-- Sur téléphone, ces trois boutons faisaient une ligne de plus dans la barre du haut :
        ils passent derrière un seul bouton, et la barre tient sur une ligne. -->
+  <button class="btn" id="toolbar-search" onclick="openRecherche()" title="Rechercher (Ctrl+K)" aria-label="Rechercher">🔍</button>
   <button class="btn" id="toolbar-plus" onclick="menuPlusMobile()" aria-label="Plus d’actions">⋯</button>
 </div>
 <button class="btn" id="devis-tab-fab" onclick="toggleDevisTab()">👁 Aperçu</button>
@@ -3455,6 +3473,100 @@ function devisMenuMobile(){
   go('dv-composer',gotoComposer);
   go('dv-mes',gotoMesDevis);
 }
+/* ============ RECHERCHE GLOBALE ============
+   Un seul champ pour les clients, les devis, les tâches et les réalisations. Sans ça, il
+   faut se souvenir de l'onglet où vit la chose qu'on cherche. */
+function rchNorm(v){
+  return (v==null?'':String(v)).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function rechercher(q){
+  const t=rchNorm(q).trim();
+  if(t.length<2)return null;         /* une seule lettre renverrait tout : ce n'est pas une recherche */
+  const mots=t.split(/\s+/);
+  const colle=(...morceaux)=>rchNorm(morceaux.filter(Boolean).join(' '));
+  const tous=(champ)=>mots.every(m=>champ.indexOf(m)>=0);
+  const res={clients:[],devis:[],taches:[],realisations:[]};
+  (clients||[]).forEach(c=>{
+    if(tous(colle(c.name,c.contact,c.phone,c.email,c.ville,c.commentaire)))res.clients.push(c);
+  });
+  (devisList||[]).forEach(d=>{
+    const snap=d.snapshot||{};
+    if(tous(colle(d.title,d.num,snap.proj,snap.raison,clientName(d.clientId))))res.devis.push(d);
+  });
+  (tasks||[]).forEach(k=>{
+    if(tous(colle(k.title,k.note,clientName(k.clientId))))res.taches.push(k);
+  });
+  (realisations||[]).forEach(r=>{
+    const photos=(r.photos||[]).map(p=>(p.name||'')+' '+(p.caption||'')).join(' ');
+    if(tous(colle(r.title,r.lieu,r.mission,r.categorie,r.texte,r.date,photos,clientName(r.clientId))))res.realisations.push(r);
+  });
+  return res;
+}
+function openRecherche(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Rechercher</h3>
+    <p class="msub">Clients, devis, tâches et réalisations — tout en même temps.</p>
+    <input type="search" id="rch-q" class="rch-input" placeholder="Nom, ville, n° de devis, titre de chantier…" autocomplete="off">
+    <div class="rch-res" id="rch-res"></div>`);
+  const inp=$('rch-q');
+  inp.addEventListener('input',()=>peindreRecherche(inp.value));
+  inp.addEventListener('keydown',e=>{
+    if(e.key!=='Enter')return;
+    const premier=document.querySelector('#rch-res .rch-row');
+    if(premier)premier.click();
+  });
+  peindreRecherche('');
+  setTimeout(()=>inp.focus(),60);
+}
+function peindreRecherche(q){
+  const host=$('rch-res');if(!host)return;
+  host.innerHTML='';
+  const res=rechercher(q);
+  if(!res){
+    const v=document.createElement('p');v.className='rch-vide';
+    v.textContent='Tapez au moins deux lettres. La recherche regarde les noms, les villes, les numéros de devis, les titres de chantier et jusqu’aux légendes des photos.';
+    host.appendChild(v);return;
+  }
+  const total=res.clients.length+res.devis.length+res.taches.length+res.realisations.length;
+  if(!total){
+    const v=document.createElement('p');v.className='rch-vide';
+    v.textContent='Rien trouvé pour « '+q.trim()+' ».';
+    host.appendChild(v);return;
+  }
+  const groupe=(titre,items,ligne)=>{
+    if(!items.length)return;
+    const h=document.createElement('div');h.className='rch-grp';h.textContent=titre+' ('+items.length+')';
+    host.appendChild(h);
+    items.slice(0,8).forEach(x=>{
+      const {t,sub,go}=ligne(x);
+      const b=document.createElement('button');b.type='button';b.className='rch-row';
+      b.innerHTML='<span class="rch-t"></span><span class="rch-s"></span>';
+      b.querySelector('.rch-t').textContent=t;
+      b.querySelector('.rch-s').textContent=sub;
+      b.addEventListener('click',()=>{closeModal();go();});
+      host.appendChild(b);
+    });
+    if(items.length>8){
+      const p=document.createElement('p');p.className='rch-vide';p.style.padding='2px 2px 6px';
+      p.textContent='… et '+(items.length-8)+' autre(s). Précisez la recherche.';
+      host.appendChild(p);
+    }
+  };
+  groupe('Clients',res.clients,c=>({t:c.name||'Client',sub:[c.ville,c.phone,c.email].filter(Boolean).join(' · '),go:()=>gotoClient(c.id)}));
+  groupe('Devis',res.devis,d=>({t:(d.title||'Devis')+(d.num?' n°'+d.num:''),sub:[clientName(d.clientId),d.status].filter(Boolean).join(' · '),go:()=>editDevis(d.id)}));
+  groupe('Réalisations',res.realisations,r=>({t:r.title||'Réalisation sans titre',
+    sub:[(r.photos||[]).length+' photo(s)',r.lieu,r.categorie,r.published?'en ligne':''].filter(Boolean).join(' · '),
+    go:()=>gotoRealisation(r.id)}));
+  groupe('Tâches',res.taches,k=>({t:k.title||'Tâche',sub:[clientName(k.clientId),k.done?'faite':'à faire'].filter(Boolean).join(' · '),go:()=>openClientTaskInDashboard(k.id)}));
+}
+/* Ctrl+K / ⌘K : le raccourci attendu partout. */
+document.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey))return;
+  if((e.key||'').toLowerCase()!=='k')return;
+  e.preventDefault();
+  if(!document.getElementById('rch-q'))openRecherche();
+});
+
 function gotoRealisation(id){
   _rzOpenId=id;
   showView('realisations');

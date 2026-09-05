@@ -2098,6 +2098,63 @@ await page.evaluate(() => {
 });
 
 // ============================================================================
+//  RECHERCHE GLOBALE
+// ============================================================================
+const rch = await page.evaluate(async () => {
+  const r = realisations.find(x => (x.photos || []).length >= 2) || realisations[0];
+  r.title = 'Villa Test'; r.lieu = 'Herzliya';
+  r.photos[1].caption = 'Verrière en acier noir';
+  saveRealisations();
+  openRecherche();
+  const q = document.getElementById('rch-q');
+  const lire = () => ({
+    groupes: [...document.querySelectorAll('#rch-res .rch-grp')].map(g => g.textContent),
+    lignes: [...document.querySelectorAll('#rch-res .rch-t')].map(t => t.textContent),
+    vide: (document.querySelector('#rch-res .rch-vide') || {}).textContent || '',
+  });
+  const depart = lire();
+  q.value = 'h'; q.dispatchEvent(new Event('input'));
+  const uneLettre = lire();
+  q.value = 'herzliya'; q.dispatchEvent(new Event('input'));
+  const parLieu = lire();
+  q.value = 'verrière acier'; q.dispatchEvent(new Event('input'));   // deux mots, dans une légende
+  const parLegende = lire();
+  q.value = 'cohen'; q.dispatchEvent(new Event('input'));
+  const parClient = lire();
+  q.value = 'zzzznexistepas'; q.dispatchEvent(new Event('input'));
+  const rien = lire();
+  q.value = 'villa test'; q.dispatchEvent(new Event('input'));
+  const premier = document.querySelector('#rch-res .rch-row');
+  premier.click();
+  await new Promise(res => setTimeout(res, 250));
+  return { depart, uneLettre, parLieu, parLegende, parClient, rien,
+           ouvert: _rzOpenId === r.id, vue: document.getElementById('realisations-view').style.display,
+           modaleFermee: !document.getElementById('overlay').classList.contains('open') };
+});
+check('Recherche : au départ, l’écran explique quoi taper', /au moins deux lettres/.test(rch.depart.vide), rch.depart.vide.slice(0, 60));
+check('Recherche : une seule lettre ne renvoie pas tout', /au moins deux lettres/.test(rch.uneLettre.vide));
+check('Recherche : trouve une réalisation par son lieu',
+  rch.parLieu.lignes.includes('Villa Test'), rch.parLieu.lignes.join(' | '));
+check('Recherche : trouve jusque dans la légende d’une photo, avec deux mots',
+  rch.parLegende.lignes.includes('Villa Test'), rch.parLegende.lignes.join(' | '));
+check('Recherche : trouve un client et ses devis',
+  rch.parClient.groupes.some(g => /^Clients/.test(g)) && rch.parClient.lignes.some(t => /Famille Cohen/.test(t)),
+  rch.parClient.groupes.join(' | ') + ' → ' + rch.parClient.lignes.join(' | '));
+check('Recherche : rien trouvé, l’écran le dit avec le mot cherché',
+  /Rien trouvé pour « zzzznexistepas »/.test(rch.rien.vide), rch.rien.vide);
+check('Recherche : cliquer un résultat ouvre la bonne chose et referme la fenêtre',
+  rch.ouvert && rch.vue === 'block' && rch.modaleFermee, JSON.stringify({ o: rch.ouvert, v: rch.vue, f: rch.modaleFermee }));
+
+const rchClavier = await page.evaluate(async () => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+  await new Promise(r => setTimeout(r, 200));
+  const ouverte = !!document.getElementById('rch-q');
+  closeModal();
+  return ouverte;
+});
+check('Recherche : Ctrl+K l’ouvre', rchClavier);
+
+// ============================================================================
 //  RAPPEL DE REPUBLICATION : le site ne se met pas à jour tout seul
 // ============================================================================
 const rappel = await page.evaluate(async () => {
