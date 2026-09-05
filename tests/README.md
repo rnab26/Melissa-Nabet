@@ -13,6 +13,13 @@ Trois suites :
 - `tests/site.test.mjs` — le **site vitrine public** (`site-vitrine/index.html`), servi
   depuis un banc d'essai local avec un faux manifeste. Vérifie notamment qu'aucune clé
   d'accès ne figure dans la page publique.
+- `tests/bout-en-bout.test.mjs` — le **contrat entre les deux** : le CRM publie une vraie
+  réalisation, et c'est le manifeste et les images RÉELLEMENT écrits qui sont servis au
+  site. Les deux suites ci-dessus vérifient chacune un côté autour d'un manifeste écrit à
+  la main : il suffisait qu'un champ soit renommé d'un côté pour que le site cesse de
+  l'afficher sans qu'aucun test ne bronche. Se lance seul (il démarre son propre serveur
+  sur le port 8903), il faut juste le serveur du CRM sur 8899 :
+  `node tests/bout-en-bout.test.mjs`.
 
 La retouche IA est **entièrement interceptée** dans le test du navigateur : le faux pont
 rejoue les trois temps de la file de fal (déposer, suivre, récupérer), y compris une demande
