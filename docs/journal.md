@@ -52,6 +52,72 @@ point est plus bas, dans l'ordre chronologique.)*
 
 ---
 
+## 5 septembre 2026 — Savoir ce qu'on regarde (et un geste en moins)
+
+**Branche** `claude/photo-etat-affiche` → fusionnée sur `main`. **Chantier** `ph18`.
+
+**Signalé par Raphaël, capture à l'appui** : « ça m'affiche comme quoi c'est la photo
+originale, alors que ce n'est pas la photo originale ; quand je clique sur la photo, ça
+monte une autre photo, je ne sais pas faire la distinction entre les deux. Le sélecteur
+n'affiche qu'une seule photo. Je voulais faire la retouche sur cette photo, ça ne s'est pas
+fait. »
+
+### Ce que disent les vraies données (lues en base, pas déduites)
+
+- La photo en question porte **`rot: 12`** — une rotation manuelle de 12°, la valeur maximale
+  du curseur. Aucune autre photo de la série n'en a.
+- Elle a **zéro version** et un **historique vide** : aucune retouche n'a jamais été posée
+  dessus.
+- `iaUsage` du mois = **6 appels**, et les autres photos totalisent **6 versions**. Donc
+  **aucun appel perdu, rien de facturé pour rien** : la retouche de cette photo n'a pas
+  échoué, elle n'a jamais été lancée.
+- `iaJobs` est vide : aucune demande en vol.
+
+Les « deux photos » étaient donc la même image, **avec et sans les 12° de rotation** —
+l'appui long montrait la photo brute.
+
+### Les trois vrais défauts, et ce qui est corrigé
+
+1. **Rien ne disait ce qu'on regarde.** L'écran annonçait « Photo d'origine » alors qu'il
+   affichait la photo d'origine **plus** des réglages manuels. Une ligne en tête de tous les
+   onglets le dit maintenant : « À l'écran : Photo d'origine + vos réglages (rotation 12,0°) »,
+   avec un bouton **↺ Annuler mes réglages** qui nomme ce qu'il va effacer.
+2. **Le geste n'était annoncé que sur ordinateur.** L'indice vivait dans la barre du haut, et
+   une règle CSS (`@media(max-width:680px){.ed-cmp{display:none}}`) le masquait sur téléphone
+   — c'est-à-dire précisément là où il sert. Il est descendu dans le panneau, visible partout.
+3. **Un geste de trop.** L'appui long faisait la même chose que le curseur avant/après, en
+   moins clair. **L'appui long est supprimé** : le curseur sert aux deux cas — comparer deux
+   versions, ou comparer la photo avec et sans vos réglages. Quand il n'y a que des réglages,
+   le partage n'apparaît **que pendant le geste** : sinon on réglerait l'exposition en ne
+   voyant que la moitié de la photo.
+
+**Au passage** : sans aucune retouche, la liste « À partir de » n'avait qu'une entrée — un
+choix qui n'en est pas un, et qui laissait croire qu'une version manquait. Elle ne s'affiche
+plus qu'à partir de deux.
+
+**Vérification** : `tests/realisations.test.mjs` → **393 contrôles, 0 échec** (7 nouveaux,
+dont le cas exact signalé : une photo sans retouche avec `rot:12` à 390 px) ;
+`tests/pont-ia.test.mjs` → 20 ; `tests/site.test.mjs` → 52.
+
+### Ce qu'il ne faut pas casser
+
+- Le partage avant/après reste **permanent** quand une autre version est en face (c'est le
+  mode de lecture d'une photo retouchée, et c'est ce que Raphaël préfère), et **transitoire**
+  quand il n'y a que des réglages manuels. C'est `_ed.imgAlt` qui fait la différence, pas un
+  réglage.
+- L'indice ne doit **pas** remonter dans `.ed-bar` : cette barre doit tenir sur une ligne sur
+  téléphone (56 px, mesuré), c'est pour ça qu'il y était masqué.
+- `editResume()` est la seule écriture de « comment on nomme un réglage manuel » : la ligne
+  d'état, la confirmation de remise à zéro et les futurs messages s'en servent.
+
+### À faire côté Raphaël
+
+**Rien de technique.** Pour cette photo : les 12° sont toujours là — un appui sur « ↺ Annuler
+mes réglages » la remet droite, puis « ✨ Retoucher cette photo » lance la retouche qui n'a
+jamais été lancée.
+
+---
+
 ## 5 septembre 2026 — Plusieurs versions par photo, et le choix de ce qu'on retouche
 
 **Branche** `claude/photo-versions` → fusionnée sur `main`. **Chantier** `ph17`.

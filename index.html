@@ -864,11 +864,18 @@
   input.ia-input[type=checkbox]{width:auto;}
   .ia-field-desc{margin:4px 0 0;font-size:11px;color:var(--stone-light);line-height:1.45;}
   .ia-field-skip{margin:0;font-size:11px;color:var(--stone-light);font-style:italic;}
-  .ed-cmp{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;}
+  /* La ligne « ce qu'on regarde » : elle vit dans le panneau, pas dans la barre du haut —
+     la barre doit tenir sur une ligne sur téléphone, et l'indice y était donc masqué,
+     c'est-à-dire invisible exactement là où il sert. */
+  .ed-etat{background:var(--travertine);border:1px solid var(--panel-edge);border-radius:10px;
+    padding:9px 11px;margin-bottom:11px;}
+  .ed-etat-l{margin:0;font-size:12.5px;color:var(--ink);line-height:1.5;}
+  .ed-etat-l b{color:var(--oxblood);}
+  .ed-cmp{margin:3px 0 0;font-size:11.5px;color:var(--stone-light);line-height:1.5;}
+  .ed-raz{margin-top:8px;}
   .ed-bar .ed-pos{font-size:11.5px;color:var(--stone-light);flex:0 0 auto;white-space:nowrap;}
   .ed-bar .btn[disabled]{opacity:.35;cursor:default;}
   #ed-photo-meta{margin-top:10px;}
-  @media(max-width:680px){.ed-cmp{display:none;}}
   /* La condition d'aspect compte autant que la largeur : un téléphone en « site pour
      ordinateur » fait ~980 px de large tout en restant en portrait. En deux colonnes, la
      photo n'y occupait que 13 % de l'écran (mesuré à 980×2175), le reste étant du noir. */
@@ -4380,6 +4387,30 @@ const REAL_RATIOS=[
   {id:'1:1',label:'1:1',v:1},
 ];
 function blankEdit(){return {persp:0,rot:0,expo:0,contrast:0,temp:0,tint:0,sat:0,ratio:'libre',pan:0};}
+/* Une photo « d'origine » à l'écran n'est PAS la photo importée : ce sont les réglages
+   manuels appliqués par-dessus. Tant que personne ne l'écrit, une rotation de 12° passe pour
+   la photo brute — et on cherche d'où vient l'écart. D'où ces deux fonctions : savoir s'il y
+   a des réglages, et savoir les nommer. */
+function editEstNeutre(e){
+  const b=blankEdit();
+  return Object.keys(b).every(k=>((e&&e[k]!==undefined)?e[k]:b[k])===b[k]);
+}
+const ED_RESUME=[
+  {k:'persp',t:v=>'verticales '+(v>0?'+':'')+Math.round(v)},
+  {k:'rot',t:v=>'rotation '+v.toFixed(1).replace('.',',')+'°'},
+  {k:'expo',t:v=>'exposition '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'contrast',t:v=>'contraste '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'temp',t:v=>'température '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'tint',t:v=>'teinte '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'sat',t:v=>'saturation '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+];
+function editResume(e){
+  const out=[];
+  ED_RESUME.forEach(d=>{const v=parseFloat((e||{})[d.k])||0;if(v)out.push(d.t(v));});
+  if(e&&e.ratio&&e.ratio!=='libre')out.push('cadrage '+e.ratio);
+  if(e&&parseFloat(e.pan))out.push('cadrage décalé');
+  return out;
+}
 
 /* ---- Ce qu'on sait d'une photo : ce qu'elle a vécu, et où elle en est du site ----
    Deux questions revenaient sans réponse : « qu'est-ce qui est en ligne ? » et « qu'est-ce
@@ -5620,7 +5651,6 @@ async function openPhotoEditor(rid,pid){
       <span class="ed-pos">${rang+1} / ${nbPh}</span>
       <button class="btn" data-next title="Photo suivante"${rang>=nbPh-1?' disabled':''}>▶</button>
       <span class="ed-title">${esc(p.name||'photo')}</span>
-      <span class="ed-cmp" data-cmp>maintenir pour voir l’original</span>
       <button class="btn" data-hist title="Historique de cette photo">🕘</button>
     </div>
     <div class="ed-body">
@@ -5656,7 +5686,7 @@ async function openPhotoEditor(rid,pid){
   document.body.appendChild(host);
   /* La retouche par consigne écrite est le mode d'entrée : c'est elle qui fait passer une
      photo de téléphone à une photo publiable. Les réglages manuels restent à un doigt. */
-  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),showOrig:false,raf:0,
+  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),raf:0,
        hist:[JSON.stringify(p.edit)],histI:0};
   host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
   host.querySelector('[data-undo]').addEventListener('click',()=>edHistGo(-1));
@@ -5682,8 +5712,7 @@ async function openPhotoEditor(rid,pid){
   host.querySelectorAll('.ed-tab').forEach(b=>b.addEventListener('click',()=>{
     _ed.tab=b.dataset.tab;paintEditorTabs();buildEditorControls();edPaintHint();
   }));
-  const cmp=host.querySelector('[data-cmp]'),stage=host.querySelector('.ed-stage');
-  const showOrig=on=>{_ed.showOrig=on;edPaint();};
+  const stage=host.querySelector('.ed-stage');
   /* Deux gestes sur la photo, jamais les deux en même temps :
      - une version IA existe → on fait glisser le curseur avant/après ;
      - sinon → appui long pour voir la photo sans réglages. */
@@ -5699,8 +5728,8 @@ async function openPhotoEditor(rid,pid){
   /* Trois gestes sur la photo, et jamais deux en même temps :
      - onglet Cadrage avec un format imposé → on FAIT GLISSER LA PHOTO pour choisir ce que
        le cadre garde (le curseur « Position » fait la même chose, au doigt près) ;
-     - sinon, une version IA existe → curseur avant/après ;
-     - sinon → appui long pour voir la photo sans réglages. */
+     - sinon → curseur avant / après, qu'il s'agisse d'une autre version ou simplement de
+       la photo avec et sans vos réglages. */
   ['mousedown','touchstart'].forEach(ev=>stage.addEventListener(ev,e=>{
     if(edCadrageDeplacable()){
       const pt=(e.touches&&e.touches[0])||e;
@@ -5708,8 +5737,7 @@ async function openPhotoEditor(rid,pid){
       if(e.cancelable)e.preventDefault();
       return;
     }
-    if(edHasCompare()){glisse=true;posSplit(e);if(e.cancelable)e.preventDefault();}
-    else showOrig(true);
+    if(edHasCompare()){glisse=true;_ed.glisse=true;posSplit(e);if(e.cancelable)e.preventDefault();}
   },{passive:false}));
   ['mousemove','touchmove'].forEach(ev=>stage.addEventListener(ev,e=>{
     if(cadre){edCadrageGlisse(e,cadre);if(e.cancelable)e.preventDefault();return;}
@@ -5717,10 +5745,9 @@ async function openPhotoEditor(rid,pid){
   },{passive:false}));
   ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>stage.addEventListener(ev,()=>{
     if(cadre){cadre=null;buildEditorControls();edTouch();return;}   /* un geste = un cran d'annulation */
-    glisse=false;if(!edHasCompare())showOrig(false);
+    glisse=false;
+    if(_ed&&_ed.glisse){_ed.glisse=false;edPaint();}
   }));
-  ['mousedown','touchstart'].forEach(ev=>cmp.addEventListener(ev,e=>{if(!edHasCompare()){e.preventDefault();showOrig(true);}}));
-  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>cmp.addEventListener(ev,()=>{if(!edHasCompare())showOrig(false);}));
   /* Ctrl+Z / Ctrl+Maj+Z : le réflexe de tout le monde sur un ordinateur. Le raccourci ne
      vit que le temps de l'éditeur. */
   _ed.clavier=(ev)=>{
@@ -5776,10 +5803,14 @@ function edCadrageGlisse(e,depart){
 /* La barre du haut dit quel geste est actif : ils ne coexistent pas. */
 function edPaintHint(){
   const el=document.querySelector('#ed-modal [data-cmp]');
-  if(!el)return;
-  el.textContent=edCadrageDeplacable()?'faire glisser la photo : choisir le cadrage'
-    :edHasCompare()?'faire glisser sur la photo : avant / après'
-    :'maintenir pour voir l’original';
+  if(!el||!_ed)return;
+  el.textContent=edCadrageDeplacable()
+    ? 'Faites glisser la photo : choisir le cadrage.'
+    : !edHasCompare()
+      ? 'Rien à comparer : cette photo n’a ni réglage manuel ni retouche.'
+      : _ed.imgAlt
+        ? 'Faites glisser sur la photo : avant à gauche, après à droite.'
+        : 'Posez le doigt sur la photo et faites glisser : avant à gauche, après à droite.';
 }
 function paintEditorTabs(){
   document.querySelectorAll('#ed-modal .ed-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===_ed.tab));
@@ -5790,9 +5821,42 @@ function paintEditorTabs(){
   if(acts)acts.style.display=(_ed.tab==='ia')?'none':'';
   edHistPaint();
 }
+/* Ce qu'on regarde, écrit noir sur blanc, sur TOUS les onglets. Sans cette ligne, une photo
+   qui porte une rotation manuelle s'annonce « photo d'origine » alors que ce n'est pas ce
+   qu'on voit — et le geste pour la comparer n'était affiché que sur ordinateur. */
+function edBuildEtat(host){
+  const p=_ed.p;
+  const box=document.createElement('div');box.className='ed-etat';
+  const reg=editResume(p.edit);
+  const l1=document.createElement('p');l1.className='ed-etat-l';
+  const nom=document.createElement('b');nom.textContent=photoVersionLabel(p,photoActiveId(p));
+  l1.appendChild(document.createTextNode('À l’écran : '));
+  l1.appendChild(nom);
+  if(reg.length)l1.appendChild(document.createTextNode(' + vos réglages (' + reg.join(', ') + ')'));
+  box.appendChild(l1);
+  const l2=document.createElement('p');l2.className='ed-cmp';l2.setAttribute('data-cmp','');
+  box.appendChild(l2);
+  if(reg.length){
+    /* La rotation de 12° prise par mégarde, on ne la voit nulle part depuis l'onglet
+       Retouche — et c'est pourtant elle qui explique l'écart. Un geste pour la retirer. */
+    const raz=document.createElement('button');raz.className='mini ed-raz';raz.type='button';
+    raz.textContent='↺ Annuler mes réglages';
+    raz.addEventListener('click',()=>askConfirm(
+      'Remettre à zéro les réglages manuels de cette photo (' + reg.join(', ') + ') ? Elle revient telle qu’elle a été importée. Les retouches IA ne sont pas touchées.',
+      ()=>{
+        Object.assign(p.edit,blankEdit());
+        edTouch();buildEditorControls();edPaintHint();edPaint();
+        toast('Réglages remis à zéro');
+      }));
+    box.appendChild(raz);
+  }
+  host.appendChild(box);
+}
 function buildEditorControls(){
   const host=$('ed-controls');if(!host||!_ed)return;
   host.innerHTML='';
+  edBuildEtat(host);
+  edPaintHint();
   const e=_ed.p.edit;
   if(_ed.tab==='ia'){ buildIaPanel(host); return; }
   if(_ed.tab==='cadrage'){
@@ -5822,9 +5886,6 @@ function buildEditorControls(){
     host.appendChild(hint);
   }
   (ED_SLIDERS[_ed.tab]||[]).forEach(cfg=>host.appendChild(sliderRow(cfg)));
-  const cmp=document.createElement('p');cmp.className='ed-hint';cmp.style.margin='12px 0 0';
-  cmp.textContent='Appui long sur la photo : comparer avec l’original.';
-  host.appendChild(cmp);
 }
 function sliderRow(cfg){
   const e=_ed.p.edit;
@@ -5846,7 +5907,14 @@ function sliderRow(cfg){
    « Avant » veut dire deux choses selon le cas, et c'est voulu :
    - une version IA existe → avant = la photo d'origine avec SES réglages, après = la version IA ;
    - sinon → avant = la photo sans aucun réglage, après = la photo réglée. */
-function edHasCompare(){return !!(_ed&&_ed.imgAlt);}
+/* Il y a de quoi comparer dans deux cas, et le MÊME geste sert aux deux : une autre version
+   existe (on la met en face), ou la photo porte des réglages manuels (on la montre avec et
+   sans). L'appui long qui servait au second cas a disparu : deux gestes pour une même
+   question, dont un jamais annoncé sur téléphone, ça ne s'apprend pas. */
+function edHasCompare(){
+  if(!_ed||!_ed.img)return false;
+  return !!_ed.imgAlt||!editEstNeutre(_ed.p.edit);
+}
 async function edLoadAlt(){
   if(!_ed)return;
   const p=_ed.p;
@@ -5873,7 +5941,7 @@ function edPaint(){
   cancelAnimationFrame(_ed.raf);
   _ed.raf=requestAnimationFrame(()=>{
     const cv=$('ed-canvas');if(!cv)return;
-    const edit=_ed.showOrig?blankEdit():_ed.p.edit;
+    const edit=_ed.p.edit;
     const out=glRenderTo(_ed.img,edit,1400,'f_'+_ed.p.id);
     if(!out)return;
     cv.width=out.width;cv.height=out.height;
@@ -5881,7 +5949,11 @@ function edPaint(){
 
     /* Sans version IA, le « avant » est la même image sans réglages : un seul rendu suffit,
        l'appui long continue de servir. */
-    const compare=edHasCompare()&&!_ed.showOrig;
+    /* Le partage reste affiché EN PERMANENCE quand il y a une autre version à mettre en
+       face : c'est le mode de lecture d'une photo retouchée. Quand il n'y a que des réglages
+       manuels, il n'apparaît que pendant le geste — sinon on réglerait l'exposition en ne
+       voyant que la moitié de la photo. */
+    const compare=edHasCompare()&&(!!_ed.imgAlt||!!_ed.glisse);
     if(!compare){ctx.drawImage(out,0,0);edPaintLabels(ctx,cv,null);return;}
 
     /* glRenderTo dessine TOUJOURS dans le même canevas WebGL : sans cette copie, les deux
@@ -5889,7 +5961,11 @@ function edPaint(){
     const snap=_ed.snap||(_ed.snap=document.createElement('canvas'));
     snap.width=out.width;snap.height=out.height;
     snap.getContext('2d').drawImage(out,0,0);
-    const alt=glRenderTo(_ed.imgAlt,_ed.altEdit||blankEdit(),1400,'alt_'+_ed.p.id);
+    /* Sans autre version à mettre en face, l'AVANT est la même image rendue SANS les
+       réglages manuels : c'est exactement ce que montrait l'appui long. */
+    const altImg=_ed.imgAlt||_ed.img;
+    const altEd=_ed.imgAlt?(_ed.altEdit||blankEdit()):blankEdit();
+    const alt=glRenderTo(altImg,altEd,1400,'alt_'+_ed.p.id);
     _glTexKey=''; /* deux images dans le même rendu : la texture en cache n'est plus la bonne */
     const x=Math.round(cv.width*(_ed.split==null?0.5:_ed.split));
     /* L'avant occupe toute la surface ; l'après est découpé à droite du curseur. Les deux
@@ -5898,7 +5974,7 @@ function edPaint(){
     /* L'autre version est l'AVANT quand elle précède celle qu'on regarde — c'est-à-dire
        dès qu'une retouche est affichée. Si c'est l'originale qui est affichée, l'autre est
        une retouche, donc l'APRÈS. */
-    const avantEstAlt=photoActiveId(_ed.p)!=='orig';
+    const avantEstAlt=_ed.imgAlt?(photoActiveId(_ed.p)!=='orig'):true;
     const bas=avantEstAlt?alt:snap, haut=avantEstAlt?snap:alt;
     if(bas)ctx.drawImage(bas,0,0,cv.width,cv.height);
     if(haut){
@@ -7157,7 +7233,10 @@ function buildIaPanel(host){
   /* À PARTIR DE QUOI. C'était le manque : l'envoi repartait toujours de l'originale, sans
      rien demander. Par défaut on retouche ce qu'on regarde — et on peut choisir autre
      chose, y compris pour reprendre une retouche mise de côté. */
+  /* Sans aucune retouche, la liste n'a qu'une entrée : un choix qui n'en est pas un, et qui
+     laisse croire qu'une version manque. On ne la montre qu'à partir de deux. */
   const srcRow=document.createElement('label');srcRow.className='fld ia-src';
+  if(!photoVersions(p).length)srcRow.style.display='none';
   srcRow.innerHTML='<span class="lbl">À partir de</span>';
   const srcSel=document.createElement('select');srcSel.className='ia-src-sel';
   const srcOptions=[{id:'orig',t:photoVersionLabel(p,'orig')}]
@@ -7179,6 +7258,7 @@ function buildIaPanel(host){
   };
   srcSel.addEventListener('change',()=>{_iaFrom=srcSel.value;majSrcNote();});
   majSrcNote();
+  if(!photoVersions(p).length)srcNote.style.display='none';
   card.appendChild(srcNote);
 
   const go=document.createElement('button');go.className='ia-go btn-primary';

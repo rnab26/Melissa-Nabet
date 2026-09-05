@@ -797,6 +797,47 @@ essais sur vingt photos font 100 Mo sur un plan de 1 Go — c'est l'alerte de sa
 (`fi01`) qui le dira. Un ménage automatique n'a pas été mis : supprimer sans qu'on le demande
 une image qui a été payée serait pire que le problème.
 
+## Savoir ce qu'on regarde dans l'éditeur (septembre 2026)
+
+**État** : livré, testé, déployé. Chantier `ph18`.
+
+**Signalement** : « ça m'affiche que c'est la photo originale alors que ce n'est pas la photo
+originale ; quand je clique dessus, ça monte une autre photo ».
+
+**Diagnostic, lu en base** : la photo portait `rot:12` (rotation manuelle, valeur maximale du
+curseur), zéro version et un historique vide. `iaUsage` du mois = 6 appels pour 6 versions
+réellement posées sur les autres photos, `iaJobs` vide : **aucun appel perdu ni facturé pour
+rien**. La retouche de cette photo n'avait jamais été lancée, et les « deux images » étaient
+la même photo avec et sans les 12°. `autoEdit` ne touche jamais `rot` : le réglage venait
+d'un curseur poussé à la main.
+
+**Ce qui a changé**
+
+- `editEstNeutre(e)` et `editResume(e)` : savoir s'il y a des réglages manuels, et **les
+  nommer en français**. Une seule écriture de cette règle.
+- `edBuildEtat(host)` : une ligne en tête de **tous** les onglets — « À l'écran : <version> +
+  vos réglages (rotation 12,0°) » — et le bouton **↺ Annuler mes réglages**, qui dit ce qu'il
+  efface avant de le faire.
+- **L'appui long est supprimé.** `edHasCompare()` est vrai dès qu'il y a une autre version
+  **ou** des réglages manuels ; le curseur avant/après sert aux deux. Quand il n'y a que des
+  réglages, le partage n'est peint que pendant le geste (`_ed.glisse`) : sinon on réglerait
+  l'exposition sur une moitié de photo.
+- L'indice de geste quitte `.ed-bar` pour le panneau. Il y était masqué sous 680 px
+  (`@media`) parce que la barre doit tenir sur une ligne : le seul endroit où il était écrit
+  était donc invisible sur téléphone.
+- La liste « À partir de » est masquée tant qu'il n'y a aucune retouche.
+
+**Ne pas casser**
+
+- Partage **permanent** avec une autre version en face, **transitoire** avec de simples
+  réglages : c'est `_ed.imgAlt` qui décide, pas un réglage.
+- Ne pas remonter l'indice dans `.ed-bar` (une ligne, 56 px, mesuré à 375 et 390 px).
+- `editResume()` reste la seule façon de nommer un réglage manuel.
+
+**Vérification** : 393 contrôles (7 ajoutés), dont le cas exact signalé rejoué à 390 px — une
+photo sans retouche portant `rot:12`, la ligne d'état, la visibilité de l'indice, la liste
+masquée, et la remise à zéro.
+
 ## Stockage — alerte de saturation (septembre 2026)
 
 **État** : livré. Chantier `fi01`.

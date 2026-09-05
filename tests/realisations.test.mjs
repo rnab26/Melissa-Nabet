@@ -244,8 +244,10 @@ check('Réglage auto : image éclaircie',
   afterColor.lum > beforeColor.lum * 1.10,
   'luminance ' + beforeColor.lum.toFixed(1) + ' → ' + afterColor.lum.toFixed(1));
 
-// --- Comparaison avant/après (appui maintenu)
-await page.evaluate(() => { _ed.showOrig = true; edPaint(); });
+// --- Comparaison avant/après. Sans autre version, le curseur compare la photo AVEC et
+//     SANS les réglages manuels : curseur à fond à droite = tout l'AVANT, donc la photo
+//     telle qu'elle a été importée.
+await page.evaluate(() => { _ed.glisse = true; _ed.split = 1; edPaint(); });
 await page.waitForTimeout(400);
 const origLum = await page.evaluate(() => {
   const cv = document.getElementById('ed-canvas'), ctx = cv.getContext('2d');
@@ -253,10 +255,13 @@ const origLum = await page.evaluate(() => {
   let s = 0, n = 0; for (let i = 0; i < d.length; i += 4 * 97) { s += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; }
   return s / n;
 });
-check('Comparaison « original » : revient bien à la photo non retouchée',
+check('Comparateur : l’avant est bien la photo non retouchée',
   Math.abs(origLum - (beforeColor.r + beforeColor.g + beforeColor.b) / 3) < 3,
   origLum.toFixed(1));
-await page.evaluate(() => { _ed.showOrig = false; edPaint(); });
+const compareSansVersion = await page.evaluate(() => ({ possible: edHasCompare(), versions: photoVersions(_ed.p).length }));
+check('Comparateur : il existe dès qu’il y a des réglages manuels, sans aucune retouche IA',
+  compareSansVersion.possible === true && compareSansVersion.versions === 0, JSON.stringify(compareSansVersion));
+await page.evaluate(() => { _ed.glisse = false; _ed.split = 0.5; edPaint(); });
 
 // --- Recadrage : le ratio demandé doit être respecté
 await page.evaluate(() => { _ed.p.edit.ratio = '16:9'; edPaint(); });
@@ -2346,6 +2351,64 @@ check('Écran : on change de version au doigt, et l’écran dit d’où elle so
   versTel.active + ' — ' + versTel.meta.slice(0, 70));
 await page.setViewportSize(vueAvantVers);
 
+// --- LE CAS SIGNALÉ : une photo SANS retouche mais AVEC un réglage manuel. L'écran
+//     annonçait « Photo d'origine » alors que ce n'est pas ce qu'on voit, le geste pour
+//     comparer n'était affiché que sur ordinateur, et la liste « À partir de » n'avait
+//     qu'une entrée — un choix qui n'en est pas un.
+await page.setViewportSize({ width: 390, height: 844 });
+const cas = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  for (const v of photoVersions(p)) { try { await photoStore.del(v.key); } catch (e) {} }
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig';
+  p.edit = Object.assign(blankEdit(), { rot: 12 });     // exactement le cas observé
+  closePhotoEditor();
+  await new Promise(x => setTimeout(x, 300));
+  await openPhotoEditor(r.id, p.id);
+  await new Promise(x => setTimeout(x, 800));
+  _ed.tab = 'ia'; buildEditorControls();
+  await new Promise(x => setTimeout(x, 300));
+  const etat = document.querySelector('#ed-controls .ed-etat-l');
+  const aide = document.querySelector('#ed-controls [data-cmp]');
+  const src = document.querySelector('#ed-controls .ia-src');
+  return {
+    etat: etat ? etat.textContent : '',
+    etatVisible: !!(etat && etat.offsetParent !== null),
+    aide: aide ? aide.textContent : '',
+    aideVisible: !!(aide && aide.offsetParent !== null),
+    srcCache: !!(src && src.offsetParent === null),
+    comparePossible: edHasCompare(),
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  };
+});
+await page.screenshot({ path: '/tmp/mn-etat-390.png' });
+check('Écran : la ligne dit ce qu’on regarde, réglages manuels compris',
+  /Photo d’origine/.test(cas.etat) && /rotation 12,0°/.test(cas.etat) && cas.etatVisible, cas.etat);
+check('Écran : le geste pour comparer est annoncé, et VISIBLE sur téléphone',
+  /faites glisser/i.test(cas.aide) && cas.aideVisible, cas.aide);
+check('Écran : sans aucune retouche, la liste « À partir de » ne s’affiche pas',
+  cas.srcCache, String(cas.srcCache));
+check('Écran : on peut comparer avec et sans les réglages, sans aucune retouche IA', cas.comparePossible === true);
+check('Écran : rien ne déborde à 390 px', cas.debord <= 1, 'débordement ' + cas.debord + 'px');
+
+const razReglages = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  const orig = window.askConfirm; let question = '';
+  window.askConfirm = (m, cb) => { question = m; return Promise.resolve(cb()); };
+  document.querySelector('#ed-controls .ed-raz').click();
+  await new Promise(x => setTimeout(x, 500));
+  window.askConfirm = orig;
+  const etat = document.querySelector('#ed-controls .ed-etat-l');
+  return { question, rot: p.edit.rot, texte: etat ? etat.textContent : '',
+           bouton: !!document.querySelector('#ed-controls .ed-raz'),
+           aide: (document.querySelector('#ed-controls [data-cmp]') || {}).textContent || '' };
+});
+check('Écran : les réglages manuels s’annulent d’un geste, en disant lesquels',
+  /rotation 12,0°/.test(razReglages.question) && razReglages.rot === 0, razReglages.question.slice(0, 100));
+check('Écran : la ligne se met à jour, et le bouton disparaît quand il n’y a plus rien',
+  !/vos réglages/.test(razReglages.texte) && !razReglages.bouton && /Rien à comparer/.test(razReglages.aide),
+  razReglages.texte + ' | ' + razReglages.aide);
+await page.setViewportSize(vueAvantVers);
+
 await page.unroute('**/functions/v1/photo-ia');
 await page.evaluate(async (pub) => {
   closePhotoEditor();
@@ -3060,7 +3123,7 @@ check('Cadrage : en format libre, il n’y a rien à déplacer',
   cadrage.enLibre.deplacable === false && cadrage.enLibre.axe === null);
 check('Cadrage : avec un format imposé, la photo se déplace sur l’axe qui a du jeu',
   cadrage.enCarre.deplacable === true && cadrage.enCarre.axe === 'x', JSON.stringify(cadrage.enCarre.axe));
-check('Cadrage : la barre du haut annonce le geste actif',
+check('Cadrage : l’écran annonce le geste actif',
   /choisir le cadrage/.test(cadrage.enCarre.aide), cadrage.enCarre.aide);
 check('Cadrage : tirer la photo déplace vraiment le cadre, dans le bon sens',
   cadrage.pendant > 0 && Math.abs(cadrage.pendant - 0.5) < 0.2, 'pan = ' + cadrage.pendant);
