@@ -5538,7 +5538,7 @@ async function openPhotoEditor(rid,pid){
     _ed.r.cover=_ed.p.id;edTouch();toast('Photo de couverture définie');
   });
   host.querySelectorAll('.ed-tab').forEach(b=>b.addEventListener('click',()=>{
-    _ed.tab=b.dataset.tab;paintEditorTabs();buildEditorControls();
+    _ed.tab=b.dataset.tab;paintEditorTabs();buildEditorControls();edPaintHint();
   }));
   const cmp=host.querySelector('[data-cmp]'),stage=host.querySelector('.ed-stage');
   const showOrig=on=>{_ed.showOrig=on;edPaint();};
@@ -5553,15 +5553,28 @@ async function openPhotoEditor(rid,pid){
     _ed.split=Math.max(0,Math.min(1,(cx-r.left)/r.width));
     edPaint();
   };
-  let glisse=false;
+  let glisse=false,cadre=null;
+  /* Trois gestes sur la photo, et jamais deux en même temps :
+     - onglet Cadrage avec un format imposé → on FAIT GLISSER LA PHOTO pour choisir ce que
+       le cadre garde (le curseur « Position » fait la même chose, au doigt près) ;
+     - sinon, une version IA existe → curseur avant/après ;
+     - sinon → appui long pour voir la photo sans réglages. */
   ['mousedown','touchstart'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(edCadrageDeplacable()){
+      const pt=(e.touches&&e.touches[0])||e;
+      cadre={x:pt.clientX,y:pt.clientY,pan:_ed.p.edit.pan||0};
+      if(e.cancelable)e.preventDefault();
+      return;
+    }
     if(edHasCompare()){glisse=true;posSplit(e);if(e.cancelable)e.preventDefault();}
     else showOrig(true);
   },{passive:false}));
   ['mousemove','touchmove'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(cadre){edCadrageGlisse(e,cadre);if(e.cancelable)e.preventDefault();return;}
     if(glisse){posSplit(e);if(e.cancelable)e.preventDefault();}
   },{passive:false}));
   ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>stage.addEventListener(ev,()=>{
+    if(cadre){cadre=null;buildEditorControls();edTouch();return;}   /* un geste = un cran d'annulation */
     glisse=false;if(!edHasCompare())showOrig(false);
   }));
   ['mousedown','touchstart'].forEach(ev=>cmp.addEventListener(ev,e=>{if(!edHasCompare()){e.preventDefault();showOrig(true);}}));
@@ -5589,11 +5602,42 @@ async function openPhotoEditor(rid,pid){
   await edLoadAlt();          /* de quoi comparer avant/après s'il existe une version IA */
   if(_ed){edPaintHint();edPaint();}
 }
+/* Le cadrage ne se déplace que s'il y a de quoi : un format imposé, donc une partie de la
+   photo laissée dehors. En « libre », la photo entière est gardée, il n'y a rien à bouger. */
+function edCadrageDeplacable(){
+  return !!(_ed&&_ed.tab==='cadrage'&&(_ed.p.edit.ratio||'libre')!=='libre'&&_ed.img);
+}
+/* L'axe qui a du jeu : une photo paysage dans un cadre carré se déplace horizontalement,
+   une photo portrait verticalement. Jamais les deux — cropWindow n'en laisse qu'un libre. */
+function edCadrageAxe(){
+  if(!_ed||!_ed.img)return null;
+  const asp=_ed.img.width/_ed.img.height;
+  const def=REAL_RATIOS.find(r=>r.id===(_ed.p.edit.ratio||'libre'));
+  const t=def?def.v:0;
+  if(!t)return null;
+  return (t<=asp)?'x':'y';
+}
+function edCadrageGlisse(e,depart){
+  const cv=$('ed-canvas');if(!cv||!_ed)return;
+  const axe=edCadrageAxe();if(!axe)return;
+  const pt=(e.touches&&e.touches[0])||e;
+  const box=cv.getBoundingClientRect();
+  const taille=(axe==='x')?box.width:box.height;
+  if(!taille)return;
+  const d=(axe==='x')?(pt.clientX-depart.x):(pt.clientY-depart.y);
+  /* On tire la PHOTO : la fenêtre de cadrage va donc dans l'autre sens. */
+  const pan=depart.pan-(d/taille)*2;
+  _ed.p.edit.pan=Math.max(-1,Math.min(1,pan));
+  edPaint();
+}
+
 /* La barre du haut dit quel geste est actif : ils ne coexistent pas. */
 function edPaintHint(){
   const el=document.querySelector('#ed-modal [data-cmp]');
   if(!el)return;
-  el.textContent=edHasCompare()?'faire glisser sur la photo : avant / après':'maintenir pour voir l’original';
+  el.textContent=edCadrageDeplacable()?'faire glisser la photo : choisir le cadrage'
+    :edHasCompare()?'faire glisser sur la photo : avant / après'
+    :'maintenir pour voir l’original';
 }
 function paintEditorTabs(){
   document.querySelectorAll('#ed-modal .ed-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===_ed.tab));
@@ -5611,7 +5655,7 @@ function buildEditorControls(){
   if(_ed.tab==='ia'){ buildIaPanel(host); return; }
   if(_ed.tab==='cadrage'){
     const hint=document.createElement('p');hint.className='ed-hint';
-    hint.textContent='Un format identique sur toutes les photos d’une réalisation, c’est ce qui donne une galerie propre. Le curseur déplace le cadrage dans la photo.';
+    hint.textContent='Un format identique sur toutes les photos d’une réalisation, c’est ce qui donne une galerie propre. Faites glisser la photo pour choisir ce que le cadre garde — le curseur ci-dessous fait la même chose, au doigt près.';
     host.appendChild(hint);
     const rats=document.createElement('div');rats.className='ed-ratios';
     REAL_RATIOS.forEach(rt=>{

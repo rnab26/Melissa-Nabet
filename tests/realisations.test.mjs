@@ -2192,6 +2192,60 @@ check('Republier : le rappel ouvre directement la bonne réalisation',
   rappelClic.vue === 'block' && rappelClic.ouverte, JSON.stringify(rappelClic));
 
 // ============================================================================
+//  ÉDITEUR : déplacer le cadrage au doigt
+// ============================================================================
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.evaluate(async () => {
+  const r = realisations[0];
+  if (!document.getElementById('ed-modal')) await openPhotoEditor(r.id, r.photos[0].id);
+});
+await page.waitForTimeout(900);
+const cadrage = await page.evaluate(async () => {
+  _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaintHint();
+  const e = _ed.p.edit;
+  e.ratio = 'libre'; e.pan = 0;
+  const enLibre = { deplacable: edCadrageDeplacable(), axe: edCadrageAxe() };
+  // format carré sur une photo paysage : le jeu est horizontal
+  e.ratio = REAL_RATIOS.find(x => x.v === 1) ? REAL_RATIOS.find(x => x.v === 1).id : '1:1';
+  buildEditorControls(); edPaintHint();
+  const enCarre = { deplacable: edCadrageDeplacable(), axe: edCadrageAxe(),
+                    aide: (document.querySelector('#ed-modal [data-cmp]') || {}).textContent || '' };
+  const stage = document.querySelector('#ed-modal .ed-stage');
+  const cv = document.getElementById('ed-canvas');
+  const box = cv.getBoundingClientRect();
+  const souris = (type, x, y) => stage.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  souris('mousedown', box.left + box.width / 2, box.top + box.height / 2);
+  souris('mousemove', box.left + box.width / 2 - box.width / 4, box.top + box.height / 2);
+  const pendant = _ed.p.edit.pan;
+  souris('mouseup', box.left + box.width / 4, box.top + box.height / 2);
+  await new Promise(r => setTimeout(r, 150));
+  const apres = { pan: _ed.p.edit.pan, cransAnnulation: _ed.hist.length };
+  // tirer très loin ne doit pas sortir des bornes
+  souris('mousedown', box.left + 10, box.top + 10);
+  souris('mousemove', box.left + box.width * 3, box.top + 10);
+  souris('mouseup', box.left + box.width * 3, box.top + 10);
+  const borne = _ed.p.edit.pan;
+  return { enLibre, enCarre, pendant, apres, borne };
+});
+check('Cadrage : en format libre, il n’y a rien à déplacer',
+  cadrage.enLibre.deplacable === false && cadrage.enLibre.axe === null);
+check('Cadrage : avec un format imposé, la photo se déplace sur l’axe qui a du jeu',
+  cadrage.enCarre.deplacable === true && cadrage.enCarre.axe === 'x', JSON.stringify(cadrage.enCarre.axe));
+check('Cadrage : la barre du haut annonce le geste actif',
+  /choisir le cadrage/.test(cadrage.enCarre.aide), cadrage.enCarre.aide);
+check('Cadrage : tirer la photo déplace vraiment le cadre, dans le bon sens',
+  cadrage.pendant > 0 && Math.abs(cadrage.pendant - 0.5) < 0.2, 'pan = ' + cadrage.pendant);
+check('Cadrage : un geste complet = un seul cran d’annulation',
+  cadrage.apres.cransAnnulation === 2, cadrage.apres.cransAnnulation + ' état(s) empilé(s)');
+check('Cadrage : on ne peut pas tirer au-delà de la photo', cadrage.borne >= -1 && cadrage.borne <= 1, 'pan = ' + cadrage.borne);
+await page.evaluate(async () => {
+  Object.assign(_ed.p.edit, blankEdit());
+  _ed.tab = 'geometrie'; paintEditorTabs(); buildEditorControls();
+  closePhotoEditor();
+});
+await page.waitForTimeout(300);
+
+// ============================================================================
 //  ÉDITEUR : annuler et rétablir
 // ============================================================================
 await page.setViewportSize({ width: 1280, height: 900 });
