@@ -2048,6 +2048,43 @@ await page.waitForTimeout(400);
 await page.screenshot({ path: '/tmp/mn-shot-desktop.png' });
 
 // ============================================================================
+//  RAPPEL DE REPUBLICATION : le site ne se met pas à jour tout seul
+// ============================================================================
+const rappel = await page.evaluate(async () => {
+  const r = realisations.find(x => (x.photos || []).length >= 2) || realisations[0];
+  _rzOpenId = null;
+  const t = Date.now() - 10000;
+  r.published = true;
+  r.photos.forEach(p => { p.publishedAt = t; p.touchedAt = t - 1000; });
+  renderRealisations();
+  const carteDe = () => {
+    const cards = [...document.querySelectorAll('.rz-card')];
+    const c = cards.find(x => (x.querySelector('.rz-ctitle') || {}).textContent === (r.title || 'Réalisation sans titre'));
+    return c ? (c.querySelector('.rz-cmeta') || {}).textContent || '' : 'carte introuvable';
+  };
+  const aJour = { carte: carteDe(), titre: r.title, publiee: r.published, etats: r.photos.map(p => photoPubState(r, p)) };
+  photoTouch(r.photos[1], 'reglages');            // une photo retouchée après publication
+  renderRealisations(); renderDashboard();
+  const apres = { carte: carteDe(), dash: (document.getElementById('dash-todos') || {}).textContent || '',
+                  n: realisationARepublier(r) };
+  return { aJour, apres, rid: r.id };
+});
+check('Republier : une réalisation à jour est marquée « en ligne »',
+  /● en ligne/.test(rappel.aJour.carte) && !/à republier/.test(rappel.aJour.carte),
+  JSON.stringify(rappel.aJour).slice(0, 160));
+check('Republier : une photo retouchée fait passer la carte à « à republier »',
+  /● à republier/.test(rappel.apres.carte) && rappel.apres.n === 1, rappel.apres.carte.slice(0, 90));
+check('Republier : le tableau de bord le rappelle, avec le nombre de photos',
+  /À republier sur le site \(1\)/.test(rappel.apres.dash) && /1 photo\(s\)/.test(rappel.apres.dash),
+  rappel.apres.dash.replace(/\s+/g, ' ').slice(0, 110));
+const rappelClic = await page.evaluate((rid) => {
+  gotoRealisation(rid);
+  return { vue: document.getElementById('realisations-view').style.display, ouverte: _rzOpenId === rid };
+}, rappel.rid);
+check('Republier : le rappel ouvre directement la bonne réalisation',
+  rappelClic.vue === 'block' && rappelClic.ouverte, JSON.stringify(rappelClic));
+
+// ============================================================================
 //  ÉDITEUR : annuler et rétablir
 // ============================================================================
 await page.setViewportSize({ width: 1280, height: 900 });

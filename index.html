@@ -3411,6 +3411,11 @@ function devisMenuMobile(){
   go('dv-composer',gotoComposer);
   go('dv-mes',gotoMesDevis);
 }
+function gotoRealisation(id){
+  _rzOpenId=id;
+  showView('realisations');
+  window.scrollTo(0,0);
+}
 function gotoClient(id){
   clientOpen[id]=true;
   showView('clients');
@@ -3796,20 +3801,24 @@ function computeTodos(){
   const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
   const brouillons=devisList.filter(d=>d.status==='brouillon').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
   const enAttente=devisList.filter(d=>d.status==='valide'&&(d.clientStatus||'attente')==='attente').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
-  return {relances,brouillons,enAttente};
+  /* Le site ne se met pas à jour tout seul : une réalisation retouchée reste en ligne dans
+     sa version précédente jusqu'à ce qu'on republie. Personne n'y pense — d'où ce rappel
+     là où l'on regarde en premier. */
+  const republier=(realisations||[]).map(r=>({r,n:realisationARepublier(r)})).filter(x=>x.n>0);
+  return {relances,brouillons,enAttente,republier};
 }
 function renderDashboard(){
   const kpiRoot=$('dash-kpi'),todoRoot=$('dash-todos');
   if(!kpiRoot||!todoRoot)return;
   renderTaskList();
-  const {relances,brouillons,enAttente}=computeTodos();
+  const {relances,brouillons,enAttente,republier}=computeTodos();
   const gt=globalTotals(clients);
   kpiRoot.innerHTML=`
     <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.montant)} ₪</div><div class="dash-kpi-lbl">Facturé (total)</div></div>
     <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.recu)} ₪</div><div class="dash-kpi-lbl">Reçu</div></div>
     <div class="dash-kpi-item"><div class="dash-kpi-val ${gt.reste>0?'due':'ok'}">${fmt(gt.reste)} ₪</div><div class="dash-kpi-lbl">Reste dû</div></div>
     <div class="dash-kpi-item"><div class="dash-kpi-val">${brouillons.length}</div><div class="dash-kpi-lbl">Devis en brouillon</div></div>`;
-  if(!relances.length&&!brouillons.length&&!enAttente.length){
+  if(!relances.length&&!brouillons.length&&!enAttente.length&&!republier.length){
     todoRoot.innerHTML=`<div class="empty">Rien à signaler pour l'instant — tout est à jour.</div>`;
     return;
   }
@@ -3821,6 +3830,10 @@ function renderDashboard(){
   if(enAttente.length){
     html+=`<div class="dash-sec-title">📨 Devis en attente de réponse (${enAttente.length})</div>`;
     html+=enAttente.map(d=>`<div class="dash-todo" onclick="editDevis('${d.id}')"><span class="dash-todo-main">${esc(clientName(d.clientId))} · ${esc(d.title||'Devis')}</span><span class="dash-todo-amt">${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</span></div>`).join('');
+  }
+  if(republier.length){
+    html+=`<div class="dash-sec-title">🖼 À republier sur le site (${republier.length})</div>`;
+    html+=republier.map(({r,n})=>`<div class="dash-todo" onclick="gotoRealisation('${r.id}')"><span class="dash-todo-main">${esc(r.title||'Réalisation sans titre')}</span><span class="dash-todo-amt due">${n} photo(s)</span></div>`).join('');
   }
   if(brouillons.length){
     html+=`<div class="dash-sec-title">📝 Devis à finaliser (${brouillons.length})</div>`;
@@ -4217,6 +4230,12 @@ function photoPubState(r,p){
   return 'enligne';
 }
 const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:''};
+/* Une réalisation en ligne dont une photo a bougé depuis. C'est LA chose qu'on oublie :
+   on retouche, on ajoute une photo, et le site garde l'ancienne version sans rien dire. */
+function realisationARepublier(r){
+  if(!r||!r.published)return 0;
+  return (r.photos||[]).filter(p=>photoPubState(r,p)!=='enligne').length;
+}
 const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée'};
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
@@ -4820,7 +4839,8 @@ function renderRealisationList(host){
     card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
       <div class="rz-cbody">
         <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
-        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.categorie?' · '+esc(r.categorie):''}${r.published?' · <span class="rz-live">● en ligne</span>':''}</div>
+        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.categorie?' · '+esc(r.categorie):''}${
+          r.published?(realisationARepublier(r)?' · <span class="rz-warn">● à republier</span>':' · <span class="rz-live">● en ligne</span>'):''}</div>
       </div>`;
     if(cover){
       const im=card.querySelector('img');
