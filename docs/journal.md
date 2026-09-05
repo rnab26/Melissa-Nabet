@@ -432,3 +432,26 @@ bas.
 
 Tout tient dans un seul bloc `@media (max-width:820px)` et un `<nav class="navbas">`.
 Supprimer le bloc rend exactement l'ancien comportement.
+
+---
+
+## 5 septembre 2026 — Annuler et rétablir dans l'éditeur photo
+
+**Branche** `claude/photo-annuler` → fusionnée sur `main`. **Chantier** `ph08` (moyenne).
+
+Boutons ↩ Annuler / ↪ Rétablir, désactivés quand il n'y a rien à faire, plus Ctrl+Z et
+Ctrl+Maj+Z sur ordinateur. Un nouveau réglage après un retour en arrière coupe la branche
+« rétablir », comme partout ailleurs.
+
+**Choix technique** : la pile garde des **états complets** de `photo.edit` (un objet
+minuscule : dix nombres) plutôt que des différences. Plus simple, et surtout ça ne peut pas
+dériver. Un état n'est empilé que lorsqu'un geste est **terminé** (curseur relâché), jamais à
+chaque mouvement — sinon quarante crans pour un seul glissement.
+
+**Ne pas casser** : le retour en arrière écrit **dans** l'objet `edit` existant
+(`Object.assign`) au lieu de le remplacer. L'éditeur, la vignette et la publication pointent
+tous sur cet objet ; le remplacer les laisserait sur un orphelin — c'est exactement le bug de
+corruption déjà rencontré sur les fiches client.
+
+**Vérification** : 8 contrôles, dont la coupure de branche et le raccourci clavier qui ne
+fait plus rien une fois l'éditeur fermé (l'écouteur est retiré à la fermeture).
