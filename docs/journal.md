@@ -293,3 +293,46 @@ La catégorie est un **type de lieu** (Appartement, Bureau…) et reste distinct
 mission** (Rénovation complète, Décoration…), déjà livré. Deux axes différents : on filtre
 par lieu, on décrit par mission. Fusionner les deux aurait donné un filtre incohérent
 (« Appartement » à côté de « Décoration »).
+
+---
+
+## 5 septembre 2026 — À propos, contact, et ce que le site dit de lui-même
+
+**Branche** `claude/site-contact` → fusionnée sur `main`, site déployé.
+**Chantier** `si04` (moyenne).
+
+**Livré** : un panneau « ⚙ Le site public » dans l'onglet Réalisations — sous-titre, texte
+« À propos », e-mail, téléphone/WhatsApp, Instagram. Sur le site, une section « À propos »
+en bas de page avec les liens correspondants (WhatsApp au format international, Instagram
+depuis un simple @nom).
+
+**Le point important** : **tout est vide, et le reste**. Je n'ai inventé aucun texte et
+recopié aucune coordonnée. Mettre une adresse ou un numéro sur une page publique est une
+décision qui appartient à Mélissa :
+
+- les coordonnées des devis ne sont **jamais** reprises automatiquement — un bouton le fait
+  en un geste, et c'est ce geste qui vaut accord ;
+- rien ne part en ligne tant qu'on n'a pas cliqué « Mettre à jour le site » ;
+- l'écran dit à chaque étape ce qui est en ligne et ce qui ne l'est pas ;
+- un champ vide ne s'affiche pas ; tout vide, la section n'existe pas.
+
+Corriger une faute dans le texte n'oblige pas à republier un chantier : la mise à jour ne
+touche que le bloc de présentation du manifeste.
+
+**Vérification** : 253 contrôles au navigateur (11 nouveaux), 49 sur le site (7 nouveaux),
+dont l'échec réseau qui doit dire que rien n'a changé en ligne.
+
+### À toi de décider (rien ne presse, rien n'est cassé en attendant)
+
+1. **Le texte « À propos »** : deux ou trois phrases sur Mélissa et sa façon de travailler.
+   Le champ est prêt, la page l'affichera dès qu'il sera rempli.
+2. **Les coordonnées publiques** : e-mail, numéro WhatsApp, Instagram. Le bouton « Reprendre
+   les coordonnées du devis » les recopie en un clic si vous voulez les mêmes.
+3. Rien d'autre. Aucun compte à créer, aucune clé, aucune dépense.
+
+### Note de sécurité, dite franchement
+
+L'adresse e-mail n'est pas écrite dans le HTML de la page : le lien est fabriqué au
+chargement à partir du manifeste. Ça décourage les robots collecteurs ordinaires. Ça ne rend
+pas l'adresse secrète pour autant — le manifeste est un fichier public. Si Mélissa ne veut
+pas exposer son e-mail du tout, laisser le champ vide et ne mettre que WhatsApp.

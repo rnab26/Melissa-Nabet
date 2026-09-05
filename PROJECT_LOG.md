@@ -702,3 +702,27 @@ adresse la couverture de la réalisation publiée à chaque publication.
 **Non fait, et pourquoi** : un aperçu *par projet* demanderait une page HTML par projet, donc
 un générateur qui republie le dépôt du site à chaque publication — un jeton GitHub à créer et
 à stocker. Écarté : une manip et un secret de plus pour un gain marginal.
+
+## Site vitrine — catégories, à propos, contact (septembre 2026)
+
+**État** : livré, déployé. Chantiers `si02` et `si04`.
+
+**Catégories** (`r.categorie`) : champ libre avec propositions (`RZ_CATS` + tout ce qui a
+déjà été tapé, via `rzCatsConnues()`). Publié dans le manifeste ; le site en fait un filtre
+qui se construit tout seul et disparaît sous deux catégories. Distinct du **type de
+mission** : on filtre par lieu, on décrit par mission.
+
+**Ce que le site dit de lui-même** (`library.site`, panneau « ⚙ Le site public ») :
+sous-titre, à propos, e-mail, téléphone, Instagram. `siteInfos()` n'écrit que les champs
+remplis ; `emptyManifest()` s'en sert, donc une publication de réalisation les rafraîchit
+aussi. `pushSiteInfos()` met à jour **le seul bloc `site` du manifeste** — corriger un texte
+n'oblige pas à republier un chantier.
+
+**Règle de conduite inscrite dans le code** : aucune coordonnée n'est recopiée depuis les
+devis sans un clic explicite, et rien n'est publié sans le bouton « Mettre à jour le site ».
+Publier un e-mail ou un numéro est une décision de l'utilisatrice, pas un défaut technique.
+Ne pas « simplifier » en synchronisant automatiquement avec `library.branding`.
+
+**Anti-collecte, sans mentir sur sa portée** : le lien `mailto:` est fabriqué au chargement,
+l'adresse n'est pas dans le HTML servi. Le manifeste, lui, est public : ce n'est pas un
+secret, c'est un ralentisseur.
