@@ -199,6 +199,11 @@
     .navbas{display:flex;}
     .viewnav{display:none;}
     #toolbar-plus{display:inline-block;padding:8px 14px;}
+    /* Aperçu d'un devis sur téléphone : la barre du haut cesse d'être collée. Un devis est
+       un document qu'on lit en entier — chaque bande gardée en haut est une bande de moins
+       pour le lire, et la navigation reste de toute façon en bas. Elle revient dès qu'on
+       remonte. */
+    body.devis-active.show-preview .toolbar{position:static;}
     /* Ces sélecteurs sont volontairement plus « forts » que ceux d'origine
        (`#split-toggle` seul, plus bas dans la feuille) : sans ça, la règle de la
        requête média à 900 px, écrite après, les réafficherait. Même raison pour

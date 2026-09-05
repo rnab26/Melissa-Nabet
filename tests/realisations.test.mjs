@@ -3342,6 +3342,22 @@ check('Menu téléphone : « Devis » propose Composer et Mes devis',
   menus.devis.length === 2 && /Composer/.test(menus.devis[0]), menus.devis.join(' | '));
 check('Menu téléphone : et le choix ouvre bien la vue devis', menus.vueDevis);
 
+// L'aperçu d'un devis se lit en entier : sur téléphone, la barre du haut ne doit pas
+// rester collée et manger une bande de document à chaque écran.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.evaluate(() => { showView('devis'); if (!document.body.classList.contains('show-preview')) toggleDevisTab(); });
+await page.waitForTimeout(500);
+const apercuDevis = await page.evaluate(() => {
+  const barre = getComputedStyle(document.querySelector('.toolbar')).position;
+  toggleDevisTab();   // retour au composeur
+  const enComposant = getComputedStyle(document.querySelector('.toolbar')).position;
+  return { barre, enComposant, nav: getComputedStyle(document.getElementById('navbas')).display };
+});
+check('Aperçu d’un devis sur téléphone : la barre du haut ne mange plus l’écran',
+  apercuDevis.barre === 'static', apercuDevis.barre);
+check('Aperçu : la barre redevient collée dès qu’on compose, et la navigation reste en bas',
+  apercuDevis.enComposant === 'sticky' && apercuDevis.nav === 'flex', JSON.stringify(apercuDevis));
+
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.evaluate(() => showView('realisations'));
 await page.waitForTimeout(300);
