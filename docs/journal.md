@@ -483,3 +483,39 @@ de tout emporter. Trouvé parce qu'un test a fabriqué un devis minimal — c'es
 genre de cas qu'un import mal terminé produit.
 
 **Vérification** : 300 contrôles au total, 0 échec.
+
+---
+
+## 5 septembre 2026 — Recherche globale
+
+**Branche** `claude/crm-recherche` → fusionnée sur `main`. **Chantier** `qu03` (moyenne).
+
+Un bouton 🔍 dans la barre du haut (Ctrl+K sur ordinateur) ouvre une fenêtre avec un seul
+champ, qui cherche **en même temps** dans les clients, les devis, les tâches et les
+réalisations — **jusque dans les légendes des photos**. Plusieurs mots : tous doivent être
+présents, dans n'importe quel ordre ; accents et majuscules ignorés. Résultats groupés par
+nature, huit par groupe, avec le compte exact. Entrée ouvre le premier.
+
+Ça couvre aussi une partie du chantier `cr04` (recherche dans les réalisations) : une
+réalisation se retrouve par son titre, son lieu, sa catégorie, sa mission, son texte ou la
+légende d'une de ses photos.
+
+**Au passage** : la barre du haut passe en `nowrap` sur téléphone — c'est le nom de l'atelier
+qui se raccourcit, pas la barre qui s'épaissit. Le bouton de recherche la faisait repasser à
+deux lignes, et n'importe quel libellé un peu plus long l'aurait refait.
+
+---
+
+## Observation, pas un chantier : ce qui est déjà public
+
+En parcourant l'aperçu d'un devis sur téléphone, j'ai revu ce qui y figure : adresse, numéro
+de téléphone, e-mail, numéro de licence et compte Instagram de Mélissa. C'est **normal** —
+ce sont les coordonnées professionnelles d'un devis. Mais elles sont **écrites en dur dans
+`index.html`**, qui est servi publiquement par GitHub Pages : elles sont donc déjà lisibles
+par n'importe qui, sans connexion.
+
+Ce n'est pas une fuite (ce sont des coordonnées professionnelles, faites pour être données à
+des clients) et **je n'ai rien changé**. Mais ça éclaire la décision du site vitrine : la
+question n'est pas « ces informations peuvent-elles devenir publiques », elles le sont — la
+question est de savoir si vous voulez qu'elles soient **mises en avant** sur la page publique.
+Le panneau « ⚙ Le site public » attend votre choix, il ne présume de rien.
