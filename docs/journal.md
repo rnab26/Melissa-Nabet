@@ -584,3 +584,40 @@ Mode **synchrone** : la session démarre un peu plus tard, mais rien ne peut tou
 les dépendances soient là. On peut passer en asynchrone si l'attente gêne.
 
 **Effet à partir de maintenant** : toute session ouverte sur `main` en bénéficie.
+
+---
+
+## 5 septembre 2026 — Cadrage au doigt
+
+**Branche** `claude/photo-recadrage-doigt` → fusionnée sur `main`. **Chantier** `ph07`.
+
+On tire la photo pour choisir ce que le cadre garde, au lieu de viser un curseur. Le
+déplacement se fait sur **l'axe qui a du jeu** (horizontal pour une photo paysage dans un
+carré, vertical pour une portrait) : le calcul de cadrage n'en laisse qu'un libre, proposer
+l'autre mentirait. En format libre, rien à déplacer, et la barre du haut annonce le geste
+réellement disponible.
+
+Le curseur « Position » **reste** : il donne la précision au pixel et fonctionne au clavier.
+Ce n'est pas une redondance — c'est la même valeur avec deux façons de la régler, comme les
+◀ ▶ à côté du glisser-déposer pour l'ordre des photos.
+
+**Ne pas casser** : trois gestes se partagent la photo et ne doivent jamais coexister —
+cadrage (onglet Cadrage, format imposé), comparateur avant/après (une version IA existe),
+appui long (voir l'original). `edPaintHint()` dit lequel est actif ; il est appelé à chaque
+changement d'onglet.
+
+**Vérification** : 6 contrôles, dont le sens du déplacement, les bornes, et le fait qu'un
+geste complet ne compte que pour un cran d'annulation.
+
+### Ce que je n'ai pas fait, et pourquoi — `ph14` (file d'attente fal.ai)
+
+Le pont appelle encore `fal.run` en mode synchrone. Je sais que la retouche en série rend ce
+chantier plus urgent, et j'ai commencé à l'écrire — puis j'ai arrêté. **Je ne peux pas le
+vérifier** : passer par la file demande d'observer les vraies réponses de fal (identifiant de
+requête, URL de statut, URL de résultat), et chaque essai coûte un appel facturé sur le
+compte de Mélissa. Livrer un chemin d'exécution non vérifié à la place d'un chemin qui
+fonctionne, c'est risquer de casser la seule fonction qui vient d'être mise en service.
+
+**Ce qu'il faut faire quand tu seras là** : lancer une retouche réelle en gardant les
+journaux Supabase ouverts, relever la forme exacte des réponses de `queue.fal.run`, et je
+branche la file dessus. En attendant : **rester en 2K**, ne pas passer en 4K.
