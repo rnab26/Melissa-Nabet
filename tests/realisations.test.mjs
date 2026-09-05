@@ -2955,6 +2955,48 @@ await page.evaluate(() => {
 });
 
 // ============================================================================
+//  FILTRE DE LA GRILLE DES RÉALISATIONS
+// ============================================================================
+const grille = await page.evaluate(async () => {
+  _rzOpenId = null; _rzFiltre = '';
+  const avant = realisations.length;
+  const lire = () => ({
+    filtres: [...document.querySelectorAll('.rz-filtre')].map(b => b.textContent),
+    cartes: [...document.querySelectorAll('.rz-ctitle')].map(t => t.textContent),
+    ajout: document.querySelectorAll('.rz-new').length,
+    vide: (document.querySelector('.rz-empty') || {}).textContent || '',
+  });
+  renderRealisations();
+  const peu = lire();                       // moins de 6 réalisations : pas de filtre
+  // on complète jusqu'au seuil, avec des réalisations sans photo
+  while (realisations.length < 7) realisations.push(normalizeRealisation({ title: 'Chantier ' + realisations.length, categorie: 'Bureau' }));
+  saveRealisations(); renderRealisations();
+  const assez = lire();
+  const bouton = t => [...document.querySelectorAll('.rz-filtre')].find(b => b.textContent.indexOf(t) === 0);
+  bouton('Pas publiées').click();
+  const nonPubliees = lire();
+  bouton('Bureau').click();
+  const parCat = lire();
+  bouton('Toutes').click();
+  const retour = lire();
+  realisations = realisations.slice(0, avant); saveRealisations(); renderRealisations();
+  return { peu, assez, nonPubliees, parCat, retour };
+});
+check('Grille : pas de filtre tant que la grille se parcourt à l’œil',
+  grille.peu.filtres.length === 0, grille.peu.filtres.join(' | '));
+check('Grille : au-delà du seuil, les filtres apparaissent avec leur décompte',
+  grille.assez.filtres.length >= 3 && /^Toutes \(7\)/.test(grille.assez.filtres[0]), grille.assez.filtres.join(' | '));
+check('Grille : filtrer sur « pas publiées » ne garde que celles-là',
+  grille.nonPubliees.cartes.length < grille.assez.cartes.length && grille.nonPubliees.cartes.length > 0,
+  grille.nonPubliees.cartes.length + ' sur ' + grille.assez.cartes.length);
+check('Grille : filtrer par catégorie fonctionne aussi',
+  grille.parCat.cartes.every(t => /Chantier/.test(t)), grille.parCat.cartes.join(' | '));
+check('Grille : « Nouvelle réalisation » disparaît pendant qu’un filtre est actif',
+  grille.parCat.ajout === 0 && grille.retour.ajout === 1);
+check('Grille : revenir à « Toutes » rend la liste entière',
+  grille.retour.cartes.length === grille.assez.cartes.length, grille.retour.cartes.length + ' carte(s)');
+
+// ============================================================================
 //  RECHERCHE GLOBALE
 // ============================================================================
 const rch = await page.evaluate(async () => {
