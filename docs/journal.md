@@ -261,3 +261,35 @@ réellement servis par un serveur.
   GitHub à créer et à confier au CRM. Non fait volontairement : ça demande une manip et un
   secret de plus. L'aperçu actuel (image du dernier projet publié) couvre le cas courant.
 - **Nom de domaine propre** (chantier `si06`) : achat à faire, ~12 €/an.
+
+---
+
+## 5 septembre 2026 — Catégories et filtre du site
+
+**Branche** `claude/site-categories` → fusionnée sur `main`, site déployé.
+**Chantier** `si02` (haute).
+
+**Livré** : un champ « Catégorie » dans la fiche d'une réalisation — **libre**, avec sept
+types de lieu proposés (Appartement, Maison, Bureau, Commerce, Restaurant, Hôtel, Espace
+commun) auxquels s'ajoutent automatiquement ceux déjà tapés ailleurs. Aucun panneau de
+réglages à ouvrir pour inventer une catégorie de plus : c'est un champ de texte avec des
+propositions.
+
+Sur le site, une **barre de filtres construite à partir de ce qui est publié** : décompte par
+catégorie, case active marquée, et rien du tout tant qu'il n'y a pas au moins deux
+catégories. Une catégorie qui disparaît du site disparaît du filtre — il n'y a aucune liste
+à tenir à jour nulle part.
+
+**Un piège évité, et testé** : ouvrir un projet depuis une liste filtrée doit ouvrir CE
+projet, pas celui du même rang dans la liste complète.
+
+**Vérification** : 242 contrôles au navigateur (5 nouveaux), 42 sur le site (6 nouveaux). Le
+banc d'essai du site passe à trois projets et deux catégories — un filtre ne veut rien dire
+en dessous.
+
+### Décision prise à ta place (dis-moi si elle ne te va pas)
+
+La catégorie est un **type de lieu** (Appartement, Bureau…) et reste distincte du **type de
+mission** (Rénovation complète, Décoration…), déjà livré. Deux axes différents : on filtre
+par lieu, on décrit par mission. Fusionner les deux aurait donné un filtre incohérent
+(« Appartement » à côté de « Décoration »).
