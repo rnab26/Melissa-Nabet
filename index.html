@@ -610,6 +610,12 @@
   .rz-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
   .rz-top h2{font-family:'Cormorant Garamond',serif;font-size:25px;font-weight:600;}
   .rz-intro{font-size:12.5px;color:var(--stone);margin:0 0 20px;max-width:70ch;line-height:1.55;}
+  .rz-filtres{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 14px;}
+  .rz-filtre{font-family:'Inter';font-size:11px;letter-spacing:.05em;padding:7px 12px;
+    border:1px solid var(--panel-edge);border-radius:999px;background:var(--panel);
+    color:var(--stone);cursor:pointer;}
+  .rz-filtre:hover{border-color:var(--stone-light);color:var(--ink);}
+  .rz-filtre.actif{background:var(--ink);border-color:var(--ink);color:var(--paper);}
   .rz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
   .rz-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;cursor:pointer;text-align:left;padding:0;font-family:'Inter';}
   .rz-card:hover{border-color:var(--oxblood);}
@@ -5149,6 +5155,9 @@ function renderRealisations(){
   if(_rzOpenId&&!findRealisation(_rzOpenId))_rzOpenId=null;
   if(!_rzOpenId&&_rzSelMode){_rzSelMode=false;_rzSel.clear();}
   if(!_rzOpenId)_rzOrderMode=false;
+  /* Un filtre qui ne montre plus rien (la dernière réalisation concernée vient d'être
+     publiée, par exemple) se rouvre tout seul : sinon l'écran semble vide sans raison. */
+  if(_rzFiltre&&(realisations||[]).length&&!realisations.some(rzFiltreTest))_rzFiltre='';
   host.innerHTML='';
   /* Le bandeau de reprise est posé AVANT la liste comme avant la fiche : une demande en
      attente peut porter sur n'importe quelle réalisation, pas seulement celle qui est
@@ -5159,9 +5168,41 @@ function renderRealisations(){
   else renderRealisationList(host);
   paintStorageBanner();
 }
+/* Filtre de la grille des réalisations. Il n'apparaît qu'à partir du moment où la grille
+   devient difficile à parcourir : en dessous, c'est un contrôle de plus pour rien. */
+const RZ_FILTRE_SEUIL=6;
+let _rzFiltre='';   /* '' | 'republier' | 'enligne' | 'brouillon' | 'cat:<catégorie>' */
+function rzFiltreTest(r){
+  if(!_rzFiltre)return true;
+  if(_rzFiltre==='republier')return realisationARepublier(r)>0;
+  if(_rzFiltre==='enligne')return !!r.published&&realisationARepublier(r)===0;
+  if(_rzFiltre==='brouillon')return !r.published;
+  if(_rzFiltre.startsWith('cat:'))return (r.categorie||'')===_rzFiltre.slice(4);
+  return true;
+}
+function buildRzFiltres(host){
+  if((realisations||[]).length<RZ_FILTRE_SEUIL)return;
+  const compte=f=>{const av=_rzFiltre;_rzFiltre=f;const n=realisations.filter(rzFiltreTest).length;_rzFiltre=av;return n;};
+  const cats=[...new Set(realisations.map(r=>(r.categorie||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  const choix=[{k:'',t:'Toutes'},{k:'republier',t:'À republier'},{k:'enligne',t:'En ligne'},{k:'brouillon',t:'Pas publiées'}]
+    .concat(cats.map(c=>({k:'cat:'+c,t:c})));
+  const bar=document.createElement('div');bar.className='rz-filtres';
+  choix.forEach(c=>{
+    const n=compte(c.k);
+    if(!n&&c.k)return;                 /* un filtre qui ne rapporte rien n'a pas à être proposé */
+    const b=document.createElement('button');b.type='button';b.className='rz-filtre'+(_rzFiltre===c.k?' actif':'');
+    b.setAttribute('aria-pressed',_rzFiltre===c.k?'true':'false');
+    b.textContent=c.t+' ('+n+')';
+    b.addEventListener('click',()=>{_rzFiltre=c.k;renderRealisations();});
+    bar.appendChild(b);
+  });
+  host.appendChild(bar);
+}
 function renderRealisationList(host){
+  buildRzFiltres(host);
   const grid=document.createElement('div');grid.className='rz-grid';
-  realisations.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).forEach(r=>{
+  const visibles=realisations.filter(rzFiltreTest).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  visibles.forEach(r=>{
     const card=document.createElement('button');card.className='rz-card';
     const cover=(r.cover&&(r.photos||[]).some(p=>p.id===r.cover))?r.cover:((r.photos||[])[0]||{}).id;
     card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
@@ -5178,14 +5219,20 @@ function renderRealisationList(host){
     card.addEventListener('click',()=>{_rzOpenId=r.id;renderRealisations();window.scrollTo(0,0);});
     grid.appendChild(card);
   });
-  const add=document.createElement('button');add.className='rz-new';
-  add.innerHTML='＋<br>Nouvelle réalisation';
-  add.addEventListener('click',newRealisation);
-  grid.appendChild(add);
+  if(!_rzFiltre){
+    const add=document.createElement('button');add.className='rz-new';
+    add.innerHTML='＋<br>Nouvelle réalisation';
+    add.addEventListener('click',newRealisation);
+    grid.appendChild(add);
+  }
   host.appendChild(grid);
   if(!realisations.length){
     const e=document.createElement('div');e.className='rz-empty';
     e.textContent='Aucune réalisation pour l’instant. Créez-en une par chantier terminé, puis ajoutez-y les photos à publier.';
+    host.appendChild(e);
+  } else if(!visibles.length){
+    const e=document.createElement('div');e.className='rz-empty';
+    e.textContent='Aucune réalisation dans ce filtre.';
     host.appendChild(e);
   }
 }
@@ -6464,7 +6511,14 @@ async function iaCall(payload){
     body:JSON.stringify(payload)
   });
   const data=await res.json().catch(()=>({error:'réponse illisible du serveur'}));
-  if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+  if(!res.ok||data.error){
+    /* Le serveur joint parfois des indications à son message (par exemple : cet échec est
+       un choix de configuration, pas une panne). Les perdre obligerait à analyser une
+       phrase française pour les retrouver. */
+    const err=new Error(data.error||('HTTP '+res.status));
+    err.data=data;
+    throw err;
+  }
   return data;
 }
 
@@ -6482,7 +6536,7 @@ async function iaLoadBalance(force){
     _iaBalance={balance:d.balance,currency:d.currency,username:d.username,at:Date.now()};
     return _iaBalance;
   }catch(e){
-    _iaBalance={err:(e&&e.message)||'erreur',at:Date.now()};
+    _iaBalance={err:(e&&e.message)||'erreur',adminManquante:!!(e&&e.data&&e.data.adminManquante),at:Date.now()};
     throw e;
   }
 }
@@ -7281,8 +7335,19 @@ function buildIaPanel(host){
       soldeVal.textContent=(b.balance==null?'—':(Math.round(b.balance*100)/100)+' '+(b.currency||''));
       solde.classList.toggle('bas',typeof b.balance==='number'&&b.balance<1);
     }catch(e){
-      /* Six lignes de gris sous le bouton principal pour une commodité d'affichage, ça
-         noyait le bouton. Une phrase, et le détail à la demande pour qui veut le lire. */
+      /* Aucune clé ADMIN configurée n'est PAS une panne : c'est un choix, et le solde n'est
+         qu'une commodité. Afficher « n/c » et une alerte à chaque ouverture de l'éditeur
+         pour une fonction volontairement désactivée, c'est du bruit permanent sous le
+         bouton principal. Dans ce cas précis, on se tait complètement. `_iaBalance` porte le
+         drapeau, y compris quand la réponse vient du cache. */
+      if(_iaBalance&&_iaBalance.adminManquante){
+        solde.style.display='none';warn.style.display='none';return;
+      }
+      solde.style.display='';
+      /* Toute autre panne — clé ADMIN présente mais refusée, expirée, réseau coupé — se dit.
+         Six lignes de gris noyaient le bouton : une phrase, et le détail à la demande. La
+         RAISON, elle, reste à l'écran : elle avait été mise dans une infobulle,
+         inatteignable au doigt, et le dépôt en a fait une règle. */
       soldeVal.textContent='n/c';
       warn.style.display='';
       warn.innerHTML='';

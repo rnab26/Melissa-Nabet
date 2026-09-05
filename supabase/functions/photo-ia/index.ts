@@ -373,7 +373,19 @@ Deno.serve(async (req) => {
     if (action === "ping") {
       return json({ ok: true, fal: !!Deno.env.get("FAL_KEY"), falAdmin: !!Deno.env.get("FAL_ADMIN_KEY") });
     }
-    if (action === "balance") return json(await getBalance());
+    if (action === "balance") {
+      /* Deux échecs très différents. « Aucune clé ADMIN configurée » n'est PAS une panne :
+         c'est un choix, et l'interface doit pouvoir se taire au lieu d'afficher une alerte
+         permanente. « Clé ADMIN refusée » est une vraie panne, à dire. Le drapeau distingue
+         les deux sans faire analyser une phrase française au navigateur. */
+      try {
+        return json(await getBalance());
+      } catch (e) {
+        const msg = String((e as Error).message);
+        const adminManquante = !Deno.env.get("FAL_ADMIN_KEY") && /ADMIN/.test(msg);
+        return json({ error: msg, adminManquante }, 502);
+      }
+    }
 
     if (action === "schema") {
       if (!body.model) return json({ error: "modèle manquant" }, 400);

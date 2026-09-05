@@ -865,3 +865,54 @@ branche la file dessus. En attendant : **rester en 2K**, ne pas passer en 4K.
 > Vérifié ainsi sur trois modèles. Ce qui reste non vérifié, et qui l'est dit : une exécution
 > réelle chez fal. Voir l'entrée « La retouche passe par la file d'attente de fal ».
 
+
+---
+
+## 5 septembre 2026 — Le site prend la forme d'un portfolio
+
+**Branche** `claude/site-mise-en-page` → fusionnée sur `main`. **Initiative** (hors tableau),
+prise en regardant ce que font les portfolios d'architectes et de photographes.
+
+- **Les photos verticales se mettent par deux**, les horizontales gardent la pleine largeur.
+  Une porte-fenêtre en portrait faisait deux mètres de haut sur un écran d'ordinateur et
+  cassait la lecture. Une seule colonne en dessous de 700 px. L'orientation vient des
+  dimensions déjà publiées dans le manifeste — rien à saisir.
+- **« Projet suivant »** en bas de chaque projet, et les flèches ← → du clavier. Un portfolio
+  se parcourt de projet en projet ; il fallait remonter à la liste à chaque fois. Le suivant
+  **respecte le filtre actif** : on reste dans la catégorie qu'on regarde.
+- **Images plus légères** : la page propose au navigateur les **deux tailles déjà publiées**
+  (700 px et 1600 px) et le laisse prendre la plus petite quand elle suffit. **Aucune image
+  supplémentaire n'est produite** — pas un octet de stockage en plus, ce qui compte vu la
+  jauge du plan gratuit.
+- **Fondu à l'arrivée** des images au lieu d'un saut ; la case tient la place avant, rien ne
+  bouge.
+- Les **filtres disparaissent** quand un projet est ouvert : ils appartiennent à la liste.
+
+**Vérification** : 60 contrôles sur le site (8 nouveaux), dont l'orientation reconnue, les
+deux colonnes, les deux tailles proposées, et le projet suivant au clic comme au clavier.
+
+### Ce que je n'ai PAS fait, et qui demanderait quelque chose de toi
+
+- **Une image d'aperçu par projet** dans WhatsApp : il faudrait une page HTML par projet,
+  donc un générateur qui republie le dépôt du site à chaque publication. Le jeton existe
+  désormais (l'autre session l'a mis en place pour la recopie) — c'est faisable, mais ça
+  change la nature du site et je préfère te le proposer plutôt que le décider.
+- **Une image intermédiaire (1000 px)** : elle ferait gagner encore du poids sur les
+  téléphones haute densité, mais coûterait +50 % de stockage par photo. Mauvais échange tant
+  que le plan gratuit est à 1 Go.
+
+---
+
+## 5 septembre 2026 — Filtres dans la grille des réalisations
+
+**Branche** `claude/crm-real-filtres` → fusionnée sur `main`. **Chantier** `cr04`, la partie
+qui restait après la recherche globale.
+
+Toutes / À republier / En ligne / Pas publiées, plus une case par catégorie, chacune avec son
+décompte. **Le filtre n'apparaît qu'à partir de six réalisations** : en dessous, la grille se
+parcourt à l'œil et un contrôle de plus ne sert à rien. Une case qui ne rapporterait rien
+n'est pas proposée. « Nouvelle réalisation » disparaît tant qu'un filtre est actif, et un
+filtre devenu vide se rouvre tout seul plutôt que de laisser un écran vide sans raison.
+
+**Note** : la suite de tests est passée à 393 contrôles — l'autre session travaille en
+parallèle sur le même fichier et y a ajouté les siens. Tout est vert.

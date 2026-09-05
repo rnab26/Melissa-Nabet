@@ -519,12 +519,17 @@ const falQueue = {
   },
 };
 
-let soldeKo = false; // pour rejouer le cas « le solde ne se lit pas »
+let soldeKo = false;        // panne réelle : une clé ADMIN est en place mais refusée
+let soldeSansAdmin = false; // choix assumé : aucune clé ADMIN n'est configurée
 await page.route('**/functions/v1/photo-ia', async (route) => {
   const body = JSON.parse(route.request().postData() || '{}');
   const auth = route.request().headers()['authorization'] || '';
   iaCalls.push({ body: { action: body.action, model: body.model, input: body.input, requestId: body.requestId, hasImage: !!body.imageDataUri, imgPrefix: (body.imageDataUri || '').slice(0, 11) }, auth });
   if (body.action === 'balance') {
+    if (soldeSansAdmin) {
+      await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: "aucune clé de portée ADMIN n'est configurée : la clé de retouche n'a pas le droit de lire la facturation (HTTP 403).", adminManquante: true }) });
+      return;
+    }
     if (soldeKo) {
       await route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({ error: "la clé fal.ai en place n'a pas le droit de lire la facturation (HTTP 403). Ce droit demande une clé de portée ADMIN ; la retouche, elle, fonctionne avec la clé actuelle." }) });
       return;
@@ -695,6 +700,29 @@ check('Échec du solde : la raison est lisible à l’écran, pas cachée dans u
   soldeEchec.visible && /ADMIN/.test(soldeEchec.texte) && /retouche/i.test(soldeEchec.texte),
   soldeEchec.texte.slice(0, 90));
 soldeKo = false;
+
+// --- SANS clé ADMIN, le solde n'est pas en panne : il est volontairement désactivé. Afficher
+//     « n/c » et une alerte à CHAQUE ouverture de l'éditeur, pour une fonction que l'on a
+//     choisi de ne pas activer, c'est du bruit permanent sous le bouton principal.
+soldeSansAdmin = true;
+const soldeMuet = await page.evaluate(async () => {
+  _iaBalance = null; buildEditorControls();
+  await new Promise(r => setTimeout(r, 700));
+  const w = document.querySelector('#ed-controls .ia-warn');
+  const s = document.querySelector('#ed-controls .ia-solde');
+  const go = document.querySelector('#ed-controls .ia-go');
+  return {
+    alerte: !!w && w.offsetParent !== null,
+    pastille: !!s && s.offsetParent !== null,
+    boutonUtilisable: !!go && !go.disabled,
+  };
+});
+check('Sans clé ADMIN, ni pastille de solde ni alerte : c’est un choix, pas une panne',
+  !soldeMuet.alerte && !soldeMuet.pastille, JSON.stringify(soldeMuet));
+check('Et la retouche reste utilisable : le solde n’a jamais été un pré-requis',
+  soldeMuet.boutonUtilisable, String(soldeMuet.boutonUtilisable));
+soldeSansAdmin = false;
+
 await page.evaluate(async () => { _iaBalance = null; buildEditorControls(); await new Promise(r => setTimeout(r, 700)); });
 
 // --- LES FENÊTRES OUVERTES DEPUIS L'ÉDITEUR DOIVENT ÊTRE AU-DESSUS DE LUI.
@@ -2988,6 +3016,48 @@ await page.evaluate(() => {
   realisations = realisations.filter(r => r.id !== realisations[realisations.length - 1].id || (r.photos || []).length);
   saveRealisations(); showView('realisations');
 });
+
+// ============================================================================
+//  FILTRE DE LA GRILLE DES RÉALISATIONS
+// ============================================================================
+const grille = await page.evaluate(async () => {
+  _rzOpenId = null; _rzFiltre = '';
+  const avant = realisations.length;
+  const lire = () => ({
+    filtres: [...document.querySelectorAll('.rz-filtre')].map(b => b.textContent),
+    cartes: [...document.querySelectorAll('.rz-ctitle')].map(t => t.textContent),
+    ajout: document.querySelectorAll('.rz-new').length,
+    vide: (document.querySelector('.rz-empty') || {}).textContent || '',
+  });
+  renderRealisations();
+  const peu = lire();                       // moins de 6 réalisations : pas de filtre
+  // on complète jusqu'au seuil, avec des réalisations sans photo
+  while (realisations.length < 7) realisations.push(normalizeRealisation({ title: 'Chantier ' + realisations.length, categorie: 'Bureau' }));
+  saveRealisations(); renderRealisations();
+  const assez = lire();
+  const bouton = t => [...document.querySelectorAll('.rz-filtre')].find(b => b.textContent.indexOf(t) === 0);
+  bouton('Pas publiées').click();
+  const nonPubliees = lire();
+  bouton('Bureau').click();
+  const parCat = lire();
+  bouton('Toutes').click();
+  const retour = lire();
+  realisations = realisations.slice(0, avant); saveRealisations(); renderRealisations();
+  return { peu, assez, nonPubliees, parCat, retour };
+});
+check('Grille : pas de filtre tant que la grille se parcourt à l’œil',
+  grille.peu.filtres.length === 0, grille.peu.filtres.join(' | '));
+check('Grille : au-delà du seuil, les filtres apparaissent avec leur décompte',
+  grille.assez.filtres.length >= 3 && /^Toutes \(7\)/.test(grille.assez.filtres[0]), grille.assez.filtres.join(' | '));
+check('Grille : filtrer sur « pas publiées » ne garde que celles-là',
+  grille.nonPubliees.cartes.length < grille.assez.cartes.length && grille.nonPubliees.cartes.length > 0,
+  grille.nonPubliees.cartes.length + ' sur ' + grille.assez.cartes.length);
+check('Grille : filtrer par catégorie fonctionne aussi',
+  grille.parCat.cartes.every(t => /Chantier/.test(t)), grille.parCat.cartes.join(' | '));
+check('Grille : « Nouvelle réalisation » disparaît pendant qu’un filtre est actif',
+  grille.parCat.ajout === 0 && grille.retour.ajout === 1);
+check('Grille : revenir à « Toutes » rend la liste entière',
+  grille.retour.cartes.length === grille.assez.cartes.length, grille.retour.cartes.length + ' carte(s)');
 
 // ============================================================================
 //  RECHERCHE GLOBALE
