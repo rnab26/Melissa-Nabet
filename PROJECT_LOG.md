@@ -957,6 +957,9 @@ un chiffre d'affichage. Fonction `photo-ia` déployée en **version 7**, vérifi
 elle refuse toujours les appels anonymes (HTTP 401).
 
 **Ne pas casser**
+- Le silence quand `adminManquante` est vrai ne doit JAMAIS s'étendre aux autres échecs :
+  une clé ADMIN refusée ou expirée est une vraie panne et doit rester signalée. Deux tests
+  gardent la frontière.
 - La **raison** d'un échec de solde doit rester lisible À L'ÉCRAN, pas derrière un geste.
   Elle avait été mise dans une infobulle, inatteignable au doigt ; un test l'impose
   (il exige les mots « ADMIN » et « retouche » dans le texte visible). Le mode d'emploi de
@@ -986,10 +989,18 @@ qui survit à une reconstruction du panneau, le coût annoncé avant l'envoi) et
 - [x] Coût et plafond annoncés avant l'envoi.
 - [x] Champs dynamiques par modèle — déjà en place, vérifié.
 - [x] Clé ADMIN séparée pour le solde, côté serveur, déployée.
-- [ ] **Manip utilisateur, non automatisable** : créer sur fal.ai une clé de portée ADMIN
-      (fal.ai → Keys → scope ADMIN) et la déposer dans Supabase → Edge Functions → Secrets
-      sous le nom `FAL_ADMIN_KEY`. Ne pas toucher à `FAL_KEY`. Rien à redéployer ensuite.
-      Tant que ce n'est pas fait, le solde affiche « n/c » — sans effet sur la retouche.
+- [x] ~~Créer une clé fal.ai de portée ADMIN pour afficher le solde~~ — **écarté par
+      Raphaël** le 05/09 : « je m'en fous, conserve la même clé ». C'est une décision, pas
+      un oubli : **ne pas la lui représenter**. Le code reste prêt (`FAL_ADMIN_KEY`, lue
+      séparément de `FAL_KEY`) si l'envie revient : créer la clé sur fal.ai → Keys en
+      portée ADMIN, la déposer dans Supabase → Edge Functions → Secrets sous ce nom, ne
+      pas toucher à `FAL_KEY`, rien à redéployer.
+- [x] Conséquence traitée : sans clé ADMIN, le panneau n'affiche **ni pastille de solde ni
+      alerte**. Afficher « n/c » en permanence pour une fonction volontairement désactivée
+      apprend à ignorer les alertes. Une clé ADMIN présente mais refusée reste, elle,
+      signalée — les deux cas sont distingués par un drapeau renvoyé par le pont
+      (`adminManquante`), pas par l'analyse d'une phrase française. Fonction `photo-ia`
+      déployée en version 8.
 - [ ] Suivi d'avancement pendant la génération : la file d'attente vient d'être livrée par
       une autre session (état sur le bouton, annulation possible, reprise à la réouverture).
       Raphaël demandait « vérifier qu'il y a bien les chargements de l'action » — à
