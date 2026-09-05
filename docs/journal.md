@@ -15,25 +15,27 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 point est plus bas, dans l'ordre chronologique.)*
 
 **Tout est en ligne et vérifié.** CRM et site public déployés, CI verte.
-**308 contrôles au navigateur, 52 sur le site public, 8 sur le pont IA — 0 échec.**
+**393 contrôles au navigateur, 65 sur le site public, 8 sur le pont IA — 0 échec.**
+*(Deux sessions ont travaillé en parallèle sur ce dépôt ; la suite de tests est commune.)*
 
 ## Ce qui a changé, par ordre d'importance pour toi
 
 | | Ce que tu pourras faire à l'ouverture |
 |---|---|
-| **Galerie** | Ranger les photos (glisser-déposer à la souris, ◀ ▶ au doigt), les **renommer et les légender**, **remplacer** une photo sans perdre sa place, voir la **progression d'un import** et la raison exacte de chaque fichier refusé (HEIC d'iPhone compris). Menu ⋯ par vignette, ◀ ▶ dans l'éditeur. |
+| **Galerie** | Ranger les photos (glisser-déposer à la souris, ◀ ▶ au doigt), les **renommer et les légender**, **remplacer** une photo sans perdre sa place, voir la **progression d'un import** et la raison exacte de chaque fichier refusé (HEIC d'iPhone compris). Menu ⋯ par vignette, ◀ ▶ dans l'éditeur, et des **filtres dans la grille** au-delà de six chantiers. |
 | **Retouche IA** | Une consigne, **toute la série** : coût annoncé avant, plafond qui bloque, interruption possible, bilan des échecs. **Plusieurs versions par photo** : chaque retouche s'ajoute au lieu d'écraser, et on choisit à partir de laquelle on relance. |
-| **Éditeur** | **Annuler / Rétablir** (et Ctrl+Z). |
-| **Site public** | Fiche de projet avec **lieu, surface, mission, texte de présentation** ; **filtre par catégorie** ; **section À propos et contact** (vide, elle t'attend) ; **aperçu correct quand on partage le lien** sur WhatsApp ; balayage au doigt en plein écran. |
-| **Téléphone** | Le menu principal passe **en bas**, la barre du haut ne fait plus qu'une ligne : ~115 px d'écran regagnés. |
+| **Éditeur** | **Annuler / Rétablir** (et Ctrl+Z), et le **cadrage se fait au doigt** — on tire la photo au lieu de viser un curseur. |
+| **Site public** | Fiche de projet avec **lieu, surface, mission, texte de présentation** ; **filtre par catégorie** ; **photos verticales par deux** comme dans un vrai portfolio ; **« Projet suivant »** (et flèches du clavier) ; **section À propos et contact** (vide, elle t'attend) ; **aperçu correct quand on partage le lien** sur WhatsApp ; balayage au doigt et plein écran pilotable au clavier ; images plus légères sur téléphone. |
+| **Téléphone** | Le menu principal passe **en bas**, la barre du haut ne fait plus qu'une ligne : ~115 px d'écran regagnés. Vérifié écran par écran : rien ne passe sous la barre. |
 | **Sécurité des données** | **Sauvegarde complète (.zip)** avec les photos en pleine définition, et le **retour en arrière** qui les remet en place. **Alerte** quand le stockage se remplit. |
-| **Au quotidien** | **Recherche globale** (Ctrl+K) sur tout le CRM, jusque dans les légendes. Rappel **« à republier »** sur le tableau de bord. Clients ↔ réalisations ↔ devis enfin **reliés dans les deux sens**. |
+| **Au quotidien** | **Recherche globale** (Ctrl+K) sur tout le CRM, jusque dans les légendes. Rappel **« à republier »** sur le tableau de bord. Clients ↔ réalisations ↔ devis enfin **reliés dans les deux sens**. Une session Claude qui démarre **charge l'état du projet toute seule**. |
 
 ## Ce qui t'attend, et rien d'autre
 
 1. **Écrire le texte « À propos »** et choisir les coordonnées publiques du site
    (onglet Réalisations → « ⚙ Le site public »). Livré **vide** : je n'invente pas de
-   contenu à la place de Mélissa.
+   contenu à la place de Mélissa. Tant que c'est vide, ni la section « À propos », ni
+   l'invitation à écrire en bas de chaque projet n'existent.
 2. **Juger le texte produit par « ✨ Rédiger un texte »** sur une vraie réalisation :
    il faut une session connectée, je n'ai pas pu le voir.
 3. **Regarder la nouvelle navigation du téléphone** et me dire si elle te va. Tout tient
