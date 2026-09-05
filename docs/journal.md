@@ -22,7 +22,7 @@ point est plus bas, dans l'ordre chronologique.)*
 | | Ce que tu pourras faire à l'ouverture |
 |---|---|
 | **Galerie** | Ranger les photos (glisser-déposer à la souris, ◀ ▶ au doigt), les **renommer et les légender**, **remplacer** une photo sans perdre sa place, voir la **progression d'un import** et la raison exacte de chaque fichier refusé (HEIC d'iPhone compris). Menu ⋯ par vignette, ◀ ▶ dans l'éditeur. |
-| **Retouche IA** | Une consigne, **toute la série** : coût annoncé avant, plafond qui bloque, interruption possible, bilan des échecs. |
+| **Retouche IA** | Une consigne, **toute la série** : coût annoncé avant, plafond qui bloque, interruption possible, bilan des échecs. **Plusieurs versions par photo** : chaque retouche s'ajoute au lieu d'écraser, et on choisit à partir de laquelle on relance. |
 | **Éditeur** | **Annuler / Rétablir** (et Ctrl+Z). |
 | **Site public** | Fiche de projet avec **lieu, surface, mission, texte de présentation** ; **filtre par catégorie** ; **section À propos et contact** (vide, elle t'attend) ; **aperçu correct quand on partage le lien** sur WhatsApp ; balayage au doigt en plein écran. |
 | **Téléphone** | Le menu principal passe **en bas**, la barre du haut ne fait plus qu'une ligne : ~115 px d'écran regagnés. |
@@ -49,6 +49,70 @@ point est plus bas, dans l'ordre chronologique.)*
   modèle en 1600 px et le site publie en 1600 px : le 4K coûterait le double pour rien.
 - Une **autre session** a automatisé la recopie du site vitrine vers son dépôt
   (`.github/workflows/sync-site-vitrine.yml`). Ne plus recopier à la main.
+
+---
+
+## 5 septembre 2026 — Plusieurs versions par photo, et le choix de ce qu'on retouche
+
+**Branche** `claude/photo-versions` → fusionnée sur `main`. **Chantier** `ph17`.
+
+**Signalé par Raphaël** : « quand je fais une modification de photo, je n'ai pas le choix de
+réutiliser l'ancienne photo… ce serait pratique de pouvoir modifier vraiment n'importe
+quelle photo qu'on veut et accéder sur la même photo. »
+
+**Ce qui n'allait pas.** Une photo n'avait que deux états : l'originale et UNE retouche.
+Relancer une retouche écrasait la précédente — sans avertissement, et pour un appel facturé.
+Et l'envoi repartait **toujours** de l'originale : impossible d'affiner un résultat en
+repartant de lui.
+
+### Ce qui est livré
+
+- **Une pile de versions par photo.** Chaque retouche s'ajoute au lieu d'écraser. Celle qui
+  est choisie s'affiche, s'exporte et part sur le site ; les autres restent à un geste.
+- **« À partir de »**, juste au-dessus du bouton d'envoi : l'originale ou n'importe quelle
+  version. **Par défaut, celle qu'on regarde** — on retouche ce qu'on voit. L'écran dit ce
+  qu'implique de repartir d'une image déjà redessinée.
+- **La pile est cliquable** : l'originale et chaque retouche, avec le modèle, la version dont
+  elle sort, la date et la consigne. **Renommer** (« Retouche 2 » ne veut plus rien dire au
+  bout de trois jours) et **supprimer**, avec une confirmation qui rappelle que l'image a été
+  payée.
+- **Chaque version garde ses propres réglages** (verticales, lumière, cadrage) : ils suivent
+  la version, ils ne la traversent pas.
+- **Le comparateur** met en face la version dont sort celle qu'on regarde, pas l'originale
+  par principe.
+- **La série** propose le même choix, mais repart de l'originale **par défaut** : enchaîner
+  vingt photos sur des sorties déjà redessinées ferait dériver toute la série sans que ça se
+  voie.
+- **Les retouches déjà faites sont conservées** : elles deviennent la version 1 et gardent
+  leur clé de stockage. Rien à refaire, rien à repayer.
+
+**Vérification** : `tests/realisations.test.mjs` → **376 contrôles, 0 échec** (31 nouveaux) ;
+`tests/pont-ia.test.mjs` → 20 ; `tests/site.test.mjs` → 52. Pont intercepté, **aucun crédit
+dépensé**. Parcours réel en 390 px sur la pile de versions.
+
+### Ce qu'il ne faut pas casser
+
+- `iaStoreResult` reste **le seul endroit qui pose un résultat** (photo seule, série,
+  reprise). Elle empile une version, elle n'en remplace jamais une.
+- `photoAllKeys(p)` est **la** liste des images d'une photo : tout chemin qui supprime une
+  photo doit passer par elle, sinon des images payées resteront dans le seau sans plus rien
+  pour les nommer.
+- L'archive de sauvegarde emporte **toutes** les versions, et son index porte la clé réelle.
+  Les archives faites avant retombent sur l'ancienne règle : ne pas retirer ce repli.
+- Supprimer une version **rattache ses descendantes à sa propre origine**, sinon leur champ
+  `from` désignerait une version disparue.
+- Le panneau porte deux listes déroulantes : celle des modèles s'attrape par `.ia-model-sel`.
+
+### Ce qui reste ouvert
+
+Rien ne limite le nombre de versions. À ~1 Mo l'image, cinq essais sur vingt photos font
+100 Mo sur un plan de 1 Go — c'est l'alerte de saturation (`fi01`) qui préviendra. Aucun
+ménage automatique : supprimer sans qu'on le demande une image déjà payée serait pire que le
+problème.
+
+### À faire côté Raphaël
+
+**Rien.** En ligne après le déploiement Pages.
 
 ---
 

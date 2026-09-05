@@ -395,8 +395,11 @@ Réponse : `{images:[{url}]}`, où `url` est un data URI quand `sync_mode` est v
   laisserait passer n'importe qui. Le contrôle réel est dans `requireUser`. Ne pas
   « corriger » en réactivant verify_jwt en croyant renforcer la sécurité — ce serait
   l'affaiblir.
-- Le résultat IA est stocké sous la clé `ra_<id>`, **à côté** de l'original (`rp_<id>`),
-  jamais à sa place. `photo.useIa` décide de la version affichée, exportée et publiée.
+- Le résultat IA est stocké **à côté** de l'original (`rp_<id>`), jamais à sa place.
+  Depuis septembre 2026, une photo porte une PILE de versions et non plus une seule : chaque
+  retouche a sa propre clé (`ra_<id>` pour la première, `ra_<id>_<version>` pour les
+  suivantes) et `photo.active` décide de celle qui est affichée, exportée et publiée.
+  Voir « Plusieurs versions par photo » plus bas.
 - L'envoi au modèle part **toujours** de l'original (`loadPhotoImage(..., {original:true})`)
   avec les corrections géométriques et de lumière appliquées — jamais d'une sortie IA
   réinjectée dans l'IA, qui dériverait à chaque passage.
@@ -614,7 +617,8 @@ les garde-fous de coût et l'interface.
 
 - **`iaStoreResult(r,photo,data,consigne,modelId)`** : la pose du résultat sur une photo est
   désormais écrite une seule fois, partagée par `applyIaToPhoto` (photo seule) et
-  `runIaSerie`. C'est la règle qui décide `photo.ia`, `editOrig`/`editIa`, `useIa` et
+  `runIaSerie` (et, depuis, la reprise d'une demande en file). C'est la règle qui décide la
+  version posée, ses réglages, la version active et
   l'historique — deux copies auraient dérivé en silence.
 - **Le coût est annoncé avant, pas après.** `iaSerieCandidats` + le récapitulatif donnent le
   nombre d'appels, le coût estimé (`coutUnitaire` des réglages) et le cumul du mois. Si le
@@ -720,6 +724,78 @@ de l'argent.
 **Reste ouvert** : la série est toujours séquentielle (la file permettrait de tout déposer
 d'un coup, mais ça change le sens du plafond et de l'interruption) ; pas de webhook (le CRM
 est une page statique, sans adresse publique où recevoir le résultat).
+
+## Plusieurs versions par photo, et le choix de ce qu'on retouche (septembre 2026)
+
+**État** : livré, testé, déployé. Chantier `ph17`.
+
+**Ce qui n'allait pas**, signalé par l'utilisateur : une photo n'avait que deux états —
+l'originale et UNE retouche. Relancer une retouche écrasait la précédente sans qu'on puisse
+comparer, et l'envoi repartait **toujours** de l'originale. Impossible donc de garder deux
+essais, ni d'affiner un résultat en repartant de lui.
+
+**Le modèle de données** — une seule source de vérité par photo :
+
+```
+p.versions = [{id, key, model, prompt, params, from, createdAt, label}]
+p.active   = 'orig' | <id de version>     celle qui s'affiche, s'exporte et se publie
+p.edits    = {orig:{…}, <id>:{…}}          chaque version garde SES réglages manuels
+p.edit     = la copie vivante des réglages de la version active
+```
+
+`key` est rangée **dans** la version : la toute première garde `ra_<photo>`, la clé de
+l'ancien format. Les retouches déjà payées restent donc lisibles sans qu'on recopie un seul
+octet. Les suivantes prennent `ra_<photo>_<version>`.
+
+`migratePhotoVersions` fait la conversion au chargement (`normalizeRealisation`) et retire
+`ia` / `useIa` / `editOrig` / `editIa` — deux formats qui cohabitent finissent toujours par
+diverger.
+
+**Ce qui change à l'usage**
+
+- Une retouche **s'ajoute**, elle n'écrase plus. La dernière produite devient celle qui est
+  affichée ; les autres restent à un geste.
+- **« À partir de »** dans le panneau : l'originale ou n'importe quelle version. Par défaut,
+  celle qu'on regarde — on retouche ce qu'on voit. Une note dit ce que ça implique de
+  repartir d'une image déjà redessinée.
+- Pile de versions cliquable, avec le modèle, la version dont elle sort, la date et la
+  consigne. **Renommer** et **supprimer** (la confirmation dit que l'image est payée).
+- La **série** propose le même choix, mais repart de l'originale **par défaut** : enchaîner
+  vingt photos sur des sorties déjà redessinées ferait dériver toute la série sans que ça se
+  voie.
+- Le **comparateur** met en face la version dont sort celle qu'on regarde, pas l'originale
+  par principe : comparer la deuxième retouche à l'originale ne dit rien du dernier envoi.
+
+**Ne pas casser**
+
+- **`iaStoreResult` reste le seul endroit qui pose un résultat** — la photo seule, la série
+  et la reprise passent par elle. Elle empile une version, elle n'en remplace jamais une.
+- **`photoAllKeys(p)`** est la liste des images d'une photo. Suppression de photo, de
+  réalisation, de sélection et remplacement s'en servent : un nouveau chemin qui supprime une
+  photo doit l'utiliser, sinon des images payées resteront dans le seau sans plus rien pour
+  les nommer.
+- **L'archive de sauvegarde emporte TOUTES les versions**, et son index porte désormais la
+  clé réelle (`cle`). Les archives faites avant retombent sur l'ancienne règle (une seule
+  retouche) : ne pas retirer ce repli.
+- **Supprimer une version rattache ses descendantes à sa propre origine** : sans ça, leur
+  champ `from` désignerait une version disparue.
+- Le panneau porte maintenant **deux listes déroulantes** (le point de départ, puis le
+  modèle). La liste des modèles porte `ia-model-sel` — un `querySelector('select')` nu
+  attrape la mauvaise.
+- La pile de versions est posée **avant** la carte du modèle (`insertBefore`) : dès qu'une
+  photo a plusieurs versions, c'est elle qu'on vient regarder.
+
+**Vérification** : `tests/realisations.test.mjs` **376 contrôles** (31 ajoutés ici), dont la
+migration de l'ancien format sans recopie d'image, deux retouches qui coexistent avec deux
+fichiers distincts, le point de départ réellement respecté (l'image envoyée n'est pas la même
+selon la version choisie), les réglages qui suivent leur version, le comparateur en chaîne,
+le renommage, la suppression et le rattachement des descendantes. Pont intercepté : aucun
+crédit dépensé. Parcours réel en 390 px sur la pile de versions.
+
+**Reste ouvert** : rien ne limite le nombre de versions. À une image d'environ 1 Mo, cinq
+essais sur vingt photos font 100 Mo sur un plan de 1 Go — c'est l'alerte de saturation
+(`fi01`) qui le dira. Un ménage automatique n'a pas été mis : supprimer sans qu'on le demande
+une image qui a été payée serait pire que le problème.
 
 ## Stockage — alerte de saturation (septembre 2026)
 

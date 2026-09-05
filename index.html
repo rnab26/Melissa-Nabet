@@ -798,6 +798,17 @@
   .ia-sub{margin:9px 0 0;font-size:11.5px;color:var(--stone-light);line-height:1.5;text-align:center;}
   .ia-state p{margin:0;font-size:12.5px;}
   .ia-prompt-echo{color:var(--stone);font-style:italic;margin-top:4px!important;}
+  /* La pile de versions : des pastilles qui passent à la ligne. Sur un téléphone, une barre
+     qui défile horizontalement cache ce qu'elle contient — on préfère qu'elles s'empilent. */
+  .ia-vers{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px;}
+  .ia-ver{border:1px solid var(--panel-edge);background:var(--travertine);color:var(--stone-deep);
+    border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:.15s;}
+  .ia-ver:hover{border-color:var(--stone-light);}
+  .ia-ver.on{background:var(--oxblood);border-color:var(--oxblood);color:#fff;cursor:default;}
+  .ia-ver-meta{color:var(--stone);font-size:11.5px!important;line-height:1.5;}
+  .ia-src{margin-top:10px;}
+  .ia-src .lbl{font-size:11px;}
   /* Solde : une pastille discrète dans l'en-tête de carte, pas un bandeau. L'information est
      utile, elle n'est pas le sujet. */
   .ia-solde{display:inline-flex;align-items:center;gap:6px;background:var(--travertine);
@@ -4029,7 +4040,7 @@ function openBackupPanel(){
       +realisations.map(r=>'<option value="'+r.id+'">'+esc(r.title||'Réalisation sans titre')+' ('+((r.photos||[]).length)+' photo(s))</option>').join('');
     const majTaille=()=>{
       const liste=sel.value?realisations.filter(r=>r.id===sel.value):realisations;
-      const n=liste.reduce((a,r)=>a+(r.photos||[]).length+((r.photos||[]).filter(p=>p.ia).length),0);
+      const n=liste.reduce((a,r)=>a+(r.photos||[]).reduce((b,p)=>b+1+photoVersions(p).length,0),0);
       const st=_storageStat;
       const moyen=(st&&st.files>3)?(st.bytes/st.files):1200000;
       $('bk-taille').textContent=n?('Environ '+moLisible(n*moyen)+' à télécharger ('+n+' fichier(s)). Sur téléphone, préférez une réalisation à la fois si l’archive dépasse quelques centaines de Mo.')
@@ -4086,7 +4097,11 @@ async function exportComplet(rid){
       const titre=(p.name||'photo').replace(/\.[a-z0-9]{2,5}$/i,'');
       const base='photos/'+slugify(r.title||'realisation')+'/'+String(i+1).padStart(2,'0')+'-'+slugify(titre);
       taches.push({key:fullKey(p.id),name:base+'.jpg',rid:r.id,pid:p.id,type:'original'});
-      if(p.ia)taches.push({key:iaKey(p.id),name:base+'-ia.jpg',rid:r.id,pid:p.id,type:'ia'});
+      /* Chaque retouche part dans l'archive, pas seulement celle qui est affichée : ce sont
+         autant d'images payées, et l'archive est le seul endroit d'où on peut les reprendre. */
+      photoVersions(p).forEach((v,k)=>{
+        taches.push({key:v.key,name:base+'-ia'+(k?String(k+1):'')+'.jpg',rid:r.id,pid:p.id,type:'ia'});
+      });
     });
   });
   _bkStop=false;
@@ -4103,7 +4118,7 @@ async function exportComplet(rid){
       const blob=await photoStore.get(t.key);
       if(!blob){absents.push(t.name);continue;}
       entries.push({name:t.name,bytes:new Uint8Array(await blob.arrayBuffer())});
-      index.push({fichier:t.name,realisation:t.rid,photo:t.pid,type:t.type});
+      index.push({fichier:t.name,realisation:t.rid,photo:t.pid,type:t.type,cle:t.key});
       await new Promise(res=>setTimeout(res,0)); /* laisse l'écran respirer sur téléphone */
     }
     if(_bkStop){bkDire('Sauvegarde interrompue : aucun fichier n’a été téléchargé.');return;}
@@ -4188,7 +4203,10 @@ async function importComplet(file){
         const bytes=fichiers.get(e.fichier);
         if(!bytes){rates.push(e.fichier);continue;}
         try{
-          await photoStore.save(e.type==='ia'?iaKey(e.photo):fullKey(e.photo),new Blob([bytes],{type:'image/jpeg'}));
+          /* `cle` n'existe pas dans les archives faites avant les versions multiples :
+             on retombe alors sur l'ancienne règle, une seule retouche par photo. */
+          const cible=e.cle||(e.type==='ia'?iaKey(e.photo):fullKey(e.photo));
+          await photoStore.save(cible,new Blob([bytes],{type:'image/jpeg'}));
           ok++;
         }catch(err){rates.push(e.fichier);}
       }
@@ -4400,7 +4418,8 @@ function normalizeRealisation(r){
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
-  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',caption:'',w:0,h:0,useIa:false,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
+  o.photos=(o.photos||[]).map(p=>migratePhotoVersions(
+    Object.assign({id:uid(),name:'',caption:'',w:0,h:0,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)})));
   return o;
 }
 function ensureRealisations(){if(!Array.isArray(realisations))realisations=[];}
@@ -4412,6 +4431,110 @@ function findPhoto(pid){
   for(const r of realisations){const p=(r.photos||[]).find(x=>x.id===pid);if(p)return p;}
   return null;
 }
+/* ============ LES VERSIONS D'UNE PHOTO ============
+
+   Une photo n'a plus deux états (l'originale et UNE retouche, avec une bascule) mais une
+   PILE : l'originale, puis chaque retouche produite, dans l'ordre. Une seule est ACTIVE —
+   c'est elle qui s'affiche, s'exporte et part sur le site.
+
+   Pourquoi ce changement : avec un seul emplacement, relancer une retouche écrasait la
+   précédente sans qu'on puisse comparer, et l'envoi repartait toujours de l'originale. On
+   ne pouvait donc ni garder deux essais, ni enchaîner une retouche sur une autre.
+
+     p.versions = [{id, key, model, prompt, params, from, createdAt, label}]
+     p.active   = 'orig' | <id de version>
+     p.edits    = {orig:{…}, <id>:{…}}   chaque version garde SES réglages manuels
+     p.edit     = la copie vivante des réglages de la version active
+
+   `key` est rangée DANS la version : la toute première garde `ra_<photo>`, la clé de
+   l'ancien format, pour que les retouches déjà en ligne restent lisibles sans rien
+   recopier. Les suivantes prennent `ra_<photo>_<version>`. */
+
+function photoVersions(p){if(!Array.isArray(p.versions))p.versions=[];return p.versions;}
+function photoVersion(p,vid){return photoVersions(p).find(v=>v.id===vid)||null;}
+/* L'identifiant actif, toujours valide : une version supprimée ailleurs (autre onglet,
+   synchronisation) ne doit pas laisser la photo pointer sur du vide. */
+function photoActiveId(p){
+  const a=p.active||'orig';
+  return (a==='orig'||photoVersion(p,a))?a:'orig';
+}
+function photoVersionKey(p,vid,thumb){
+  if(!vid||vid==='orig')return thumb?thumbKey(p.id):fullKey(p.id);
+  const v=photoVersion(p,vid);
+  /* Une retouche n'a pas de vignette à part : son image sert pour les deux. */
+  return v?v.key:(thumb?thumbKey(p.id):fullKey(p.id));
+}
+function photoVersionLabel(p,vid){
+  if(!vid||vid==='orig')return 'Photo d’origine';
+  const v=photoVersion(p,vid);
+  if(!v)return 'version supprimée';
+  return v.label||('Retouche '+(photoVersions(p).indexOf(v)+1));
+}
+function photoEditOf(p,vid){
+  if(vid===photoActiveId(p))return p.edit||blankEdit();
+  return (p.edits||{})[vid]||blankEdit();
+}
+/* Changer de version affichée. Les réglages manuels suivent la version, ils ne la
+   traversent pas : ce qui a été redressé sur l'originale n'a rien à faire sur une retouche
+   où le modèle a déjà redressé. */
+function photoSetActive(p,vid){
+  const clone=e=>JSON.parse(JSON.stringify(e||blankEdit()));
+  const cur=photoActiveId(p);
+  vid=(vid==='orig'||photoVersion(p,vid))?vid:'orig';
+  if(vid===cur)return false;
+  if(!p.edits)p.edits={};
+  p.edits[cur]=clone(p.edit);
+  p.active=vid;
+  p.edit=clone(p.edits[vid]);
+  /* C'est cette version-là qui partira à l'export et sur le site : la photo n'est donc plus
+     à jour vis-à-vis de ce qui est publié. */
+  photoTouch(p,'version',photoVersionLabel(p,vid));
+  return true;
+}
+/* Supprime une version et son image. Les retouches qui en descendaient se rattachent à ce
+   dont ELLE descendait : sinon leur origine désignerait une version disparue. */
+async function photoDeleteVersion(p,vid){
+  const v=photoVersion(p,vid);if(!v)return false;
+  const nom=photoVersionLabel(p,vid);
+  const repli=(v.from&&(v.from==='orig'||photoVersion(p,v.from)))?v.from:'orig';
+  try{await photoStore.del(v.key);}catch(e){console.error('suppression version',e);}
+  _imgCache.delete(v.key);
+  photoVersions(p).forEach(x=>{if(x.from===vid)x.from=repli;});
+  p.versions=photoVersions(p).filter(x=>x.id!==vid);
+  if(p.edits)delete p.edits[vid];
+  if(photoActiveId(p)===vid||p.active===vid){
+    p.active=repli;
+    p.edit=JSON.parse(JSON.stringify((p.edits||{})[repli]||blankEdit()));
+  }
+  photoTouch(p,'iasuppr',nom);
+  return true;
+}
+/* Toutes les clés d'images d'une photo — l'originale, sa vignette et chaque retouche. Un
+   seul endroit à tenir : suppression, remplacement, sauvegarde et comptage s'en servent. */
+function photoAllKeys(p){
+  return [fullKey(p.id),thumbKey(p.id)].concat(photoVersions(p).map(v=>v.key));
+}
+/* Ancien format → nouveau. Faite au chargement, sur place, sans rien recopier dans le
+   stockage : l'unique retouche existante devient la version 1 et garde sa clé. */
+function migratePhotoVersions(p){
+  if(Array.isArray(p.versions)&&p.edits)return p;
+  const clone=e=>JSON.parse(JSON.stringify(e||blankEdit()));
+  if(!Array.isArray(p.versions))p.versions=[];
+  if(!p.edits){
+    const avaitIa=!!p.ia, actif=!!(p.ia&&p.useIa);
+    p.edits={orig:clone(actif?p.editOrig:p.edit)};
+    if(avaitIa){
+      const v={id:'v1',key:iaKey(p.id),model:p.ia.model||'',prompt:p.ia.prompt||'',
+        params:p.ia.params||{},from:'orig',createdAt:p.ia.createdAt||Date.now(),label:''};
+      p.versions.push(v);
+      p.edits[v.id]=clone(actif?p.edit:p.editIa);
+    }
+    p.active=actif?'v1':'orig';
+  }
+  delete p.ia;delete p.useIa;delete p.editOrig;delete p.editIa;
+  return p;
+}
+
 function isEditingRealisations(){
   if(typeof _ed!=='undefined'&&_ed)return true; /* éditeur photo ouvert : ses objets sont vivants */
   const a=document.activeElement;
@@ -4593,15 +4716,15 @@ function blobToImage(blob){
     img.src=url;
   });
 }
-/* `original:true` force la photo d'origine même quand une version IA est active — sert au
-   comparatif et à l'envoi vers le modèle (on ne réinjecte pas une sortie IA dans l'IA). */
-/* `original:true` force la photo d'origine, `useIaForce:true` force la version IA.
-   Sans forçage, c'est `photo.useIa` qui décide — la même règle partout : écran, export,
-   publication. */
-async function loadPhotoImage(pid,{thumb=false,original=false,useIaForce=false}={}){
+/* Sans précision, c'est la version ACTIVE de la photo qui est chargée — la même règle
+   partout : écran, export, publication. `original:true` force la photo d'origine (le
+   comparatif s'en sert), `versionId` en désigne une en particulier (retoucher à partir
+   d'une version précise). */
+async function loadPhotoImage(pid,{thumb=false,original=false,versionId=null}={}){
   const ph=findPhoto(pid);
-  const useIa=useIaForce?!!(ph&&ph.ia):(!original&&ph&&ph.ia&&ph.useIa);
-  const key=thumb?(useIa?iaKey(pid):thumbKey(pid)):(useIa?iaKey(pid):fullKey(pid));
+  if(!ph)return null;
+  const vid=original?'orig':(versionId!=null?versionId:photoActiveId(ph));
+  const key=photoVersionKey(ph,vid,thumb);
   if(!thumb&&_imgCache.has(key))return _imgCache.get(key);
   const blob=await photoStore.get(key);
   if(!blob)return null;
@@ -4764,17 +4887,18 @@ async function replaceOnePhoto(r,p,file){
        change pas : sans cette remise à zéro, l'écran continuerait d'afficher l'ancienne
        image alors que le fichier, lui, a bien changé. */
     _glTexKey='';
-    if(p.ia){
-      /* La version IA a été calculée à partir de l'ancienne image : la garder afficherait
-         l'ancienne photo sous un nouveau nom. */
-      await photoStore.del(iaKey(p.id));_imgCache.delete(iaKey(p.id));
-      iaUseVersion(p,false);delete p.ia;delete p.editIa;
+    /* Les retouches ont été calculées à partir de l'ANCIENNE image : les garder
+       afficherait l'ancienne photo sous un nouveau nom. */
+    for(const v of photoVersions(p).slice()){
+      try{await photoStore.del(v.key);}catch(e){}
+      _imgCache.delete(v.key);
     }
+    p.versions=[];p.edits={orig:blankEdit()};p.active='orig';
     p.w=d.w;p.h=d.h;
     /* Les corrections visaient l'ancienne image (verticales, recadrage) : les garder sur
        une autre photo n'a aucun sens. */
     Object.assign(p.edit,blankEdit());
-    if(p.editOrig)Object.assign(p.editOrig,blankEdit());
+    p.edits={orig:blankEdit()};
     photoTouch(p,'remplacee',file.name||'');
     return '';
   }catch(e){console.error('remplacement photo',e);return photoFileRaison(file,e);}
@@ -4785,7 +4909,8 @@ function rzReplacePhoto(r,p){
   inp.onchange=()=>{
     const file=(inp.files||[])[0];if(!file)return;
     const pertes=[];
-    if(p.ia)pertes.push('la version IA de cette photo sera supprimée');
+    const nv=photoVersions(p).length;
+    if(nv)pertes.push(nv>1?('ses '+nv+' retouches IA seront supprimées'):'sa retouche IA sera supprimée');
     if(JSON.stringify(p.edit)!==JSON.stringify(blankEdit()))pertes.push('ses réglages seront remis à zéro');
     askConfirm('Remplacer cette photo par « '+(file.name||'le fichier choisi')+' » ? Son titre, sa légende et sa place sont conservés'
       +(pertes.length?', mais '+pertes.join(' et ')+'.':'.'),async()=>{
@@ -5135,8 +5260,10 @@ function renderRealisationDetail(host,r){
         <div class="rz-ph-load">…</div><img alt="" style="display:none">
         <div class="rz-ph-tags">
           ${etat!=='hors'?`<span class="rz-tag t-${etat}">${esc(PHOTO_PUB_LABEL[etat])}</span>`:''}
-          ${p.ia?`<span class="rz-tag t-ia">${p.useIa?'✨ version IA':'✨ IA disponible'}</span>`:''}
-          ${edited&&!p.ia?'<span class="rz-tag t-reg">réglée</span>':''}
+          ${photoVersions(p).length?`<span class="rz-tag t-ia">${photoActiveId(p)==='orig'
+              ?('✨ '+photoVersions(p).length+' retouche'+(photoVersions(p).length>1?'s':'')+' de côté')
+              :('✨ '+esc(photoVersionLabel(p,photoActiveId(p))))}</span>`:''}
+          ${edited&&!photoVersions(p).length?'<span class="rz-tag t-reg">réglée</span>':''}
         </div>
         ${(r.cover===p.id&&!_rzOrderMode)?'<span class="rz-ph-badge" style="top:6px;bottom:auto;background:rgba(154,133,116,.92)">couverture</span>':''}
         ${coins}
@@ -5353,7 +5480,7 @@ async function renderThumbInto(p,im,ld){
   try{
     /* Quand une version IA est active, la vignette doit la montrer : la galerie reflète
        ce qui sera publié. Pas de vignette IA stockée, on rend depuis la pleine taille. */
-    const blob=(p.ia&&p.useIa)?await photoStore.get(iaKey(p.id)):await photoStore.get(thumbKey(p.id));
+    const blob=await photoStore.get(photoVersionKey(p,photoActiveId(p),true));
     if(!blob){if(ld)ld.textContent='indisponible';return;}
     const edit=p.edit||blankEdit();
     if(JSON.stringify(edit)===JSON.stringify(blankEdit())){showBlobIn(blob,im,ld);return;}
@@ -5437,16 +5564,15 @@ function newRealisation(){
 function delRealisation(id){
   const r=findRealisation(id);if(!r)return;
   askConfirm('Supprimer « '+(r.title||'cette réalisation')+' » et ses '+(r.photos||[]).length+' photo(s) ? C’est définitif.',async()=>{
-    for(const p of (r.photos||[])){await photoStore.del(fullKey(p.id));await photoStore.del(thumbKey(p.id));if(p.ia)await photoStore.del(iaKey(p.id));}
+    for(const p of (r.photos||[])){for(const k of photoAllKeys(p)){await photoStore.del(k);}}
     realisations=realisations.filter(x=>x.id!==id);
     _rzOpenId=null;storageInvalidate();saveRealisations();renderRealisations();toast('Réalisation supprimée');
   });
 }
 function delPhoto(r,pid){
   askConfirm('Retirer cette photo de la réalisation ?',async()=>{
-    await photoStore.del(fullKey(pid));await photoStore.del(thumbKey(pid));
     const gone=(r.photos||[]).find(p=>p.id===pid);
-    if(gone&&gone.ia)await photoStore.del(iaKey(pid));
+    for(const k of (gone?photoAllKeys(gone):[fullKey(pid),thumbKey(pid)])){await photoStore.del(k);}
     r.photos=(r.photos||[]).filter(p=>p.id!==pid);
     if(r.cover===pid)r.cover=(r.photos[0]||{}).id||'';
     r.updatedAt=Date.now();storageInvalidate();saveRealisations();renderRealisations();
@@ -5714,17 +5840,22 @@ async function edLoadAlt(){
   if(!_ed)return;
   const p=_ed.p;
   _ed.altErr=null;
-  if(!p.ia){_ed.imgAlt=null;_ed.altEdit=null;return;}
-  /* L'autre version : l'original quand on regarde l'IA, l'IA quand on regarde l'original. */
+  const vs=photoVersions(p);
+  if(!vs.length){_ed.imgAlt=null;_ed.altEdit=null;_ed.altId=null;return;}
+  /* L'autre version, c'est celle DONT SORT la version affichée : comparer la deuxième
+     retouche à l'originale ne dirait rien de ce que le dernier envoi a changé. Quand c'est
+     l'originale qui est affichée, l'autre est la dernière retouche produite. */
+  const act=photoActiveId(p);
+  const other=(act==='orig')?vs[vs.length-1].id
+    :((photoVersion(p,act)||{}).from&&(photoVersion(p,act).from==='orig'||photoVersion(p,photoVersion(p,act).from))
+        ?photoVersion(p,act).from:'orig');
   let alt=null;
-  try{
-    alt=await loadPhotoImage(p.id,p.useIa?{thumb:false,original:true}:{thumb:false,useIaForce:true});
-  }catch(e){alt=null;}
+  try{ alt=await loadPhotoImage(p.id,{thumb:false,versionId:other}); }catch(e){alt=null;}
   if(!_ed||_ed.p!==p)return;
-  _ed.imgAlt=alt;
-  _ed.altEdit=JSON.parse(JSON.stringify((p.useIa?p.editOrig:p.editIa)||blankEdit()));
+  _ed.imgAlt=alt;_ed.altId=other;
+  _ed.altEdit=JSON.parse(JSON.stringify(photoEditOf(p,other)));
   /* Sans ce message, le comparateur disparaîtrait sans un mot et on croirait à un oubli. */
-  if(!alt)_ed.altErr=(p.useIa?'La photo d’origine':'La version IA')+' n’a pas pu être chargée depuis le cloud : la comparaison avant/après est indisponible. Vérifiez votre connexion, puis rouvrez la photo.';
+  if(!alt)_ed.altErr='« '+photoVersionLabel(p,other)+' » n’a pas pu être chargée depuis le cloud : la comparaison avant/après est indisponible. Vérifiez votre connexion, puis rouvrez la photo.';
 }
 function edPaint(){
   if(!_ed||!_ed.img)return;
@@ -5753,7 +5884,10 @@ function edPaint(){
     /* L'avant occupe toute la surface ; l'après est découpé à droite du curseur. Les deux
        rendus peuvent avoir des tailles différentes (le modèle rend dans sa propre
        définition) : on les ramène au même cadre. */
-    const avantEstAlt=!!_ed.p.useIa; /* la version IA est l'APRÈS */
+    /* L'autre version est l'AVANT quand elle précède celle qu'on regarde — c'est-à-dire
+       dès qu'une retouche est affichée. Si c'est l'originale qui est affichée, l'autre est
+       une retouche, donc l'APRÈS. */
+    const avantEstAlt=photoActiveId(_ed.p)!=='orig';
     const bas=avantEstAlt?alt:snap, haut=avantEstAlt?snap:alt;
     if(bas)ctx.drawImage(bas,0,0,cv.width,cv.height);
     if(haut){
@@ -5851,7 +5985,7 @@ function openPhotoHistory(r,p){
       : etat==='enligne' ? 'Cette photo est en ligne sur le site, à jour.'
       : etat==='modifiee' ? 'Cette photo est en ligne, mais elle a été modifiée depuis : republiez pour mettre le site à jour.'
       : 'Cette photo n’est pas encore en ligne : elle a été ajoutée après la dernière publication.'}</p>
-    ${p.ia?`<p class="msub">Version affichée : <b>${p.useIa?'la retouche IA':'la photo d’origine'}</b> — c’est elle qui part à l’export et sur le site.</p>`:''}
+    ${photoVersions(p).length?`<p class="msub">Version affichée : <b>${esc(photoVersionLabel(p,photoActiveId(p)))}</b> — c’est elle qui part à l’export et sur le site.</p>`:''}
     <ul class="hist">${lignes||'<li><span class="hist-k">Aucun événement enregistré pour l’instant. L’import, les réglages, les retouches IA et les publications s’inscriront ici.</span></li>'}</ul>
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
       ${(p.hist||[]).length?`<button class="mini" onclick="clearPhotoHistory('${esc(p.id)}')">🗑 Vider l’historique</button>`:'<span></span>'}
@@ -6055,11 +6189,7 @@ function rzDeleteSelected(r){
   if(!photos.length)return;
   const n=photos.length;
   askConfirm('Supprimer '+n+' photo'+(n>1?'s':'')+' de cette réalisation ? C’est définitif.',async()=>{
-    for(const p of photos){
-      await photoStore.del(fullKey(p.id));
-      await photoStore.del(thumbKey(p.id));
-      if(p.ia)await photoStore.del(iaKey(p.id));
-    }
+    for(const p of photos){for(const k of photoAllKeys(p)){await photoStore.del(k);}}
     const ids=new Set(photos.map(p=>p.id));
     r.photos=(r.photos||[]).filter(p=>!ids.has(p.id));
     if(ids.has(r.cover))r.cover=(r.photos[0]||{}).id||'';
@@ -6174,7 +6304,39 @@ function ensureIaModels(){
   if(!library.iaPrompts)library.iaPrompts=[];
   if(!library.iaParams)library.iaParams={};
 }
-function iaKey(pid){return 'ra_'+pid;}
+function iaKey(pid){return 'ra_'+pid;} /* clé historique : la toute première retouche d'une photo */
+
+/* La version choisie comme point de départ du prochain envoi. `null` = celle qui est
+   affichée. On ne garde qu'un identifiant : s'il ne vaut plus rien (autre photo ouverte,
+   version supprimée), on retombe tout seul sur la version affichée. */
+let _iaFrom=null;
+function iaFromId(photo){
+  if(_iaFrom&&(_iaFrom==='orig'||photoVersion(photo,_iaFrom)))return _iaFrom;
+  return photoActiveId(photo);
+}
+/* Nommer une version : « Retouche 2 » ne dit rien, « désencombré » se retrouve. */
+function iaAskRenameVersion(photo,vid){
+  const v=photoVersion(photo,vid);if(!v)return;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Nommer cette version</h3>
+    <p class="msub">Un nom court, pour la reconnaître dans la liste. Laissez vide pour revenir au nom automatique.</p>
+    <label class="fld"><span class="lbl">Nom</span>
+      <input type="text" id="ver-nom" maxlength="40" value="${esc(v.label||'')}" placeholder="${esc(photoVersionLabel(photo,vid))}"></label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="ver-ok">Enregistrer</button>
+    </div>`);
+  const inp=$('ver-nom');
+  const valider=()=>{
+    v.label=(inp.value||'').trim().slice(0,40);
+    photoTouch(photo,'texte','version : '+photoVersionLabel(photo,vid));
+    saveRealisations();closeModal();buildEditorControls();
+    toast('Version renommée');
+  };
+  $('ver-ok').addEventListener('click',valider);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')valider();});
+  setTimeout(()=>inp.focus(),60);
+}
 /* Le nom lisible d'un modèle, qu'il vienne du catalogue ou de la liste personnelle. */
 function iaModelLabel(id){
   const m=(library.iaModels||[]).find(x=>x.id===id)||IA_CATALOGUE.find(x=>x.id===id);
@@ -6328,13 +6490,16 @@ function iaEtatTexte(job){
 
 /* Prépare l'image et les réglages, dépose la demande dans la file, et l'inscrit AVANT de
    rendre la main. */
-async function iaSubmitJob(r,photo,consigne,modelId){
-  const img=await loadPhotoImage(photo.id,{thumb:false,original:true});
-  if(!img)throw new Error('photo introuvable');
+async function iaSubmitJob(r,photo,consigne,modelId,from){
+  /* De quelle version on part. Par défaut celle qui est affichée : on retouche ce qu'on
+     regarde. Repartir de l'originale reste à un clic, et c'est ce que fait la série. */
+  const src=(from&&(from==='orig'||photoVersion(photo,from)))?from:photoActiveId(photo);
+  const img=await loadPhotoImage(photo.id,{thumb:false,versionId:src});
+  if(!img)throw new Error('image de départ introuvable');
   /* On envoie la photo AVEC les corrections déjà faites (verticales, lumière, cadrage) :
-     l'IA travaille sur ce qu'on veut publier, pas sur le brut. Toujours depuis l'original,
-     jamais depuis une sortie IA — sinon l'image dérive à chaque passage. */
-  const cv=glRenderTo(img,photo.edit||blankEdit(),1600,'ia_'+photo.id);
+     l'IA travaille sur ce qu'on veut publier, pas sur le brut. Les réglages sont ceux de la
+     version de départ — chaque version a les siens. */
+  const cv=glRenderTo(img,photoEditOf(photo,src),1600,'ia_'+photo.id+'_'+src);
   if(!cv)throw new Error('rendu impossible');
   _glTexKey='';
   /* Les préférences du CRM ne sont pas seulement affichées : elles partent réellement — mais
@@ -6356,7 +6521,7 @@ async function iaSubmitJob(r,photo,consigne,modelId){
   if(!d.requestId)throw new Error('fal.ai n’a pas renvoyé d’identifiant de demande');
   const job={id:uid(),reqId:d.requestId,model:modelId,prompt:consigne,
     statusUrl:d.statusUrl||'',responseUrl:d.responseUrl||'',cancelUrl:d.cancelUrl||'',
-    realId:r.id,photoId:photo.id,photoName:photo.name||'photo',
+    realId:r.id,photoId:photo.id,photoName:photo.name||'photo',from:src,
     at:Date.now(),etat:'IN_QUEUE',position:(typeof d.queuePosition==='number'?d.queuePosition:null)};
   await iaJobAdd(job);
   /* La file a accepté la demande : le modèle va tourner, donc elle sera facturée. On la
@@ -6429,7 +6594,7 @@ async function iaCollectJob(job,onEtat){
     if(e.definitif)await iaJobDrop(job.id);
     throw e;
   }
-  await iaStoreResult(r,photo,data,job.prompt,job.model);
+  await iaStoreResult(r,photo,data,job.prompt,job.model,job.from);
   await iaJobDrop(job.id);
   return {r,photo,data};
 }
@@ -6465,33 +6630,16 @@ async function runIaEdit(photo,consigne,modelId,opts){
   opts=opts||{};
   const r=opts.r||iaRealOf(photo);
   if(!r)throw new Error('cette photo n’appartient à aucune réalisation');
-  const job=await iaSubmitJob(r,photo,consigne,modelId);
+  const job=await iaSubmitJob(r,photo,consigne,modelId,opts.from);
   if(opts.onJob)opts.onJob(job);
   return await iaCollectJob(job,opts.onEtat);
-}
-
-/* Ce qui part au modèle, ce sont les corrections DÉJÀ APPLIQUÉES (verticales, lumière,
-   cadrage). Elles sont donc cuites dans l'image qu'il renvoie. Les laisser aussi dans
-   `photo.edit` les appliquait une SECONDE fois — à l'écran, à l'export et à la publication :
-   verticales sur-redressées, lumière poussée deux fois. Chaque version porte donc ses
-   propres réglages, et bascule avec elle. */
-function iaUseVersion(photo,useIa){
-  const clone=e=>JSON.parse(JSON.stringify(e||blankEdit()));
-  useIa=!!useIa;
-  if(useIa===!!photo.useIa)return;
-  if(photo.useIa)photo.editIa=clone(photo.edit); else photo.editOrig=clone(photo.edit);
-  photo.useIa=useIa;
-  photo.edit=clone(useIa?photo.editIa:photo.editOrig);
-  /* C'est cette version-là qui partira à l'export et sur le site : c'est un changement de
-     ce qui sera publié, donc la photo n'est plus « à jour » vis-à-vis du site. */
-  photoTouch(photo,'version',useIa?'version IA':'photo d’origine');
 }
 
 /* Dernière erreur de retouche, gardée hors du panneau : le panneau est reconstruit à chaque
    changement, un message posé dedans disparaîtrait aussitôt. Un toast s'efface en trois
    secondes — trop court pour lire pourquoi un appel a échoué. */
 let _iaLastError=null;
-async function applyIaToPhoto(r,photo,consigne,modelId,btn){
+async function applyIaToPhoto(r,photo,consigne,modelId,btn,from){
   const setBtn=t=>{if(btn){btn.disabled=t!==null;btn.textContent=t||'✨ Retoucher cette photo';}};
   /* Le plafond bloque AVANT tout appel : rien n'est envoyé, donc rien n'est facturé. */
   if(iaPlafondAtteint()){
@@ -6504,7 +6652,7 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
   _iaLastError=null;
   setBtn('Dépôt de la demande…');
   try{
-    await runIaEdit(photo,consigne,modelId,{r,
+    await runIaEdit(photo,consigne,modelId,{r,from,
       /* Le suivi s'écrit là où on vient de cliquer : sur le bouton et juste dessous. On ne
          reconstruit PAS le panneau à chaque changement d'état — ça détacherait le bouton
          dont cette retouche tient la référence. */
@@ -6519,7 +6667,7 @@ async function applyIaToPhoto(r,photo,consigne,modelId,btn){
       _iaLastError=(e&&e.message)||'erreur inconnue';
       toast('Échec de la retouche — le détail reste affiché');
     }
-  }finally{ _iaEnCours=null; setBtn(null); buildEditorControls(); }
+  }finally{ _iaEnCours=null; _iaFrom=null; setBtn(null); buildEditorControls(); }
 }
 
 /* Ce qui se passe pendant l'attente, écrit sous le bouton, avec de quoi annuler. Sans ça,
@@ -6551,17 +6699,26 @@ function iaWaitPaint(){
 /* Pose du résultat sur la photo. UNE seule écriture de cette règle : la retouche d'une
    photo et la retouche d'une série doivent produire exactement le même état, sinon la
    série finirait par diverger sans que rien ne le signale. */
-async function iaStoreResult(r,photo,data,consigne,modelId){
-  await photoStore.save(iaKey(photo.id),dataUriToBlob(data.imageDataUri));
-  _imgCache.delete(iaKey(photo.id));
-  photo.ia={model:modelId,prompt:consigne,params:Object.assign({},iaParamsFor(modelId)),createdAt:Date.now()};
-  /* Les réglages du moment sont maintenant DANS l'image renvoyée : on les met de côté pour
-     la photo d'origine, et la version IA repart de réglages neutres. */
-  photo.editOrig=JSON.parse(JSON.stringify(photo.edit||blankEdit()));
-  photo.editIa=blankEdit();
+async function iaStoreResult(r,photo,data,consigne,modelId,from){
+  /* Une retouche ne remplace plus la précédente : elle s'ajoute. Chacune garde son image,
+     son modèle, sa consigne et la version dont elle est sortie. */
+  const vid='v'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  const key='ra_'+photo.id+'_'+vid;
+  await photoStore.save(key,dataUriToBlob(data.imageDataUri));
+  _imgCache.delete(key);
+  const actif=photoActiveId(photo);
+  const src=(from&&(from==='orig'||photoVersion(photo,from)))?from:actif;
+  /* Les réglages du moment sont maintenant DANS l'image renvoyée : on les laisse à la
+     version qui était affichée, et la nouvelle repart de réglages neutres. */
+  if(!photo.edits)photo.edits={};
+  photo.edits[actif]=JSON.parse(JSON.stringify(photo.edit||blankEdit()));
+  photoVersions(photo).push({id:vid,key,model:modelId,prompt:consigne,
+    params:Object.assign({},iaParamsFor(modelId)),from:src,createdAt:Date.now(),label:''});
+  photo.edits[vid]=blankEdit();
+  photo.active=vid;
   photo.edit=blankEdit();
-  photo.useIa=true;
-  photoTouch(photo,'ia',iaModelLabel(modelId)+(consigne?' · « '+consigne+' »':''));
+  photoTouch(photo,'ia',iaModelLabel(modelId)+(consigne?' · « '+consigne+' »':'')
+    +(src==='orig'?'':' · à partir de '+photoVersionLabel(photo,src)));
   if(consigne&&consigne.length>3&&library.iaPrompts.indexOf(consigne)<0){
     library.iaPrompts.unshift(consigne);
     library.iaPrompts=library.iaPrompts.slice(0,8);
@@ -6582,7 +6739,7 @@ function iaSerieCandidats(r,portee,selection){
   const toutes=(r.photos||[]);
   if(portee==='sel')return toutes.filter(p=>selection.has(p.id));
   if(portee==='toutes')return toutes.slice();
-  return toutes.filter(p=>!p.ia);
+  return toutes.filter(p=>!photoVersions(p).length);
 }
 function openIaSerieDialog(r,selection){
   ensureIaModels();
@@ -6606,6 +6763,11 @@ function openIaSerieDialog(r,selection){
     <label class="fld"><span class="lbl">Modèle</span><select id="serie-modele">
       ${modeles.map(m=>`<option value="${esc(m.id)}"${m.id===choisi?' selected':''}>${esc(m.label||m.id)}</option>`).join('')}
     </select></label>
+    <label class="fld"><span class="lbl">À partir de</span><select id="serie-depart">
+      <option value="orig" selected>La photo d’origine de chacune (recommandé)</option>
+      <option value="active">La version affichée de chacune</option>
+    </select></label>
+    <p class="ias-note">Repartir des versions affichées enchaîne une retouche sur une image déjà redessinée : utile pour affiner, mais sur toute une série l’écart au réel s’accumule sans se voir.</p>
     <p class="msub" id="serie-recap"></p>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
       <button class="mini" onclick="closeModal()">Annuler</button>
@@ -6647,7 +6809,7 @@ function openIaSerieDialog(r,selection){
     if(!c){toast('Écrivez la consigne, ou touchez une consigne toute prête');ta.focus();return;}
     const liste=iaSerieCandidats(r,portee(),sel);
     if(!liste.length)return;
-    runIaSerie(r,liste,c,$('serie-modele').value);
+    runIaSerie(r,liste,c,$('serie-modele').value,$('serie-depart').value);
   });
 }
 function iaSeriePaint(){
@@ -6667,7 +6829,7 @@ function iaSeriePaint(){
     });
   }
 }
-async function runIaSerie(r,photos,consigne,modelId){
+async function runIaSerie(r,photos,consigne,modelId,depart){
   _iaSerie={total:photos.length,done:0,nom:(photos[0].name||'photo'),stop:false,echecs:[],job:null,annulMsg:''};
   _iaSerieReport=null;
   openModal(`<h3>Retouche en cours</h3>
@@ -6705,6 +6867,7 @@ async function runIaSerie(r,photos,consigne,modelId){
     _iaSerie.nom=p.name||'photo';iaSeriePaint();
     try{
       await runIaEdit(p,consigne,modelId,{r,
+        from:(depart==='active')?photoActiveId(p):'orig',
         onJob:job=>{if(_iaSerie){_iaSerie.job=job;iaSeriePaint();}},
         onEtat:()=>iaSeriePaint()});
       ok++;
@@ -6939,7 +7102,7 @@ function buildIaPanel(host){
   const ta=document.createElement('textarea');
   ta.className='ia-prompt';ta.rows=3;
   ta.placeholder='Décrivez ce que vous voulez obtenir — ou touchez une consigne toute prête ci-dessous.';
-  ta.value=(p.ia&&p.ia.prompt)||'';
+  ta.value=((photoVersion(p,photoActiveId(p))||{}).prompt)||'';
   card.appendChild(ta);
 
   const chips=document.createElement('div');chips.className='ia-chips';
@@ -6963,6 +7126,33 @@ function buildIaPanel(host){
     });
     card.appendChild(recent);
   }
+
+  /* À PARTIR DE QUOI. C'était le manque : l'envoi repartait toujours de l'originale, sans
+     rien demander. Par défaut on retouche ce qu'on regarde — et on peut choisir autre
+     chose, y compris pour reprendre une retouche mise de côté. */
+  const srcRow=document.createElement('label');srcRow.className='fld ia-src';
+  srcRow.innerHTML='<span class="lbl">À partir de</span>';
+  const srcSel=document.createElement('select');srcSel.className='ia-src-sel';
+  const srcOptions=[{id:'orig',t:photoVersionLabel(p,'orig')}]
+    .concat(photoVersions(p).map(v=>({id:v.id,t:photoVersionLabel(p,v.id)})));
+  const srcActif=iaFromId(p);
+  srcOptions.forEach(o=>{
+    const el=document.createElement('option');el.value=o.id;
+    el.textContent=o.t+(o.id===photoActiveId(p)?' (affichée)':'');
+    if(o.id===srcActif)el.selected=true;
+    srcSel.appendChild(el);
+  });
+  srcRow.appendChild(srcSel);
+  card.appendChild(srcRow);
+  const srcNote=document.createElement('p');srcNote.className='ia-field-desc';
+  const majSrcNote=()=>{
+    srcNote.textContent=srcSel.value==='orig'
+      ? 'Le modèle repart de la photo telle qu’elle a été importée, avec vos réglages en cours.'
+      : 'Le modèle repart d’une image qu’il a déjà redessinée : c’est ce qu’il faut pour affiner un résultat, mais enchaîner les passages éloigne peu à peu du réel.';
+  };
+  srcSel.addEventListener('change',()=>{_iaFrom=srcSel.value;majSrcNote();});
+  majSrcNote();
+  card.appendChild(srcNote);
 
   const go=document.createElement('button');go.className='ia-go btn-primary';
   const bloque=iaPlafondAtteint();
@@ -7003,7 +7193,7 @@ function buildIaPanel(host){
   cardM.appendChild(headM);
 
   const modelRow=document.createElement('div');modelRow.className='ia-model-row';
-  modelRow.innerHTML='<select></select>';
+  modelRow.innerHTML='<select class="ia-model-sel"></select>';
   const sel=modelRow.querySelector('select');
   /* Tout le catalogue est dans la liste, rangé par usage. Aucune raison de cacher des
      modèles derrière un panneau de réglages : c'est le choix principal de cet écran.
@@ -7124,44 +7314,76 @@ function buildIaPanel(host){
   go.addEventListener('click',()=>{
     const c=(ta.value||'').trim();
     if(prendPrompt&&!c){toast('Écrivez d’abord ce que vous voulez, ou touchez une consigne toute prête');ta.focus();return;}
-    const lancer=()=>applyIaToPhoto(r,p,c,sel.value,go);
+    const src=srcSel.value;
+    const lancer=()=>applyIaToPhoto(r,p,c,sel.value,go,src);
     if(iaSettings().confirmer){
-      askConfirm('Envoyer cette photo au modèle « '+iaModelLabel(sel.value)+' » ? Cet appel est facturé par le fournisseur.',lancer);
+      askConfirm('Envoyer « '+photoVersionLabel(p,src)+' » au modèle « '+iaModelLabel(sel.value)+' » ? Cet appel est facturé par le fournisseur, et le résultat s’ajoutera aux versions existantes sans en écraser aucune.',lancer);
     }else lancer();
   });
 
-  /* ---------- Carte 3 : la version IA déjà produite ---------- */
-  if(p.ia){
-    const box=document.createElement('div');box.className='ia-card ia-state';
+  /* ---------- Carte 3 : les versions de cette photo ---------- */
+  if(photoVersions(p).length){
+    const box=document.createElement('div');box.className='ia-card ia-state ia-versions';
     const h=document.createElement('div');h.className='ia-card-h';
-    h.innerHTML='<span class="ttl">Version IA de cette photo</span>';
+    h.innerHTML='<span class="ttl">Versions de cette photo</span>';
     box.appendChild(h);
-    const meta=document.createElement('p');
-    meta.innerHTML=`<b>${esc(iaModelLabel(p.ia.model))}</b>`;
+    const intro=document.createElement('p');intro.className='msub';
+    intro.textContent='Celle qui est choisie s’affiche, s’exporte et part sur le site. Les autres restent là : rien n’est écrasé.';
+    box.appendChild(intro);
+
+    const strip=document.createElement('div');strip.className='ia-vers';
+    const actif=photoActiveId(p);
+    [{id:'orig'}].concat(photoVersions(p)).forEach(v=>{
+      const b=document.createElement('button');b.type='button';
+      b.className='ia-ver'+(v.id===actif?' on':'');
+      b.dataset.ver=v.id;
+      b.textContent=photoVersionLabel(p,v.id);
+      b.addEventListener('click',async()=>{
+        if(!photoSetActive(p,v.id))return;
+        _iaFrom=null;edTouch();buildEditorControls();await reloadEditorImage();
+        toast('Version affichée : '+photoVersionLabel(p,v.id));
+      });
+      strip.appendChild(b);
+    });
+    box.appendChild(strip);
+
+    /* Le détail de la version affichée : de quoi elle sort, avec quel modèle, quelle
+       consigne. Sans ça, « Retouche 3 » ne veut rien dire au bout de trois jours. */
+    const v=photoVersion(p,actif);
+    const meta=document.createElement('p');meta.className='ia-ver-meta';
+    if(v){
+      meta.innerHTML='<b>'+esc(iaModelLabel(v.model))+'</b>'
+        +(v.from&&v.from!=='orig'?' · à partir de '+esc(photoVersionLabel(p,v.from)):' · à partir de la photo d’origine')
+        +(v.createdAt?' · '+new Date(v.createdAt).toLocaleDateString('fr-FR'):'');
+    }else{
+      meta.textContent='La photo telle qu’elle a été importée. '+photoVersions(p).length+' retouche(s) de côté.';
+    }
     box.appendChild(meta);
-    if(p.ia.prompt){
+    if(v&&v.prompt){
       const echo=document.createElement('p');echo.className='ia-prompt-echo';
-      echo.textContent='« '+p.ia.prompt+' »';
+      echo.textContent='« '+v.prompt+' »';
       box.appendChild(echo);
     }
-    const sw=document.createElement('div');sw.className='ed-acts';sw.style.marginTop='10px';
-    const bOrig=document.createElement('button');bOrig.className='btn '+(p.useIa?'btn-onlight':'btn-primary');bOrig.textContent='Photo d’origine';
-    const bIa=document.createElement('button');bIa.className='btn '+(p.useIa?'btn-primary':'btn-onlight');bIa.textContent='Version IA';
-    bOrig.addEventListener('click',async()=>{iaUseVersion(p,false);edTouch();buildEditorControls();await reloadEditorImage();});
-    bIa.addEventListener('click',async()=>{iaUseVersion(p,true);edTouch();buildEditorControls();await reloadEditorImage();});
-    sw.appendChild(bOrig);sw.appendChild(bIa);
-    box.appendChild(sw);
-    const del=document.createElement('button');del.className='mini';del.textContent='🗑 Supprimer la version IA';del.style.marginTop='10px';
-    del.addEventListener('click',()=>askConfirm('Supprimer la version IA de cette photo ? L’original n’est pas touché.',async()=>{
-      await photoStore.del(iaKey(p.id));_imgCache.delete(iaKey(p.id));
-      iaUseVersion(p,false); /* rend à la photo d'origine les réglages qui étaient les siens */
-      delete p.ia;delete p.editIa;
-      photoTouch(p,'iasuppr','');
-      edTouch();buildEditorControls();await reloadEditorImage();
-      toast('Version IA supprimée');
-    }));
-    box.appendChild(del);
-    host.appendChild(box);
+
+    if(v){
+      const acts=document.createElement('div');acts.className='ed-acts';acts.style.marginTop='10px';
+      const ren=document.createElement('button');ren.className='mini';ren.type='button';ren.textContent='✎ Renommer';
+      ren.addEventListener('click',()=>iaAskRenameVersion(p,v.id));
+      acts.appendChild(ren);
+      const del=document.createElement('button');del.className='mini';del.type='button';del.textContent='🗑 Supprimer cette version';
+      del.addEventListener('click',()=>askConfirm(
+        'Supprimer « '+photoVersionLabel(p,v.id)+' » ? Son image est perdue — elle a été facturée, et la refaire coûtera un nouvel appel. La photo d’origine et les autres versions ne sont pas touchées.',
+        async()=>{
+          await photoDeleteVersion(p,v.id);
+          edTouch();buildEditorControls();await reloadEditorImage();
+          toast('Version supprimée');
+        }));
+      acts.appendChild(del);
+      box.appendChild(acts);
+    }
+    /* La pile passe AVANT la carte du modèle : dès qu'une photo a plusieurs versions, c'est
+       elle qu'on vient regarder et sur laquelle on agit ; le modèle est un réglage. */
+    host.insertBefore(box,cardM);
   }
 
   /* Ce qu'on a dépensé, et par où le régler : au même endroit, sinon le plafond est une

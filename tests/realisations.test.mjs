@@ -707,10 +707,10 @@ const applique = await page.evaluate(async () => {
   });
   await new Promise(r2 => setTimeout(r2, 700));
   return {
-    aVersionIa: !!p.ia, useIa: p.useIa === true,
-    prompt: p.ia && p.ia.prompt,
+    aVersionIa: photoVersions(p).length === 1, useIa: photoActiveId(p) !== 'orig',
+    prompt: (photoVersion(p, photoActiveId(p)) || {}).prompt,
     originalIntact: window.__files.has('test-user/' + fullKey(p.id)),
-    fichierIa: window.__files.has('test-user/' + iaKey(p.id)),
+    fichierIa: window.__files.has('test-user/' + photoVersionKey(p, photoActiveId(p))),
     nouveauxFichiers: window.__files.size - avant,
   };
 });
@@ -748,14 +748,15 @@ const doubleCorrection = await page.evaluate(async () => {
   const r = realisations[0], p = r.photos[0];
   // On repart d'une photo SANS version IA mais AVEC des corrections marquées : sans valeurs
   // non nulles, ce test passerait même si le bug était toujours là.
-  delete p.ia; delete p.editIa; delete p.editOrig; p.useIa = false;
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig';
   Object.assign(p.edit, { persp: 0.35, expo: 0.4 });
   await applyIaToPhoto(r, p, 'consigne de test', 'fal-ai/nano-banana-pro/edit', null);
-  const apresIa = { persp: p.edit.persp, expo: p.edit.expo, useIa: p.useIa };
-  const memorise = p.editOrig ? { persp: p.editOrig.persp, expo: p.editOrig.expo } : null;
-  iaUseVersion(p, false);                      // retour à la photo d'origine
-  const retour = { persp: p.edit.persp, expo: p.edit.expo, useIa: p.useIa };
-  iaUseVersion(p, true);
+  const vid = photoActiveId(p);
+  const apresIa = { persp: p.edit.persp, expo: p.edit.expo, useIa: vid !== 'orig' };
+  const memorise = p.edits.orig ? { persp: p.edits.orig.persp, expo: p.edits.orig.expo } : null;
+  photoSetActive(p, 'orig');                   // retour à la photo d'origine
+  const retour = { persp: p.edit.persp, expo: p.edit.expo, useIa: photoActiveId(p) !== 'orig' };
+  photoSetActive(p, vid);
   return { apresIa, memorise, retour, apresRetourIa: { persp: p.edit.persp, expo: p.edit.expo } };
 });
 check('Après retouche IA : les réglages déjà appliqués ne sont PAS réappliqués par-dessus',
@@ -775,9 +776,10 @@ check('Pont IA : le jeton envoyé est celui de la SESSION, pas la clé publique 
 
 const bascule = await page.evaluate(async () => {
   const p = realisations[0].photos[0];
-  p.useIa = false;
+  const vid = photoVersions(p)[0].id;
+  photoSetActive(p, 'orig');
   const orig = await loadPhotoImage(p.id, { thumb: false });
-  p.useIa = true;
+  photoSetActive(p, vid);
   const ia = await loadPhotoImage(p.id, { thumb: false });
   const force = await loadPhotoImage(p.id, { thumb: false, original: true });
   return { differentes: orig !== ia, originalForce: force === orig };
@@ -789,7 +791,7 @@ check('« original:true » ramène bien la photo d’origine (pas de réinjectio
 //     l'écran et rien ne dit ce qui a changé. Le curseur coupe l'image en deux.
 const comparateur = await page.evaluate(async () => {
   const p = realisations[0].photos[0];
-  p.useIa = true;
+  photoSetActive(p, photoVersions(p)[0].id);
   await reloadEditorImage();
   await new Promise(r => setTimeout(r, 500));
   const cv = document.getElementById('ed-canvas');
@@ -832,7 +834,7 @@ check('Historique : la fenêtre s’ouvre bien par-dessus l’éditeur', histo.a
 
 // --- La liste des modèles n'est plus limitée : tout le catalogue y est, rangé par usage
 const listeModeles = await page.evaluate(() => {
-  const sel = document.querySelector('#ed-controls select');
+  const sel = document.querySelector('#ed-controls select.ia-model-sel');
   return {
     groupes: [...sel.querySelectorAll('optgroup')].map(g => g.label),
     n: sel.querySelectorAll('option').length,
@@ -1016,7 +1018,7 @@ const cmpKo = await page.evaluate(async () => {
   const vrai = photoStore.get;
   photoStore.get = async (k) => (/^rp_/.test(k) ? null : vrai(k));
   _imgCache.clear();
-  p.useIa = true;
+  photoSetActive(p, photoVersions(p)[0].id);
   await edLoadAlt();
   buildEditorControls();
   await new Promise(x => setTimeout(x, 300));
@@ -1356,9 +1358,15 @@ check('Menu photo : la photo déjà en couverture ne propose pas de le refaire',
 // --- Remplacer une photo : la place, le titre et la légende restent
 const repl = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId), p = r.photos[1];
-  p.ia = { model: 'test/modele', prompt: 'essai' };
-  p.useIa = true;
-  await photoStore.save(iaKey(p.id), new Blob(['ia'], { type: 'image/jpeg' }));
+  // Deux retouches, pour vérifier qu'aucune ne survit au remplacement de la photo.
+  const cles = ['ra_' + p.id + '_a', 'ra_' + p.id + '_b'];
+  p.versions = [
+    { id: 'a', key: cles[0], model: 'test/modele', prompt: 'essai', from: 'orig', createdAt: Date.now() },
+    { id: 'b', key: cles[1], model: 'test/modele', prompt: 'essai 2', from: 'a', createdAt: Date.now() },
+  ];
+  p.edits = { orig: blankEdit(), a: blankEdit(), b: blankEdit() };
+  p.active = 'b';
+  for (const k of cles) await photoStore.save(k, new Blob(['ia'], { type: 'image/jpeg' }));
   p.edit.persp = 40;
   const avant = { id: p.id, rang: 1, nom: p.name, legende: p.caption, largeur: p.w,
                   octets: (await photoStore.get(fullKey(p.id))).size };
@@ -1366,8 +1374,8 @@ const repl = await page.evaluate(async () => {
   const why = await replaceOnePhoto(r, p, fichier);
   const apres = { id: r.photos[1].id, nom: p.name, legende: p.caption, largeur: p.w,
                   octets: (await photoStore.get(fullKey(p.id))).size,
-                  ia: !!p.ia, useIa: !!p.useIa, persp: p.edit.persp,
-                  iaEnStock: !!(await photoStore.get(iaKey(p.id))),
+                  ia: photoVersions(p).length > 0, useIa: photoActiveId(p) !== 'orig', persp: p.edit.persp,
+                  iaEnStock: (await Promise.all(cles.map(k => photoStore.get(k)))).some(Boolean),
                   hist: (p.hist || []).map(h => h.k) };
   return { why, avant, apres };
 });
@@ -1377,8 +1385,8 @@ check('Remplacer : le titre et la légende sont conservés',
   repl.apres.nom === repl.avant.nom && repl.apres.legende === repl.avant.legende, repl.apres.nom + ' / ' + repl.apres.legende);
 check('Remplacer : le fichier stocké a réellement changé',
   repl.apres.octets !== repl.avant.octets && repl.apres.largeur === 640, repl.avant.octets + ' → ' + repl.apres.octets + ' octets, ' + repl.apres.largeur + 'px');
-check('Remplacer : la version IA de l’ancienne image est supprimée',
-  !repl.apres.ia && !repl.apres.useIa && !repl.apres.iaEnStock);
+check('Remplacer : TOUTES les retouches de l’ancienne image sont supprimées',
+  !repl.apres.ia && !repl.apres.useIa && !repl.apres.iaEnStock, JSON.stringify(repl.apres));
 check('Remplacer : les réglages de l’ancienne image sont remis à zéro', repl.apres.persp === 0, String(repl.apres.persp));
 check('Remplacer : l’historique de la photo en garde la trace', repl.apres.hist.includes('remplacee'), repl.apres.hist.join(','));
 
@@ -1473,8 +1481,10 @@ await page.route('**/functions/v1/photo-ia', async (route) => {
 // --- Le dialogue annonce ce qui va être envoyé, et ce que ça coûte
 const dlg = await page.evaluate(() => {
   const r = findRealisation(_rzOpenId);
-  r.photos.forEach(p => { delete p.ia; p.useIa = false; });
-  r.photos[0].ia = { model: 'x', prompt: 'déjà faite' };   // une photo déjà retouchée
+  r.photos.forEach(p => { p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig'; });
+  // une photo déjà retouchée
+  r.photos[0].versions = [{ id: 'x1', key: 'ra_' + r.photos[0].id + '_x1', model: 'x', prompt: 'déjà faite', from: 'orig', createdAt: Date.now() }];
+  r.photos[0].edits = { orig: blankEdit(), x1: blankEdit() };
   library.iaSettings = Object.assign({}, library.iaSettings, { plafondMois: 0, coutUnitaire: 0.13 });
   _rzSel.clear();
   openIaSerieDialog(r, _rzSel);
@@ -1501,19 +1511,19 @@ check('Série : les consignes toutes prêtes sont là aussi', dlg.consignesPrete
 serieEdits = 0;
 const serie = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);
-  r.photos.forEach(p => { delete p.ia; p.useIa = false; p.edit.persp = 20; });
+  r.photos.forEach(p => { p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig'; p.edit.persp = 20; });
   const octetsAvant = await Promise.all(r.photos.map(async p => (await photoStore.get(fullKey(p.id))).size));
   const usageAvant = iaSpend();
   await runIaSerie(r, r.photos.slice(), 'équilibre la lumière de la pièce', IA_CATALOGUE[0].id);
   const octetsApres = await Promise.all(r.photos.map(async p => (await photoStore.get(fullKey(p.id))).size));
-  const iaEnStock = await Promise.all(r.photos.map(async p => !!(await photoStore.get(iaKey(p.id)))));
+  const iaEnStock = await Promise.all(r.photos.map(async p => !!(await photoStore.get(photoVersionKey(p, photoActiveId(p))))));
   return {
-    avecIa: r.photos.filter(p => p.ia && p.useIa).length,
+    avecIa: r.photos.filter(p => photoVersions(p).length === 1 && photoActiveId(p) !== 'orig').length,
     total: r.photos.length,
-    memeConsigne: r.photos.every(p => p.ia && p.ia.prompt === 'équilibre la lumière de la pièce'),
+    memeConsigne: r.photos.every(p => (photoVersion(p, photoActiveId(p)) || {}).prompt === 'équilibre la lumière de la pièce'),
     originauxIntacts: octetsAvant.join() === octetsApres.join(),
     iaEnStock: iaEnStock.every(Boolean),
-    reglagesRanges: r.photos.every(p => p.edit.persp === 0 && p.editOrig && p.editOrig.persp === 20),
+    reglagesRanges: r.photos.every(p => p.edit.persp === 0 && p.edits.orig && p.edits.orig.persp === 20),
     hist: r.photos[0].hist.map(h => h.k),
     usage: iaSpend() - usageAvant,
     bilan: (document.querySelector('.rz-bilan-serie.ia-ok p') || {}).textContent || '',
@@ -1535,10 +1545,10 @@ check('Série : un appel au pont par photo (plus le schéma)', serieCalls.length
 serieRate = true; serieEdits = 0;
 const serieKo = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);
-  r.photos.forEach(p => { delete p.ia; p.useIa = false; });
+  r.photos.forEach(p => { p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig'; });
   await runIaSerie(r, r.photos.slice(0, 3), 'consigne', IA_CATALOGUE[0].id);
   const box = document.querySelector('.rz-bilan-serie');
-  return { faites: r.photos.slice(0, 3).filter(p => p.ia).length,
+  return { faites: r.photos.slice(0, 3).filter(p => photoVersions(p).length).length,
            texte: (box.querySelector('p') || {}).textContent || '',
            lignes: [...box.querySelectorAll('.rz-refus li')].map(li => li.textContent) };
 });
@@ -1551,14 +1561,14 @@ serieRate = false;
 // --- Interrompre en cours de série
 const serieStop = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);
-  r.photos.forEach(p => { delete p.ia; p.useIa = false; });
+  r.photos.forEach(p => { p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig'; });
   const pr = runIaSerie(r, r.photos.slice(), 'consigne', IA_CATALOGUE[0].id);
   await new Promise(res => setTimeout(res, 60));
   const btn = document.getElementById('serie-stop');
   btn.click();
   const libelle = btn.textContent;
   await pr;
-  return { libelle, faites: r.photos.filter(p => p.ia).length, total: r.photos.length,
+  return { libelle, faites: r.photos.filter(p => photoVersions(p).length).length, total: r.photos.length,
            texte: (document.querySelector('.rz-bilan-serie p') || {}).textContent || '' };
 });
 check('Série : « Interrompre » annonce que l’arrêt est en cours',
@@ -1641,10 +1651,10 @@ falQueue.reset(); falQueue.attente = 2;
 const trois = await page.evaluate(async () => {
   library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10, plafondMois: 0 });
   const r = realisations[0], p = r.photos[0];
-  delete p.ia; p.useIa = false;
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig';
   const etats = [];
   await runIaEdit(p, 'passe par la file', IA_CATALOGUE[0].id, { r, onEtat: j => etats.push(j.etat + (j.position != null ? ':' + j.position : '')) });
-  return { etats, aVersionIa: !!p.ia, prompt: p.ia && p.ia.prompt, useIa: p.useIa === true };
+  return { etats, aVersionIa: photoVersions(p).length > 0, prompt: (photoVersion(p, photoActiveId(p)) || {}).prompt, useIa: photoActiveId(p) !== 'orig' };
 });
 check('File : la demande est déposée, suivie, puis récupérée — et plus jamais en appel bloquant',
   fileCalls.some(b => b.action === 'submit') && fileCalls.some(b => b.action === 'status')
@@ -1665,7 +1675,7 @@ const attenteTel = await page.evaluate(async () => {
   library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10, confirmer: false, plafondMois: 0 });
   library.iaJobs = [];
   const r = realisations[0], p = r.photos[0];
-  delete p.ia; p.useIa = false;
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig';
   _rzOpenId = r.id; renderRealisations();
   await openPhotoEditor(r.id, p.id);
   await new Promise(x => setTimeout(x, 700));
@@ -1696,7 +1706,7 @@ const finTel = await page.evaluate(async () => {
   for (let i = 0; i < 60 && _iaEnCours; i++) await new Promise(x => setTimeout(x, 200));
   const p = realisations[0].photos[0];
   const sub = document.querySelector('#ed-controls .ia-sub');
-  return { pose: !!p.ia, restants: iaJobs().length, sousApres: sub ? sub.textContent : '', annulable: !!document.querySelector('#ed-controls .ia-annuler') };
+  return { pose: photoVersions(p).length > 0, restants: iaJobs().length, sousApres: sub ? sub.textContent : '', annulable: !!document.querySelector('#ed-controls .ia-annuler') };
 });
 check('Écran : l’attente se termine sur la pose du résultat, et l’état d’attente laisse la place',
   finTel.pose && finTel.restants === 0 && !finTel.annulable
@@ -1825,7 +1835,7 @@ await page.evaluate(async () => { library.iaJobs = []; await saveLibrary(); });
 falQueue.reset(); falQueue.attente = 999;
 const delai = await page.evaluate(async () => {
   const r = realisations[0], p = r.photos[0];
-  delete p.ia; p.useIa = false;
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig';
   library.iaJobs = [];
   library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 0.05 });
   let msg = '';
@@ -1844,14 +1854,14 @@ const reprise = await page.evaluate(async () => {
   library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10 });
   const j = iaJobs()[0];
   const r = findRealisation(j.realId), p = r.photos.find(x => x.id === j.photoId);
-  delete p.ia; p.useIa = false;
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig';
   _rzOpenId = null; _iaReprise = null; renderRealisations();
   const bandeauListe = !!document.querySelector('.rz-reprise-ia');
   const texteAttente = (document.querySelector('.rz-reprise-ia p') || {}).textContent || '';
   const detail = (document.querySelector('.rz-reprise-ia .rz-refus') || {}).textContent || '';
   await iaReprendre();
   await new Promise(x => setTimeout(x, 300));
-  return { bandeauListe, texteAttente, detail, aVersionIa: !!p.ia, prompt: p.ia && p.ia.prompt,
+  return { bandeauListe, texteAttente, detail, aVersionIa: photoVersions(p).length > 0, prompt: (photoVersion(p, photoActiveId(p)) || {}).prompt,
            restants: iaJobs().length, bilan: (document.querySelector('.rz-reprise-ia p') || {}).textContent || '' };
 });
 check('Reprise : le bandeau se voit hors de la fiche (une demande peut porter sur n’importe quelle réalisation)',
@@ -1949,6 +1959,322 @@ await page.evaluate(async (arg) => {
   _rzOpenId = arg.id || (realisations[0] && realisations[0].id) || null;
   renderRealisations();
 }, { id: rzOuvertAvant, pub: etatPubAvant });
+
+
+// ============================================================================
+//  PLUSIEURS VERSIONS PAR PHOTO, ET LE CHOIX DE CE QU'ON RETOUCHE (chantier ph17)
+//  Le pont est intercepté : aucun crédit n'est dépensé.
+// ============================================================================
+const verCalls = [];
+const pubAvantVersions = await page.evaluate(() =>
+  realisations[0].photos.map(p => ({ id: p.id, publishedAt: p.publishedAt || null, touchedAt: p.touchedAt || null })));
+await page.route('**/functions/v1/photo-ia', async (route) => {
+  const body = JSON.parse(route.request().postData() || '{}');
+  verCalls.push({ action: body.action, model: body.model, from: body.from,
+                  imgLen: (body.imageDataUri || '').length, prompt: (body.input || {}).prompt });
+  if (body.action === 'schema') {
+    await route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ model: body.model, required: ['prompt', 'image_urls'],
+        properties: { prompt: { type: 'string' }, image_urls: { type: 'array' }, sync_mode: { type: 'boolean' },
+                      resolution: { type: 'string', enum: ['1K', '2K', '4K'], default: '1K' } } }) });
+    return;
+  }
+  if (body.action === 'balance') { await route.fulfill({ status: 200, contentType: 'application/json', body: '{"balance":9.87}' }); return; }
+  const q = falQueue.handle(body);
+  await route.fulfill({ status: q.status, contentType: 'application/json', body: JSON.stringify(q.json) });
+});
+
+// --- MIGRATION. Les photos déjà retouchées sont à l'ancien format (une seule version, la
+//     clé `ra_<photo>`). Elles doivent devenir la version 1 SANS qu'on recopie une image :
+//     sinon toute retouche déjà payée deviendrait illisible à la mise à jour.
+const migr = await page.evaluate(() => {
+  const ancienne = { id: 'photo-ancienne', name: 'vieille.jpg', caption: '', w: 100, h: 80,
+    ia: { model: 'fal-ai/nano-banana-pro/edit', prompt: 'ancienne consigne', createdAt: 1000 },
+    useIa: true,
+    edit: Object.assign(blankEdit(), { expo: 0.5 }),        // les réglages de la version IA
+    editOrig: Object.assign(blankEdit(), { persp: 0.3 }),   // ceux de la photo d'origine
+    editIa: Object.assign(blankEdit(), { expo: 0.5 }) };
+  const r = normalizeRealisation({ id: 'real-ancienne', title: 'Ancienne', photos: [ancienne] });
+  const p = r.photos[0];
+  return {
+    nb: photoVersions(p).length,
+    cle: photoVersions(p)[0] && photoVersions(p)[0].key,
+    cleAttendue: 'ra_photo-ancienne',
+    actif: photoActiveId(p),
+    prompt: (photoVersion(p, photoActiveId(p)) || {}).prompt,
+    modele: (photoVersion(p, photoActiveId(p)) || {}).model,
+    depuis: (photoVersion(p, photoActiveId(p)) || {}).from,
+    editIa: p.edit.expo, editOrig: (p.edits.orig || {}).persp,
+    resteAncien: ('ia' in p) || ('useIa' in p) || ('editOrig' in p) || ('editIa' in p),
+  };
+});
+check('Migration : l’unique retouche d’avant devient la version 1 et GARDE sa clé de stockage',
+  migr.nb === 1 && migr.cle === migr.cleAttendue, JSON.stringify(migr));
+check('Migration : elle reste la version affichée, avec son modèle et sa consigne',
+  migr.actif !== 'orig' && migr.prompt === 'ancienne consigne' && /nano-banana/.test(migr.modele || '') && migr.depuis === 'orig',
+  JSON.stringify(migr));
+check('Migration : les réglages de chaque version sont rangés au bon endroit',
+  migr.editIa === 0.5 && migr.editOrig === 0.3, JSON.stringify(migr));
+check('Migration : les champs de l’ancien format sont retirés (une seule source de vérité)',
+  migr.resteAncien === false);
+
+// --- DEUX RETOUCHES COEXISTENT. C'est la demande de départ : relancer une retouche
+//     n'écrase plus la précédente.
+falQueue.reset();
+const deux = await page.evaluate(async () => {
+  library.iaSettings = Object.assign({}, library.iaSettings, { sondageSec: 1, attenteMaxMin: 10, plafondMois: 0, confirmer: false });
+  const r = realisations[0], p = r.photos[0];
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig';
+  const fichiersAvant = window.__files.size;
+  await runIaEdit(p, 'premier essai', IA_CATALOGUE[0].id, { r, from: 'orig' });
+  const apres1 = photoActiveId(p);
+  await runIaEdit(p, 'deuxième essai', IA_CATALOGUE[0].id, { r, from: 'orig' });
+  const vs = photoVersions(p);
+  return {
+    n: vs.length,
+    clesDistinctes: vs[0] && vs[1] && vs[0].key !== vs[1].key,
+    toutesEnStock: (await Promise.all(vs.map(v => photoStore.get(v.key)))).every(Boolean),
+    consignes: vs.map(v => v.prompt),
+    actifEstLaDerniere: photoActiveId(p) === vs[1].id && photoActiveId(p) !== apres1,
+    originalIntact: !!(await photoStore.get(fullKey(p.id))),
+    nouveauxFichiers: window.__files.size - fichiersAvant,
+    libelles: [photoVersionLabel(p, 'orig'), photoVersionLabel(p, vs[0].id), photoVersionLabel(p, vs[1].id)],
+  };
+});
+check('Versions : une deuxième retouche s’AJOUTE au lieu d’écraser la première',
+  deux.n === 2 && deux.clesDistinctes && deux.toutesEnStock, JSON.stringify(deux));
+check('Versions : chacune garde sa consigne',
+  deux.consignes[0] === 'premier essai' && deux.consignes[1] === 'deuxième essai', deux.consignes.join(' | '));
+check('Versions : la dernière produite devient celle qui est affichée', deux.actifEstLaDerniere);
+check('Versions : l’originale n’est jamais touchée, et deux fichiers sont ajoutés',
+  deux.originalIntact && deux.nouveauxFichiers === 2, deux.nouveauxFichiers + ' fichier(s)');
+check('Versions : elles portent un nom lisible dès le départ',
+  deux.libelles[0] === 'Photo d’origine' && deux.libelles[1] === 'Retouche 1' && deux.libelles[2] === 'Retouche 2',
+  deux.libelles.join(' / '));
+
+// --- LE POINT DE DÉPART EST RESPECTÉ. C'était l'autre moitié de la demande : l'envoi
+//     repartait toujours de l'originale, sans qu'on puisse dire autre chose.
+const departVer = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  const v1 = photoVersions(p)[0].id;
+  photoSetActive(p, v1);
+  await runIaEdit(p, 'à partir de la retouche 1', IA_CATALOGUE[0].id, { r, from: v1 });
+  const vs = photoVersions(p);
+  const derniere = vs[vs.length - 1];
+  return { depuis: derniere.from, attendu: v1, n: vs.length,
+           chaine: vs.map(v => v.from) };
+});
+const envois = verCalls.filter(c => c.action === 'submit');
+check('Point de départ : une retouche lancée depuis une autre retouche s’en souvient',
+  departVer.depuis === departVer.attendu && departVer.n === 3, JSON.stringify(departVer));
+check('Point de départ : l’image envoyée n’est PAS la même selon la version choisie',
+  envois.length >= 3 && envois[2].imgLen !== envois[0].imgLen,
+  envois.map(e => e.imgLen).join(' / '));
+
+// --- LE SÉLECTEUR À L'ÉCRAN : c'est par là que ça se choisit, pas par le code.
+const selDepart = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  await openPhotoEditor(r.id, p.id);
+  await new Promise(x => setTimeout(x, 700));
+  _ed.tab = 'ia'; buildEditorControls();
+  await new Promise(x => setTimeout(x, 300));
+  const sel = document.querySelector('#ed-controls .ia-src-sel');
+  return {
+    existe: !!sel,
+    options: sel ? [...sel.options].map(o => o.textContent) : [],
+    defaut: sel ? sel.value : '',
+    actif: photoActiveId(p),
+    note: (document.querySelector('#ed-controls .ia-src + .ia-field-desc') || {}).textContent || '',
+  };
+});
+check('Écran : on choisit à partir de quelle version on retouche',
+  selDepart.existe && selDepart.options.length === 4, selDepart.options.join(' | '));
+check('Écran : par défaut, on retouche la version qu’on regarde',
+  selDepart.defaut === selDepart.actif && selDepart.options.some(t => /\(affichée\)/.test(t)),
+  selDepart.defaut + ' vs ' + selDepart.actif);
+check('Écran : repartir d’une retouche est expliqué, pas juste possible',
+  /déjà redessinée/.test(selDepart.note), selDepart.note.slice(0, 90));
+
+// --- CHANGER DE VERSION AFFICHÉE, ET CE QUE ÇA ENTRAÎNE
+const bascule2 = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  const vs = photoVersions(p);
+  const puces = () => [...document.querySelectorAll('#ed-controls .ia-ver')].map(b => b.textContent);
+  const active = () => (document.querySelector('#ed-controls .ia-ver.on') || {}).textContent || '';
+  const avant = { puces: puces(), active: active() };
+  document.querySelectorAll('#ed-controls .ia-ver')[1].click();   // « Retouche 1 »
+  await new Promise(x => setTimeout(x, 600));
+  const apres = { active: active(), actif: photoActiveId(p), attendu: vs[0].id };
+  // ce qui est affiché est aussi ce qui sera publié : la vignette et l'export suivent
+  const cleVignette = photoVersionKey(p, photoActiveId(p), true);
+  const cleExport = photoVersionKey(p, photoActiveId(p));
+  return { avant, apres, suitPartout: cleVignette === vs[0].key && cleExport === vs[0].key,
+           hist: (p.hist || []).map(h => h.k) };
+});
+check('Écran : la pile des versions est là, l’originale comprise, une seule marquée',
+  bascule2.avant.puces.length === 4 && bascule2.avant.puces[0] === 'Photo d’origine',
+  bascule2.avant.puces.join(' | '));
+check('Écran : toucher une version la rend active',
+  bascule2.apres.actif === bascule2.apres.attendu && /Retouche 1/.test(bascule2.apres.active),
+  JSON.stringify(bascule2.apres));
+check('Versions : celle qui est affichée est celle qui s’exporte et se publie', bascule2.suitPartout);
+check('Versions : le changement est tracé dans l’historique de la photo',
+  bascule2.hist.includes('version'), bascule2.hist.join(','));
+
+// --- CHAQUE VERSION GARDE SES PROPRES RÉGLAGES
+const reglagesParVersion = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  const vs = photoVersions(p);
+  photoSetActive(p, vs[0].id); p.edit.expo = 0.42;
+  photoSetActive(p, vs[1].id); p.edit.expo = -0.17;
+  photoSetActive(p, 'orig');   p.edit.expo = 0.05;
+  const lu = [];
+  photoSetActive(p, vs[0].id); lu.push(p.edit.expo);
+  photoSetActive(p, vs[1].id); lu.push(p.edit.expo);
+  photoSetActive(p, 'orig');   lu.push(p.edit.expo);
+  photoSetActive(p, vs[0].id);
+  return lu;
+});
+check('Versions : les réglages manuels suivent la version, ils ne la traversent pas',
+  reglagesParVersion.join(',') === '0.42,-0.17,0.05', reglagesParVersion.join(','));
+
+// --- COMPARER : la version affichée face à CELLE DONT ELLE SORT
+const compareChaine = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  const vs = photoVersions(p);
+  photoSetActive(p, vs[2].id);           // la retouche faite À PARTIR DE la retouche 1
+  await edLoadAlt();
+  const depuisRetouche = _ed.altId;
+  photoSetActive(p, 'orig');
+  await edLoadAlt();
+  const depuisOriginal = _ed.altId;
+  photoSetActive(p, vs[2].id);
+  return { depuisRetouche, attendu: vs[0].id, depuisOriginal, derniere: vs[vs.length - 1].id };
+});
+check('Comparateur : une retouche est comparée à celle dont elle sort, pas à l’originale par principe',
+  compareChaine.depuisRetouche === compareChaine.attendu,
+  compareChaine.depuisRetouche + ' vs ' + compareChaine.attendu);
+check('Comparateur : depuis l’originale, c’est la dernière retouche qu’on met en face',
+  compareChaine.depuisOriginal === compareChaine.derniere);
+
+// --- RENOMMER une version : « Retouche 2 » ne veut plus rien dire au bout de trois jours
+const renomVer = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  const vid = photoActiveId(p);
+  iaAskRenameVersion(p, vid);
+  await new Promise(x => setTimeout(x, 200));
+  const champ = document.getElementById('ver-nom');
+  const placeholder = champ ? champ.placeholder : '';
+  champ.value = '  désencombré  ';
+  document.getElementById('ver-ok').click();
+  await new Promise(x => setTimeout(x, 300));
+  return { placeholder, nom: photoVersionLabel(p, vid),
+           surLaPuce: [...document.querySelectorAll('#ed-controls .ia-ver')].map(b => b.textContent).join(' | '),
+           /* closeModal ne fait que retirer la classe « open » : c'est elle qui dit si la
+              fenêtre est refermée, pas la présence du champ dans le DOM. */
+           ferme: !document.getElementById('overlay').classList.contains('open') };
+});
+check('Versions : on peut nommer une version, et le nom automatique sert de repère',
+  renomVer.nom === 'désencombré' && /Retouche/.test(renomVer.placeholder), renomVer.nom + ' (' + renomVer.placeholder + ')');
+check('Versions : le nom choisi apparaît tout de suite dans la pile',
+  /désencombré/.test(renomVer.surLaPuce) && renomVer.ferme, renomVer.surLaPuce);
+
+// --- SUPPRIMER une version : c'est une image payée, la confirmation doit le dire
+const supprVer = await page.evaluate(async () => {
+  const p = realisations[0].photos[0];
+  const vs = photoVersions(p);
+  const v1 = vs[0].id, v3 = vs[2].id, cle1 = vs[0].key;
+  photoSetActive(p, v1);
+  buildEditorControls();
+  await new Promise(x => setTimeout(x, 200));
+  const orig = window.askConfirm; let question = '';
+  window.askConfirm = (m, cb) => { question = m; return Promise.resolve(cb()); };
+  const btn = [...document.querySelectorAll('#ed-controls .ia-versions .mini')].find(b => /Supprimer/.test(b.textContent));
+  btn.click();
+  await new Promise(x => setTimeout(x, 600));
+  window.askConfirm = orig;
+  return { question, n: photoVersions(p).length,
+           imageEffacee: !(await photoStore.get(cle1)),
+           rattachee: (photoVersion(p, v3) || {}).from,
+           actif: photoActiveId(p),
+           autresIntactes: (await Promise.all(photoVersions(p).map(v => photoStore.get(v.key)))).every(Boolean) };
+});
+check('Versions : supprimer prévient que l’image est payée et qu’elle sera perdue',
+  /facturée/.test(supprVer.question) && /coûtera un nouvel appel/.test(supprVer.question), supprVer.question.slice(0, 110));
+check('Versions : la version part vraiment, son image avec elle', supprVer.n === 2 && supprVer.imageEffacee, JSON.stringify(supprVer));
+check('Versions : ce qui en descendait se rattache à ce dont ELLE descendait',
+  supprVer.rattachee === 'orig', String(supprVer.rattachee));
+check('Versions : on retombe sur une version qui existe, et les autres images sont intactes',
+  supprVer.actif === 'orig' && supprVer.autresIntactes, supprVer.actif);
+
+// --- LA SÉRIE aussi choisit son point de départ, et repart de l'originale par défaut :
+//     enchaîner vingt photos sur des sorties déjà redessinées ferait dériver toute la série.
+const serieDepart = await page.evaluate(async () => {
+  const r = realisations[0];
+  closePhotoEditor();
+  await new Promise(x => setTimeout(x, 300));
+  _rzOpenId = r.id; renderRealisations();
+  openIaSerieDialog(r, new Set());
+  const sel = document.getElementById('serie-depart');
+  const res = { existe: !!sel, defaut: sel ? sel.value : '', options: sel ? [...sel.options].map(o => o.textContent) : [] };
+  closeModal();
+  return res;
+});
+check('Série : le point de départ est proposé là aussi',
+  serieDepart.existe && serieDepart.options.length === 2, serieDepart.options.join(' | '));
+check('Série : par défaut elle repart de la photo d’origine de chacune',
+  serieDepart.defaut === 'orig' && /recommandé/.test(serieDepart.options[0] || ''), serieDepart.defaut);
+
+// --- PARCOURS TÉLÉPHONE : une pile de versions qui ne tient pas à 390 px ne sert à rien.
+const vueAvantVers = page.viewportSize();
+await page.setViewportSize({ width: 390, height: 844 });
+const versTel = await page.evaluate(async () => {
+  const r = realisations[0], p = r.photos[0];
+  // un nom long, comme il s'en écrit vraiment
+  const vs = photoVersions(p);
+  vs[0].label = 'lumière équilibrée et fenêtres dégagées';
+  await openPhotoEditor(r.id, p.id);
+  await new Promise(x => setTimeout(x, 800));
+  _ed.tab = 'ia'; buildEditorControls();
+  await new Promise(x => setTimeout(x, 400));
+  const puces = [...document.querySelectorAll('#ed-controls .ia-ver')];
+  puces[1].click();
+  await new Promise(x => setTimeout(x, 600));
+  const carte=document.querySelector('#ed-controls .ia-versions');
+  if(carte)carte.scrollIntoView({block:'center'});
+  await new Promise(x => setTimeout(x, 250));
+  return {
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    nPuces: puces.length,
+    active: (document.querySelector('#ed-controls .ia-ver.on') || {}).textContent || '',
+    meta: (document.querySelector('#ed-controls .ia-ver-meta') || {}).textContent || '',
+  };
+});
+await page.screenshot({ path: '/tmp/mn-versions-390.png' });
+check('Écran : la pile de versions tient à 390 px, même avec un nom long',
+  versTel.debord <= 1 && versTel.nPuces === 3, 'débordement ' + versTel.debord + 'px, ' + versTel.nPuces + ' version(s)');
+check('Écran : on change de version au doigt, et l’écran dit d’où elle sort',
+  /lumière équilibrée/.test(versTel.active) && /à partir de/.test(versTel.meta),
+  versTel.active + ' — ' + versTel.meta.slice(0, 70));
+await page.setViewportSize(vueAvantVers);
+
+await page.unroute('**/functions/v1/photo-ia');
+await page.evaluate(async (pub) => {
+  closePhotoEditor();
+  const r = realisations[0], p = r.photos[0];
+  // On rend la photo à son état d'avant la section : l'originale affichée, aucune retouche,
+  // et l'état de publication remis — le décompte « à republier » est vérifié plus loin.
+  for (const v of photoVersions(p)) { try { await photoStore.del(v.key); } catch (e) {} }
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig'; p.edit = blankEdit();
+  pub.forEach(x => {
+    const ph = (r.photos || []).find(y => y.id === x.id);
+    if (!ph) return;
+    if (x.publishedAt === null) delete ph.publishedAt; else ph.publishedAt = x.publishedAt;
+    if (x.touchedAt === null) delete ph.touchedAt; else ph.touchedAt = x.touchedAt;
+  });
+  saveRealisations(); renderRealisations();
+}, pubAvantVersions);
+await page.waitForTimeout(300);
 
 
 // ============================================================================
@@ -2279,8 +2605,19 @@ check('Partage : plus rien en ligne, l’image d’aperçu est effacée',
 // ============================================================================
 const bkZip = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);
-  r.photos[0].ia = { model: 'test/modele', prompt: 'essai' };
-  await photoStore.save(iaKey(r.photos[0].id), new Blob(['fausse-image-ia'], { type: 'image/jpeg' }));
+  // Deux retouches sur la même photo : l'archive doit les emporter toutes les deux, sinon
+  // une image payée disparaîtrait de la seule sauvegarde qui existe.
+  const p0 = r.photos[0];
+  p0.versions = [
+    { id: 'z1', key: 'ra_' + p0.id, model: 'test/modele', prompt: 'essai', from: 'orig', createdAt: Date.now() },
+    { id: 'z2', key: 'ra_' + p0.id + '_z2', model: 'test/modele', prompt: 'essai 2', from: 'z1', createdAt: Date.now() },
+  ];
+  p0.edits = { orig: blankEdit(), z1: blankEdit(), z2: blankEdit() };
+  // On laisse l'originale affichée : ces deux « images » sont des octets factices, non
+  // décodables — les afficher laisserait l'éditeur vide pour les contrôles suivants.
+  p0.active = 'orig';
+  await photoStore.save('ra_' + p0.id, new Blob(['fausse-image-ia'], { type: 'image/jpeg' }));
+  await photoStore.save('ra_' + p0.id + '_z2', new Blob(['fausse-image-ia-2'], { type: 'image/jpeg' }));
   openBackupPanel();
   const portees = [...document.querySelectorAll('#bk-portee option')].map(o => o.textContent);
   const taille = document.getElementById('bk-taille').textContent;
@@ -2347,15 +2684,17 @@ const bkRestore = await page.evaluate(async (b64) => {
   const rev = realisations.find(x => x.id === r.id);
   const photo = rev && rev.photos.find(p => p.id === pid);
   const blob = await photoStore.get(fullKey(pid));
-  const ia = await photoStore.get(iaKey(rev.photos[0].id));
+  const vs = photoVersions(rev.photos[0]);
+  const iaBlobs = await Promise.all(vs.map(v => photoStore.get(v.key)));
   return { nbReal: realisations.length, retrouvee: !!rev, titre: rev && rev.title,
-           memePhoto: !!photo, memeTaille: blob ? blob.size : 0, avant, ia: !!ia,
+           memePhoto: !!photo, memeTaille: blob ? blob.size : 0, avant,
+           ia: vs.length === 2 && iaBlobs.every(Boolean),
            message: document.getElementById('bk-msg') ? document.getElementById('bk-msg').textContent : '' };
 }, bkZip.b64);
 check('Restauration : les réalisations sont revenues', bkRestore.nbReal >= 1 && bkRestore.retrouvee, bkRestore.nbReal + ' réalisation(s)');
 check('Restauration : la photo est revenue, octet pour octet',
   bkRestore.memePhoto && bkRestore.memeTaille === bkRestore.avant, bkRestore.avant + ' → ' + bkRestore.memeTaille);
-check('Restauration : la version IA aussi', bkRestore.ia);
+check('Restauration : les DEUX retouches de la photo reviennent aussi', bkRestore.ia);
 check('Restauration : le bilan dit combien de photos sont remises en place',
   /photo\(s\) remises en place/.test(bkRestore.message), bkRestore.message);
 
@@ -2387,7 +2726,11 @@ for (const [w, h, nom, minPart, enLigneAttendu] of [
   // On mesure sur la photo d'origine : à ce stade du test, la version IA est l'image
   // factice de 1×1 px renvoyée par le faux pont, qui fausserait toute mesure de surface.
   await page.evaluate(() => {
-    realisations[0].photos[0].useIa = false;
+    // On repose l'affichage sur la photo d'origine SANS passer par photoSetActive : celui-ci
+    // marque la photo « à republier », ce que le décompte du tableau de bord vérifie plus loin.
+    const p0 = realisations[0].photos[0];
+    p0.active = 'orig';
+    p0.edit = JSON.parse(JSON.stringify((p0.edits || {}).orig || blankEdit()));
     if (!document.getElementById('ed-modal')) openPhotoEditor(realisations[0].id, realisations[0].photos[0].id);
   });
   await page.waitForTimeout(900);
