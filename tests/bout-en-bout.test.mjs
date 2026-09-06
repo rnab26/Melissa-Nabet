@@ -51,7 +51,24 @@ const publication = await crm.evaluate(async () => {
         upload: async (p, b) => { files.set(p, b); return { error: null }; },
         download: async (p) => files.has(p) ? { data: files.get(p), error: null } : { data: null, error: { message: 'Object not found', statusCode: '404' } },
         remove: async (ps) => { ps.forEach(x => files.delete(x)); return { error: null }; },
-        list: async () => ({ data: [], error: null }),
+        /* Le vrai stockage LISTE ce qu'il contient, et la publication s'en sert pour savoir
+           ce qui est réellement en ligne. Un listing toujours vide faisait croire au CRM
+           que tout avait disparu : il réécrivait toutes les photos à chaque publication, et
+           aucun test ne pouvait voir qu'on n'en réécrit qu'une. */
+        list: async (prefixe) => {
+          const p = String(prefixe || '').replace(/\/$/, '');
+          const vus = new Set(), out = [];
+          for (const chemin of files.keys()) {
+            if (p && !chemin.startsWith(p + '/')) continue;
+            const reste = p ? chemin.slice(p.length + 1) : chemin;
+            const nom = reste.split('/')[0];
+            if (!nom || vus.has(nom)) continue;
+            vus.add(nom);
+            /* Un dossier n'a pas de `metadata` chez Supabase — c'est ce qui le distingue. */
+            out.push(reste.indexOf('/') >= 0 ? { name: nom } : { name: nom, metadata: { size: 1 } });
+          }
+          return { data: out, error: null };
+        },
       }),
     },
     from: chain,

@@ -945,6 +945,14 @@
     font-size:12.5px;color:var(--ink);overflow:hidden;}
   .site-ordre-nom i{font-style:normal;font-size:11px;color:var(--stone);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pub-envoi{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--ink);cursor:pointer;}
+  .pub-envoi.off{color:var(--stone);font-style:italic;cursor:default;}
+  .pub-envoi input{margin:0;}
+  .pub-choix{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
+    margin:10px 0 4px;padding:10px 12px;border:1px solid var(--panel-edge);border-radius:8px;
+    background:var(--travertine);font-size:12px;color:var(--stone);}
+  .pub-choix span{flex:1;min-width:180px;}
+  .pub-choix div{display:flex;gap:6px;}
   .site-langues{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 4px;}
   .site-chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);}
   .site-onglets{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:10px 0 0;
@@ -9386,6 +9394,10 @@ async function askPublishRealisation(r){
       +(plan.ecartees?' — les '+plan.ecartees+' autres sont écartées (menu ⋯ d’une vignette pour les remettre).':'.')+'</p>'
     +(plan.couvEcartee?'<p class="pub-note">La photo choisie comme couverture est écartée du site : c’est la première photo publiée qui servira de couverture.</p>':'')
     +(ancienne?'<p class="pub-note">Cette réalisation a été mise en ligne avant que le CRM ne garde trace des versions : on ne peut pas montrer ici ce qui y est en ce moment. Les photos concernées seront réécrites une fois à la prochaine publication, puis le suivi sera exact.</p>':'')
+    +'<div class="pub-choix" id="pub-choix" hidden>'
+      +'<span>Vous pouvez ne mettre à jour que le texte et les informations du projet, en laissant les photos telles qu’elles sont en ligne.</span>'
+      +'<div><button type="button" class="mini" id="pub-aucune">Photos inchangées</button>'
+      +'<button type="button" class="mini" id="pub-toutes">Tout envoyer</button></div></div>'
     +'<div class="pub-liste" id="pub-liste"></div>'
     +'<p class="pub-note" id="pub-note"></p>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">'
@@ -9398,6 +9410,9 @@ async function askPublishRealisation(r){
   const liste=document.getElementById('pub-liste');
   const note=document.getElementById('pub-note');
   const bouges=plan.photos.filter(x=>x.etat!=='inchangee');
+  /* Seule une photo DÉJÀ en ligne, dont on sait quels fichiers y sont, peut être laissée
+     en l'état. Les autres n'ont rien à garder. */
+  const peutGarder=x=>x.etat!=='nouvelle'&&!!(x.p.pub&&x.p.pub.full&&x.p.pub.thumb);
   if(plan.rien){
     liste.innerHTML='<p class="pub-vide">Rien n’a changé depuis la dernière publication : le site montre déjà ces '
       +plan.photos.length+' photo(s), dans cet ordre.<br>Publier maintenant n’enverrait rien de nouveau.</p>';
@@ -9407,6 +9422,7 @@ async function askPublishRealisation(r){
     const p=x.p;
     const ligne=document.createElement('div');
     ligne.className='pub-ligne'+(x.etat==='inchangee'?' inch':'');
+    ligne.dataset.pid=p.id;
     ligne.innerHTML='<div class="pub-h"><b>'+esc(p.name||'Photo sans titre')+'</b>'
       +'<span class="pub-why">'+esc(x.etat==='nouvelle'?'pas encore en ligne'
         :(x.etat==='inchangee'?'déjà en ligne à l’identique':x.pourquoi))+'</span></div>'
@@ -9417,7 +9433,13 @@ async function askPublishRealisation(r){
       +'<span class="pub-ver" data-verlbl>'+esc(photoVersionLabel(p,photoActiveId(p)))+'</span>'
       +(photoVersions(p).length?'<button type="button" class="pub-chver" data-chver>Changer la version…</button>':'')
       +'</div>'
-      +'</div>';
+      +'</div>'
+      /* Une photo déjà en ligne peut RESTER telle quelle : on décoche, et seuls la fiche,
+         l'ordre et les légendes partent. Une photo jamais mise en ligne n'a pas ce choix —
+         la garder ferait pointer le site sur un fichier qui n'existe pas. */
+      +(peutGarder(x)
+        ? '<label class="pub-envoi"><input type="checkbox" data-envoi checked> Envoyer cette photo</label>'
+        : (x.etat==='nouvelle'?'<span class="pub-envoi off">Première mise en ligne : cette photo doit partir.</span>':''));
     liste.appendChild(ligne);
     /* Ce qui est en ligne : l'image PUBLIQUE, à son adresse réelle. C'est la seule preuve
        honnête — un rendu local montrerait ce que le CRM croit avoir publié. */
@@ -9478,7 +9500,30 @@ async function askPublishRealisation(r){
   else if(bouges.length&&plan.inchangees)note.textContent=plan.inchangees+' photo(s) déjà en ligne à l’identique ne seront pas réécrites.';
 
   const go=document.getElementById('pub-go');
-  go.addEventListener('click',()=>{closeModal();publishRealisation(r);});
+  /* CE QUI PART, EN DIRECT. Décocher une photo doit se lire tout de suite sur le bouton :
+     sinon on confirme sans savoir si on envoie une image ou seulement du texte. */
+  const cases=()=>[...liste.querySelectorAll('[data-envoi]')];
+  /* On lit l'identifiant PORTÉ PAR LA LIGNE, pas la position dans un tableau : les deux
+     listes ne coïncident pas toujours (lignes tronquées à 40, photos inchangées masquées),
+     et une correspondance par rang finirait par garder la mauvaise photo. */
+  const gardees=()=>cases().filter(c=>!c.checked)
+    .map(c=>c.closest('.pub-ligne').dataset.pid).filter(Boolean);
+  const rafraichir=()=>{
+    const gard=gardees().length;
+    const envoyees=bouges.length-gard;
+    if(!r.published)return;
+    go.textContent=envoyees>0
+      ? 'Republier ('+envoyees+' photo'+(envoyees>1?'s':'')+')'
+      : (gard?'Mettre à jour le texte seulement':'Mettre le site à jour');
+  };
+  const choix=document.getElementById('pub-choix');
+  if(choix&&cases().length){
+    choix.hidden=false;
+    document.getElementById('pub-aucune').addEventListener('click',()=>{cases().forEach(c=>{c.checked=false;});rafraichir();});
+    document.getElementById('pub-toutes').addEventListener('click',()=>{cases().forEach(c=>{c.checked=true;});rafraichir();});
+    cases().forEach(c=>c.addEventListener('change',rafraichir));
+  }
+  go.addEventListener('click',()=>{const g=gardees();closeModal();publishRealisation(r,g.length?{garder:g}:undefined);});
   const force=document.getElementById('pub-force');
   if(force)force.addEventListener('click',()=>{closeModal();publishRealisation(r,{tout:true});});
 }
@@ -9495,6 +9540,13 @@ async function publishRealisation(r,opts){
   if(!photosPubliees(r).length){toast('Toutes les photos sont écartées du site : il n’y a rien à publier');return;}
   if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
   const tout=!!(opts&&opts.tout);
+  /* PHOTOS GARDÉES TELLES QUELLES. Le reproche exact : « pour publier mon texte, je suis
+     contraint de publier la photo qui n'est pas à jour ». Une photo listée ici reste en
+     ligne dans la version que le visiteur voit déjà — son fichier n'est ni recalculé ni
+     renvoyé — pendant que la fiche du projet, l'ordre et les légendes, eux, partent.
+     Une photo JAMAIS mise en ligne ne peut pas être gardée : le manifeste pointerait sur
+     un fichier qui n'existe pas. La consigne est donc ignorée pour celles-là. */
+  const garder=new Set((opts&&opts.garder)||[]);
   const btn=document.querySelector('#rz-body [data-publish]');
   if(btn){btn.disabled=true;btn.textContent='Publication…';}
   try{
@@ -9509,8 +9561,16 @@ async function publishRealisation(r,opts){
       if(existing)presents=new Set(existing.map(f=>f.name));
     }catch(e){ /* listing indisponible : on réécrit tout, c'est le choix sûr */ }
 
-    const aEcrire=plan.photos.filter(x=>tout||x.etat!=='inchangee'
-      ||!(presents&&presents.has(x.full.split('/').pop())&&presents.has(x.thumb.split('/').pop())));
+    /* Gardable seulement si ce qui est en ligne existe VRAIMENT : sans cette vérification,
+       garder une photo dont le fichier a disparu du seau publierait un cadre vide. */
+    const estGardee=x=>{
+      const pub=x.p.pub;
+      if(!garder.has(x.p.id)||!pub||!pub.full||!pub.thumb)return false;
+      if(presents&&!(presents.has(pub.full.split('/').pop())&&presents.has(pub.thumb.split('/').pop())))return false;
+      return true;
+    };
+    const aEcrire=plan.photos.filter(x=>!estGardee(x)&&(tout||x.etat!=='inchangee'
+      ||!(presents&&presents.has(x.full.split('/').pop())&&presents.has(x.thumb.split('/').pop()))));
     const entries=[];
     /* Les identités publiées sont préparées ici mais POSÉES plus bas, après l'écriture du
        manifeste. Tant qu'il n'est pas écrit, le site ne sait rien de ces images : les
@@ -9521,7 +9581,8 @@ async function publishRealisation(r,opts){
     let sharePartage=null,ecrites=0;
     for(const x of plan.photos){
       const p=x.p;
-      const doit=aEcrire.indexOf(x)>=0;
+      const laisser=estGardee(x);
+      const doit=!laisser&&aEcrire.indexOf(x)>=0;
       let w=(p.pub&&p.pub.w)||p.w||0,h=(p.pub&&p.pub.h)||p.h||0;
       if(doit){
         ecrites++;
@@ -9555,17 +9616,43 @@ async function publishRealisation(r,opts){
       }
       /* `plan.coverId` et non `r.cover` : si la couverture choisie a été écartée du site,
          c'est la première photo publiée qui la remplace — décidé une fois, dans le plan. */
-      const entry={full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:plan.coverId===p.id};
+      /* Une photo gardée pointe sur les fichiers DÉJÀ en ligne, pas sur ceux qu'aurait
+         produits la version courante — ils n'ont pas été écrits. */
+      const entry=laisser
+        ? {full:ownerId+'/'+p.pub.full,thumb:ownerId+'/'+p.pub.thumb,w:p.pub.w||w,h:p.pub.h||h,cover:plan.coverId===p.id}
+        : {full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:plan.coverId===p.id};
       /* Seule la LÉGENDE part sur le site. Le titre reste interne : c'est souvent le nom du
-         fichier de l'appareil photo, qui n'a rien à faire sur une page publique. */
+         fichier de l'appareil photo, qui n'a rien à faire sur une page publique. La légende
+         part MÊME pour une photo gardée : c'est du texte dans le manifeste, ça ne coûte
+         aucun envoi d'image — et refuser une correction de légende sous prétexte qu'on ne
+         renvoie pas la photo n'aurait aucun sens. */
       if((p.caption||'').trim())entry.caption=p.caption.trim();
       entries.push(entry);
-      posees.push({p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
-        cap:(p.caption||'').trim(),cover:plan.coverId===p.id,
-        v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
+      /* Gardée : son identité publiée ne bouge pas — elle reste « à republier », et c'est
+         exact. Seuls la légende et le rôle de couverture, qui viennent de partir, sont
+         mis à jour, sans quoi le CRM la dirait modifiée pour une raison déjà réglée. */
+      posees.push(laisser
+        ? {p,pub:Object.assign({},p.pub,{cap:(p.caption||'').trim(),cover:plan.coverId===p.id}),garde:true}
+        : {p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
+            cap:(p.caption||'').trim(),cover:plan.coverId===p.id,
+            v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
     }
     _glTexKey='';
 
+    /* Aucune image réécrite — republication de la seule fiche, retour à une publication
+       précédente, photos toutes gardées — et l'aperçu de partage n'était alors pas touché :
+       un lien partagé pouvait continuer à montrer la couverture d'un AUTRE projet, celui
+       publié en dernier. On recopie donc la vignette déjà en ligne de la couverture. Une
+       copie, pas un rendu : rien n'est recalculé. */
+    if(!sharePartage&&plan.coverId){
+      const couv=(r.photos||[]).find(p=>p.id===plan.coverId);
+      if(couv&&couv.pub&&couv.pub.thumb){
+        try{
+          const {data}=await sb.storage.from(GALLERY_BUCKET).download(ownerId+'/'+couv.pub.thumb);
+          if(data)sharePartage=data;
+        }catch(e){console.error('image de partage (copie)',e);}
+      }
+    }
     /* L'aperçu de partage ne doit jamais faire échouer une publication : la galerie, elle,
        est déjà en ligne à ce stade. */
     if(sharePartage){
@@ -9594,7 +9681,13 @@ async function publishRealisation(r,opts){
     /* Le manifeste est écrit : à partir d'ici seulement, ces photos sont vraiment en ligne.
        C'est aussi le seul moment où l'on peut dire QUELLE version l'est. */
     const quand=Date.now();
-    posees.forEach(({p,pub})=>{p.pub=Object.assign({at:quand},pub);p.publishedAt=quand;photoLog(p,'publie',pub.vlabel);});
+    /* Une photo gardée n'a rien envoyé : sa date de mise en ligne ne bouge pas et rien ne
+       s'inscrit dans son historique, sinon elle passerait pour publiée à jour. */
+    posees.forEach(({p,pub,garde})=>{
+      p.pub=Object.assign({at:(garde&&p.pub&&p.pub.at)||quand},pub);
+      if(garde)return;
+      p.publishedAt=quand;photoLog(p,'publie',pub.vlabel);
+    });
 
     /* Le pas d'avant est gardé — un seul, celui auquel « revenir » veut dire quelque chose.
        Ses fichiers ne sont pas effacés (voir le ménage ci-dessous) : le retour est donc

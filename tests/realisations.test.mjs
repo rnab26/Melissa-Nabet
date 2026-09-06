@@ -40,7 +40,24 @@ await page.evaluate(() => {
         upload: async (path, blob) => { files.set(path, blob); return { error: null }; },
         download: async (path) => files.has(path) ? { data: files.get(path), error: null } : { data: null, error: { message: 'Object not found', statusCode: '404' } },
         remove: async (paths) => { paths.forEach(p => files.delete(p)); return { error: null }; },
-        list: async () => ({ data: [], error: null }),
+        /* Le vrai stockage LISTE ce qu'il contient, et la publication s'en sert pour savoir
+           ce qui est réellement en ligne. Un listing toujours vide faisait croire au CRM
+           que tout avait disparu : il réécrivait toutes les photos à chaque publication, et
+           aucun test ne pouvait voir qu'on n'en réécrit qu'une. */
+        list: async (prefixe) => {
+          const p = String(prefixe || '').replace(/\/$/, '');
+          const vus = new Set(), out = [];
+          for (const chemin of files.keys()) {
+            if (p && !chemin.startsWith(p + '/')) continue;
+            const reste = p ? chemin.slice(p.length + 1) : chemin;
+            const nom = reste.split('/')[0];
+            if (!nom || vus.has(nom)) continue;
+            vus.add(nom);
+            /* Un dossier n'a pas de `metadata` chez Supabase — c'est ce qui le distingue. */
+            out.push(reste.indexOf('/') >= 0 ? { name: nom } : { name: nom, metadata: { size: 1 } });
+          }
+          return { data: out, error: null };
+        },
       }),
     },
     from: chain,
@@ -4295,6 +4312,59 @@ for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
 }
 await page.evaluate(() => showView('realisations'));
 check('Navigation entre toutes les vues sans erreur', true);
+
+/* --- PUBLIER LE TEXTE SANS RENVOYER UNE PHOTO -----------------------------------------
+   Le reproche exact de Raphaël : « j'ai déjà écrit du texte sur Bureau Sébastien, sauf que
+   pour le publier je suis contraint de publier la photo qui n'est pas à jour ». On reproduit
+   la situation : une réalisation en ligne, dont le texte ET une photo ont changé. */
+const partiel = await page.evaluate(async () => {
+  const r = (realisations || []).filter(x => x.published && (x.photos || []).length)[0];
+  if (!r) return { pasDeCas: true };
+  const cle = () => [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const fiche = async () => {
+    const m = JSON.parse(await window.__files.get(cle()).text());
+    return m.realisations.find(f => f.id === r.id);
+  };
+  const avant = await fiche();
+  const photo = r.photos.find(p => p.pub && p.pub.full);
+  const cheminAvant = photo.pub.full;
+  const dateAvant = photo.publishedAt;
+  const clesAvant = new Set(window.__files.keys());
+
+  // le texte change, et la photo aussi (nouveau réglage = nouvelle signature)
+  r.texte = 'Un plateau de bureaux ramené à un seul volume traversant.';
+  photo.edit = Object.assign({}, photo.edit || {}, { expo: 12 });
+  photo.touchedAt = Date.now();
+  r.updatedAt = Date.now();
+  saveRealisations();
+  const planAvant = realisationPublishPlan(r);
+
+  await publishRealisation(r, { garder: [photo.id] });
+  const apres = await fiche();
+  const entree = apres.photos.find(e => e.full.endsWith(cheminAvant));
+  return {
+    pasDeCas: false, texteAvant: avant.texte || '', texteApres: apres.texte || '',
+    cheminInchange: !!entree, memeNombreDePhotos: apres.photos.length === avant.photos.length,
+    /* On compte les fichiers AJOUTÉS, pas la variation nette : la publication fait aussi le
+       ménage des images qu'aucune fiche ne référence plus, et une soustraction cacherait un
+       ajout derrière une suppression. L'aperçu de partage est écrit à chaque publication, à
+       une adresse fixe — il n'appartient pas à la galerie du projet. */
+    ajoutes: [...window.__files.keys()].filter(k => !clesAvant.has(k) && !/share\.jpg$/.test(k)),
+    dateInchangee: photo.publishedAt === dateAvant,
+    encoreARepublier: photoPubChange(r, photo) !== '',
+    planDisaitModifiee: planAvant.changees >= 1,
+  };
+});
+check('Fiche seule : le cas existe (réalisation en ligne avec photo modifiée)',
+  partiel.pasDeCas === false && partiel.planDisaitModifiee === true, JSON.stringify(partiel));
+check('Fiche seule : le texte part bien sur le site',
+  /volume traversant/.test(partiel.texteApres) && partiel.texteApres !== partiel.texteAvant, partiel.texteApres.slice(0, 50));
+check('Fiche seule : la photo gardée pointe toujours sur le fichier déjà en ligne',
+  partiel.cheminInchange && partiel.memeNombreDePhotos, JSON.stringify(partiel));
+check('Fiche seule : aucune image n’a été réécrite (seul le manifeste bouge)',
+  Array.isArray(partiel.ajoutes) && partiel.ajoutes.length === 0, (partiel.ajoutes || []).join(', '));
+check('Fiche seule : la photo reste marquée « à republier », elle n’est pas déclarée à jour',
+  partiel.encoreARepublier && partiel.dateInchangee, JSON.stringify(partiel));
 
 /* --- SUPPRIMER UNE RÉALISATION PUBLIÉE ------------------------------------------------
    Elle restait EN LIGNE : la fiche demeurait dans le manifeste et ses images dans le seau
