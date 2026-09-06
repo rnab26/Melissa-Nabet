@@ -901,6 +901,19 @@
   .st-txt b{font-size:14px;font-weight:600;}
   .st-txt i{font-style:normal;font-size:11px;color:var(--stone-light);}
   .st-txt em{font-style:normal;font-size:12px;color:var(--stone);line-height:1.45;}
+  /* --- Langues et journal du site (greffés sur le panneau existant) --- */
+  .site-langues{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 4px;}
+  .site-chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);}
+  .site-onglets{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:10px 0 0;
+    padding-bottom:8px;border-bottom:1px solid var(--panel-edge);}
+  .site-onglet{background:none;border:1px solid var(--panel-edge);border-radius:3px;padding:6px 12px;
+    cursor:pointer;font-family:'Inter';font-size:12px;color:var(--stone);}
+  .site-onglet.on{background:var(--ink);border-color:var(--ink);color:var(--paper);}
+  .site-onglets-note{font-size:10.5px;color:var(--stone-light);margin-left:auto;letter-spacing:.05em;}
+  .site-repli{font-size:11px;color:var(--stone-light);font-style:italic;margin:-7px 0 11px;}
+  .site-entree{border:1px solid var(--panel-edge);border-radius:4px;padding:10px;margin-bottom:10px;background:var(--panel);}
+  .site-entree input,.site-entree textarea{font-size:12.5px;padding:6px 8px;min-width:0;}
+  .site-entree input[disabled]{opacity:.55;}
   .site-mvt{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;}
   .site-mvt .mini[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);font-weight:600;}
   .ia-params{margin-top:11px;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);}
@@ -8222,9 +8235,59 @@ const SITE_THEMES=[
    Un manifeste publié avant cette version n'a pas de thème — il ne doit pas changer d'allure
    tout seul. */
 const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret'};
+/* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
+   comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
+   français plutôt que de laisser un blanc — et jamais dans une traduction automatique, qui
+   parlerait au nom de Melissa sans qu'elle l'ait relue. */
+const SITE_LANGUES=[{code:'fr',nom:'Français',dir:'ltr'},{code:'en',nom:'English',dir:'ltr'},{code:'he',nom:'עברית',dir:'rtl'}];
+/* Les champs qui changent d'une langue à l'autre. Le reste (e-mail, téléphone, Instagram,
+   dates) est commun : le traduire n'aurait aucun sens. */
+const SITE_TRADUISIBLES=['sousTitre','apropos'];
+function siteLanguesActives(){
+  const st=siteSettings();
+  const l=Array.isArray(st.langues)?SITE_LANGUES.map(x=>x.code).filter(c=>st.langues.indexOf(c)>=0):['fr'];
+  return l.indexOf('fr')<0?['fr'].concat(l):l;
+}
+/* Le français reste dans les champs d'origine (`sousTitre`, `apropos`) : aucune migration
+   de données, et le code qui les lit déjà continue de marcher. Les autres langues vivent à
+   part, dans `i18n`. */
+function siteTexte(cle,lang){
+  const st=siteSettings();
+  if(lang==='fr')return st[cle]||'';
+  return ((st.i18n||{})[lang]||{})[cle]||'';
+}
+function siteSetTexte(cle,lang,val){
+  const st=siteSettings();
+  if(lang==='fr'){st[cle]=val;return;}
+  if(!st.i18n||typeof st.i18n!=='object')st.i18n={};
+  if(!st.i18n[lang]||typeof st.i18n[lang]!=='object')st.i18n[lang]={};
+  st.i18n[lang][cle]=val;
+}
+function siteJournal(){
+  const st=siteSettings();
+  if(!Array.isArray(st.journal))st.journal=[];
+  st.journal.forEach(j=>{
+    if(!j.id)j.id=uid();
+    ['date','titre','texte'].forEach(k=>{if(typeof j[k]!=='string')j[k]='';});
+    if(!j.i18n||typeof j.i18n!=='object')j.i18n={};
+  });
+  return st.journal;
+}
+function journalTexte(j,cle,lang){return lang==='fr'?(j[cle]||''):(((j.i18n||{})[lang]||{})[cle]||'');}
+function journalSetTexte(j,cle,lang,val){
+  if(lang==='fr'){j[cle]=val;return;}
+  if(!j.i18n[lang]||typeof j.i18n[lang]!=='object')j.i18n[lang]={};
+  j.i18n[lang][cle]=val;
+}
+/* Complète EN PLACE, sans remplacer l'objet. La version précédente réaffectait
+   `library.site` à chaque appel : deux appels imbriqués — garder le résultat du premier
+   puis appeler une fonction qui rappelle celle-ci — laissaient écrire dans un objet
+   devenu orphelin, jamais sauvegardé, sans que rien ne le signale. */
 function siteSettings(){
-  library.site=Object.assign({},SITE_DEFAULTS,library.site||{});
-  return library.site;
+  if(!library.site||typeof library.site!=='object')library.site={};
+  const s=library.site;
+  Object.keys(SITE_DEFAULTS).forEach(k=>{if(s[k]===undefined)s[k]=SITE_DEFAULTS[k];});
+  return s;
 }
 function siteInfos(){
   const st=siteSettings();
@@ -8238,6 +8301,38 @@ function siteInfos(){
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
   });
+  /* Langues et traductions : purement ADDITIF. `subtitle` et `apropos` restent le français,
+     tels qu'ils sont lus aujourd'hui ; les autres langues arrivent à côté, dans `i18n`.
+     Un champ vide ne part pas : le site sait retomber sur le français, une chaîne vide
+     publiée l'en empêcherait. */
+  const langues=siteLanguesActives();
+  if(langues.length>1){
+    o.langues=langues;
+    const i18n={};
+    langues.filter(l=>l!=='fr').forEach(l=>{
+      const bloc={};
+      SITE_TRADUISIBLES.forEach(k=>{
+        const v=siteTexte(k,l).trim();
+        if(v)bloc[k==='sousTitre'?'subtitle':k]=v;
+      });
+      if(Object.keys(bloc).length)i18n[l]=bloc;
+    });
+    if(Object.keys(i18n).length)o.i18n=i18n;
+  }
+  const journal=siteJournal()
+    .filter(j=>langues.some(l=>journalTexte(j,'titre',l).trim()||journalTexte(j,'texte',l).trim()))
+    .map(j=>{
+      const e={id:j.id,date:(j.date||'').trim(),titre:(j.titre||'').trim(),texte:(j.texte||'').trim()};
+      const tr={};
+      langues.filter(l=>l!=='fr').forEach(l=>{
+        const bloc={};
+        ['titre','texte'].forEach(k=>{const v=journalTexte(j,k,l).trim();if(v)bloc[k]=v;});
+        if(Object.keys(bloc).length)tr[l]=bloc;
+      });
+      if(Object.keys(tr).length)e.i18n=tr;
+      return e;
+    });
+  if(journal.length)o.journal=journal;
   return o;
 }
 function emptyManifest(){
@@ -8261,9 +8356,34 @@ async function pushSiteInfos(btn){
     dire('Échec : '+((e&&e.message)||'erreur')+'. Rien n’a été modifié en ligne.');
   }finally{ if(btn){btn.disabled=false;btn.textContent='Mettre à jour le site';} }
 }
+/* Langue actuellement ÉCRITE dans le panneau (pas celle du site : celle des champs).
+   Une seule à la fois — trois colonnes de texte côte à côte sont illisibles sur un
+   téléphone, et c'est depuis un téléphone que ce panneau sert le plus. */
+let _siteLangEdit='fr';
 function openSitePanel(){
   const st=siteSettings(), b=library.branding||{};
   const nb=(realisations||[]).filter(r=>r.published).length;
+  const actives=siteLanguesActives();
+  if(actives.indexOf(_siteLangEdit)<0)_siteLangEdit='fr';
+  const LE=_siteLangEdit;
+  const rtl=(SITE_LANGUES.find(l=>l.code===LE)||{}).dir==='rtl'?' dir="rtl"':'';
+  const suff=LE==='fr'?'':' — '+((SITE_LANGUES.find(l=>l.code===LE)||{}).nom||LE);
+  /* Dire ce qui se passera en ligne : un champ laissé vide dans une autre langue n'est pas
+     un trou, c'est le français qui s'affichera. */
+  const repli=(val,fr)=>(LE!=='fr'&&!(val||'').trim()&&(fr||'').trim())
+    ?'<p class="site-repli">Non traduit — le français s’affichera.</p>':'';
+  const jrn=siteJournal();
+  const journalHtml=jrn.map((j,i)=>`<div class="site-entree" data-i="${i}">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <input type="text" data-j="date" value="${esc(j.date)}" placeholder="Date — ex. Septembre 2026"${LE==='fr'?'':' disabled title="Commune aux langues"'}>
+        <button class="mini" data-jmove="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+        <button class="mini" data-jmove="1" ${i===jrn.length-1?'disabled':''} title="Descendre">↓</button>
+        <button class="mini danger" data-jdel title="Supprimer">×</button>
+      </div>
+      <input type="text" data-j="titre" value="${esc(journalTexte(j,'titre',LE))}"${rtl} placeholder="Titre" style="margin-bottom:6px">
+      <textarea rows="3" data-j="texte"${rtl} placeholder="Texte">${esc(journalTexte(j,'texte',LE))}</textarea>
+      ${repli(journalTexte(j,'titre',LE),j.titre)||repli(journalTexte(j,'texte',LE),j.texte)}
+    </div>`).join('')||'<p class="ias-note" style="margin:0">Aucune entrée pour l’instant.</p>';
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
     <h3>Le site public</h3>
     <p class="msub">Ce que le site dit de lui-même, en dehors des projets. <b>Tout ce qui est rempli ici devient public</b> — laissez vide ce que vous ne voulez pas montrer. Les projets, eux, ne partent en ligne que par « Publier sur le site », réalisation par réalisation (${nb} en ligne).</p>
@@ -8279,10 +8399,24 @@ function openSitePanel(){
       <button type="button" class="mini" data-mvt="discret" aria-pressed="${st.mouvement!=='aucun'?'true':'false'}">Discret — les images apparaissent en douceur</button>
       <button type="button" class="mini" data-mvt="aucun" aria-pressed="${st.mouvement==='aucun'?'true':'false'}">Aucun — net et immédiat</button>
     </div>
-    <label class="fld" style="margin-top:14px"><span class="lbl">Sous-titre, sous le nom</span>
-      <input type="text" id="site-sub" maxlength="60" value="${esc(st.sousTitre||'')}" placeholder="ex. Architecture d’intérieur"></label>
-    <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page</span>
-      <textarea id="site-apropos" rows="4" maxlength="700" placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(st.apropos||'')}</textarea></label>
+    <div class="ed-eyebrow" style="margin-top:14px">Langues du site</div>
+    <p class="ias-note">Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.</p>
+    <div class="site-langues" id="site-langues">${SITE_LANGUES.map(l=>`
+      <label class="site-chk"><input type="checkbox" data-langue="${l.code}" ${actives.indexOf(l.code)>=0?'checked':''} ${l.code==='fr'?'disabled':''}> ${esc(l.nom)}</label>`).join('')}</div>
+    ${actives.length>1?`<div class="site-onglets" id="site-onglets">${
+      SITE_LANGUES.filter(l=>actives.indexOf(l.code)>=0).map(l=>
+        `<button type="button" class="site-onglet${l.code===LE?' on':''}" data-lang="${l.code}">${esc(l.nom)}</button>`).join('')
+      }<span class="site-onglets-note">langue en cours d’écriture</span></div>`:''}
+    <label class="fld" style="margin-top:14px"><span class="lbl">Sous-titre, sous le nom${suff}</span>
+      <input type="text" id="site-sub" maxlength="60"${rtl} value="${esc(siteTexte('sousTitre',LE))}" placeholder="${LE==='fr'?'ex. Architecture d’intérieur':esc(st.sousTitre||'—')}"></label>
+    ${repli(siteTexte('sousTitre',LE),st.sousTitre)}
+    <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page${suff}</span>
+      <textarea id="site-apropos" rows="4" maxlength="700"${rtl} placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(siteTexte('apropos',LE))}</textarea></label>
+    ${repli(siteTexte('apropos',LE),st.apropos)}
+    <div class="ed-eyebrow" style="margin-top:14px">Journal${suff}</div>
+    <p class="ias-note">Des notes datées, affichées après les projets. Sans entrée, la section n’apparaît pas du tout sur le site.</p>
+    ${journalHtml}
+    <button class="add-btn" id="site-journal-add">+ Ajouter une entrée</button>
     <div class="ed-eyebrow" style="margin-top:14px">Vous joindre</div>
     <p class="ias-note">Ces coordonnées deviennent visibles par n'importe quel visiteur. Laissez un champ vide et il n'apparaît pas du tout.</p>
     <div class="row2">
@@ -8304,7 +8438,49 @@ function openSitePanel(){
   Object.entries(champs).forEach(([k,id])=>{
     const el=document.getElementById(id);
     if(!el)return;
-    el.addEventListener('input',()=>{siteSettings()[k]=el.value;saveLibraryDebounced();});
+    const traduisible=SITE_TRADUISIBLES.indexOf(k)>=0;
+    el.addEventListener('input',()=>{
+      if(traduisible)siteSetTexte(k,LE,el.value);else siteSettings()[k]=el.value;
+      saveLibraryDebounced();
+    });
+  });
+  document.querySelectorAll('#site-onglets .site-onglet').forEach(b=>{
+    b.addEventListener('click',()=>{_siteLangEdit=b.dataset.lang;openSitePanel();});
+  });
+  document.querySelectorAll('#site-langues input[data-langue]').forEach(c=>{
+    c.addEventListener('change',()=>{
+      const st=siteSettings(), code=c.dataset.langue;
+      const l=siteLanguesActives().filter(x=>x!==code);
+      st.langues=c.checked?SITE_LANGUES.map(x=>x.code).filter(x=>l.indexOf(x)>=0||x===code):l;
+      if(st.langues.indexOf('fr')<0)st.langues.unshift('fr');
+      saveLibraryDebounced();openSitePanel();rappel();
+    });
+  });
+  const jadd=document.getElementById('site-journal-add');
+  if(jadd)jadd.addEventListener('click',()=>{
+    siteJournal().push({id:uid(),date:'',titre:'',texte:'',i18n:{}});
+    saveLibraryDebounced();openSitePanel();
+  });
+  document.querySelectorAll('.site-entree').forEach(bloc=>{
+    const i=+bloc.dataset.i, j=siteJournal()[i];
+    if(!j)return;
+    bloc.querySelectorAll('[data-j]').forEach(ch=>{
+      ch.addEventListener('input',()=>{
+        const k=ch.dataset.j;
+        if(k==='date')j.date=ch.value;else journalSetTexte(j,k,LE,ch.value);
+        saveLibraryDebounced();
+      });
+    });
+    bloc.querySelectorAll('[data-jmove]').forEach(bt=>bt.addEventListener('click',()=>{
+      const a=siteJournal(), d=+bt.dataset.jmove, k=i+d;
+      if(k<0||k>=a.length)return;
+      const t=a[i];a[i]=a[k];a[k]=t;
+      saveLibraryDebounced();openSitePanel();
+    }));
+    const del=bloc.querySelector('[data-jdel]');
+    if(del)del.addEventListener('click',()=>askConfirm('Supprimer cette entrée du journal ? Elle disparaîtra du site à la prochaine mise à jour.',()=>{
+      siteJournal().splice(i,1);store.set(K_LIB,library);openSitePanel();
+    }));
   });
   /* Un choix ne vaut rien tant qu'il n'est pas EN LIGNE : le dire ici évite de croire que
      cliquer sur une direction a changé le site. */

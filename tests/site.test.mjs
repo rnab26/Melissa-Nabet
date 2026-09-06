@@ -24,6 +24,8 @@ for (let i = 0; i < 3; i++) {
       return cv.toDataURL('image/jpeg', 0.85).split(',')[1];
     }, [w, h, i]);
     writeFileSync(`${DIR}/galerie/u/r1/${name}`, Buffer.from(b64, 'base64'));
+    // Le banc « ancien manifeste » a son propre dossier : il sert le format encore en ligne.
+    if (i === 0) writeFileSync(`${DIR}/galerie/v/r1/${name}`, Buffer.from(b64, 'base64'));
   }
 }
 await gen.close();
@@ -438,6 +440,104 @@ const rSansObs = await sansObs.evaluate(() => {
 await sansObs.close();
 check('Navigateur sans observateur : rien n’est marqué, donc rien n’est invisible',
   rSansObs.total > 0 && rSansObs.invisibles === 0 && rSansObs.marquees === 0, JSON.stringify(rSansObs));
+
+// --- Les trois langues -----------------------------------------------------------------
+// L'interface se traduit ; les textes de Melissa, non traduits, retombent sur le français.
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.evaluate(() => { try { localStorage.removeItem('mn-langue'); } catch (e) {} });
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+const langBtns = await page.locator('#langs button').allTextContents();
+check('Sélecteur de langue : FR / EN / עב', langBtns.join('') === 'FRENעב', langBtns.join(' '));
+
+await page.locator('#langs button', { hasText: 'EN' }).click();
+await page.waitForTimeout(400);
+const en = await page.evaluate(() => ({
+  rubrique: (document.getElementById('t-realisations').textContent || '').trim(),
+  apropos: (document.getElementById('t-apropos').textContent || '').trim(),
+  sousTitre: (document.getElementById('site-tagline').textContent || '').trim(),
+  texteApropos: (document.getElementById('apropos-txt').textContent || '').trim(),
+  filtre: (document.querySelector('#filtres button') || {}).textContent || '',
+  journalTitre: (document.querySelector('.entree-titre') || {}).textContent || '',
+  journalTexte: (document.querySelector('.entree-texte') || {}).textContent || '',
+}));
+check('Interface traduite en anglais', en.rubrique === 'Works' && en.apropos === 'About' && /^All /.test(en.filtre),
+  [en.rubrique, en.apropos, en.filtre].join(' | '));
+check('Un texte traduit dans le CRM s’affiche bien traduit',
+  en.sousTitre === 'Interior architecture' && /office delivered/.test(en.journalTitre),
+  en.sousTitre + ' | ' + en.journalTitre);
+check('Un texte NON traduit retombe sur le français, rien n’est inventé',
+  /banc d’essai/.test(en.texteApropos) && /bibliothèque sur mesure/.test(en.journalTexte),
+  en.texteApropos.slice(0, 30) + ' | ' + en.journalTexte.slice(0, 30));
+
+await page.locator('#langs button', { hasText: 'עב' }).click();
+await page.waitForTimeout(400);
+const he = await page.evaluate(() => ({
+  lang: document.documentElement.lang, dir: document.documentElement.dir,
+  rubrique: (document.getElementById('t-realisations').textContent || '').trim(),
+  sens: getComputedStyle(document.querySelector('.project')).direction,
+}));
+check('Hébreu : la page passe en lecture de droite à gauche',
+  he.lang === 'he' && he.dir === 'rtl' && he.sens === 'rtl', he.lang + '/' + he.dir + '/' + he.sens);
+check('Interface traduite en hébreu', he.rubrique === 'עבודות', he.rubrique);
+/* Un texte français non traduit, affiché dans une page hébreu, doit garder sa ponctuation
+   à sa place : sans `dir="auto"`, le point final part se coller au début de la ligne. */
+const bidi = await page.evaluate(() => ({
+  apropos: document.getElementById('apropos-txt').getAttribute('dir'),
+  entree: (document.querySelector('.entree') || {}).dir,
+  nom: (document.querySelector('.project-name') || {}).dir,
+  sensLu: getComputedStyle(document.getElementById('apropos-txt')).direction,
+}));
+check('Un texte français dans une page hébreu garde son sens de lecture',
+  bidi.apropos === 'auto' && bidi.entree === 'auto' && bidi.nom === 'auto' && bidi.sensLu === 'ltr',
+  JSON.stringify(bidi));
+// Les flèches du plein écran doivent suivre le sens de lecture, pas rester à gauche.
+const fleches = await page.evaluate(() => {
+  document.getElementById('lightbox').classList.add('open');
+  const p = document.getElementById('lb-prev').getBoundingClientRect();
+  const n = document.getElementById('lb-next').getBoundingClientRect();
+  document.getElementById('lightbox').classList.remove('open');
+  return { prev: p.left, next: n.left };
+});
+check('Plein écran : les flèches suivent le sens de lecture', fleches.prev > fleches.next,
+  'préc. ' + Math.round(fleches.prev) + 'px / suiv. ' + Math.round(fleches.next) + 'px');
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+check('La langue choisie est retenue d’une visite à l’autre',
+  (await page.evaluate(() => document.documentElement.lang)) === 'he');
+await page.evaluate(() => { try { localStorage.removeItem('mn-langue'); } catch (e) {} });
+
+// --- Journal ---------------------------------------------------------------------------
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+const jrn = await page.evaluate(() => ({
+  visible: !document.getElementById('journal').hidden,
+  entrees: [...document.querySelectorAll('.entree')].map(e => ({
+    date: (e.querySelector('.entree-date') || {}).textContent || '',
+    titre: (e.querySelector('.entree-titre') || {}).textContent || '',
+    texte: (e.querySelector('.entree-texte') || {}).textContent || '',
+  })),
+}));
+check('Journal affiché, dans l’ordre du CRM',
+  jrn.visible && jrn.entrees.length === 2 && /Sébastien/.test(jrn.entrees[0].titre), JSON.stringify(jrn.entrees));
+check('Une entrée sans texte n’affiche pas de paragraphe vide', jrn.entrees[1].texte === '', '« ' + jrn.entrees[1].texte + ' »');
+
+// --- Manifeste à l'ANCIEN format : c'est celui qui est en ligne aujourd'hui
+await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(700);
+const ancien = await page.evaluate(() => ({
+  sous: (document.getElementById('site-tagline').textContent || '').trim(),
+  projets: document.querySelectorAll('.project').length,
+  langs: !document.getElementById('langs').hidden,
+  journal: !document.getElementById('journal').hidden,
+  rubrique: (document.getElementById('t-realisations').textContent || '').trim(),
+}));
+check('Ancien manifeste : la page reste correcte',
+  ancien.sous === 'Architecture d’intérieur' && ancien.projets === 1 && ancien.rubrique === 'Réalisations',
+  JSON.stringify(ancien));
+check('Ancien manifeste : ni sélecteur de langue ni journal affichés pour rien',
+  !ancien.langs && !ancien.journal, JSON.stringify(ancien));
 
 // État vide : rien de publié encore, la page ne doit pas avoir l'air cassée
 await page.goto('http://127.0.0.1:8902/vide.html', { waitUntil: 'networkidle' });

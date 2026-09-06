@@ -10,6 +10,10 @@ Trois suites :
   navigateur irait chercher n'importe quelle adresse avec la clé du compte. Se lance avec
   `bun tests/pont-ia.test.mjs` (bun exécute le TypeScript du pont). Aucune dépense : ce sont
   des fonctions pures, aucun appel n'est émis.
+- `tests/site-langues.test.mjs` — les **langues et le journal** du site, réglés depuis le CRM
+  (⚙ Le site public). Suit un texte écrit dans le panneau jusqu'au manifeste, et vérifie
+  surtout qu'un champ **non traduit ne part pas vide** en ligne. Serveur sur le port 8899,
+  comme la suite Réalisations : `node tests/site-langues.test.mjs`.
 - `tests/site.test.mjs` — le **site vitrine public** (`site-vitrine/index.html`), servi
   depuis un banc d'essai local avec un faux manifeste. Vérifie notamment qu'aucune clé
   d'accès ne figure dans la page publique.
