@@ -9,6 +9,38 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 6 septembre 2026 — Publication : la case « Va partir » devient cliquable
+
+**Chantier `4666e187`** (dispatch Jarvis du 6 sept., base `dev_items`). Ses mots : « je ne
+suis pas satisfait des retouches sur certaines photos, je préfère les photos d'origine »,
+et la fenêtre de publication n'offrait aucun moyen de choisir — juste une vignette figée
+sur la version que le CRM avait retenue.
+
+**Livré** : dans la fenêtre Publier/Republier, chaque vignette « Va partir » qui a au
+moins une retouche porte un lien « Changer la version… ». Cliquer ouvre une rangée de
+vraies vignettes (origine + chaque retouche, rendue avec SES propres réglages via
+`photoEditOf`), et choisir en une remplace la version retenue **dans la fenêtre
+elle-même** — étiquette et image mises à jour tout de suite, sans la fermer, sans passer
+par la fiche puis revenir. C'est exactement l'aller-retour qu'il venait de signaler.
+
+Techniquement : le clic appelle `photoSetActive(p,vid)`, la même fonction que celle de
+l'éditeur — une seule mécanique décide « quelle version compte », que ce soit affiché,
+exporté ou publié. `publishRealisation` recalcule son plan à l'instant de l'envoi (pas de
+plan figé à l'ouverture de la fenêtre) : le choix fait ici part donc vraiment sur le site.
+
+**Au passage, en dehors du périmètre du chantier mais bloquant TOUT le système de
+réservation** : réserver n'importe quel `dev_items` échouait — un déclencheur
+(`notifier_push_chantiers_livres`) appelait `min(uuid)`, fonction qui n'existe pas en
+Postgres. Remplacé par `(array_agg(...))[1]` : aucune donnée touchée, seulement la
+définition de la fonction. Signalé dans `dev_log`.
+
+**Vérifié** : `tests/realisations.test.mjs` **482/482** (4 nouveaux : le sélecteur ne
+s'ouvre pas tout seul, propose bien origine + chaque retouche en vignettes, met à jour
+l'étiquette sans fermer la fenêtre, et le choix fait ici se retrouve dans le manifeste
+publié — `p.pub.v`). `tests/bout-en-bout.test.mjs` 20/20, aucune régression.
+
+---
+
 ## 6 septembre 2026 — Les quatre points de la relance : déjà livrés, vérifiés en ligne
 
 **Session de reprise** (remplace une session coûteuse coupée en cours). Avant de toucher au

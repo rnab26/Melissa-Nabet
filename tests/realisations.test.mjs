@@ -1621,6 +1621,45 @@ check('Publier : chaque vignette « va partir » est nommée par sa version',
   ecranChoix.versions.length >= 1 && /Retouche 2|Photo d’origine/.test(ecranChoix.versions[0]),
   ecranChoix.versions.join(' | '));
 
+// --- CHOISIR UNE AUTRE VERSION DEPUIS LA FENÊTRE DE PUBLICATION, SANS LA FERMER.
+// Le reproche exact : « aucune option de sélection de la photo à faire partir ». On
+// vérifie que le clic change réellement ce qui PART, jusqu'au manifeste — pas seulement
+// l'affichage de la fenêtre.
+const choixVersion = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[0];
+  p.active = photoVersions(p)[0].id; p.edit = JSON.parse(JSON.stringify(p.edits[p.active] || blankEdit()));
+  await askPublishRealisation(r);
+  await new Promise(x => setTimeout(x, 500));
+  const ligne = [...document.querySelectorAll('#modal .pub-ligne')]
+    .find(l => l.querySelector('[data-chver]'));
+  const avantOuverture = !!document.querySelector('#modal .pub-verpick');
+  ligne.querySelector('[data-chver]').click();
+  await new Promise(x => setTimeout(x, 400));
+  const boutons = [...ligne.querySelectorAll('.pub-verb')].map(b => b.textContent.trim());
+  const nVersions = photoVersions(p).length;
+  const origBtn = [...ligne.querySelectorAll('.pub-verb')].find(b => /origine/i.test(b.textContent));
+  origBtn.click();
+  await new Promise(x => setTimeout(x, 300));
+  const labelApres = ligne.querySelector('[data-verlbl]').textContent;
+  const panelFerme = !ligne.querySelector('.pub-verpick');
+  const activeApresClic = photoActiveId(p);
+  closeModal();
+  await publishRealisation(r);
+  const man = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const versionPubliee = man.realisations.find(x => x.id === r.id).photos.find(x => x.id === p.id);
+  return { avantOuverture, boutons, nVersions, labelApres, panelFerme, activeApresClic, pubV: p.pub.v };
+});
+check('Publier : la vignette « va partir » n’ouvre pas de sélecteur avant qu’on clique',
+  !choixVersion.avantOuverture, String(choixVersion.avantOuverture));
+check('Publier : « Changer la version… » propose l’origine ET chaque retouche, en vignettes',
+  choixVersion.boutons.length === 1 + choixVersion.nVersions && choixVersion.boutons.some(t => /origine/i.test(t)) && choixVersion.boutons.some(t => /Retouche/i.test(t)),
+  choixVersion.boutons.join(' | '));
+check('Publier : choisir l’origine met à jour l’étiquette ET la version retenue, sans fermer la fenêtre',
+  choixVersion.panelFerme && choixVersion.activeApresClic === 'orig' && /origine/i.test(choixVersion.labelApres),
+  JSON.stringify(choixVersion));
+check('Publier : le choix fait dans cette fenêtre part vraiment sur le site',
+  choixVersion.pubV === 'orig', choixVersion.pubV);
+
 // --- TOUT ÉCARTER : refus explicite plutôt qu'une publication vide.
 const toutEcarte = await page.evaluate(async () => {
   const r = realisations.find(x => x.id === window.__rPub);

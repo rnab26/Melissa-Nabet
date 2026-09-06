@@ -864,6 +864,18 @@
   .pub-fleche{text-align:center;color:var(--stone-light);font-size:13px;}
   .pub-note{margin:9px 0 0;font-size:11.5px;color:var(--stone);line-height:1.5;}
   .pub-vide{padding:18px 14px;text-align:center;font-size:12.5px;color:var(--stone);line-height:1.55;}
+  .pub-vue.pub-choisissable{cursor:pointer;}
+  .pub-chver{display:block;margin:4px auto 0;font-size:10.5px;color:var(--oxblood);
+    background:none;border:0;padding:2px 4px;text-decoration:underline;cursor:pointer;}
+  .pub-verpick{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;padding-top:9px;
+    border-top:1px dashed var(--panel-edge);}
+  .pub-verb{width:64px;border:0;background:none;padding:0;cursor:pointer;text-align:center;}
+  .pub-verb-im{aspect-ratio:4/3;border-radius:6px;overflow:hidden;background:var(--travertine);
+    border:2px solid var(--panel-edge);}
+  .pub-verb.on .pub-verb-im{border-color:var(--oxblood);}
+  .pub-verb-im img{width:100%;height:100%;object-fit:cover;display:block;}
+  .pub-verb span{display:block;font-size:9.5px;color:var(--stone);margin-top:3px;line-height:1.25;}
+  .pub-verb.on span{color:var(--oxblood);font-weight:600;}
   @media(max-width:420px){.pub-liste{max-height:40vh;}}
   .ia-src{margin-top:10px;}
   .ia-src .lbl{font-size:11px;}
@@ -5961,6 +5973,21 @@ async function renderThumbInto(p,im,ld){
     im.style.display='block';if(ld)ld.remove();
   }catch(e){if(ld)ld.textContent='erreur';}
 }
+/* Vignette d'UNE version précise, quelle qu'elle soit — pas forcément l'active. Sert au
+   choix « quelle version part sur le site » : chaque candidate garde SES propres réglages
+   (`photoEditOf`), pas ceux de la version actuellement affichée. */
+async function renderVersionThumbInto(p,vid,im){
+  try{
+    const blob=await photoStore.get(photoVersionKey(p,vid,true));
+    if(!blob)return;
+    const edit=photoEditOf(p,vid);
+    if(JSON.stringify(edit)===JSON.stringify(blankEdit())){showBlobIn(blob,im);return;}
+    const img=await blobToImage(blob);
+    const cv=glRenderTo(img,edit,160,'t_'+photoVersionKey(p,vid,true));
+    if(!cv){showBlobIn(blob,im);return;}
+    im.src=cv.toDataURL('image/jpeg',0.8);im.style.display='block';
+  }catch(e){}
+}
 /* Depuis une réalisation, retrouver le client et le devis correspondant. Sans ça, le
    chantier photographié et son dossier commercial vivaient dans deux mondes séparés. */
 function buildRealisationLiens(r){
@@ -9276,7 +9303,9 @@ async function askPublishRealisation(r){
       +'<div class="pub-cote"><span class="pub-lbl">En ligne</span><div class="pub-vue" data-avant><span>…</span></div></div>'
       +'<div class="pub-fleche">→</div>'
       +'<div class="pub-cote"><span class="pub-lbl">Va partir</span><div class="pub-vue" data-apres><span>…</span></div>'
-      +'<span class="pub-ver">'+esc(photoVersionLabel(p,photoActiveId(p)))+'</span></div>'
+      +'<span class="pub-ver" data-verlbl>'+esc(photoVersionLabel(p,photoActiveId(p)))+'</span>'
+      +(photoVersions(p).length?'<button type="button" class="pub-chver" data-chver>Changer la version…</button>':'')
+      +'</div>'
       +'</div>';
     liste.appendChild(ligne);
     /* Ce qui est en ligne : l'image PUBLIQUE, à son adresse réelle. C'est la seule preuve
@@ -9293,6 +9322,46 @@ async function askPublishRealisation(r){
     const im2=document.createElement('img');im2.alt='';im2.style.display='none';
     apres.appendChild(im2);
     renderThumbInto(p,im2,apres.querySelector('span'));
+    /* Choisir une autre version SANS quitter cette fenêtre : le reproche exact était de
+       devoir fermer, aller changer la version retenue sur la fiche, puis revenir publier.
+       `photoSetActive` est la même fonction que celle de l'éditeur — une seule mécanique
+       pour « quelle version compte », que ce soit affiché, exporté ou publié. */
+    if(photoVersions(p).length){
+      const chBtn=ligne.querySelector('[data-chver]');
+      const verLbl=ligne.querySelector('[data-verlbl]');
+      apres.classList.add('pub-choisissable');
+      apres.title='Choisir une autre version à publier';
+      let panel=null;
+      const fermer=()=>{if(panel){panel.remove();panel=null;}chBtn.textContent='Changer la version…';};
+      const ouvrir=()=>{
+        if(panel){fermer();return;}
+        chBtn.textContent='Annuler';
+        panel=document.createElement('div');panel.className='pub-verpick';
+        ligne.appendChild(panel);
+        const actif=photoActiveId(p);
+        [{id:'orig'}].concat(photoVersions(p)).forEach(v=>{
+          const b=document.createElement('button');b.type='button';
+          b.className='pub-verb'+(v.id===actif?' on':'');
+          const box=document.createElement('div');box.className='pub-verb-im';
+          const im=document.createElement('img');im.alt='';im.style.display='none';
+          box.appendChild(im);b.appendChild(box);
+          const lab=document.createElement('span');lab.textContent=photoVersionLabel(p,v.id);
+          b.appendChild(lab);
+          panel.appendChild(b);
+          renderVersionThumbInto(p,v.id,im);
+          b.addEventListener('click',()=>{
+            if(photoSetActive(p,v.id)){
+              renderThumbInto(p,im2,null);
+              verLbl.textContent=photoVersionLabel(p,v.id);
+              toast('« '+photoVersionLabel(p,v.id)+' » partira à la publication');
+            }
+            fermer();
+          });
+        });
+      };
+      chBtn.addEventListener('click',ouvrir);
+      apres.addEventListener('click',ouvrir);
+    }
   });
   if(bouges.length>40)note.textContent='Les 40 premières photos concernées sont montrées ; les '+(bouges.length-40)+' autres partiront aussi.';
   else if(bouges.length&&plan.inchangees)note.textContent=plan.inchangees+' photo(s) déjà en ligne à l’identique ne seront pas réécrites.';
