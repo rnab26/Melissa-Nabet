@@ -629,7 +629,7 @@
   .rz-cbody{padding:10px 12px 12px;}
   .rz-ctitle{font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rz-cmeta{font-size:11.5px;color:var(--stone);margin-top:3px;}
-  .rz-new{border:1px dashed var(--stone-light);border-radius:8px;background:transparent;color:var(--stone);cursor:pointer;font-size:13px;font-family:'Inter';min-height:150px;}
+  .rz-new,.bt-new{border:1px dashed var(--stone-light);border-radius:8px;background:transparent;color:var(--stone);cursor:pointer;font-size:13px;font-family:'Inter';min-height:150px;}
   .rz-new:hover{border-color:var(--oxblood);color:var(--oxblood);}
   .rz-empty{font-size:13px;color:var(--stone);padding:18px 0;}
   .rz-live{color:#6a9a5a;font-weight:600;}
@@ -738,6 +738,9 @@
   .rz-tag.t-reg{background:rgba(61,57,52,.6);}
   .rz-ph-badge{position:absolute;left:6px;bottom:6px;background:rgba(61,57,52,.82);color:#fff;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2px 6px;border-radius:2px;}
   .rz-ph-del{position:absolute;right:5px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;border-radius:3px;width:24px;height:24px;font-size:13px;cursor:pointer;line-height:1;}
+  .bt-ph-foot{display:flex;gap:6px;align-items:center;justify-content:space-between;
+    padding:6px 8px;border-top:1px solid var(--panel-edge);background:var(--panel);}
+  .bt-ph-foot .mini{font-size:11px;}
   .rz-add{border:1px dashed var(--stone-light);border-radius:6px;background:transparent;color:var(--stone);cursor:pointer;font-size:12px;font-family:'Inter';aspect-ratio:3/2;}
   .rz-selectable{outline:2px solid transparent;}
   .rz-picked{outline:2px solid var(--oxblood);outline-offset:1px;}
@@ -1013,6 +1016,7 @@
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
     <button class="vnav" id="vn-chantier" onclick="showView('chantier')">Estimation</button>
     <button class="vnav" id="vn-real" onclick="showView('realisations')">Réalisations</button>
+    <button class="vnav" id="vn-boutique" onclick="showView('boutique')">Boutique</button>
   </div>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
   <div class="spacer"></div>
@@ -1038,6 +1042,7 @@
   <button data-vue="clients" onclick="showView('clients')"><span>👤</span>Clients</button>
   <button data-vue="chantier" onclick="showView('chantier')"><span>📐</span>Estimation</button>
   <button data-vue="realisations" onclick="showView('realisations')"><span>🖼</span>Réalisations</button>
+  <button data-vue="boutique" onclick="showView('boutique')"><span>🧱</span>Boutique</button>
 </nav>
 
 <div class="stage">
@@ -1206,6 +1211,21 @@
     <p class="rz-intro">Les photos de chantiers terminés, retouchées et prêtes à publier sur le site. Rien à voir avec les documents d'une fiche client : ici les photos sont gardées en pleine définition et les retouches ne modifient jamais l'original.</p>
     <div id="rz-storage"></div>
     <div id="rz-body"></div>
+  </div>
+</div>
+
+<div id="boutique-view">
+  <div class="rz-wrap">
+    <div class="rz-top">
+      <h2>Boutique</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-onlight" onclick="openSitePanel()">⚙ Le site public</button>
+        <button class="btn btn-onlight" onclick="window.open(SITE_URL,'_blank')">🌐 Voir le site</button>
+        <button class="btn btn-primary" style="color:#fff" onclick="newProduit()">+ Nouveau produit</button>
+      </div>
+    </div>
+    <p class="rz-intro">Ce que le magasin propose à la vente — revêtements muraux et autres. Un produit n'est pas un chantier : il a un prix (ou pas), une matière, une disponibilité, et un bouton pour écrire sur WhatsApp. Rien ne part en ligne tant que vous ne publiez pas.</p>
+    <div id="bt-body"></div>
   </div>
 </div>
 
@@ -1574,7 +1594,7 @@ const store={
     try{if(typeof window!=='undefined'&&window.storage){await window.storage.delete(k,false);return;}}catch(e){}
     try{if(typeof window!=='undefined'&&window.localStorage){localStorage.removeItem(k);return;}}catch(e){}},
 };
-const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier',K_TASKS='mn_tasks',K_REAL='mn_realisations';
+const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier',K_TASKS='mn_tasks',K_REAL='mn_realisations',K_PROD='mn_produits';
 let tasks=[];
 let realisations=[];
 
@@ -3543,18 +3563,20 @@ function renderClientStatusFilters(){
   if(legend)legend.innerHTML=library.clientStatuses.map(s=>`<span><span class="dot" style="background:${esc(s.color)}"></span>${esc(s.label)}</span>`).join('');
 }
 function showView(v){
-  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier',rz=v==='realisations';
+  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier',rz=v==='realisations',bt=v==='boutique';
   document.querySelector('.stage').style.display=dev?'flex':'none';
   document.body.classList.toggle('devis-active',dev);
   $('clients-view').style.display=cli?'block':'none';
   $('dashboard-view').style.display=dash?'block':'none';
   $('chantier-view').style.display=ch?'block':'none';
   $('realisations-view').style.display=rz?'block':'none';
+  $('boutique-view').style.display=bt?'block':'none';
   $('vn-devis').classList.toggle('active',dev);
   $('vn-clients').classList.toggle('active',cli);
   $('vn-dash').classList.toggle('active',dash);
   $('vn-chantier').classList.toggle('active',ch);
   $('vn-real').classList.toggle('active',rz);
+  $('vn-boutique').classList.toggle('active',bt);
   /* Les deux navigations disent la même chose : celle du haut (bureau) et celle du bas
      (téléphone). Une seule des deux est visible à la fois, mais l'état suit dans les deux
      cas — sinon un changement de taille d'écran affiche un onglet actif faux. */
@@ -3563,6 +3585,7 @@ function showView(v){
   if(dash)renderDashboard();
   if(ch)renderChantier();
   if(rz)renderRealisations();
+  if(bt)renderBoutique();
 }
 /* Sur téléphone, le menu déroulant « Devis » de la barre du haut est invisible (cette
    barre est masquée) : on pose la même question dans une fenêtre, au même endroit que
@@ -4267,7 +4290,7 @@ async function donneesSauvegarde(){
   for(const t of tasks){for(const d of (t.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
   const realThumbs={};
   for(const r of realisations){for(const p of (r.photos||[])){try{const b=await photoStore.get(thumbKey(p.id));if(b)realThumbs[thumbKey(p.id)]=await blobToDataUri(b);}catch(e){}}}
-  return {app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,realThumbs,docs};
+  return {app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,produits,realThumbs,docs};
 }
 
 /* ---- Lecture d'une archive .zip écrite par `buildZip` (méthode « store ») ----
@@ -4361,6 +4384,7 @@ async function appliquerSauvegarde(data){
   devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
   if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
   if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
+  if(Array.isArray(data.produits)){produits=data.produits.map(normalizeProduit);await store.set(K_PROD,produits);}
   if(data.realThumbs){for(const k in data.realThumbs){try{await photoStore.save(k,dataUriToBlob(data.realThumbs[k]));}catch(e){}}}
   if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
 }
@@ -5990,6 +6014,320 @@ async function redigerTexteRealisation(r,btn,ta,apres){
     renderRealisations();
   }finally{btn.disabled=false;btn.textContent=vieux;}
 }
+/* ============ BOUTIQUE — ce que le magasin vend ============
+   Un PRODUIT n'est pas une réalisation : une réalisation est un chantier terminé qu'on
+   montre, un produit est une chose qu'on achète. Il a une matière, un prix (facultatif),
+   une disponibilité, et un canal de vente — aujourd'hui WhatsApp, rien d'autre.
+
+   Ce qui est RÉUTILISÉ des réalisations, volontairement : le format des photos, l'import,
+   le stockage, l'éditeur et le rendu des vignettes. Dupliquer ce moteur pour la boutique
+   aurait fait diverger les deux au premier correctif.
+
+   Ce qui n'est PAS fait, et n'a pas été demandé : panier, compte client, frais de port,
+   stock, paiement en ligne. L'encaissement est un chantier à part (26af62e0). */
+let produits=[];
+let _btOpenId=null, _btLang='fr', _btFiltre='';
+const PROD_DISPO=[{id:'oui',label:'Disponible'},{id:'commande',label:'Sur commande'},{id:'rupture',label:'Épuisé'}];
+const PROD_CATS_DEFAUT=['Revêtement mural','Papier peint','Panneau décoratif','Accessoire'];
+/* Traduisibles : ce qui se lit. Pas le prix (un nombre), pas la disponibilité (une liste). */
+const PROD_TRADUISIBLES=['nom','description','matiere'];
+
+function normalizeProduit(x){
+  const o=Object.assign({id:uid(),nom:'',description:'',matiere:'',prix:'',dispo:'oui',
+    categorie:'',photos:[],cover:'',published:false,i18n:{},
+    createdAt:Date.now(),updatedAt:Date.now()},x||{});
+  if(!o.i18n||typeof o.i18n!=='object')o.i18n={};
+  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',caption:'',w:0,h:0,useIa:false,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
+  return o;
+}
+function ensureProduits(){if(!Array.isArray(produits))produits=[];}
+function saveProduits(){produits.forEach(p=>{p.updatedAt=p.updatedAt||Date.now();});store.set(K_PROD,produits);}
+let _btSaveT=null;
+function saveProduitsDebounced(){clearTimeout(_btSaveT);_btSaveT=setTimeout(saveProduits,500);}
+function findProduit(id){return produits.find(p=>p.id===id)||null;}
+function isEditingBoutique(){
+  const a=document.activeElement;
+  return !!(a&&a.closest&&a.closest('#boutique-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));
+}
+/* Les catégories de PRODUITS se gèrent comme celles des réalisations : une liste ordonnée
+   dans les réglages du site, jamais un champ libre. */
+function produitCategories(){
+  const st=siteSettings();
+  if(!Array.isArray(st.categoriesProduits))st.categoriesProduits=PROD_CATS_DEFAUT.slice();
+  st.categoriesProduits=st.categoriesProduits.map(c=>String(c||'').trim()).filter(Boolean).filter((c,i,t)=>t.indexOf(c)===i);
+  (produits||[]).forEach(p=>{
+    const c=(p.categorie||'').trim();
+    if(c&&st.categoriesProduits.indexOf(c)<0)st.categoriesProduits.push(c);
+  });
+  if(!st.categoriesProduits.length)st.categoriesProduits=PROD_CATS_DEFAUT.slice();
+  return st.categoriesProduits;
+}
+function produitTexte(p,cle,lang){
+  if(lang==='fr')return p[cle]||'';
+  return ((p.i18n||{})[lang]||{})[cle]||'';
+}
+function produitSetTexte(p,cle,lang,val){
+  if(lang==='fr'){p[cle]=val;return;}
+  if(!p.i18n||typeof p.i18n!=='object')p.i18n={};
+  if(!p.i18n[lang]||typeof p.i18n[lang]!=='object')p.i18n[lang]={};
+  p.i18n[lang][cle]=val;
+}
+function produitNom(p){return (p.nom||'').trim()||'Produit sans nom';}
+
+/* ---- L'écran ------------------------------------------------------------------------ */
+function renderBoutique(){
+  const host=$('bt-body');if(!host)return;
+  ensureProduits();
+  if(_btOpenId&&!findProduit(_btOpenId))_btOpenId=null;
+  host.innerHTML='';
+  if(_btOpenId)renderProduitDetail(host,findProduit(_btOpenId));
+  else renderProduitList(host);
+}
+function renderProduitList(host){
+  /* Un filtre à une seule case n'est pas un filtre : il n'apparaît qu'à partir de deux
+     catégories réellement portées par un produit. */
+  const cats=[...new Set(produits.map(p=>(p.categorie||'').trim()).filter(Boolean))];
+  const ordre=produitCategories();
+  cats.sort((a,b)=>{const ia=ordre.indexOf(a),ib=ordre.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  if(cats.length>1){
+    const bar=document.createElement('div');bar.className='rz-filtres';
+    [{k:'',t:'Tous'}].concat(cats.map(c=>({k:c,t:c}))).forEach(c=>{
+      const n=c.k?produits.filter(p=>(p.categorie||'')===c.k).length:produits.length;
+      const b=document.createElement('button');b.type='button';b.className='rz-filtre'+(_btFiltre===c.k?' actif':'');
+      b.setAttribute('aria-pressed',_btFiltre===c.k?'true':'false');
+      b.textContent=c.t+' ('+n+')';
+      b.addEventListener('click',()=>{_btFiltre=c.k;renderBoutique();});
+      bar.appendChild(b);
+    });
+    host.appendChild(bar);
+  }
+  const grid=document.createElement('div');grid.className='rz-grid';
+  const vus=produits.filter(p=>!_btFiltre||(p.categorie||'')===_btFiltre)
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  vus.forEach(p=>{
+    const card=document.createElement('button');card.className='rz-card';
+    const cover=(p.cover&&(p.photos||[]).some(x=>x.id===p.cover))?p.cover:((p.photos||[])[0]||{}).id;
+    const dispo=(PROD_DISPO.find(d=>d.id===p.dispo)||PROD_DISPO[0]).label;
+    card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
+      <div class="rz-cbody">
+        <div class="rz-ctitle">${esc(produitNom(p))}</div>
+        <div class="rz-cmeta">${(p.prix||'').trim()?esc(p.prix.trim()):'<i>prix sur demande</i>'} · ${esc(dispo)}${
+          p.categorie?' · '+esc(p.categorie):''}${p.published?' · <span class="rz-live">● en ligne</span>':''}</div>
+      </div>`;
+    if(cover){
+      const im=card.querySelector('img');
+      const ph=(p.photos||[]).find(x=>x.id===cover);
+      if(im&&ph)renderThumbInto(ph,im,null);
+    }
+    card.addEventListener('click',()=>{_btOpenId=p.id;renderBoutique();window.scrollTo(0,0);});
+    grid.appendChild(card);
+  });
+  /* Classe distincte de `.rz-new` (la tuile des réalisations) tout en partageant son
+     apparence : deux écrans différents ne doivent pas se confondre — ni à l'œil, ni pour
+     qui compte les éléments de la page. */
+  const add=document.createElement('button');add.className='bt-new';
+  add.innerHTML='＋<br>Nouveau produit';
+  add.addEventListener('click',newProduit);
+  grid.appendChild(add);
+  host.appendChild(grid);
+  if(!produits.length){
+    const e=document.createElement('div');e.className='rz-empty';
+    e.textContent='Aucun produit pour l’instant. Ajoutez ce que le magasin propose à la vente : une photo, un nom, une matière — le prix est facultatif.';
+    host.appendChild(e);
+  }
+}
+
+function renderProduitDetail(host,p){
+  if(!p)return;
+  const L=_btLang, rtl=L==='he'?' dir="rtl"':'';
+  const back=document.createElement('button');back.className='rz-back';back.textContent='← Tous les produits';
+  back.addEventListener('click',()=>{_btOpenId=null;renderBoutique();});
+  host.appendChild(back);
+
+  const bar=document.createElement('div');bar.className='rz-detail-head';
+  bar.innerHTML=`<h2 style="font-family:var(--devis-heading-font);font-size:23px;font-weight:600;">${esc(produitNom(p))}</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ${p.published?'btn-onlight':'btn-primary'}" data-pub>${p.published?'✓ En ligne — republier':'🌐 Publier sur le site'}</button>
+      ${p.published?'<button class="btn btn-onlight" data-unpub>Retirer du site</button>':''}
+      <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
+    </div>`;
+  bar.querySelector('[data-pub]').addEventListener('click',()=>publishProduit(p));
+  const unp=bar.querySelector('[data-unpub]');
+  if(unp)unp.addEventListener('click',()=>unpublishProduit(p));
+  bar.querySelector('[data-del]').addEventListener('click',()=>delProduit(p.id));
+  host.appendChild(bar);
+
+  const etat=document.createElement('p');etat.className='rz-site';
+  etat.innerHTML=p.published
+    ? 'En vente sur le site : <a href="'+SITE_URL+'" target="_blank" rel="noopener">'+esc(SITE_URL)+'</a>. Republiez après une modification pour la voir en ligne.'
+    : 'Pas encore en ligne. Rien ne part sur le site tant que vous ne cliquez pas sur « Publier ».';
+  host.appendChild(etat);
+
+  /* Une langue à la fois : trois colonnes de texte sont illisibles sur un téléphone. Et
+     ici l'hébreu n'est pas décoratif — c'est la langue des clients du magasin. */
+  const langs=siteLanguesActives();
+  if(langs.length>1){
+    const ong=document.createElement('div');ong.className='site-onglets';
+    SITE_LANGUES.filter(l=>langs.indexOf(l.code)>=0).forEach(l=>{
+      const b=document.createElement('button');b.type='button';
+      b.className='site-onglet'+(l.code===L?' on':'');
+      b.textContent=l.nom;
+      b.addEventListener('click',()=>{_btLang=l.code;renderBoutique();});
+      ong.appendChild(b);
+    });
+    const n=document.createElement('span');n.className='site-onglets-note';n.textContent='langue en cours d’écriture';
+    ong.appendChild(n);
+    host.appendChild(ong);
+  }
+
+  const suff=L==='fr'?'':' — '+((SITE_LANGUES.find(l=>l.code===L)||{}).nom||L);
+  const repli=(v,fr)=>(L!=='fr'&&!(v||'').trim()&&(fr||'').trim())
+    ?'<p class="site-repli">Non traduit — le français s’affichera.</p>':'';
+  const meta=document.createElement('div');meta.className='rz-meta';
+  meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom du produit${suff}</span>
+      <input type="text" data-p="nom"${rtl} value="${esc(produitTexte(p,'nom',L))}" placeholder="${L==='fr'?'ex. Panneau chêne rainuré':esc(p.nom||'—')}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Matière / finition${suff}</span>
+      <input type="text" data-p="matiere"${rtl} value="${esc(produitTexte(p,'matiere',L))}" placeholder="${L==='fr'?'ex. Chêne massif, huilé':esc(p.matiere||'—')}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Prix <em>(vide = « sur demande »)</em></span>
+      <input type="text" data-p="prix" value="${esc(p.prix||'')}" placeholder="ex. 180 ₪ / m²"></label>
+    <label class="fld" style="flex:1;min-width:140px"><span class="lbl">Disponibilité</span>
+      <select data-p="dispo">${PROD_DISPO.map(d=>`<option value="${d.id}"${p.dispo===d.id?' selected':''}>${esc(d.label)}</option>`).join('')}</select></label>
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Catégorie — la section du site</span>
+      <select data-p="categorie"></select></label>`;
+  const selCat=meta.querySelector('[data-p="categorie"]');
+  selCat.innerHTML='<option value="">— aucune —</option>'
+    +produitCategories().map(c=>`<option value="${esc(c)}"${(p.categorie||'')===c?' selected':''}>${esc(c)}</option>`).join('')
+    +'<option value="__gerer">✎ Gérer les catégories…</option>';
+  selCat.addEventListener('change',()=>{
+    if(selCat.value==='__gerer'){selCat.value=p.categorie||'';openSitePanel();return;}
+    p.categorie=selCat.value;p.updatedAt=Date.now();saveProduitsDebounced();
+  });
+  host.appendChild(meta);
+  if(L!=='fr'){
+    const r1=document.createElement('div');
+    r1.innerHTML=repli(produitTexte(p,'nom',L),p.nom)+repli(produitTexte(p,'matiere',L),p.matiere);
+    if(r1.innerHTML)host.appendChild(r1);
+  }
+
+  const desc=document.createElement('div');desc.className='rz-pres';
+  desc.innerHTML=`<label class="fld"><span class="lbl">Description${suff} <em>(publiée sur le site)</em></span>
+    <textarea data-p="description" rows="4" maxlength="900"${rtl} placeholder="${L==='fr'?'Ce que c’est, comment ça se pose, pour quelles pièces.':'—'}">${esc(produitTexte(p,'description',L))}</textarea></label>`;
+  host.appendChild(desc);
+  if(L!=='fr'){
+    const r2=document.createElement('div');r2.innerHTML=repli(produitTexte(p,'description',L),p.description);
+    if(r2.innerHTML)host.appendChild(r2);
+  }
+
+  [...meta.querySelectorAll('[data-p]:not([data-p="categorie"])'),...desc.querySelectorAll('[data-p]')].forEach(el=>{
+    const cle=el.dataset.p;
+    const ecrire=()=>{
+      if(PROD_TRADUISIBLES.indexOf(cle)>=0)produitSetTexte(p,cle,L,el.value);
+      else p[cle]=el.value;
+      p.updatedAt=Date.now();saveProduitsDebounced();
+    };
+    el.addEventListener('input',ecrire);
+    el.addEventListener('change',ecrire);
+  });
+
+  /* Le canal de vente d'aujourd'hui, et le seul : WhatsApp. Annoncé ici pour qu'on sache
+     ce que le visiteur verra — et pour dire quoi faire s'il manque. */
+  const canal=document.createElement('p');canal.className='ias-note';
+  const tel=(siteSettings().tel||'').trim();
+  canal.innerHTML=tel
+    ? 'Sur le site, chaque produit porte un bouton WhatsApp vers le <b>'+esc(tel)+'</b>, avec le nom du produit déjà écrit dans le message.'
+    : '<b>Aucun numéro WhatsApp renseigné</b> : sans lui, les visiteurs n’auront aucun moyen de commander. Ajoutez-le dans ⚙ Le site public.';
+  host.appendChild(canal);
+
+  const imp=buildImportPanel();
+  if(imp)host.appendChild(imp);
+  host.appendChild(buildProduitPhotos(p));
+}
+
+function buildProduitPhotos(p){
+  const wrap=document.createElement('div');
+  const tete=document.createElement('p');tete.className='ed-eyebrow';
+  tete.textContent='Photos du produit';
+  wrap.appendChild(tete);
+  if(!(p.photos||[]).length){
+    const v=document.createElement('div');v.className='rz-empty';
+    v.textContent='Aucune photo. Un produit sans photo ne s’affiche pas sur le site : ajoutez-en au moins une.';
+    wrap.appendChild(v);
+  }
+  const grid=document.createElement('div');grid.className='rz-photos';
+  (p.photos||[]).forEach((ph,i)=>{
+    /* Mêmes classes que les vignettes d'une réalisation : une seule apparence à maintenir. */
+    const t=document.createElement('div');t.className='rz-ph';
+    t.innerHTML=`<div class="rz-ph-vue"><img alt=""></div>
+      <div class="bt-ph-foot">
+        <button class="mini" data-cov title="Mettre en couverture">${p.cover===ph.id||(!p.cover&&i===0)?'★ couverture':'☆'}</button>
+        <button class="mini danger" data-sup title="Retirer cette photo">×</button>
+      </div>`;
+    renderThumbInto(ph,t.querySelector('img'),null);
+    t.querySelector('[data-cov]').addEventListener('click',()=>{p.cover=ph.id;p.updatedAt=Date.now();saveProduits();renderBoutique();});
+    t.querySelector('[data-sup]').addEventListener('click',()=>askConfirm('Retirer cette photo du produit ?',async()=>{
+      for(const k of photoAllKeys(ph)){await photoStore.del(k);}
+      p.photos=p.photos.filter(x=>x.id!==ph.id);
+      if(p.cover===ph.id)p.cover='';
+      p.updatedAt=Date.now();storageInvalidate();saveProduits();renderBoutique();
+    }));
+    grid.appendChild(t);
+  });
+  const add=document.createElement('button');add.className='rz-add';
+  add.innerHTML='＋<br>Ajouter des photos';
+  add.addEventListener('click',()=>btPickPhotos(p));
+  grid.appendChild(add);
+  wrap.appendChild(grid);
+  return wrap;
+}
+function btPickPhotos(p){
+  const inp=document.createElement('input');
+  inp.type='file';inp.multiple=true;inp.accept='image/*';
+  inp.onchange=()=>addPhotosToProduit(p,inp.files);
+  inp.click();
+}
+/* Même moteur d'import que les réalisations : `importOnePhoto` ne connaît que « un objet
+   qui a des photos ». Le seul écart est ce qu'on sauvegarde et ce qu'on redessine. */
+async function addPhotosToProduit(p,files){
+  const list=Array.from(files||[]);
+  if(!list.length)return;
+  if(!(sb&&sbUser&&ownerId)){
+    _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'photo',why:'connexion requise : les photos sont enregistrées dans le cloud, pas sur l’appareil'}))};
+    renderBoutique();return;
+  }
+  const refus=[];let n=0;
+  _rzImportReport=null;
+  _rzImport={total:list.length,done:0,name:(list[0].name||'')};
+  renderBoutique();
+  for(const file of list){
+    _rzImport.name=file.name||'photo';paintImportProgress();
+    const why=await importOnePhoto(p,file);
+    if(why)refus.push({name:file.name||'photo',why});else n++;
+    _rzImport.done++;paintImportProgress();
+  }
+  _rzImport=null;
+  _rzImportReport=refus.length?{n,refus}:null;
+  p.updatedAt=Date.now();
+  storageInvalidate();
+  saveProduits();renderBoutique();
+  if(n)toast(n+' photo(s) ajoutée(s)');
+}
+
+function newProduit(){
+  ensureProduits();
+  const p=normalizeProduit({});
+  produits.push(p);saveProduits();
+  _btOpenId=p.id;renderBoutique();
+  setTimeout(()=>{const i=document.querySelector('#bt-body [data-p="nom"]');if(i)i.focus();},60);
+}
+function delProduit(id){
+  const p=findProduit(id);if(!p)return;
+  askConfirm('Supprimer « '+produitNom(p)+' » et ses '+(p.photos||[]).length+' photo(s) ? C’est définitif.',async()=>{
+    for(const ph of (p.photos||[])){for(const k of photoAllKeys(ph)){await photoStore.del(k);}}
+    produits=produits.filter(x=>x.id!==id);
+    _btOpenId=null;storageInvalidate();saveProduits();renderBoutique();toast('Produit supprimé');
+  });
+}
+
 function newRealisation(){
   const r=normalizeRealisation({title:'',date:String(new Date().getFullYear())});
   realisations.push(r);saveRealisations();
@@ -8463,6 +8801,8 @@ function siteInfos(){
      l'alphabet. « Commercial, Habitation, Bureaux » est un ordre voulu, pas un hasard. */
   const cats=siteCategories();
   if(cats.length)o.categories=cats.slice();
+  const catsProd=produitCategories();
+  if(catsProd.length)o.categoriesProduits=catsProd.slice();
   const journal=siteJournal()
     .filter(j=>langues.some(l=>journalTexte(j,'titre',l).trim()||journalTexte(j,'texte',l).trim()))
     .map(j=>{
@@ -8539,6 +8879,14 @@ function openSitePanel(){
       <button class="mini" data-cat-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
       <button class="mini" data-cat-move="1" ${i===listeCats.length-1?'disabled':''} title="Descendre">↓</button>
       <button class="mini danger" data-cat-del title="Supprimer">×</button></div>`).join('');
+  const listeCatsProd=produitCategories();
+  const compteProd=c=>(produits||[]).filter(x=>(x.categorie||'')===c).length;
+  const listeCatsProdHtml=listeCatsProd.map((c,i)=>`<div class="lib-item" data-catprod="${i}">
+      <input type="text" value="${esc(c)}" data-catprod-nom placeholder="Nom du rayon" style="flex:2">
+      <span class="site-cat-n">${compteProd(c)}</span>
+      <button class="mini" data-catprod-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+      <button class="mini" data-catprod-move="1" ${i===listeCatsProd.length-1?'disabled':''} title="Descendre">↓</button>
+      <button class="mini danger" data-catprod-del title="Supprimer">×</button></div>`).join('');
   const jrn=siteJournal();
   const journalHtml=jrn.map((j,i)=>`<div class="site-entree" data-i="${i}">
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
@@ -8572,6 +8920,10 @@ function openSitePanel(){
     <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
     <div id="site-cats">${listeCatsHtml}</div>
     <button class="add-btn" id="site-cat-add">+ Ajouter une catégorie</button>
+    <div class="ed-eyebrow" style="margin-top:14px">Catégories de la boutique</div>
+    <p class="ias-note">Les rayons de la section « À la vente ». Même logique que les sections des réalisations : un produit choisit la sienne dans un menu.</p>
+    <div id="site-cats-prod">${listeCatsProdHtml}</div>
+    <button class="add-btn" id="site-catprod-add">+ Ajouter une catégorie de produit</button>
     <div class="ed-eyebrow" style="margin-top:14px">Langues du site</div>
     <p class="ias-note">Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.</p>
     <div class="site-langues" id="site-langues">${SITE_LANGUES.map(l=>`
@@ -8687,6 +9039,44 @@ function openSitePanel(){
     liste.push(n);saveLibraryDebounced();openSitePanel();
     const dernier=document.querySelector('#site-cats [data-cat]:last-child [data-cat-nom]');
     if(dernier){dernier.focus();dernier.select();}
+  });
+  /* Mêmes règles que pour les catégories de réalisations : renommer suit sur les produits,
+     supprimer annonce combien sont concernés, un doublon est refusé. */
+  document.querySelectorAll('#site-cats-prod [data-catprod]').forEach(ligne=>{
+    const i=+ligne.dataset.catprod, avant=produitCategories()[i];
+    const champ=ligne.querySelector('[data-catprod-nom]');
+    champ.addEventListener('change',()=>{
+      const neuf=champ.value.trim(), liste=produitCategories();
+      if(!neuf){champ.value=avant;return;}
+      if(liste.some((c,j)=>j!==i&&c===neuf)){toast('Ce rayon existe déjà');champ.value=avant;return;}
+      liste[i]=neuf;
+      (produits||[]).forEach(x=>{if((x.categorie||'')===avant){x.categorie=neuf;x.updatedAt=Date.now();}});
+      saveProduits();store.set(K_LIB,library);renderBoutique();openSitePanel();rappel();
+    });
+    ligne.querySelectorAll('[data-catprod-move]').forEach(b=>b.addEventListener('click',()=>{
+      const liste=produitCategories(), j=i+(+b.dataset.catprodMove);
+      if(j<0||j>=liste.length)return;
+      const t=liste[i];liste[i]=liste[j];liste[j]=t;
+      saveLibraryDebounced();openSitePanel();rappel();
+    }));
+    ligne.querySelector('[data-catprod-del]').addEventListener('click',()=>{
+      const liste=produitCategories(), mort=liste[i], n=compteProd(mort);
+      askConfirm('Supprimer le rayon « '+mort+' » ?'
+        +(n?' '+n+' produit(s) y sont rangés : ils resteront en vente, mais dans aucun rayon.':'')
+        +' Le site ne changera qu’après « Mettre à jour le site ».',()=>{
+        const l=produitCategories();
+        l.splice(l.indexOf(mort),1);
+        (produits||[]).forEach(x=>{if((x.categorie||'')===mort){x.categorie='';x.updatedAt=Date.now();}});
+        saveProduits();store.set(K_LIB,library);renderBoutique();openSitePanel();
+      });
+    });
+  });
+  const cpadd=document.getElementById('site-catprod-add');
+  if(cpadd)cpadd.addEventListener('click',()=>{
+    const liste=produitCategories();
+    let n='Nouveau rayon', k=2;
+    while(liste.indexOf(n)>=0)n='Nouveau rayon '+(k++);
+    liste.push(n);saveLibraryDebounced();openSitePanel();
   });
   const jadd=document.getElementById('site-journal-add');
   if(jadd)jadd.addEventListener('click',()=>{
@@ -9025,6 +9415,103 @@ async function rollbackRealisation(r){
   }
 }
 
+/* ---- Publication d'un produit -------------------------------------------------------
+   Même circuit que les réalisations : copies redimensionnées dans le seau public, retouches
+   appliquées, originaux jamais publiés. Les produits vivent dans le manifeste sous la clé
+   `produits`, à part des réalisations : un chantier terminé et un article en vente ne se
+   présentent pas de la même façon. */
+async function publishProduit(p){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  if(!(p.photos||[]).length){toast('Ajoutez au moins une photo avant de publier');return;}
+  if(!(p.nom||'').trim()){toast('Donnez un nom au produit avant de publier');return;}
+  const btn=document.querySelector('#bt-body [data-pub]');
+  if(btn){btn.disabled=true;btn.textContent='Publication…';}
+  try{
+    const dossier=ownerId+'/prod-'+p.id;
+    const entries=[];
+    for(let i=0;i<p.photos.length;i++){
+      const ph=p.photos[i];
+      if(btn)btn.textContent='Publication '+(i+1)+'/'+p.photos.length+'…';
+      const img=await loadPhotoImage(ph.id,{thumb:false});
+      if(!img)continue;
+      const edit=ph.edit||blankEdit();
+      const big=glRenderTo(img,edit,PUB_FULL,'pub_'+ph.id);
+      if(!big)throw new Error('rendu impossible');
+      const bigBlob=await canvasToBlob(big,PUB_FULL_Q);
+      const small=glRenderTo(img,edit,PUB_THUMB,'pub_'+ph.id);
+      const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+      const nomFull='prod-'+p.id+'/p'+i+'.jpg', nomThumb='prod-'+p.id+'/t'+i+'.jpg';
+      const up=async(nom,blob)=>{
+        const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+nom,blob,{contentType:'image/jpeg',upsert:true});
+        if(error)throw error;
+      };
+      await up(nomFull,bigBlob);await up(nomThumb,smallBlob);
+      entries.push({full:ownerId+'/'+nomFull,thumb:ownerId+'/'+nomThumb,w:big.width,h:big.height,cover:p.cover===ph.id});
+    }
+    _glTexKey='';
+    if(!entries.some(e=>e.cover)&&entries.length)entries[0].cover=true;
+    /* Republication avec moins de photos : les fichiers devenus orphelins resteraient
+       publiquement accessibles alors qu'ils ne sont plus dans la fiche. */
+    try{
+      const {data:existants}=await sb.storage.from(GALLERY_BUCKET).list(dossier,{limit:1000});
+      const garder=new Set(entries.flatMap(e=>[e.full.split('/').pop(),e.thumb.split('/').pop()]));
+      const morts=(existants||[]).map(f=>f.name).filter(n=>!garder.has(n));
+      if(morts.length)await sb.storage.from(GALLERY_BUCKET).remove(morts.map(n=>dossier+'/'+n));
+    }catch(e){}
+
+    const man=await readManifest();
+    man.site=siteInfos();
+    man.updatedAt=new Date().toISOString();
+    if(!Array.isArray(man.produits))man.produits=[];
+    man.produits=man.produits.filter(x=>x.id!==p.id);
+    man.produits.unshift(produitPublie(p,entries));
+    await writeManifest(man);
+
+    p.published=true;p.publishedAt=Date.now();p.updatedAt=Date.now();
+    storageInvalidate();saveProduits();renderBoutique();
+    toast('Produit en ligne');
+  }catch(e){
+    console.error('publication produit',e);
+    toast('Échec de la publication : '+((e&&e.message)||'erreur'));
+    if(btn){btn.disabled=false;btn.textContent=p.published?'✓ En ligne — republier':'🌐 Publier sur le site';}
+  }
+}
+/* Ce qui part en ligne, et rien d'autre. Un champ vide ne part pas : le site sait retomber
+   sur le français, et « prix : » suivi de rien vaut moins que « sur demande ». */
+function produitPublie(p,photos){
+  const langs=siteLanguesActives();
+  const o={id:p.id,nom:(p.nom||'').trim(),photos:photos,dispo:p.dispo||'oui',
+    publishedAt:new Date().toISOString()};
+  ['description','matiere','prix','categorie'].forEach(k=>{
+    const v=(p[k]||'').trim();
+    if(v)o[k]=v;
+  });
+  const tr={};
+  langs.filter(l=>l!=='fr').forEach(l=>{
+    const bloc={};
+    PROD_TRADUISIBLES.forEach(k=>{const v=produitTexte(p,k,l).trim();if(v)bloc[k]=v;});
+    if(Object.keys(bloc).length)tr[l]=bloc;
+  });
+  if(Object.keys(tr).length)o.i18n=tr;
+  return o;
+}
+async function unpublishProduit(p){
+  askConfirm('Retirer « '+produitNom(p)+' » de la vente en ligne ? Les photos restent dans l’appli.',async()=>{
+    try{
+      const dossier=ownerId+'/prod-'+p.id;
+      const {data:existants}=await sb.storage.from(GALLERY_BUCKET).list(dossier,{limit:1000});
+      if(existants&&existants.length)await sb.storage.from(GALLERY_BUCKET).remove(existants.map(f=>dossier+'/'+f.name));
+      const man=await readManifest();
+      man.produits=(man.produits||[]).filter(x=>x.id!==p.id);
+      man.updatedAt=new Date().toISOString();
+      await writeManifest(man);
+      p.published=false;delete p.publishedAt;p.updatedAt=Date.now();
+      storageInvalidate();saveProduits();renderBoutique();
+      toast('Retiré de la vente en ligne');
+    }catch(e){toast('Échec du retrait : '+((e&&e.message)||'erreur'));}
+  });
+}
+
 async function unpublishRealisation(r){
   askConfirm('Retirer « '+(r.title||'cette réalisation')+' » du site public ? Les photos restent dans l’appli.',async()=>{
     try{
@@ -9055,9 +9542,9 @@ const SB_URL='https://njaamykxnvohoesrtpvv.supabase.co';
 const SITE_URL='https://rnab26.github.io/melissa-nabet-site/';
 const SB_KEY='sb_publishable_h7zdNqYow8o3jdofbWKIlg_IaEEcjj0';
 const APP_VERSION='v14 · 2026-08-03 (Supabase)';
-const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL]);
+const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL,K_PROD]);
 let sb=null,sbUser=null,ownerId=null,sbChannel=null,applyingRemote=false,offlineMode=false,lastSyncError='',cloudReady=false,loggedIn=false;
-let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRealJson='',pushT=null;
+let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRealJson='',remoteProdJson='',pushT=null;
 function setSyncStatus(s){const b=document.getElementById('sync-badge');if(!b)return;b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 /* Id du client dont une fiche est en cours de saisie (champ actif dans .cl-group[data-cid]).
@@ -9116,14 +9603,15 @@ async function loadAll(){
       else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
       else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=r.data;remoteTasksJson=JSON.stringify(tasks);}}
       else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=JSON.stringify(realisations);}}
+      else if(r.kind==='produits'){if(Array.isArray(r.data)){produits=r.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
     });
     clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
     devisList=devisList.filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));
     Object.keys(remoteClients).forEach(id=>{if(!cloudIds.has(id))delete remoteClients[id];});
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);
     applyingRemote=false;cloudReady=true;
-    try{renderClients();render();if(!isEditingRealisations())renderRealisations();}catch(e){}
+    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();}catch(e){}
     setSyncStatus('ok');
     scheduleSyncPush();
     /* Les demandes en vol vivent dans `library` : c'est ici, une fois la bibliothèque
@@ -9163,13 +9651,18 @@ function handleRealtime(payload){
              PAS `remoteRealJson`, pour que le prochain cloudPush renvoie notre version. */
         }
         else if(row.kind==='realisations'){if(Array.isArray(row.data)){mergeRealisations(row.data);remoteRealJson=JSON.stringify(realisations);}}
+        /* Même protection que pour les réalisations : une saisie en cours ne se fait pas
+           écraser par un écho distant, et le prochain push renverra la version locale. */
+        else if(row.kind==='produits'&&isEditingBoutique()){}
+        else if(row.kind==='produits'){if(Array.isArray(row.data)){produits=row.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
       }
     }
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);
   }catch(e){}
   applyingRemote=false;
   try{if(!isEditingClients())renderClients();}catch(e){}
   try{if(!isEditingRealisations())renderRealisations();}catch(e){}
+  try{if(!isEditingBoutique())renderBoutique();}catch(e){}
   setSyncStatus('ok');
 }
 async function cloudPush(){
@@ -9179,13 +9672,14 @@ async function cloudPush(){
      appliqué qu'APRÈS confirmation d'écriture réussie — sinon un push qui échoue (hors ligne,
      erreur réseau) était marqué à tort comme envoyé, et la modification locale ne repartait
      plus jamais en synchro (silencieusement perdue au prochain rechargement/loadAll). */
-  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null,pendingReal=null;
+  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null,pendingReal=null,pendingProd=null;
   const pendingDelC=[],pendingDelD=[];
   clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){pendingC[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
   devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){pendingD[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
   const lj=JSON.stringify(library);if(lj!==remoteLibJson){pendingLib=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
   const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){pendingTasks=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
   const rj=JSON.stringify(realisations);if(rj!==remoteRealJson){pendingReal=rj;rows.push({id:'realisations',owner:ownerId,kind:'realisations',data:realisations,updated_at:new Date().toISOString()});}
+  const pj=JSON.stringify(produits);if(pj!==remoteProdJson){pendingProd=pj;rows.push({id:'produits',owner:ownerId,kind:'produits',data:produits,updated_at:new Date().toISOString()});}
   Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id))pendingDelC.push(id);});
   Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id))pendingDelD.push(id);});
   delIds.push(...pendingDelC,...pendingDelD);
@@ -9196,6 +9690,7 @@ async function cloudPush(){
     if(pendingLib!==null)remoteLibJson=pendingLib;
     if(pendingTasks!==null)remoteTasksJson=pendingTasks;
     if(pendingReal!==null)remoteRealJson=pendingReal;
+    if(pendingProd!==null)remoteProdJson=pendingProd;
     pendingDelC.forEach(id=>delete remoteClients[id]);
     pendingDelD.forEach(id=>delete remoteDevis[id]);
     lastSyncError='';setSyncStatus('ok');
@@ -9320,6 +9815,7 @@ async function init(){
   devisList=(await store.get(K_DEVIS))||[];
   tasks=(await store.get(K_TASKS))||[];
   realisations=((await store.get(K_REAL))||[]).map(normalizeRealisation);
+  produits=((await store.get(K_PROD))||[]).map(normalizeProduit);
   chantierList=(await store.get(K_CHANTIER))||[];
   const chDraft=await store.get('mn_chantier_draft');
   if(chDraft&&Array.isArray(chDraft.cats))chantier=chDraft;

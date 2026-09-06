@@ -309,6 +309,33 @@
   .langs button:hover{color:var(--ink);}
   .langs button[aria-current="true"]{color:var(--ink);}
 
+  /* --- À LA VENTE ---------------------------------------------------------------------
+     Une grille différente de celle des réalisations, et c'est voulu : un chantier terminé se
+     regarde, un produit s'achète. La carte porte donc son prix, sa disponibilité et le
+     bouton pour écrire — pas seulement une belle image. */
+  .boutique{padding:clamp(30px,6vw,56px) 0 0;border-top:1px solid var(--hair);margin-top:clamp(34px,6vw,64px);}
+  .produits{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:clamp(16px,2.6vw,26px);}
+  .produit{display:flex;flex-direction:column;border:1px solid var(--hair);background:var(--paper);}
+  .produit-img{aspect-ratio:1/1;overflow:hidden;background:var(--travertine);}
+  .produit-img img{width:100%;height:100%;object-fit:cover;display:block;
+    transition:transform .6s cubic-bezier(.2,.7,.3,1);}
+  .produit:hover .produit-img img{transform:scale(1.03);}
+  .produit-corps{padding:12px 13px 14px;display:flex;flex-direction:column;gap:5px;flex:1;}
+  .produit-nom{font-family:var(--titre);font-weight:500;font-size:17px;line-height:1.25;margin:0;color:var(--ink);}
+  .produit-matiere{font-size:12px;color:var(--stone);margin:0;}
+  .produit-prix{font-size:14px;color:var(--ink);margin:2px 0 0;font-weight:500;}
+  .produit-prix.demande{color:var(--stone);font-weight:400;font-style:italic;}
+  .produit-dispo{font-size:10px;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--stone-light);}
+  .produit-dispo.rupture{color:#a4645a;}
+  .produit-desc{font-size:13px;line-height:1.6;color:var(--stone);margin:4px 0 0;white-space:pre-line;}
+  /* Le seul canal de vente aujourd'hui : écrire sur WhatsApp, le nom du produit déjà dans
+     le message. Pas de panier, pas de compte — ça n'a pas été demandé. */
+  .produit-wa{margin-top:auto;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    padding:10px 12px;border:1px solid var(--ink);color:var(--ink);background:none;cursor:pointer;
+    font-family:var(--texte);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    text-decoration:none;transition:background .25s,color .25s;}
+  .produit-wa:hover{background:var(--ink);color:var(--paper);}
+
   /* --- Journal --- */
   .journal{padding:clamp(30px,6vw,56px) 0 0;border-top:1px solid var(--hair);margin-top:clamp(34px,6vw,64px);}
   .entrees{display:flex;flex-direction:column;gap:clamp(22px,3.4vw,34px);max-width:64ch;}
@@ -361,6 +388,11 @@
       <span class="suivant-nom" id="suivant-nom" dir="auto"></span>
     </button>
   </section>
+  <section class="boutique" id="boutique" hidden>
+    <p class="eyebrow" id="t-boutique">À la vente</p>
+    <nav class="filtres" id="filtres-prod" hidden aria-label="Filtrer les produits"></nav>
+    <div class="produits" id="produits"></div>
+  </section>
   <section class="journal" id="journal" hidden>
     <p class="eyebrow" id="t-journal">Journal</p>
     <div class="entrees" id="journal-list"></div>
@@ -410,6 +442,9 @@ var MOTS = {
   fr: { realisations:'Réalisations', apropos:'À propos', journal:'Journal',
         retour:'← Toutes les réalisations', suivant:'Projet suivant', tout:'Tout',
         photos:'photos', agrandir:'Agrandir la photo', photo:'photo',
+        boutique:'À la vente', surDemande:'Prix sur demande', ecrireWa:'Écrire sur WhatsApp',
+        dispoOui:'Disponible', dispoCommande:'Sur commande', dispoRupture:'Épuisé',
+        messageWa:'Bonjour, je suis intéressé(e) par : ',
         vide:'Bientôt en ligne', videTxt:'Les premières réalisations seront publiées ici prochainement.',
         panne:'Les réalisations n’ont pas pu être chargées',
         panneTxt:'La connexion n’a pas abouti. Vérifiez votre réseau, puis réessayez.',
@@ -418,6 +453,9 @@ var MOTS = {
   en: { realisations:'Works', apropos:'About', journal:'Journal',
         retour:'← All works', suivant:'Next project', tout:'All',
         photos:'photographs', agrandir:'Enlarge photograph', photo:'photograph',
+        boutique:'For sale', surDemande:'Price on request', ecrireWa:'Message on WhatsApp',
+        dispoOui:'In stock', dispoCommande:'To order', dispoRupture:'Sold out',
+        messageWa:'Hello, I am interested in: ',
         vide:'Coming soon', videTxt:'The first projects will be published here shortly.',
         panne:'The projects could not be loaded',
         panneTxt:'The connection failed. Check your network, then try again.',
@@ -426,6 +464,9 @@ var MOTS = {
   he: { realisations:'עבודות', apropos:'אודות', journal:'יומן',
         retour:'→ כל העבודות', suivant:'הפרויקט הבא', tout:'הכול',
         photos:'תמונות', agrandir:'הגדלת התמונה', photo:'תמונה',
+        boutique:'למכירה', surDemande:'מחיר לפי בקשה', ecrireWa:'שלחו הודעה בוואטסאפ',
+        dispoOui:'במלאי', dispoCommande:'בהזמנה', dispoRupture:'אזל',
+        messageWa:'שלום, אני מתעניין/ת ב: ',
         vide:'בקרוב', videTxt:'העבודות הראשונות יפורסמו כאן בקרוב.',
         panne:'לא ניתן היה לטעון את העבודות',
         panneTxt:'החיבור נכשל. בדקו את הרשת ונסו שוב.',
@@ -502,9 +543,126 @@ function toutRedessiner() {
   el('back').textContent = mot('retour');
   renderLangues();
   renderApropos(s);
+  renderBoutique();
   renderJournal(s);
   if (projects.length) { renderFiltres(); renderIndex(); }
   if (current) openProject(projects.indexOf(current));
+}
+
+/* ---- À la vente ---------------------------------------------------------------------
+   Alimentée par `manifest.produits`. Section absente du manifeste = section absente de la
+   page : un site sans boutique ne doit pas afficher un rayon vide. */
+var produits = [], filtreProd = '';
+function texteProduit(p, cle) {
+  var tr = ((p.i18n || {})[langue]) || {};
+  return (tr[cle] || '').trim() || (p[cle] || '').trim();
+}
+function renderBoutique() {
+  var sec = el('boutique');
+  var visibles = produits.filter(function (p) { return p.photos && p.photos.length; });
+  sec.hidden = !visibles.length;
+  if (!visibles.length) return;
+  el('t-boutique').textContent = mot('boutique');
+  renderFiltresProd(visibles);
+  var host = el('produits');
+  host.innerHTML = '';
+  var liste = filtreProd ? visibles.filter(function (p) { return (p.categorie || '') === filtreProd; }) : visibles;
+  liste.forEach(function (p) { host.appendChild(carteProduit(p)); });
+}
+function renderFiltresProd(visibles) {
+  var host = el('filtres-prod'), cats = [];
+  visibles.forEach(function (p) {
+    var c = (p.categorie || '').trim();
+    if (c && cats.indexOf(c) < 0) cats.push(c);
+  });
+  if (cats.length < 2) { host.hidden = true; host.innerHTML = ''; filtreProd = ''; return; }
+  var ordre = (infosSite && infosSite.categoriesProduits) || [];
+  cats.sort(function (a, b) {
+    var ia = ordre.indexOf(a), ib = ordre.indexOf(b);
+    if (ia < 0 && ib < 0) return a.localeCompare(b, 'fr');
+    if (ia < 0) return 1;
+    if (ib < 0) return -1;
+    return ia - ib;
+  });
+  host.hidden = false;
+  host.innerHTML = '';
+  [''].concat(cats).forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.dir = 'auto';
+    var n = c ? visibles.filter(function (p) { return (p.categorie || '') === c; }).length : visibles.length;
+    b.textContent = (c || mot('tout')) + ' (' + n + ')';
+    b.setAttribute('aria-pressed', filtreProd === c ? 'true' : 'false');
+    b.addEventListener('click', function () { filtreProd = c; renderBoutique(); });
+    host.appendChild(b);
+  });
+}
+/* Le numéro de WhatsApp est celui du contact du site : une seule source, jamais deux
+   numéros qui divergent. Sans numéro, aucun bouton — mieux vaut rien qu'un lien mort. */
+function lienWhatsApp(p) {
+  var tel = ((infosSite || {}).tel || '').trim();
+  if (!tel) return '';
+  var wa = versWhatsApp(tel);
+  if (!wa) return '';
+  return 'https://wa.me/' + wa + '?text=' + encodeURIComponent(mot('messageWa') + texteProduit(p, 'nom'));
+}
+function carteProduit(p) {
+  var art = document.createElement('article');
+  art.className = 'produit';
+  /* Chaque texte porte SA direction, pas la carte : marquer la carte entière faisait lire
+     « 180 ₪ / m² » comme « m² / ₪ 180 » dès qu'un nom hébreu ouvrait le bloc, et renvoyait
+     le point final des phrases françaises en début de ligne. Un prix mal lu est un prix
+     faux. */
+  var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
+  if (cover) {
+    var box = document.createElement('div');
+    box.className = 'produit-img';
+    var im = document.createElement('img');
+    im.loading = 'lazy';
+    im.decoding = 'async';
+    im.src = url(cover.thumb);
+    im.srcset = url(cover.thumb) + ' 700w, ' + url(cover.full) + ' 1600w';
+    im.sizes = '(max-width:700px) 100vw, 300px';
+    im.alt = texteProduit(p, 'nom');
+    box.appendChild(im);
+    art.appendChild(box);
+  }
+  var corps = document.createElement('div');
+  corps.className = 'produit-corps';
+  var h = document.createElement('h3');
+  h.className = 'produit-nom';
+  h.dir = 'auto';
+  h.textContent = texteProduit(p, 'nom');
+  corps.appendChild(h);
+  var mat = texteProduit(p, 'matiere');
+  if (mat) { var m = document.createElement('p'); m.className = 'produit-matiere'; m.dir = 'auto'; m.textContent = mat; corps.appendChild(m); }
+  var prix = document.createElement('p');
+  prix.dir = 'auto';
+  /* Un prix vide n'est pas un oubli : Melissa ne veut pas forcément afficher ses tarifs. */
+  if ((p.prix || '').trim()) { prix.className = 'produit-prix'; prix.textContent = p.prix.trim(); }
+  else { prix.className = 'produit-prix demande'; prix.textContent = mot('surDemande'); }
+  corps.appendChild(prix);
+  var d = document.createElement('p');
+  var etat = p.dispo === 'rupture' ? 'Rupture' : (p.dispo === 'commande' ? 'Commande' : 'Oui');
+  d.className = 'produit-dispo' + (p.dispo === 'rupture' ? ' rupture' : '');
+  d.dir = 'auto';
+  d.textContent = mot('dispo' + etat);
+  corps.appendChild(d);
+  var desc = texteProduit(p, 'description');
+  if (desc) { var dp = document.createElement('p'); dp.className = 'produit-desc'; dp.dir = 'auto'; dp.textContent = desc; corps.appendChild(dp); }
+  var lien = lienWhatsApp(p);
+  if (lien && p.dispo !== 'rupture') {
+    var a = document.createElement('a');
+    a.className = 'produit-wa';
+    a.href = lien;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = mot('ecrireWa');
+    corps.appendChild(a);
+  }
+  art.appendChild(corps);
+  guetter(art);
+  return art;
 }
 
 function renderJournal(site) {
@@ -1050,6 +1208,7 @@ function charger() {
       infosSite = m.site;
     }
     projects = (m.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
+    produits = m.produits || [];
     /* Un seul point d'entrée du rendu : nom, sous-titre, sélecteur de langue, index,
        filtres, journal et à-propos. C'est aussi ce qu'on rejoue à chaque changement de
        langue — deux chemins de rendu finiraient par diverger. */
