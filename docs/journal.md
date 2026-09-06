@@ -1997,3 +1997,84 @@ dans « Le site public » ; s'il le juge inutile, supprimer le bloc `#site-ordre
 **Ce qui demande une manipulation de sa part** : toujours rien de nouveau — les trois
 livraisons fonctionnent avec les données déjà en place. Reste la liste d'hier (remplir la
 fiche de « Bureau Sébastien », choisir un thème, écrire l'« À propos », puis republier).
+
+---
+
+## 6 septembre 2026 (soir) — Mises à jour précises, et une fiche projet 7 fois plus légère
+
+### Ce que Raphaël a demandé
+
+> « J'ai déjà écrit du texte sur Bureau Sébastien, sauf que pour le publier je suis contraint
+> de publier la photo qui n'est pas à jour. Étape illogique d'ailleurs qu'on ne puisse pas
+> faire des mises à jour précises par projet. »
+
+Livré. Dans l'écran de republication, chaque photo **déjà en ligne** porte une case
+« Envoyer cette photo », cochée par défaut. Décochée, elle reste en ligne telle que le
+visiteur la voit : son fichier n'est ni recalculé ni renvoyé, pendant que le texte, les
+informations, l'ordre et les légendes partent. Un bandeau propose « Photos inchangées » et
+« Tout envoyer » d'un geste, et le bouton dit ce qu'il fera : « Republier (2 photos) » ou
+« Mettre à jour le texte seulement ».
+
+Garde-fous : une photo jamais mise en ligne ne peut pas être gardée (le manifeste pointerait
+sur rien — l'écran le dit au lieu d'offrir une case morte) ; une photo dont les fichiers ont
+disparu du seau non plus ; une photo gardée **reste marquée « à republier »** et garde sa
+date — elle n'est pas à jour, et le CRM ne doit pas prétendre le contraire.
+
+Sur son second point — choisir la version de la photo depuis « Va partir » — **c'était déjà
+livré ce matin** (bouton « Changer la version… »). Sa capture montrait une page en cache. Un
+rechargement forcé suffit.
+
+### Deux défauts trouvés en écrivant les contrôles
+
+**1. Le faux stockage des tests renvoyait toujours un listing vide.** La publication s'en
+sert pour savoir ce qui est réellement en ligne : elle croyait donc que tout avait disparu et
+**réécrivait chaque photo à chaque publication**. Aucun test ne pouvait voir qu'on n'en
+réécrit qu'une. Le faux stockage liste maintenant ce qu'il contient, comme le vrai — c'est un
+progrès du banc d'essai, pas un contournement.
+
+**2. Rendu visible par le premier** : quand aucune image n'est réécrite (fiche seule, retour
+à une publication précédente, photos toutes gardées), l'aperçu de partage n'était pas mis à
+jour. Un lien envoyé sur WhatsApp pouvait continuer à montrer la couverture **d'un autre
+projet**, le dernier publié. La vignette déjà en ligne de la couverture est maintenant
+recopiée — une copie, pas un rendu.
+
+### Performance mobile : mesurée, puis corrigée
+
+Mesuré sur le vrai site, avec les douze photos réellement publiées d'Allenby 54, dans un
+navigateur en 390 px : **4,57 Mo pour ouvrir une fiche projet**. Cause : `sizes` annonçait
+100vw — 390 px — alors que la photo s'affiche sur 346 px (`main` a 22 px de marge de chaque
+côté). Sur un écran à deux pixels physiques par pixel CSS, 390 × 2 = 780 dépassait les 700 px
+de la vignette déjà publiée : le navigateur prenait la version 1600 px, quatre fois plus
+lourde, pour l'afficher sur 692 px réels. Avec la vraie largeur, 346 × 2 = 692 tient dans la
+vignette. **0,62 Mo après.** Rien n'est dégradé (c'est du 1:1), les écrans à trois pixels
+reçoivent toujours la grande image, aucune image nouvelle n'est produite, rien à republier.
+
+Au passage : `srcset` et `sizes` sont posés **avant** `src` — dans l'autre ordre, le
+navigateur a déjà lancé le téléchargement de la grande image quand il découvre qu'une plus
+petite suffisait, et les deux partent.
+
+Deux autres pistes ont été mesurées puis **écartées** : ré-encoder en JPEG q0,78 (−10 %) ou en
+WebP q0,82 (−16 %) ne changeait pas la classe du problème, et demandait de tout republier.
+
+### Deux finitions vues en parcourant le vrai site
+
+- La surface s'affichait « 110 » tout court sur la fiche d'Allenby 54, entre le lieu et la
+  mission. L'unité est ajoutée quand — et seulement quand — la valeur est un nombre nu, dans
+  la langue affichée. « 85 m² » déjà écrit n'est pas touché.
+- Le titre publié était recopié tel quel : le manifeste porte « Bureau Sébastien » avec une
+  espace finale, qui se retrouvait dans le titre de l'onglet et les données structurées.
+  Titre et date sont maintenant nettoyés comme les autres champs.
+
+### Ce qui demande une manipulation de Raphaël
+
+- **Les crédits Anthropic du compte sont épuisés** — sa capture montre l'erreur exacte :
+  « Your credit balance is too low ». C'est pour ça que « ✨ Rédiger un texte » a échoué et
+  qu'il a écrit le texte à la main. À recharger sur console.anthropic.com (Plans & Billing).
+  Rien à redéployer ensuite : la clé ne change pas.
+- **Recharger le CRM en vidant le cache** : sa capture montrait un écran de publication d'une
+  version antérieure.
+- Le lieu d'Allenby 54 est publié « Tel avi ». C'est ce qui a été saisi ; je ne corrige pas le
+  contenu à sa place.
+
+**Vérification** : 503 contrôles CRM (5 nouveaux), 138 site (8 nouveaux), 21 bout en bout,
+7 sections, 20 langues — 0 échec. CRM et site déployés et vérifiés en ligne.
