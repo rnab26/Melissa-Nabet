@@ -514,6 +514,80 @@ déjà été tapé continue de s'y ajouter.
 
 ---
 
+## 6 septembre 2026 — Un menu en haut du site, et deux défauts signalés du téléphone
+
+**Branche** `claude/site-menu-haut`. Deuxième des cinq chantiers du site, plus deux
+correctifs urgents arrivés en cours de route (ils sont dans le même fichier, d'où un seul
+commit — les deux sujets sont séparés ici).
+
+### Le menu du site
+
+- Une barre **collante** sous le nom du studio : *Réalisations · À la vente · Journal ·
+  À propos*. Sur un portfolio on descend loin dans les photos ; remonter pour changer de
+  section est le geste qu'on ne fait pas.
+- **Une entrée n'existe que si sa section existe.** Les sections savent déjà se masquer
+  quand elles sont vides ; le menu lit leur état au lieu de refaire le raisonnement. Une
+  entrée qui mène nulle part est pire qu'une entrée manquante.
+- **Chaque libellé est modifiable** dans le CRM → ⚙ Le site public → *Menu du site*. Vide,
+  c'est le mot par défaut — qui se traduit tout seul dans les trois langues ; rempli, c'est
+  le mot de Melissa, traduisible comme ses autres textes.
+- **L'entrée où l'on se trouve est marquée** au défilement. Un menu qui dit ce qu'on peut
+  faire mais jamais où l'on est, sur une page longue, on s'y perd.
+- Depuis un projet ouvert, le menu **referme d'abord le projet** : sans ça il ferait défiler
+  vers une section cachée sous le détail, et il ne se passerait rien.
+- Sur téléphone, les entrées **défilent latéralement** avec un dégradé qui annonce la suite,
+  plutôt que de se replier derrière un ☰ : quatre entrées se lisent d'un coup d'œil.
+- Le titre « Réalisations » au-dessus de la liste **disparaît** quand le menu est là : le
+  même mot deux fois à trois centimètres d'écart, c'est une redondance. Les autres sections
+  gardent le leur — on y arrive en défilant, il fait repère.
+
+Les **catégories** (Bureau, Appartement…) restent en second niveau, sous la liste : elles
+filtrent une section, elles ne sont pas des sections. Les mêler au menu ferait une barre de
+dix entrées où « Bureau » et « Journal » auraient l'air d'être de même nature.
+
+### Deux défauts signalés depuis le téléphone
+
+**1. « Le nom et le prénom remplis donnent quand même *Nouveau client* partout. »**
+Le champ du nom existait bien — c'est le gros texte dans l'entête sombre de la fiche — mais
+il ne **ressemblait pas à un champ** : pas d'étiquette, police à empattements, centré sur
+fond sombre. On remplit donc « Contact » en croyant nommer le client, et la fiche comme la
+liste restent « Nouveau client » sans que rien ne le signale. Trois corrections :
+- une étiquette **Nom du client** au-dessus du champ, et le champ s'éclaircit au focus ;
+- à la création, le **curseur est posé dedans, texte sélectionné** ;
+- saisir un **Contact** nomme le client **tant que personne ne l'a nommé** (le nom est
+  encore le nom automatique). Un nom déjà choisi n'est jamais écrasé — c'est vérifié.
+
+**2. « Il faut valider la tâche pour que le bloc notes s'affiche. »**
+Le dialogue « Nouvelle tâche » n'avait pas de champ de notes : il fallait créer la tâche,
+la rouvrir, puis écrire. Le champ **Notes** est maintenant dans le dialogue de création. Au
+passage, le champ s'appelait « Détail » dans la fiche et « notes » dans la tête de tout le
+monde : c'est **Notes** des deux côtés.
+
+### Vérification
+
+`realisations` **504** (6 nouveaux), `site` **161** (19 nouveaux), `bout-en-bout` **21** —
+**686 contrôles, 0 échec**. Captures : `/tmp/mn-menu-390.png`.
+
+### Ce qu'il ne faut pas casser
+
+- `renderMenu()` est appelée **après** les sections : elle lit leur état (masquée ou non)
+  pour savoir quelles entrées ont un sens. L'appeler avant construit un menu sur des
+  sections pas encore dessinées.
+- `allerA()` retient si un projet était ouvert **avant** de le refermer : `closeProject`
+  passe par l'historique du navigateur, qui est asynchrone.
+- « À propos » est la **dernière** section : le navigateur ne peut pas la faire monter sous
+  la barre, il n'y a rien après elle. La promesse est « on arrive en bas du site et elle est
+  entièrement visible », pas « elle arrive sous la barre ».
+- `clientSansNom()` est le seul endroit qui décide si un nom a été choisi. L'élargir (par
+  exemple à tout nom court) ferait écraser de vrais noms.
+
+### À faire côté Raphaël
+
+Les libellés du menu sont dans ⚙ Le site public ; ils ne partent en ligne qu'avec
+« Mettre à jour le site ».
+
+---
+
 ## 6 septembre 2026 — Le bandeau se règle, et se pilote à la main
 
 **Branche** `claude/bandeau-reglable`. Premier des cinq chantiers demandés par Raphaël sur
