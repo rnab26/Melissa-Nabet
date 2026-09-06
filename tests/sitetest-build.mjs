@@ -22,16 +22,25 @@ const avant = source.match(/var STORAGE = '[^']+';/);
 if (!avant) throw new Error('STORAGE introuvable dans site-vitrine/index.html');
 const local = source.replace(/var STORAGE = '[^']+';/, "var STORAGE = '" + BASE + "';")
                     .replace(/var OWNER = '[^']+';/, "var OWNER = 'u';");
-/* La page « vide » lit un dossier sans manifeste : c'est l'état du site avant la première
-   publication, et il doit rester lisible au lieu d'avoir l'air cassé. */
-const vide = local.replace("var OWNER = 'u';", "var OWNER = 'pas-encore-publie';");
-/* Le manifeste RÉELLEMENT en ligne aujourd'hui ne connaît ni langues ni journal : la page
-   doit le lire sans broncher, sinon on casse le site en production. */
+/* Deux échecs qui n'en sont qu'un seul en apparence, et qu'il faut éprouver séparément :
+   - « vide »  : le manifeste est là, il n'annonce aucune réalisation — rien n'est encore
+                 publié, le site le dit sans faire croire à une panne ;
+   - « panne » : le manifeste est introuvable — la lecture échoue vraiment, et le visiteur
+                 doit pouvoir réessayer au lieu de repartir en croyant qu'il n'y a rien. */
+const vide = local.replace("var OWNER = 'u';", "var OWNER = 'rien-publie';");
+const panne = local.replace("var OWNER = 'u';", "var OWNER = 'pas-de-manifeste';");
+/* Et le manifeste RÉELLEMENT en ligne aujourd'hui, qui ne connaît ni langues ni journal :
+   la page doit le lire sans broncher, sinon on casse le site en production. */
 const ancien = local.replace("var OWNER = 'u';", "var OWNER = 'v';");
 
 mkdirSync(join(DIR, 'galerie/u/r1'), { recursive: true });
+mkdirSync(join(DIR, 'galerie/rien-publie'), { recursive: true });
 writeFileSync(join(DIR, 'index.html'), local);
 writeFileSync(join(DIR, 'vide.html'), vide);
+writeFileSync(join(DIR, 'panne.html'), panne);
+writeFileSync(join(DIR, 'galerie/rien-publie/manifest.json'), JSON.stringify({
+  version: 1, updatedAt: new Date().toISOString(), site: { title: 'Melissa Nabet' }, realisations: [],
+}, null, 1));
 /* Fichiers servis tels quels : ils sont testés à l'octet près, pas régénérés. */
 for (const f of ['robots.txt', 'sitemap.xml']) {
   copyFileSync(join(RACINE, 'site-vitrine', f), join(DIR, f));
