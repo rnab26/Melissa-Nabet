@@ -9561,7 +9561,10 @@ async function publishRealisation(r,opts){
     man.updatedAt=new Date().toISOString();
     const avant=man.realisations.find(x=>x.id===r.id)||null;
     man.realisations=man.realisations.filter(x=>x.id!==r.id);
-    const fiche={id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()};
+    /* Titre et date nettoyés comme les autres champs : une espace en trop se retrouvait
+       sinon dans le titre de l'onglet, dans l'adresse partagée et dans les données que
+       lisent les moteurs de recherche. */
+    const fiche={id:r.id,title:(r.title||'').trim(),date:(r.date||'').trim(),photos:entries,publishedAt:new Date().toISOString()};
     /* Champs vides omis : le site ne doit pas afficher d'étiquette sans valeur. */
     [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
       if((v||'').trim())fiche[k]=String(v).trim();

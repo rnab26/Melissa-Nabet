@@ -448,6 +448,31 @@ await sansObs.close();
 check('Navigateur sans observateur : rien n’est marqué, donc rien n’est invisible',
   rSansObs.total > 0 && rSansObs.invisibles === 0 && rSansObs.marquees === 0, JSON.stringify(rSansObs));
 
+/* LA SURFACE — saisie librement dans le CRM. Tapée seule (« 110 »), elle s'affichait telle
+   quelle entre le lieu et la mission, sans dire de quoi il s'agit : c'est exactement l'état
+   du vrai site aujourd'hui. L'unité est ajoutée au nombre nu, et seulement à lui. */
+const surf = await page.evaluate(async () => {
+  const lire = () => (document.getElementById('d-meta').textContent || '').trim();
+  const vues = {};
+  for (const id of ['r1', 'r2']) {
+    for (let i = 0; i < projects.length; i++) if (projects[i].id === id) { openProject(i, 'remplacer'); break; }
+    await new Promise(r => setTimeout(r, 250));
+    vues[id] = lire();
+  }
+  const enHebreu = (() => { const avant = langue; langue = 'he'; const v = surfaceLisible('110'); langue = avant; return v; })();
+  closeProject();
+  await new Promise(r => setTimeout(r, 250));
+  return { vues, enHebreu, dejaEcrite: surfaceLisible('85 m²'), vide: surfaceLisible(''),
+           decimal: surfaceLisible('110,5'), espace: surfaceLisible('1 200') };
+});
+check('Surface : un nombre nu reçoit son unité', /110 m²/.test(surf.vues.r2), surf.vues.r2);
+check('Surface : une valeur qui porte déjà son unité n’est pas retouchée',
+  surf.dejaEcrite === '85 m²' && /85 m²/.test(surf.vues.r1) && !/85 m² m²/.test(surf.vues.r1), surf.vues.r1);
+check('Surface : vide reste vide, aucune unité orpheline', surf.vide === '');
+check('Surface : un décimal et un nombre espacé sont reconnus comme des nombres',
+  surf.decimal === '110,5 m²' && surf.espace === '1 200 m²', surf.decimal + ' | ' + surf.espace);
+check('Surface : l’unité suit la langue', surf.enHebreu === '110 מ″ר', surf.enHebreu);
+
 /* CHARGEMENT — ce que voit un visiteur avant que le manifeste arrive. Les cartes d'attente
    doivent être dans le HTML SERVI (donc peintes sans attendre le script), et avoir
    entièrement disparu une fois les vraies réalisations affichées. */

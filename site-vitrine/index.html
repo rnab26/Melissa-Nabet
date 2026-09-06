@@ -512,6 +512,7 @@ var MOTS = {
         vide:'Bientôt en ligne', videTxt:'Les premières réalisations seront publiées ici prochainement.',
         panne:'Les réalisations n’ont pas pu être chargées',
         panneTxt:'La connexion n’a pas abouti. Vérifiez votre réseau, puis réessayez.',
+        m2:'m²',
         reessayer:'Réessayer', genre:'Un projet de ce genre ? ',
         ecrire:'écrivez-moi', whatsapp:'écrivez-moi sur WhatsApp' },
   en: { realisations:'Works', apropos:'About', journal:'Journal',
@@ -523,6 +524,7 @@ var MOTS = {
         vide:'Coming soon', videTxt:'The first projects will be published here shortly.',
         panne:'The projects could not be loaded',
         panneTxt:'The connection failed. Check your network, then try again.',
+        m2:'m²',
         reessayer:'Try again', genre:'A project like this one? ',
         ecrire:'write to me', whatsapp:'message me on WhatsApp' },
   he: { realisations:'עבודות', apropos:'אודות', journal:'יומן',
@@ -534,6 +536,7 @@ var MOTS = {
         vide:'בקרוב', videTxt:'העבודות הראשונות יפורסמו כאן בקרוב.',
         panne:'לא ניתן היה לטעון את העבודות',
         panneTxt:'החיבור נכשל. בדקו את הרשת ונסו שוב.',
+        m2:'מ″ר',
         reessayer:'נסו שוב', genre:'רוצים פרויקט כזה? ',
         ecrire:'כתבו לי', whatsapp:'כתבו לי בוואטסאפ' }
 };
@@ -545,6 +548,16 @@ var langue = 'fr';
 function mot(k) { return (MOTS[langue] && MOTS[langue][k]) || MOTS.fr[k] || ''; }
 /* « 1 photos » sur une carte de portfolio, ça se remarque. */
 function nbPhotos(n) { return n + ' ' + mot(n > 1 ? 'photos' : 'photo'); }
+/* La surface est saisie librement dans le CRM. Tapée seule — « 110 » — elle s'affichait
+   telle quelle au milieu de la fiche technique, entre le lieu et la mission, sans dire de
+   quoi il s'agit. On ajoute l'unité UNIQUEMENT quand la valeur est un nombre nu : si
+   Mélissa a déjà écrit « 110 m² » ou « 1 200 pi² », on ne touche à rien. L'unité suit la
+   langue, comme le reste. */
+function surfaceLisible(v) {
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return '';
+  return /^[0-9]+([.,][0-9]+)?$/.test(t.replace(/[\s\u00a0]/g, '')) ? t + ' ' + mot('m2') : t;
+}
 
 /* Un texte de Melissa, dans la langue courante — à défaut, le français d'origine.
    `src` permet de le demander sur un objet précis plutôt que sur l'état global : une
@@ -1049,7 +1062,7 @@ function majSeo(titre, description, image) {
 function afficherProjet(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
-  el('d-meta').textContent = [current.date, current.categorie, current.lieu, current.surface,
+  el('d-meta').textContent = [current.date, current.categorie, current.lieu, surfaceLisible(current.surface),
     current.mission, nbPhotos(current.photos.length)].filter(Boolean).join(' · ');
   el('d-text').textContent = current.texte || '';
   el('d-text').hidden = !current.texte;
@@ -1102,7 +1115,7 @@ function afficherProjet(i) {
   peindreContactProjet();
   var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
   majSeo(current.title + ' — ' + TITRE_SITE,
-    current.texte || [current.lieu, current.surface, current.mission].filter(Boolean).join(' · ') || DESC_SITE,
+    current.texte || [current.lieu, surfaceLisible(current.surface), current.mission].filter(Boolean).join(' · ') || DESC_SITE,
     couv ? url(couv.full) : '');
 }
 

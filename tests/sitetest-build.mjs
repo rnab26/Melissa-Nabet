@@ -112,7 +112,9 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
     photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '', true)],
   }, {
     id: 'r2', title: 'Duplex Ben Yehuda', date: '2025',
-    lieu: 'Tel Aviv', categorie: 'Appartement',
+    /* Surface tapée comme un nombre nu — c'est ce que Mélissa fait en pratique. Le site
+       doit y remettre l'unité, alors que « 85 m² » de r1 ne doit pas être touché. */
+    lieu: 'Tel Aviv', surface: '110', categorie: 'Appartement',
     publishedAt: new Date().toISOString(),
     photos: [photo(0, ''), photo(1, '')],
   }, {

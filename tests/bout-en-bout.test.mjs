@@ -73,8 +73,11 @@ const publication = await crm.evaluate(async () => {
   realisations = [];
   newRealisation();
   const r = realisations[0];
-  r.title = 'Duplex Rothschild';
-  r.date = '2026';
+  /* Espaces volontaires : c'est ce qu'on tape sans le voir, et c'est ce qu'il y avait dans
+     le vrai manifeste (« Bureau Sébastien  »). Le titre publié doit être propre — il finit
+     dans le titre de l'onglet, dans l'adresse partagée et dans les données structurées. */
+  r.title = '  Duplex Rothschild ';
+  r.date = ' 2026 ';
   r.lieu = 'Tel Aviv';
   r.surface = '120 m²';
   r.mission = 'Rénovation complète';
@@ -175,6 +178,10 @@ const vu = await site.evaluate(() => ({
   vignettes: [...document.querySelectorAll('.project-img img')].filter(i => i.naturalWidth > 0).length,
 }));
 check('Le site montre la réalisation publiée', vu.cartes.join('') === 'Duplex Rothschild', vu.cartes.join(' | '));
+check('Le titre publié est nettoyé de ses espaces, pas recopié tel quel',
+  publication.manifest.realisations[0].title === 'Duplex Rothschild'
+  && publication.manifest.realisations[0].date === '2026',
+  JSON.stringify([publication.manifest.realisations[0].title, publication.manifest.realisations[0].date]));
 check('La vignette de couverture écrite par le CRM se charge vraiment', vu.vignettes === 1, vu.vignettes + ' chargée(s)');
 check('Les informations du projet arrivent sur la carte',
   /2026/.test(vu.meta[0]) && /Tel Aviv/.test(vu.meta[0]), vu.meta[0]);
