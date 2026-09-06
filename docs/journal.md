@@ -1205,3 +1205,48 @@ réellement acquis** (photos datées avant l'écriture du manifeste, fichiers é
 retour possible, fichier envoyé sans nettoyage). À écrire dans les prochaines revues :
 *rien ne se marque « fait » tant que la dernière écriture n'a pas réussi, et tout ce qui a
 été écrit avant l'échec se nettoie.*
+
+---
+
+## 6 septembre 2026 — « Je vois rien » : ce que la page montrait vraiment
+
+**Diagnostic d'abord.** Raphaël a rechargé le site et n'a rien vu. Le site n'était pas
+cassé : la page servie est bien la dernière version (identique à l'octet près au dépôt),
+le manifeste public répond 200, les six photos publiées aussi, et chargée dans un vrai
+navigateur avec les **vraies données publiées**, elle affiche le projet « Bureau Sébastien »,
+sa photo de couverture et les trois liens de contact. Capture à l'appui.
+
+Ce qu'il ne voit pas, ce sont les **nouveautés** — et c'est normal : la seule réalisation
+publiée date du 5 septembre au soir et ne porte aucune des informations que ces nouveautés
+affichent. Pas de catégorie sur au moins deux projets → pas de filtres. Pas de légendes →
+rien sous les photos. Un seul projet → pas de « projet suivant ». Pas de texte de
+présentation, pas de texte « À propos », pas de thème choisi. **Tout cela n'apparaîtra
+qu'après avoir rempli ces champs dans le CRM puis republié** (Réalisations → « Tout
+republier »).
+
+**Ce qui, en revanche, était un vrai défaut.** Entre l'ouverture de la page et l'arrivée du
+manifeste, le site n'affichait **rien du tout** : ni cartes, ni message, ni signe d'activité.
+Sur un téléphone en réseau lent ce silence dure plusieurs secondes et se lit comme une page
+cassée — c'est exactement l'impression décrite. Trois **cartes d'attente** occupent
+maintenant la place des vraies ; elles sont dans le HTML servi, donc peintes avant même que
+le script tourne, et disparaissent au premier rendu réel.
+
+**Et un défaut plus grave parce qu'invisible** : un manifeste introuvable et un portfolio
+réellement vide affichaient le **même** message, « Bientôt en ligne ». Un visiteur arrivant
+pendant une panne repartait en croyant qu'il n'y a rien à voir, et personne n'apprenait que
+le site était muet. Les deux cas sont désormais distincts, et celui de la panne propose de
+**réessayer** sur place. Une lecture qui ne répond pas s'arrête au bout de vingt secondes,
+sinon rien ne déclencherait jamais ce message.
+
+**Au passage** : le banc d'essai éprouvait le cas « vide » avec un manifeste absent —
+c'est-à-dire le cas de la panne, pas celui du portfolio vide. Il porte maintenant les deux
+pages séparément, et le test aurait donc échoué à repérer le problème.
+
+**Vérification** : 82 contrôles sur le site (10 nouveaux), 20 bout en bout, tous verts ;
+puis la page réelle rechargée avec le manifeste et les photos réellement publiés — un
+projet affiché, aucune erreur JavaScript. Déploiement confirmé en ligne.
+
+**Ce qui demande une manipulation de sa part** : remplir lieu / surface / mission /
+catégorie / texte sur « Bureau Sébastien », choisir un thème dans « Le site public »,
+écrire le texte « À propos », puis republier. Sans ça, la moitié du travail de ces deux
+jours reste invisible.
