@@ -18,6 +18,12 @@ Trois suites :
   champ libre), liste modifiable depuis le CRM, renommage qui suit sur les réalisations,
   ordre publié dans le manifeste, et le bouton « + Nouvelle réalisation » visible sans
   défilement. Port 8899 : `node tests/categories.test.mjs`.
+- `tests/onglet-persistant.test.mjs` — l'onglet du CRM **survit au rechargement** (F5),
+  via une route dans l'URL (`#/devis`, `#/clients`…) : Tableau de bord au tout premier
+  chargement, même onglet après un rechargement, lien direct vers un onglet. Fichier à
+  part parce qu'il fait de VRAIS `page.reload()`/`page.goto()`, ce qui efface tout mock
+  injecté (Supabase, `window.__files`) — le faire dans `realisations.test.mjs` casserait
+  les contrôles qui suivent. Port 8899 : `node tests/onglet-persistant.test.mjs`.
 - `tests/site-sections.test.mjs` — le bloc **« Sections du site »** du panneau ⚙ Le site
   public : il doit expliquer, avec les chiffres réels, pourquoi le site n'affiche aucune
   section (rien de publié / aucune catégorie / une seule catégorie) et le confirmer quand

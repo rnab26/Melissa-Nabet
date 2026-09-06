@@ -9,6 +9,32 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 6 septembre 2026 — Le CRM garde l’onglet ouvert après un rechargement
+
+**Chantier `46e782c5`** (dispatch Jarvis). Ses mots : « lorsqu'on recharge la page du
+CRM, ça nous remet quoi qu'il arrive sur le tableau de bord ». Il voulait le Tableau de
+bord comme page d'entrée au tout premier chargement, mais rester sur l'onglet en cours
+(Devis, Clients…) si on recharge après avoir navigué ailleurs.
+
+**Livré** : chaque onglet écrit sa route dans l'URL (`#/devis`, `#/clients`,
+`#/realisations`…) dès qu'on l'ouvre (`history.replaceState`, sans empiler l'historique).
+Recharger relit cette route au démarrage — et retombe sur le Tableau de bord seulement si
+elle est absente ou invalide (premier chargement, ou route inventée). Bénéfice direct de
+choisir l'URL plutôt qu'un stockage local, comme prévu dans sa demande : **un lien direct
+vers un onglet précis fonctionne** dès l'arrivée, et un `hashchange` (lien cliqué, retour
+navigateur) rouvre le bon onglet sans recharger la page.
+
+**Ce qui n'est pas couvert** : le sous-écran (une fiche client ouverte, par exemple) —
+seul l'onglet principal est mémorisé. Sa demande le disait « si possible » ; pas fait
+pour rester dans le périmètre exact du chantier.
+
+**Vérifié** : `tests/onglet-persistant.test.mjs` — **nouveau, 6 contrôles, 0 échec**,
+avec de VRAIS `page.reload()`/`page.goto()` (fichier à part : ça efface les mocks
+injectés, ça aurait cassé la suite Réalisations plus loin). `tests/realisations.test.mjs`
+482/482, `tests/categories.test.mjs` 18/18 — aucune régression.
+
+---
+
 ## 6 septembre 2026 — Publication : la case « Va partir » devient cliquable
 
 **Chantier `4666e187`** (dispatch Jarvis du 6 sept., base `dev_items`). Ses mots : « je ne

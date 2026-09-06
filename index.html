@@ -3580,7 +3580,26 @@ function renderClientStatusFilters(){
   const legend=$('cl-legend');
   if(legend)legend.innerHTML=library.clientStatuses.map(s=>`<span><span class="dot" style="background:${esc(s.color)}"></span>${esc(s.label)}</span>`).join('');
 }
+/* L'onglet ouvert vit dans l'URL (#/<onglet>), pas seulement en mémoire : recharger la
+   page (F5, veille du navigateur) doit rouvrir le MÊME onglet, pas retomber sur le
+   Tableau de bord — sauf au tout premier chargement, où le Tableau de bord reste la
+   page d'entrée voulue. Un avantage direct de ce choix : un lien partagé vers un onglet
+   précis fonctionne, et survit à un nettoyage du stockage local (contrairement à une
+   mémorisation dans localStorage). */
+const CRM_VUES=['dashboard','devis','clients','chantier','realisations','boutique'];
+let _vueCourante='dashboard';
+function vueDepuisHash(){
+  const h=(location.hash||'').replace(/^#\/?/,'');
+  return CRM_VUES.includes(h)?h:null;
+}
+window.addEventListener('hashchange',()=>{
+  const v=vueDepuisHash();
+  if(v&&v!==_vueCourante)showView(v);
+});
 function showView(v){
+  _vueCourante=v;
+  const cible='#/'+v;
+  if(location.hash!==cible)history.replaceState(null,'',cible);
   const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier',rz=v==='realisations',bt=v==='boutique';
   document.querySelector('.stage').style.display=dev?'flex':'none';
   document.body.classList.toggle('devis-active',dev);
@@ -10001,7 +10020,7 @@ async function init(){
   current.branding={...library.branding};
   fillFields();wireBindings();buildPrest();buildExclu();render();
   wireClientFilters();
-  showView('dashboard');
+  showView(vueDepuisHash()||'dashboard');
   $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
   initSupabase();
 }
