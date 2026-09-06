@@ -979,3 +979,34 @@ reste de toute façon en bas.
 **Si ce n'était pas ça, le problème** : dis-le-moi, la description du chantier était courte
 (« la barre de menu mange la vue quand on clique la moitié de l'écran ») et j'ai traité ce que
 j'ai pu constater à l'écran.
+
+---
+
+## 6 septembre 2026 — Tout republier d'un coup, et un mensonge silencieux corrigé
+
+**Branche** `claude/crm-republier-lot` → fusionnée sur `main`. **Initiative**, dans la suite
+directe du rappel « à republier ».
+
+Le tableau de bord disait « 2 réalisations à republier » et laissait ouvrir chaque fiche pour
+recliquer « Publier ». Il porte maintenant le geste : **« 🌐 Tout republier (2) »** —
+confirmation (nombre de réalisations et de photos), progression, interruption possible, et un
+bilan qui reste affiché **là où le geste a été fait**. Un échec sur l'une n'arrête pas les
+autres ; le bilan nomme laquelle et pourquoi.
+
+### Le bug trouvé en écrivant le test d'échec — celui-là comptait
+
+`publishRealisation` datait chaque photo comme « publiée » **dans la boucle d'envoi**, donc
+**avant** l'écriture du manifeste. Si cette écriture échouait (coupure réseau, manifeste
+illisible), les photos étaient marquées en ligne alors que **le site n'en savait rien** : la
+réalisation affichait « ● en ligne », le rappel « à republier » disparaissait, et plus rien ne
+signalait que le site était resté en arrière.
+
+C'est exactement le mensonge silencieux que ce rappel existe pour empêcher — et il était dans
+le code depuis la première version de la publication. Les dates ne sont désormais posées
+**qu'après** l'écriture du manifeste. Un test le vérifie : une publication qui échoue laisse
+bien sa réalisation « en attente ».
+
+**Ne pas casser** : ne jamais remonter `p.publishedAt=…` dans la boucle d'envoi des photos.
+Tant que le manifeste n'est pas écrit, rien n'est en ligne.
+
+**Vérification** : 413 contrôles au navigateur (6 nouveaux), bout en bout inchangé.
