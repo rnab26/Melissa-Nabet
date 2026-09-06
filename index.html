@@ -8377,6 +8377,19 @@ function openSitePanel(){
      un trou, c'est le français qui s'affichera. */
   const repli=(val,fr)=>(LE!=='fr'&&!(val||'').trim()&&(fr||'').trim())
     ?'<p class="site-repli">Non traduit — le français s’affichera.</p>':'';
+  /* Pourquoi le site n'affiche aucune section : dit ici, avec SES chiffres, plutôt que
+     laissé à deviner. Un filtre à une seule case n'est pas un filtre — le site ne l'affiche
+     donc pas, et il faut au moins deux catégories différentes pour qu'il apparaisse. */
+  const etatSections=(()=>{
+    const pub=(realisations||[]).filter(r=>r.published);
+    const cats=[...new Set(pub.map(r=>(r.categorie||'').trim()).filter(Boolean))];
+    const sans=pub.filter(r=>!(r.categorie||'').trim()).length;
+    const orphelines=sans?' <b>'+sans+'</b> réalisation(s) publiée(s) n’ont pas de catégorie : elles restent visibles, mais dans aucune section.':'';
+    if(!pub.length)return {ok:false,html:'Aucune réalisation publiée pour l’instant : le site n’affiche donc aucune section.'};
+    if(cats.length>=2)return {ok:true,html:'Le site affiche <b>'+cats.length+'</b> sections : '+cats.map(esc).join(', ')+'.'+orphelines};
+    if(cats.length===1)return {ok:false,html:'Une seule catégorie publiée (« '+esc(cats[0])+' ») : le site n’affiche pas de sections, un choix unique n’est pas un choix. Il en faut <b>au moins deux</b>.'+orphelines};
+    return {ok:false,html:'<b>'+pub.length+'</b> réalisation(s) publiée(s), <b>aucune</b> catégorie renseignée — c’est pour ça qu’aucune section n’apparaît. Ouvrez une réalisation, remplissez son champ « Catégorie » (Commercial, Habitation, Bureaux, Réalisation sur mesure…), puis republiez-la.'};
+  })();
   const jrn=siteJournal();
   const journalHtml=jrn.map((j,i)=>`<div class="site-entree" data-i="${i}">
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
@@ -8404,6 +8417,9 @@ function openSitePanel(){
       <button type="button" class="mini" data-mvt="discret" aria-pressed="${st.mouvement!=='aucun'?'true':'false'}">Discret — les images apparaissent en douceur</button>
       <button type="button" class="mini" data-mvt="aucun" aria-pressed="${st.mouvement==='aucun'?'true':'false'}">Aucun — net et immédiat</button>
     </div>
+    <div class="ed-eyebrow" style="margin-top:14px">Sections du site</div>
+    <p class="ias-note">Les sections du site (« Commercial », « Habitation »…) ne sont pas un réglage à activer : ce sont les <b>catégories</b> des réalisations publiées. Chacune porte la sienne, dans sa fiche.</p>
+    <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
     <div class="ed-eyebrow" style="margin-top:14px">Langues du site</div>
     <p class="ias-note">Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.</p>
     <div class="site-langues" id="site-langues">${SITE_LANGUES.map(l=>`

@@ -54,6 +54,57 @@ point est plus bas, dans l'ordre chronologique.)*
 
 ---
 
+## 6 septembre 2026 — « Je ne vois rien de spécial » : ce qu'il manquait vraiment
+
+**Branche** `claude/site-sections-lisible-0609`.
+
+Raphaël a mis le site à jour et n'a rien reconnu de ce qu'il avait choisi. Il avait raison
+sur les trois points. Diagnostic tiré du **manifeste réellement en ligne**, pas d'une
+supposition :
+
+| Ce qu'il attendait | Ce que dit le manifeste |
+|---|---|
+| la direction « Index » | `theme: "epure"` — il a cliqué la mauvaise vignette |
+| des sections commercial / habitation / bureaux | `categorie: null` sur sa seule réalisation |
+| « un truc qui a été fait » | 1 projet, 6 photos, aucun texte de présentation |
+
+### Ce qui a été corrigé
+
+Le panneau **⚙ Le site public** ne disait nulle part **pourquoi** aucune section
+n'apparaît. Il porte maintenant un bloc « Sections du site » qui l'explique avec **ses
+chiffres à lui**, et nomme le geste à faire :
+
+- aucune réalisation publiée → il le dit ;
+- publiées mais **aucune catégorie renseignée** (son cas) → « c'est pour ça qu'aucune
+  section n'apparaît. Ouvrez une réalisation, remplissez son champ Catégorie… » ;
+- **une seule** catégorie → le site n'affiche toujours rien : un choix unique n'est pas un
+  choix, il en faut au moins deux ;
+- deux ou plus → confirme les sections en ligne, et signale les réalisations publiées qui
+  n'ont pas de catégorie (visibles, mais dans aucune section).
+
+### Ce qui a été constaté, et qu'aucun code ne corrigera
+
+Avec **un seul projet**, la direction « Index » est un mauvais choix : le sommaire
+typographique réduit son chantier à une ligne et une vignette de 58 px. Rendu côté à côté
+sur ses vraies photos (`/tmp/reel-epure.png`, `/tmp/reel-index.png`) : **« Épure » — ce
+qu'il a activé par erreur — est objectivement plus flatteur pour lui aujourd'hui**, parce
+que la grande photo occupe l'écran. « Index » deviendra le bon choix quand il aura dix
+chantiers en ligne. C'est écrit dans la description du thème (« Le mieux quand il y en a
+beaucoup »), mais visiblement pas assez tôt dans le parcours.
+
+**Le vrai blocage reste le même, et il n'est pas graphique** : un projet, aucun texte
+« À propos », aucune catégorie. Tant que ça ne bouge pas, changer d'habillage ne changera
+rien à l'impression qu'il a en ouvrant le site.
+
+### Vérification
+
+`tests/site-sections.test.mjs` — **nouveau, 7 contrôles, 0 échec** : les quatre situations
+(rien de publié, publié sans catégorie, une seule catégorie, deux ou plus), en 390 px.
+`tests/realisations.test.mjs` 442/442 et `tests/site-langues.test.mjs` 20/20 — aucune
+régression.
+
+---
+
 ## 6 septembre 2026 — Le site en trois langues, et un journal
 
 **Branche** `claude/site-langues-journal-0509`. **Chantier** `eaf36cf0-9664-45ed-b536-a7f861a489ee`

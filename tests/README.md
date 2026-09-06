@@ -10,6 +10,10 @@ Trois suites :
   navigateur irait chercher n'importe quelle adresse avec la clé du compte. Se lance avec
   `bun tests/pont-ia.test.mjs` (bun exécute le TypeScript du pont). Aucune dépense : ce sont
   des fonctions pures, aucun appel n'est émis.
+- `tests/site-sections.test.mjs` — le bloc **« Sections du site »** du panneau ⚙ Le site
+  public : il doit expliquer, avec les chiffres réels, pourquoi le site n'affiche aucune
+  section (rien de publié / aucune catégorie / une seule catégorie) et le confirmer quand
+  elles existent. Port 8899 : `node tests/site-sections.test.mjs`.
 - `tests/site-langues.test.mjs` — les **langues et le journal** du site, réglés depuis le CRM
   (⚙ Le site public). Suit un texte écrit dans le panneau jusqu'au manifeste, et vérifie
   surtout qu'un champ **non traduit ne part pas vide** en ligne. Serveur sur le port 8899,
