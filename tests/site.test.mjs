@@ -771,6 +771,130 @@ check('Lien direct vers un projet : « Toutes les réalisations » ramène à la
   !apresLienDirect.vue && apresLienDirect.hash === '' && apresLienDirect.cartes > 0, JSON.stringify(apresLienDirect));
 
 // ============================================================================
+//  LE MENU DU SITE : où l'on peut aller, et où l'on est
+// ============================================================================
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+
+const lireMenu = () => page.evaluate(() => {
+  const m = document.getElementById('menu');
+  return {
+    visible: !m.hidden,
+    colle: getComputedStyle(m).position,
+    entrees: [...document.querySelectorAll('#menu-in button')].map(b => b.textContent.trim()),
+    actif: (document.querySelector('#menu-in [aria-current="true"]') || {}).textContent || '',
+    titreListeVu: (() => { const t = document.getElementById('t-realisations');
+      return t ? getComputedStyle(t).display !== 'none' : false; })(),
+  };
+});
+const menu1 = await lireMenu();
+check('Menu : une barre en haut, avec une entrée par section publiée',
+  menu1.visible && menu1.entrees.join(' | ') === 'Réalisations | À la vente | Journal | À propos',
+  menu1.entrees.join(' | '));
+/* Sur un portfolio on descend loin dans les photos : remonter pour changer de section est
+   le geste qu'on ne fait pas. */
+check('Menu : il reste accessible en défilant', menu1.colle === 'sticky', menu1.colle);
+check('Menu : l’entrée où l’on se trouve est marquée', menu1.actif === 'Réalisations', menu1.actif);
+/* Le menu annonce déjà « Réalisations » trois centimètres plus haut : répéter le mot en
+   titre de liste, c'est deux fois la même chose. */
+check('Menu : le titre de la liste ne répète pas l’entrée du menu', menu1.titreListeVu === false);
+
+const versBoutique = await page.evaluate(async () => {
+  document.querySelector('#menu-in [data-menu="boutique"]').click();
+  await new Promise(r => setTimeout(r, 1200));
+  const sec = document.getElementById('boutique').getBoundingClientRect();
+  const barre = document.getElementById('menu').getBoundingClientRect();
+  return { hautSection: Math.round(sec.top), basMenu: Math.round(barre.bottom),
+           actif: (document.querySelector('#menu-in [aria-current="true"]') || {}).textContent || '' };
+});
+/* La section doit arriver SOUS la barre collante, pas dessous elle : un titre caché
+   derrière le menu donne l'impression que le clic n'a rien fait. */
+check('Menu : « À la vente » amène à la boutique, sous la barre et non derrière',
+  versBoutique.hautSection >= versBoutique.basMenu - 2 && versBoutique.hautSection < 200,
+  'section à ' + versBoutique.hautSection + 'px, barre finit à ' + versBoutique.basMenu + 'px');
+check('Menu : l’entrée atteinte devient l’entrée marquée',
+  /vente/i.test(versBoutique.actif), versBoutique.actif);
+
+/* « À propos » est la DERNIÈRE section : le navigateur ne peut pas la faire monter plus
+   haut, il n'y a rien après elle pour défiler. La promesse n'est donc pas « elle arrive
+   sous la barre » mais « on arrive en bas du site, et elle est entièrement à l'écran ». */
+const versApropos = await page.evaluate(async () => {
+  document.querySelector('#menu-in [data-menu="apropos"]').click();
+  await new Promise(r => setTimeout(r, 1200));
+  const sec = document.getElementById('apropos').getBoundingClientRect();
+  const bas = (window.scrollY || window.pageYOffset) + window.innerHeight;
+  return { haut: Math.round(sec.top), basSec: Math.round(sec.bottom),
+           ecran: window.innerHeight, enBasDuSite: bas >= document.body.scrollHeight - 4,
+           texte: (document.getElementById('apropos-txt') || {}).textContent || '' };
+});
+check('Menu : « À propos » descend au bas du site, et la section y est entièrement visible',
+  versApropos.enBasDuSite && versApropos.haut >= 0 && versApropos.basSec <= versApropos.ecran + 2
+  && /banc d’essai/.test(versApropos.texte),
+  JSON.stringify(versApropos).slice(0, 130));
+
+/* Depuis un projet ouvert : le menu doit d'abord refermer le projet, sinon il ferait
+   défiler vers une section cachée sous le détail — et il ne se passerait rien. */
+const depuisProjet = await page.evaluate(async () => {
+  openProject(0);
+  await new Promise(r => setTimeout(r, 600));
+  const ouvert = document.body.classList.contains('viewing');
+  document.querySelector('#menu-in [data-menu="journal"]').click();
+  await new Promise(r => setTimeout(r, 1400));
+  return { ouvert, encoreOuvert: document.body.classList.contains('viewing'),
+           haut: Math.round(document.getElementById('journal').getBoundingClientRect().top) };
+});
+check('Menu : depuis un projet ouvert, il referme le projet puis va à la section',
+  depuisProjet.ouvert && !depuisProjet.encoreOuvert && depuisProjet.haut < 220,
+  JSON.stringify(depuisProjet));
+
+// Les libellés viennent du CRM quand Melissa en écrit un ; sinon, le mot de la page.
+const libelles = await page.evaluate(() => {
+  infosSite.menuBoutique = 'La boutique';
+  infosSite.menuApropos = '';
+  renderMenu();
+  const lu = [...document.querySelectorAll('#menu-in button')].map(b => b.textContent.trim());
+  delete infosSite.menuBoutique;
+  renderMenu();
+  return { lu, remis: [...document.querySelectorAll('#menu-in button')].map(b => b.textContent.trim()) };
+});
+check('Menu : un libellé écrit dans le CRM remplace le mot par défaut',
+  libelles.lu.indexOf('La boutique') >= 0 && libelles.lu.indexOf('À propos') >= 0, libelles.lu.join(' | '));
+check('Menu : effacé, le mot par défaut revient',
+  libelles.remis.indexOf('À la vente') >= 0, libelles.remis.join(' | '));
+
+/* Une entrée qui mène nulle part est pire qu'une entrée manquante. */
+const menuVide = await page.evaluate(() => {
+  const j = document.getElementById('journal'), b = document.getElementById('boutique');
+  const ej = j.hidden, eb = b.hidden;
+  j.hidden = true; b.hidden = true;
+  renderMenu();
+  const restant = [...document.querySelectorAll('#menu-in button')].map(b2 => b2.dataset.menu);
+  const barreVisible = !document.getElementById('menu').hidden;
+  j.hidden = ej; b.hidden = eb; renderMenu();
+  return { restant, barreVisible };
+});
+check('Menu : une section vide n’a pas d’entrée',
+  menuVide.restant.join(',') === 'liste,apropos', menuVide.restant.join(','));
+check('Menu : deux entrées suffisent pour qu’il ait un sens', menuVide.barreVisible === true);
+
+// --- Sur téléphone : ça défile latéralement, et rien ne déborde de la page
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+const menuTel = await page.evaluate(() => {
+  const in_ = document.getElementById('menu-in');
+  return { entrees: in_.querySelectorAll('button').length,
+           defileLateral: in_.scrollWidth > in_.clientWidth + 2,
+           debordPage: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+           indice: getComputedStyle(document.getElementById('menu'), '::after').display };
+});
+await page.screenshot({ path: '/tmp/mn-menu-390.png' });
+check('Menu sur téléphone : toutes les entrées sont là, on les fait défiler du doigt',
+  menuTel.entrees === 4 && menuTel.defileLateral && menuTel.debordPage <= 1, JSON.stringify(menuTel));
+check('Menu sur téléphone : un dégradé dit qu’il y a une suite', menuTel.indice !== 'none', menuTel.indice);
+await page.setViewportSize({ width: 1280, height: 900 });
+
+// ============================================================================
 //  LE BANDEAU D'ACCUEIL : deux photos qui se suivent, projets au hasard, fondu doux
 // ============================================================================
 await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });

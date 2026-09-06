@@ -180,6 +180,39 @@
     .bd-couche.on .bd-case img{transform:none;transition:none;}
   }
 
+  /* ---- LE MENU DU SITE ----
+     Collant en haut : sur un portfolio, on descend loin dans les photos, et remonter pour
+     changer de section est le geste qu'on ne fait pas. Il défile latéralement sur
+     téléphone plutôt que de se replier derrière un ☰ : trois à cinq entrées se lisent
+     d'un coup d'œil, un menu replié les cache pour rien. */
+  .menu{
+    position:sticky;top:0;z-index:40;
+    background:var(--paper);border-bottom:1px solid var(--hair);
+  }
+  /* Sur téléphone, les entrées débordent et se font défiler du doigt. Un dégradé sur le
+     bord dit qu'il y a une suite : sans lui, la dernière entrée coupée ressemble à un
+     défaut d'affichage, et personne ne pense à glisser. */
+  .menu::after{
+    content:"";position:absolute;top:0;right:0;bottom:1px;width:34px;pointer-events:none;
+    background:linear-gradient(to right,transparent,var(--paper));
+  }
+  @media (min-width:760px){.menu::after{display:none;}}
+  .menu-in{
+    max-width:1240px;margin:0 auto;padding:0 14px;
+    display:flex;align-items:stretch;gap:clamp(4px,1.4vw,20px);
+    overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .menu-in::-webkit-scrollbar{display:none;}
+  .menu-in button{
+    flex:0 0 auto;background:none;border:0;padding:14px 6px;cursor:pointer;
+    font-family:var(--texte);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    font-weight:600;color:var(--stone);white-space:nowrap;
+    border-bottom:2px solid transparent;transition:color .2s ease,border-color .2s ease;
+  }
+  .menu-in button:hover{color:var(--ink);}
+  .menu-in button[aria-current="true"]{color:var(--ink);border-bottom-color:var(--oxblood);}
+  .menu-in button:focus-visible{outline:2px solid var(--oxblood);outline-offset:-4px;}
+
   main{max-width:1240px;margin:0 auto;padding:clamp(30px,6vw,64px) 22px 90px;}
 
   .eyebrow{
@@ -276,6 +309,10 @@
      ils appartiennent à l'index. `hidden` seul ne suffit pas pour les filtres, qui sont
      affichés en `flex` dès qu'il y a plusieurs catégories. */
   body.viewing .projects,body.viewing .index-head,body.viewing .filtres{display:none;}
+  /* Deux fois le même mot à trois centimètres d'écart : le menu l'annonce, la liste le
+     répète. On garde celui qui sert à naviguer. Les autres sections gardent leur titre —
+     on y arrive en défilant, il fait repère. */
+  body.avec-menu .index-head{display:none;}
   body.viewing .detail{display:block;}
   .back{
     background:none;border:none;padding:0 0 24px;cursor:pointer;font-family:inherit;
@@ -448,6 +485,8 @@
   <p class="tagline" id="site-tagline" dir="auto">Architecture d’intérieur</p>
   <div class="langs" id="langs" hidden role="group" aria-label="Langue"></div>
 </header>
+
+<nav class="menu" id="menu" hidden aria-label="Sections du site"><div class="menu-in" id="menu-in"></div></nav>
 
 <section class="bandeau" id="bandeau" hidden aria-label="Réalisations en images">
   <button class="bd-ouvrir" id="bd-ouvrir" type="button">
@@ -657,6 +696,10 @@ function toutRedessiner() {
   renderBoutique();
   renderJournal(s);
   if (projects.length) { renderFiltres(); renderIndex(); }
+  /* APRÈS les sections : le menu lit leur état (masquée ou non) pour savoir quelles entrées
+     ont un sens. L'appeler avant, c'est construire un menu sur des sections pas encore
+     dessinées. */
+  renderMenu();
   bdDemarrer();
   if (current) openProject(projects.indexOf(current));
 }
@@ -892,6 +935,95 @@ function renderIndex() {
     host.appendChild(b);
   });
 }
+
+/* ---- LE MENU DU SITE ------------------------------------------------------------------
+   Une barre collante sous le nom du studio. Deux principes :
+
+   - **Une entrée n'existe que si sa section existe.** Un menu qui propose « À la vente »
+     sur un site sans boutique, ou « Journal » sans entrée écrite, envoie le visiteur sur du
+     vide. Les sections savent déjà se masquer ; le menu les lit au lieu de les deviner.
+   - **Le mot est celui de Melissa, sinon celui de la page.** Un libellé écrit dans le CRM
+     l'emporte ; vide, c'est le mot d'appareil, qui lui se traduit tout seul.
+
+   Les CATÉGORIES de réalisations restent en second niveau, sous le titre de la liste :
+   elles filtrent une section, elles ne sont pas des sections. Les mêler au menu ferait une
+   barre de dix entrées où « Bureau » et « Journal » auraient l'air d'être de même nature. */
+var MENU = [
+  { cle: 'realisations', mot: 'realisations', champ: 'menuRealisations', cible: 'liste' },
+  { cle: 'boutique',     mot: 'boutique',     champ: 'menuBoutique',     cible: 'boutique' },
+  { cle: 'journal',      mot: 'journal',      champ: 'menuJournal',      cible: 'journal' },
+  { cle: 'apropos',      mot: 'apropos',      champ: 'menuApropos',      cible: 'apropos' },
+];
+function titreMenu(e) { return texteSite(e.champ) || mot(e.mot); }
+/* Ce qui est réellement affiché : les sections se masquent elles-mêmes quand elles sont
+   vides, on lit leur état plutôt que de refaire le raisonnement une seconde fois. */
+function menuEntrees() {
+  return MENU.filter(function (e) {
+    if (e.cible === 'liste') return projects.length > 0;
+    var sec = el(e.cible);
+    return !!sec && !sec.hidden;
+  });
+}
+function renderMenu() {
+  var host = el('menu-in'), barre = el('menu');
+  var entrees = menuEntrees();
+  host.innerHTML = '';
+  /* Une seule entrée n'est pas un menu : ce serait un titre déguisé en commande. */
+  barre.hidden = entrees.length < 2;
+  document.body.classList.toggle('avec-menu', !barre.hidden);
+  if (barre.hidden) return;
+  entrees.forEach(function (e) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.menu = e.cible;
+    b.dir = 'auto';
+    b.textContent = titreMenu(e);
+    b.addEventListener('click', function () { allerA(e.cible); });
+    host.appendChild(b);
+  });
+  majMenuActif();
+}
+/* Aller à une section. Un projet ouvert est d'abord refermé : sans ça, on ferait défiler
+   la page vers une section cachée sous le détail du projet, et il ne se passerait rien. */
+function allerA(cible) {
+  /* Il faut savoir si un projet était ouvert AVANT de le refermer : `closeProject` passe
+     par l'historique du navigateur, qui est asynchrone — lire `current` après ne dit rien
+     de fiable, et on mesurerait la position d'une section pas encore remise en place. */
+  var etaitOuvert = !!current;
+  if (etaitOuvert) closeProject();
+  var faire = function () {
+    if (cible === 'liste') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    var sec = el(cible);
+    if (!sec || sec.hidden) return;
+    var h = (el('menu') && !el('menu').hidden) ? el('menu').getBoundingClientRect().height : 0;
+    var y = sec.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0) - h - 12;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  };
+  /* Refermer un projet redessine la page ET la fait remonter là où on l'avait laissée :
+     on attend que tout soit posé, sinon on mesure une section qui n'est pas à sa place. */
+  if (etaitOuvert) setTimeout(faire, 140); else requestAnimationFrame(faire);
+}
+/* Marquer où l'on est. Sans ça, le menu dit ce qu'on PEUT faire mais jamais où l'on est —
+   et sur une page qui défile longtemps, on se perd. */
+function majMenuActif() {
+  var barre = el('menu');
+  if (!barre || barre.hidden) return;
+  var haut = barre.getBoundingClientRect().height + 24;
+  var actif = 'liste';
+  menuEntrees().forEach(function (e) {
+    if (e.cible === 'liste') return;
+    var sec = el(e.cible);
+    if (sec && !sec.hidden && sec.getBoundingClientRect().top <= haut) actif = e.cible;
+  });
+  [].forEach.call(barre.querySelectorAll('button'), function (b) {
+    b.setAttribute('aria-current', b.dataset.menu === actif ? 'true' : 'false');
+  });
+}
+var _menuT = null;
+window.addEventListener('scroll', function () {
+  if (_menuT) return;
+  _menuT = requestAnimationFrame(function () { _menuT = null; majMenuActif(); });
+}, { passive: true });
 
 /* ---- LE BANDEAU D'ACCUEIL -------------------------------------------------------------
    Une grande image sous le nom du studio, qui fait défiler les projets réalisés. Trois

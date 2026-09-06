@@ -4416,6 +4416,83 @@ check('Suppression : et elle disparaît bien de l’appli', supprPub.existeEncor
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
+// ============================================================================
+//  DEUX DÉFAUTS SIGNALÉS DEPUIS LE TÉLÉPHONE
+// ============================================================================
+
+// 1) « Le nom et le prénom remplis donnent quand même "Nouveau client" partout. »
+//    Le champ du nom existait, mais il ne ressemblait pas à un champ : gros texte sur fond
+//    sombre, sans étiquette. On remplissait « Contact » en croyant nommer le client.
+const nomClient = await page.evaluate(async () => {
+  clients = [];
+  showView('clients');
+  addClient();
+  await new Promise(r => setTimeout(r, 900));
+  const c = clients[0];
+  const groupe = document.querySelector('.cl-group[data-cid="' + c.id + '"]');
+  const champNom = groupe.querySelector('input[data-name]');
+  const etiquette = (groupe.querySelector('.cl-side-lbl') || {}).textContent || '';
+  const focusPose = document.activeElement === champNom;
+  const contact = groupe.querySelector('input[data-cf="contact"]');
+  contact.value = 'Gérard Zouari';
+  contact.dispatchEvent(new Event('change'));
+  await new Promise(r => setTimeout(r, 200));
+  const apres = { nom: c.name, champ: champNom.value,
+    ligne: (groupe.querySelector('.cl-name') || {}).textContent || '' };
+  // Un nom déjà choisi ne doit JAMAIS être écrasé par un changement de contact.
+  c.name = 'Cabinet Lévy';
+  champNom.value = 'Cabinet Lévy';
+  contact.value = 'Autre personne';
+  contact.dispatchEvent(new Event('change'));
+  await new Promise(r => setTimeout(r, 200));
+  return { etiquette, focusPose, apres, nomProtege: c.name };
+});
+check('Client : le champ du nom porte une étiquette, on ne le prend plus pour un titre',
+  /Nom du client/i.test(nomClient.etiquette), nomClient.etiquette);
+check('Client : à la création, le curseur est posé dans le champ du nom',
+  nomClient.focusPose === true);
+check('Client : saisir le contact nomme le client tant que personne ne l’a nommé',
+  nomClient.apres.nom === 'Gérard Zouari' && nomClient.apres.champ === 'Gérard Zouari'
+  && nomClient.apres.ligne === 'Gérard Zouari', JSON.stringify(nomClient.apres));
+check('Client : un nom déjà choisi n’est jamais écrasé par un changement de contact',
+  nomClient.nomProtege === 'Cabinet Lévy', nomClient.nomProtege);
+
+// 2) « Il faut valider la tâche pour que le bloc notes s'affiche. »
+const notesTache = await page.evaluate(async () => {
+  tasks = [];
+  /* Les tâches vivent sur le tableau de bord : les contrôles précédents ont laissé la vue
+     sur les clients, où rien de tout cela n'est à l'écran. */
+  showView('dashboard');
+  await new Promise(r => setTimeout(r, 200));
+  openTaskModal();
+  await new Promise(r => setTimeout(r, 200));
+  const champ = document.getElementById('task-detail');
+  const present = !!champ;
+  const label = present ? (champ.closest('.fld').querySelector('.lbl') || {}).textContent : '';
+  document.getElementById('task-title').value = 'Contacter sapak hipouy';
+  if (champ) champ.value = 'Rappeler avant vendredi.';
+  saveTaskFromModal();
+  await new Promise(r => setTimeout(r, 300));
+  const t = tasks[0];
+  /* La tâche qu'on vient de créer est DÉPLIÉE : ses notes sont donc dans son champ, pas
+     dans l'aperçu replié. On vérifie les deux états — écrit à l'écran tout de suite, et
+     résumé une fois la tâche repliée. */
+  /* Uniquement ce qui est VISIBLE : le dialogue refermé garde son contenu dans la page,
+     le compter ferait passer le contrôle pour une mauvaise raison. */
+  const champVu = [...document.querySelectorAll('textarea')]
+    .filter(x => x.offsetParent !== null && /vendredi/.test(x.value)).length;
+  _taskOpenIds.delete(t.id);
+  renderTaskList();
+  await new Promise(r => setTimeout(r, 200));
+  return { present, label, detail: t && t.detail, titre: t && t.title, champVu,
+           apercu: (document.querySelector('.task-detail-preview') || {}).textContent || '' };
+});
+check('Tâche : les notes s’écrivent dès la création, sans avoir à valider puis rouvrir',
+  notesTache.present && /Notes/i.test(notesTache.label), notesTache.label);
+check('Tâche : ce qui est écrit est enregistré et affiché aussitôt, sans rouvrir',
+  notesTache.detail === 'Rappeler avant vendredi.' && notesTache.champVu === 1
+  && /vendredi/.test(notesTache.apercu), JSON.stringify(notesTache));
+
 const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible|suppression réalisation \{message: réseau indisponible\}/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 

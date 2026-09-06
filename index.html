@@ -433,7 +433,11 @@
   .cl-side-head{background:var(--ink);padding:18px 14px;text-align:center;}
   .cl-side-avatar{width:46px;height:46px;border-radius:50%;background:var(--oxblood);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:18px;margin:0 auto 10px;}
   .cl-side-head input.cl-side-name{background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.3);color:#fff;text-align:center;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;padding:2px 4px 6px;margin-bottom:8px;}
-  .cl-side-head input.cl-side-name:focus{border-bottom-color:#fff;}
+  .cl-side-head input.cl-side-name:focus{border-bottom-color:#fff;background:rgba(255,255,255,.07);}
+  /* Sans étiquette, le nom du client ressemblait à un titre, pas à un champ : on remplissait
+     « Contact » en croyant nommer le client, et la fiche restait « Nouveau client ». */
+  .cl-side-lbl{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);margin-bottom:3px;text-align:center;}
   .cl-side-head select.cl-side-statut{background:transparent;border:1px solid rgba(255,255,255,.3);color:#d8d2c8;text-align:center;text-align-last:center;font-size:11px;border-radius:3px;padding:4px 6px;}
   .cl-side-head select.cl-side-statut option{color:#3d3934;}
   .cl-side-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
@@ -3155,7 +3159,20 @@ function wireMetaInputs(container,c){
   container.querySelectorAll('input[data-cf]').forEach(inp=>{
     inp.addEventListener('input',()=>{c[inp.dataset.cf]=inp.value;saveClientsDebounced();});
     // À la sortie du champ : on met à jour la ligne concernée seulement (sans refermer la fiche)
-    inp.addEventListener('change',()=>{c[inp.dataset.cf]=inp.value;saveClients();updateClientRow(c);});
+    inp.addEventListener('change',()=>{
+      c[inp.dataset.cf]=inp.value;
+      /* Un contact saisi sur un client que PERSONNE n'a encore nommé lui donne son nom.
+         Rien n'est écrasé : on ne remplace que le nom automatique. Dès que le nom a été
+         choisi, ce chemin ne s'applique plus. Sans ça, la fiche et toute la liste restaient
+         « Nouveau client » alors que le contact était rempli — le défaut signalé. */
+      if(inp.dataset.cf==='contact'&&clientSansNom(c)&&(inp.value||'').trim()){
+        c.name=inp.value.trim();
+        const n=container.closest('.cl-group')&&container.closest('.cl-group').querySelector('input[data-name]');
+        if(n)n.value=c.name;
+        toast('Client nommé « '+c.name+' » — modifiable en haut de la fiche');
+      }
+      saveClients();updateClientRow(c);
+    });
   });
 }
 function cardWrap(icon,title,bodyEl){
@@ -3176,6 +3193,7 @@ function buildClientDetail(c){
   const initials=(c.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
   side.innerHTML=`<div class="cl-side-head">
       <div class="cl-side-avatar">${esc(initials)}</div>
+      <span class="cl-side-lbl">Nom du client</span>
       <input type="text" class="cl-side-name" data-name value="${esc(c.name)}" placeholder="Nom du client">
       <select class="cl-side-statut" data-statut>
         ${clientStatusOptionsHtml(c)}
@@ -3582,15 +3600,26 @@ function closeCadViewer(){
   if(_cadDocManager){try{_cadDocManager.destroy();}catch(e){}_cadDocManager=null;}
   closeModal();
 }
+/* Le nom donné automatiquement à un client qu'on vient de créer. Tant qu'il est encore
+   celui-là, personne ne l'a choisi : on peut donc le remplacer sans rien écraser. */
+const CLIENT_SANS_NOM='Nouveau client';
+function clientSansNom(c){return !((c.name||'').trim())||(c.name||'').trim()===CLIENT_SANS_NOM;}
 function addClient(){
   try{
     clientFilters.q='';clientFilters.statut='all';
     const q=$('cl-q'),st=$('cl-statut');if(q)q.value='';if(st)st.value='all';
-    const c=normalizeClient({name:'Nouveau client'});
+    const c=normalizeClient({name:CLIENT_SANS_NOM});
     clients.unshift(c);clientOpen[c.id]=true;saveClients();renderClients();
     const el=document.querySelector('.cl-group[data-cid="'+c.id+'"]');
     if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='2px solid var(--oxblood)';el.style.borderRadius='6px';setTimeout(()=>{if(el){el.style.outline='';el.style.borderRadius='';}},1600);}
-    toast('Client créé — modifiez son nom ci-dessous');
+    /* Le curseur est POSÉ dans le champ du nom, texte sélectionné : sans ça, ce champ ne
+       ressemble pas à un champ (gros texte serif sur fond sombre) et on remplit « Contact »
+       en croyant nommer le client — c'est exactement ce qui a été signalé. */
+    setTimeout(()=>{
+      const n=document.querySelector('.cl-group[data-cid="'+c.id+'"] input[data-name]');
+      if(n){n.focus();n.select();}
+    },700);
+    toast('Client créé — son nom vous attend, en haut de la fiche');
   }catch(e){toast('Erreur : '+e.message);}
 }
 function wireClientFilters(){
@@ -3990,7 +4019,7 @@ function taskRowHtml(t){
     </div>
     <div class="task-body" onclick="event.stopPropagation()">
       <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
-      <label class="fld"><span class="lbl">Détail</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
+      <label class="fld"><span class="lbl">Notes</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
       <label class="fld"><span class="lbl">Client</span><select onchange="updateTaskFieldRerender('${t.id}','clientId',this.value)">${taskClientOptionsHtml(t)}</select></label>
       <div class="row2">
         <label class="fld"><span class="lbl">Échéance</span><input type="date" value="${t.dueDate||''}" onchange="updateTaskFieldRerender('${t.id}','dueDate',this.value)"></label>
@@ -4108,6 +4137,9 @@ function openTaskModal(clientId){
       <label class="fld"><span class="lbl">Catégorie</span><select id="task-category">${taskCategoryOptionsHtml(null)}</select></label>
       <label class="fld"><span class="lbl">Priorité</span><select id="task-priority">${taskPriorityOptionsHtml({priority:'normal'})}</select></label>
     </div>
+    <!-- Les notes n'existaient qu'APRÈS création, dans la fiche dépliée : il fallait créer
+         la tâche, la rouvrir, puis écrire. On note quand on y pense, pas deux gestes plus tard. -->
+    <label class="fld"><span class="lbl">Notes (facultatif)</span><textarea id="task-detail" style="min-height:64px;" placeholder="Ce qu'il faut se rappeler : un lien, un contact, une précision."></textarea></label>
     <div style="display:flex;justify-content:flex-end;margin-top:10px;">
       <button class="btn btn-primary" onclick="saveTaskFromModal()">Ajouter</button>
     </div>`);
@@ -4122,7 +4154,8 @@ function saveTaskFromModal(){
   const category=$('task-category').value||'';
   const clientId=$('task-client').value||'';
   const id=uid();
-  tasks.push({id,title,detail:'',dueDate,reminderDate,priority,category,clientId,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
+  const detail=(($('task-detail')||{}).value||'').trim();
+  tasks.push({id,title,detail,dueDate,reminderDate,priority,category,clientId,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
   saveTasks();closeModal();
   _taskOpenIds.add(id);
   renderTaskList();toast('Tâche ajoutée');
@@ -8832,7 +8865,20 @@ const SITE_THEMES=[
 /* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null};
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,
+  menuRealisations:'',menuBoutique:'',menuJournal:'',menuApropos:''};
+/* Les entrées du menu du site. Vides, ce sont les mots par défaut de la page (traduits) ;
+   remplies, ce sont les mots de Melissa — et ils se traduisent comme ses autres textes. */
+const SITE_MENU=[
+  {cle:'menuRealisations',id:'site-menu-real',defaut:'Réalisations',
+   aide:'La liste des projets, en haut du site.'},
+  {cle:'menuBoutique',id:'site-menu-bout',defaut:'À la vente',
+   aide:'N’apparaît que si des produits sont publiés.'},
+  {cle:'menuJournal',id:'site-menu-jour',defaut:'Journal',
+   aide:'N’apparaît que si le journal contient une entrée.'},
+  {cle:'menuApropos',id:'site-menu-apro',defaut:'À propos',
+   aide:'Descend directement au bas du site. N’apparaît que si le texte ou une coordonnée est rempli.'},
+];
 /* Le bandeau d'accueil montre deux photos qui se suivent, projet après projet, tirés au
    hasard. Sa durée d'affichage est un réglage : trop court on n'a pas le temps de regarder,
    trop long le site paraît figé. Les bornes évitent les valeurs absurdes (0,5 s clignote,
@@ -8856,7 +8902,7 @@ function bandeauPar(){
 const SITE_LANGUES=[{code:'fr',nom:'Français',dir:'ltr'},{code:'en',nom:'English',dir:'ltr'},{code:'he',nom:'עברית',dir:'rtl'}];
 /* Les champs qui changent d'une langue à l'autre. Le reste (e-mail, téléphone, Instagram,
    dates) est commun : le traduire n'aurait aucun sens. */
-const SITE_TRADUISIBLES=['sousTitre','apropos'];
+const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuBoutique','menuJournal','menuApropos'];
 function siteLanguesActives(){
   const st=siteSettings();
   const l=Array.isArray(st.langues)?SITE_LANGUES.map(x=>x.code).filter(c=>st.langues.indexOf(c)>=0):['fr'];
@@ -8932,7 +8978,7 @@ function siteInfos(){
   o.diaporama=(st.diaporama==='aucun')?'aucun':'actif';
   o.diaporamaSec=bandeauSec();
   o.diaporamaPar=bandeauPar();
-  ['apropos','email','tel','instagram'].forEach(k=>{
+  ['apropos','email','tel','instagram','menuRealisations','menuBoutique','menuJournal','menuApropos'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
   });
@@ -9095,6 +9141,11 @@ function openSitePanel(){
     <label class="fld" style="margin-top:9px"><span class="lbl">Temps d’affichage de chaque vue (secondes)</span>
       <input type="number" id="site-diapo-sec" min="${BANDEAU_SEC_MIN}" max="${BANDEAU_SEC_MAX}" step="1" value="${bandeauSec()}"></label>
     <p class="ias-note" id="site-diapo-msg"></p>
+    <div class="ed-eyebrow" style="margin-top:14px">Menu du site</div>
+    <p class="ias-note">Les entrées de la barre en haut du site. Laissez vide pour garder le mot par défaut — celui-ci se traduit tout seul dans les autres langues, un mot que vous écrivez ici ne se traduit que si vous le traduisez.</p>
+    ${SITE_MENU.map(m=>`<label class="fld"><span class="lbl">${esc(m.defaut)}</span>
+      <input type="text" id="${m.id}" value="${esc(siteTexte(m.cle,LE))}" placeholder="${esc(m.defaut)}">
+      <span class="ias-note" style="margin-top:3px;display:block">${esc(m.aide)}</span></label>`).join('')}
     <div class="ed-eyebrow" style="margin-top:14px">Sections du site</div>
     <p class="ias-note">Les sections du site (« Commercial », « Habitation »…) ne sont pas un réglage à activer : ce sont les <b>catégories</b> des réalisations publiées. Chacune porte la sienne, dans sa fiche.</p>
     <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
@@ -9144,7 +9195,8 @@ function openSitePanel(){
       <button class="mini" onclick="closeModal()">Fermer</button>
       <button class="btn btn-primary" id="site-push">Mettre à jour le site</button>
     </div>`);
-  const champs={sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta'};
+  const champs=Object.assign({sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta'},
+    Object.fromEntries(SITE_MENU.map(m=>[m.cle,m.id])));
   Object.entries(champs).forEach(([k,id])=>{
     const el=document.getElementById(id);
     if(!el)return;
