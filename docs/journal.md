@@ -1010,3 +1010,39 @@ bien sa réalisation « en attente ».
 Tant que le manifeste n'est pas écrit, rien n'est en ligne.
 
 **Vérification** : 413 contrôles au navigateur (6 nouveaux), bout en bout inchangé.
+
+---
+
+## 6 septembre 2026 — Deux demi-échecs qui ne pouvaient pas se voir
+
+**Branches** `claude/photo-remplacement-sur` et `claude/import-sans-orphelin` → fusionnées.
+**Initiative** : après le bug de datation trouvé la veille, j'ai relu tout ce que j'avais
+écrit qui **écrit plusieurs fichiers d'affilée sans transaction possible**. Deux cas.
+
+**1. Remplacer une photo laissait un demi-échange.** Deux fichiers sont écrasés (la pleine
+définition et la vignette). Si le second envoi échouait, on avait la **nouvelle photo en
+grand et l'ancienne en vignette** — un état que rien n'affiche comme anormal. Les deux
+fichiers écrasés sont maintenant gardés le temps de l'échange et **remis en place** si quoi
+que ce soit échoue, et le message le dit : « remplacement annulé, la photo d'avant est
+toujours en place ».
+
+**2. Un import coupé laissait un fichier fantôme.** Même situation à l'import : si le second
+envoi échouait, le premier restait dans le seau, **référencé par aucune photo** — invisible
+dans l'appli, impossible à supprimer, et comptant quand même dans le quota. Sur un plan
+plafonné à 1 Go, ces fantômes s'accumulent en silence, et c'est précisément ce que l'alerte
+de saturation ne pourrait pas expliquer. Ce qui a été envoyé est maintenant effacé.
+
+**Au passage** : une coupure réseau ne s'annonce plus comme un « fichier illisible ». Les
+deux ne se corrigent pas de la même façon — l'un demande de réessayer, l'autre de convertir
+le fichier.
+
+**Vérification** : 418 contrôles (5 nouveaux), dont un envoi coupé à mi-chemin avec la photo
+retrouvée octet pour octet, et le nombre de fichiers du stockage avant/après.
+
+### La règle qui sort de ces trois bugs
+
+Trois fois de suite, le même défaut : **l'état est mis à jour avant que l'effet soit
+réellement acquis** (photos datées avant l'écriture du manifeste, fichiers échangés sans
+retour possible, fichier envoyé sans nettoyage). À écrire dans les prochaines revues :
+*rien ne se marque « fait » tant que la dernière écriture n'a pas réussi, et tout ce qui a
+été écrit avant l'échec se nettoie.*
