@@ -659,6 +659,19 @@
   .rz-ph-cap{display:block;font-size:11px;color:var(--stone);font-style:italic;margin-top:1px;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rz-ph-cap.vide{color:var(--stone-light);font-style:normal;}
+  /* Une photo écartée du site reste lisible, mais on doit voir d'un coup d'œil qu'elle ne
+     part pas : elle est en retrait, pas cachée. */
+  .rz-hors-site .rz-ph-vue{opacity:.5;filter:grayscale(.5);}
+  .rz-tag.t-ecartee{background:rgba(61,57,52,.86);color:#fff;}
+  .ph-menu .mini.on{border-color:var(--oxblood);color:var(--oxblood);font-weight:700;}
+  /* Sous chaque « va partir », le nom de la version retenue : sans lui, deux vignettes qui
+     se ressemblent ne disent pas laquelle est publiée. */
+  .pub-ver{display:block;margin-top:4px;font-size:11px;color:var(--stone);text-align:center;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ias-steps{margin:10px 0 0;padding-left:20px;font-size:13px;color:var(--ink);line-height:1.65;}
+  .ias-steps li{margin-bottom:8px;}
+  .ias-steps code{background:var(--travertine);border:1px solid var(--panel-edge);border-radius:4px;padding:1px 5px;font-size:12px;}
+  .ia-solde.nc b{color:var(--stone-light);font-weight:600;}
   .rz-ph-menu{position:absolute;right:33px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;
     border-radius:3px;width:24px;height:24px;font-size:14px;cursor:pointer;line-height:1;}
   /* Mode « ranger » : le rang est écrit sur la vignette, sinon on ne sait pas ce qu'on
@@ -4576,20 +4589,39 @@ function photoPubChange(r,p){
     else raisons.push('réglages de l’image');
   }
   if((pub.cap||'')!==((p.caption||'').trim()))raisons.push((p.caption||'').trim()?'légende':'légende retirée');
-  if(!!pub.cover!==(r.cover===p.id))raisons.push(r.cover===p.id?'devient la couverture':'n’est plus la couverture');
+  const couv=couvertureEffective(r);
+  if(!!pub.cover!==(couv===p.id))raisons.push(couv===p.id?'devient la couverture':'n’est plus la couverture');
   return raisons.join(' · ');
 }
 /* État vis-à-vis du site public. `r.published` dit si la RÉALISATION est en ligne ; ceci dit
    si CETTE photo l'est, ce qui n'est pas la même chose dès qu'on en ajoute une après coup.
    Repli par date pour les photos publiées AVANT ce mécanisme : elles n'ont pas de `p.pub`,
    et on ne va pas les déclarer absentes du site alors qu'elles y sont. */
+/* Les photos qui partent VRAIMENT sur le site : celles qui ne sont pas écartées. Écarter
+   une photo, c'est la garder dans le CRM sans la montrer au public — une prise ratée, un
+   détail technique, une photo qui ne sert qu'au dossier. UNE seule écriture de cette règle :
+   le plan de publication, la publication elle-même, les décomptes et l'écran de confirmation
+   s'en servent tous. */
+function photosPubliees(r){return (r.photos||[]).filter(p=>!p.horsSite);}
+/* La couverture EFFECTIVE : celle qui a été choisie, sauf si elle a été écartée du site —
+   auquel cas c'est la première photo publiée. Une seule écriture de cette règle : la
+   publication, le plan ET la comparaison « qu'est-ce qui a changé » doivent parler de la
+   même couverture. Deux définitions, et une photo reste « à republier » pour toujours :
+   publiée comme couverture d'un côté, comparée à un autre choix de l'autre. */
+function couvertureEffective(r){
+  const pub=photosPubliees(r);
+  if(!pub.length)return '';
+  return pub.some(p=>p.id===r.cover)?r.cover:pub[0].id;
+}
+
 function photoPubState(r,p){
+  if(p&&p.horsSite)return 'ecartee';
   if(!r||!r.published)return 'hors';
   const quoi=photoPubChange(r,p);
   if(quoi==='nouvelle')return 'absente';
   return quoi?'modifiee':'enligne';
 }
-const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:''};
+const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:'',ecartee:'écartée du site'};
 /* Une réalisation en ligne dont une photo a bougé depuis. C'est LA chose qu'on oublie :
    on retouche, on ajoute une photo, et le site garde l'ancienne version sans rien dire. */
 function realisationARepublier(r){
@@ -4601,7 +4633,7 @@ function realisationARepublier(r){
    confirmation et la publication elle-même s'en servent tous. Sans ça, l'écran pourrait
    annoncer une chose et la publication en faire une autre. */
 function realisationPublishPlan(r){
-  const photos=(r.photos||[]).map((p,i)=>{
+  const photos=photosPubliees(r).map((p,i)=>{
     const sig=photoPubSig(p);
     const noms=photoPubNames(r,p,sig);
     const pourquoi=r.published?photoPubChange(r,p):'nouvelle';
@@ -4611,16 +4643,23 @@ function realisationPublishPlan(r){
   /* L'ordre et la fiche du projet vivent dans le manifeste, pas dans les images : ils
      changent le site sans qu'aucune photo ne bouge. Il faut donc le dire à part. */
   const ordreAvant=(r.pub&&Array.isArray(r.pub.order))?r.pub.order.join(','):null;
-  const ordreApres=(r.photos||[]).map(p=>p.id).join(',');
+  const ordreApres=photosPubliees(r).map(p=>p.id).join(',');
   const ordre=!!(r.published&&ordreAvant!==null&&ordreAvant!==ordreApres);
   const ficheAvant=(r.pub&&r.pub.fiche)||'';
   const ficheApres=realisationFicheSig(r);
   const fiche=!!(r.published&&r.pub&&ficheAvant!==ficheApres);
+  /* Une photo écartée compte comme retirée du site au même titre qu'une photo supprimée :
+     dans les deux cas, le visiteur ne la verra plus après la publication. */
   const retirees=(r.published&&r.pub&&Array.isArray(r.pub.pids))
-    ? r.pub.pids.filter(id=>!(r.photos||[]).some(p=>p.id===id)).length : 0;
+    ? r.pub.pids.filter(id=>!photosPubliees(r).some(p=>p.id===id)).length : 0;
+  const ecartees=(r.photos||[]).length-photosPubliees(r).length;
   const nouvelles=photos.filter(x=>x.etat==='nouvelle').length;
   const changees=photos.filter(x=>x.etat==='changee').length;
-  return {photos,nouvelles,changees,retirees,ordre,fiche,
+  /* La couverture choisie peut avoir été écartée : le site prendrait alors la première
+     photo publiée sans que personne l'ait décidé. On le dit, et on la désigne. */
+  const couvEcartee=!!(r.cover&&(r.photos||[]).some(p=>p.id===r.cover&&p.horsSite)&&photos.length);
+  return {photos,nouvelles,changees,retirees,ecartees,couvEcartee,ordre,fiche,
+    coverId:couvertureEffective(r),
     inchangees:photos.filter(x=>x.etat==='inchangee').length,
     change:nouvelles+changees,
     rien:!(nouvelles||changees||retirees||ordre||fiche)};
@@ -4630,7 +4669,7 @@ function realisationPublishPlan(r){
 function realisationFicheSig(r){
   return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||''].join('\u0001');
 }
-const HIST_LABEL={couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée',retour:'Retour à la publication précédente'};
+const HIST_LABEL={horssite:'Écartée du site',sursite:'Remise sur le site',couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée',retour:'Retour à la publication précédente'};
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
      et un portfolio : ils partent sur le site avec les photos. */
@@ -5561,7 +5600,7 @@ function renderRealisationDetail(host,r){
   (r.photos||[]).forEach((p,idx)=>{
     const tile=document.createElement('div');
     const picked=_rzSel.has(p.id);
-    tile.className='rz-ph'+(_rzSelMode?' rz-selectable':'')+(picked?' rz-picked':'');
+    tile.className='rz-ph'+(_rzSelMode?' rz-selectable':'')+(picked?' rz-picked':'')+(p.horsSite?' rz-hors-site':'');
     tile.dataset.pid=p.id;
     const edited=JSON.stringify(p.edit)!==JSON.stringify(blankEdit());
     const etat=photoPubState(r,p);
@@ -5769,6 +5808,8 @@ function openPhotoMenu(r,p){
     <div class="ph-menu">
       <button class="mini" data-edit>🖼 Ouvrir l’éditeur</button>
       <button class="mini" data-text>✎ Titre et légende</button>
+      ${photoVersions(p).length?`<button class="mini" data-ver>🖼 Version publiée : ${esc(photoVersionLabel(p,photoActiveId(p)))}</button>`:''}
+      <button class="mini" data-site>${p.horsSite?'🌐 Remettre sur le site':'🚫 Ne pas publier cette photo'}</button>
       <button class="mini" data-cover ${estCouv?'disabled':''}>★ ${estCouv?'Déjà en couverture':'Mettre en couverture'}</button>
       <button class="mini" data-repl>⇄ Remplacer la photo</button>
       <button class="mini" data-dl>⬇ Télécharger</button>
@@ -5776,10 +5817,67 @@ function openPhotoMenu(r,p){
   const go=(sel,fn)=>{const b=document.querySelector('#modal [data-'+sel+']');if(b)b.addEventListener('click',()=>{closeModal();fn();});};
   go('edit',()=>openPhotoEditor(r.id,p.id));
   go('text',()=>openPhotoTextDialog(r,p));
+  go('ver',()=>openPhotoVersionDialog(r,p));
+  go('site',()=>photoToggleSite(r,p));
   if(!estCouv)go('cover',()=>rzSetCover(r,p.id));
   go('repl',()=>rzReplacePhoto(r,p));
   go('dl',()=>rzAskDownload(r,[p]));
 }
+/* La marche à suivre pour afficher le solde. C'est la SEULE chose de tout le CRM qui ne peut
+   pas se faire depuis ici : créer une clé sur un compte fal.ai demande d'être connecté à ce
+   compte. Alors on donne le chemin exact, une étape à la fois, avec les adresses — plutôt
+   qu'un « demandez à votre administrateur ». */
+function iaExpliquerSolde(detail){
+  const ref=(String(SB_URL||'').replace(/^https?:\/\//,'').split('.')[0])||'';
+  const secrets=ref?('https://supabase.com/dashboard/project/'+ref+'/settings/functions'):'https://supabase.com/dashboard';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3 style="font-size:19px">Afficher le solde fal.ai ici</h3>
+    <p class="msub">Chez fal.ai, faire tourner un modèle et lire la facturation ne demandent pas le même droit. La clé en place fait tourner les modèles — c'est elle qui compte pour retoucher. Lire le solde exige une clé <b>de portée ADMIN</b>, en plus, qui ne remplace pas la première.</p>
+    <ol class="ias-steps">
+      <li>Ouvrez <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai → Keys</a> et créez une clé en choisissant la portée <b>ADMIN</b>. Copiez-la.</li>
+      <li>Ouvrez <a href="${esc(secrets)}" target="_blank" rel="noopener">Supabase → Edge Functions → Secrets</a>, ajoutez un secret nommé exactement <code>FAL_ADMIN_KEY</code> et collez la clé dedans.</li>
+      <li>Revenez ici et touchez <b>↻</b> à côté du solde. Rien à redéployer.</li>
+    </ol>
+    <p class="ias-note">La clé qui fait tourner les modèles (<code>FAL_KEY</code>) n'est pas touchée : la retouche continue de fonctionner pendant et après.</p>
+    <p class="ias-note">En attendant, le solde réel se lit sur <a href="https://fal.ai/dashboard/billing" target="_blank" rel="noopener">fal.ai → Billing</a>, et le pied de ce panneau compte exactement vos retouches du mois.</p>
+    ${detail?`<p class="ias-note">Réponse du serveur : ${esc(detail)}</p>`:''}
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+}
+
+/* Choisir la version publiée SANS ouvrir l'éditeur. C'est le geste le plus courant une fois
+   les retouches faites : on compare, on retient, on publie. Aller le chercher au fond d'un
+   onglet de l'éditeur en faisait une manœuvre. */
+function openPhotoVersionDialog(r,p){
+  const actif=photoActiveId(p);
+  const liste=[{id:'orig'}].concat(photoVersions(p));
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3 style="font-size:19px">Version publiée</h3>
+    <p class="msub">Celle qui est choisie s’affiche dans la galerie, part à l’export et sur le site. Les autres restent là : rien n’est écrasé.</p>
+    <div class="ph-menu">${liste.map(v=>`<button class="mini${v.id===actif?' on':''}" data-v="${esc(v.id)}">${v.id===actif?'✓ ':''}${esc(photoVersionLabel(p,v.id))}${v.id==='orig'?'':' · '+esc(iaModelLabel(v.model))}</button>`).join('')}</div>`);
+  document.querySelectorAll('#modal [data-v]').forEach(b=>b.addEventListener('click',()=>{
+    const vid=b.dataset.v;
+    closeModal();
+    if(!photoSetActive(p,vid))return;
+    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+    toast('Version publiée : '+photoVersionLabel(p,vid));
+  }));
+}
+/* Écarter une photo du site : elle reste dans le CRM, elle ne part plus sur la page
+   publique. Le geste inverse est au même endroit. */
+function photoToggleSite(r,p){
+  const enLigne=!p.horsSite&&r.published&&photoPubState(r,p)==='enligne';
+  const acte=()=>{
+    p.horsSite=!p.horsSite;
+    photoTouch(p,p.horsSite?'horssite':'sursite','');
+    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+    toast(p.horsSite?'Photo écartée du site':'Photo remise sur le site');
+  };
+  if(p.horsSite)return acte();
+  askConfirm('Ne plus publier cette photo ? Elle reste dans le CRM et dans vos sauvegardes'
+    +(enLigne?', mais elle sera retirée du site à la prochaine publication.':', elle ne partira simplement pas sur le site.'),acte);
+}
+
 /* La vignette montre la photo AVEC ses retouches : la galerie doit refléter ce qui sera
    publié, pas l'original. Rendu à la volée depuis la vignette stockée (rapide).
    ATTENTION : ne jamais réutiliser le `src` d'un objet Image déjà chargé pour alimenter
@@ -7658,38 +7756,44 @@ function buildIaPanel(host){
     soldeVal.textContent='…';warn.style.display='none';
     try{
       const b=await iaLoadBalance(force);
+      solde.classList.remove('nc');solde.removeAttribute('title');soldeBtn.textContent='↻';
       soldeVal.textContent=(b.balance==null?'—':(Math.round(b.balance*100)/100)+' '+(b.currency||''));
       solde.classList.toggle('bas',typeof b.balance==='number'&&b.balance<1);
+      return;
     }catch(e){
-      /* Aucune clé ADMIN configurée n'est PAS une panne : c'est un choix, et le solde n'est
-         qu'une commodité. Afficher « n/c » et une alerte à chaque ouverture de l'éditeur
-         pour une fonction volontairement désactivée, c'est du bruit permanent sous le
-         bouton principal. Dans ce cas précis, on se tait complètement. `_iaBalance` porte le
-         drapeau, y compris quand la réponse vient du cache. */
-      if(_iaBalance&&_iaBalance.adminManquante){
-        solde.style.display='none';warn.style.display='none';return;
-      }
       solde.style.display='';
+      /* Deux situations, deux tons. Aucune clé ADMIN configurée n'est pas une panne : c'est
+         un état, et il ne mérite pas une alerte permanente sous le bouton principal. Mais se
+         taire complètement laissait sans réponse la question « où sont mes crédits ? » —
+         l'endroit où on les cherche devenait vide, sans un mot. La pastille reste donc, elle
+         ne prétend rien (« non lu »), et un appui donne la marche à suivre.
+         `_iaBalance` porte le drapeau, y compris quand la réponse vient du cache. */
+      if(_iaBalance&&_iaBalance.adminManquante){
+        warn.style.display='none';
+        soldeVal.textContent='non lu';
+        solde.classList.add('nc');solde.title='Pourquoi le solde n’est pas affiché';
+        soldeBtn.textContent='?';
+        return;
+      }
       /* Toute autre panne — clé ADMIN présente mais refusée, expirée, réseau coupé — se dit.
          Six lignes de gris noyaient le bouton : une phrase, et le détail à la demande. La
          RAISON, elle, reste à l'écran : elle avait été mise dans une infobulle,
          inatteignable au doigt, et le dépôt en a fait une règle. */
+      solde.classList.add('nc');soldeBtn.textContent='↻';
       soldeVal.textContent='n/c';
-      warn.style.display='';
-      warn.innerHTML='';
-      /* La RAISON reste à l'écran — elle était dans une infobulle, inatteignable au doigt,
-         et le dépôt en a fait une règle. Seul le mode d'emploi de la réparation passe
-         derrière un bouton : il n'a pas à occuper six lignes sous le bouton principal. */
+      warn.style.display='';warn.innerHTML='';
       const t=document.createElement('span');
       t.textContent='Solde indisponible : le lire demande une clé fal.ai de portée ADMIN. La retouche n’est pas concernée — vous pouvez lancer. ';
       warn.appendChild(t);
       const pk=document.createElement('button');pk.className='mini';pk.type='button';pk.textContent='Comment l’afficher';
-      pk.addEventListener('click',()=>askInfo('Afficher le solde fal.ai',
-        'Lire le solde et faire tourner un modèle ne demandent pas le même droit sur la clé fal.ai : la facturation exige une clé de portée ADMIN, la retouche se contente d’une clé de portée API. La clé en place est de portée API — elle fait donc tourner les modèles, mais se fait refuser sur le solde.\n\nPour afficher le solde : créer sur fal.ai une clé de portée ADMIN et la déposer dans Supabase sous le nom FAL_ADMIN_KEY. La clé qui fait tourner les modèles n’est pas touchée.\n\nDétail renvoyé par le serveur : '+((e&&e.message)||'erreur')));
+      pk.addEventListener('click',()=>iaExpliquerSolde((e&&e.message)||''));
       warn.appendChild(pk);
     }
   };
-  soldeBtn.addEventListener('click',()=>paintSolde(true));
+  soldeBtn.addEventListener('click',()=>{
+    if(solde.classList.contains('nc')&&soldeBtn.textContent==='?')iaExpliquerSolde('');
+    else paintSolde(true);
+  });
   /* L'ordre à l'écran suit l'ordre de l'action : avec QUEL modèle, puis QUOI lui demander,
      puis lancer. La carte du modèle est donc posée en premier — plus bas, une fois
      construite — et celle-ci vient après, son gros bouton en dernier élément de l'écran.
@@ -8521,6 +8625,7 @@ function openSitePanel(){
    le visiteur voit AUJOURD'HUI et ce qu'il verra après — et rien ne part sans un appui. */
 async function askPublishRealisation(r){
   if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
+  if(!photosPubliees(r).length){toast('Toutes les photos sont écartées du site : il n’y a rien à publier');return;}
   if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
   const plan=realisationPublishPlan(r);
   /* Publiée avant que le CRM ne garde trace des versions : on ne peut pas dire ce qui est en
@@ -8534,6 +8639,7 @@ async function askPublishRealisation(r){
   if(plan.ordre)chips.push('<span class="pub-chip chg">ordre modifié</span>');
   if(plan.fiche)chips.push('<span class="pub-chip chg">fiche du projet modifiée</span>');
   if(plan.inchangees)chips.push('<span class="pub-chip">'+plan.inchangees+' inchangée(s)</span>');
+  if(plan.ecartees)chips.push('<span class="pub-chip ret">'+plan.ecartees+' écartée(s), non publiée(s)</span>');
 
   openModal('<button class="modal-x" onclick="closeModal()">×</button>'
     +'<h3>'+(r.published?'Republier':'Publier')+' « '+esc(r.title)+' »</h3>'
@@ -8541,6 +8647,9 @@ async function askPublishRealisation(r){
       ? 'À gauche, ce que le visiteur voit en ce moment. À droite, ce qui partira. Rien n’est envoyé tant que vous n’avez pas confirmé.'
       : 'Ces photos vont devenir publiques sur le site vitrine. Rien n’est envoyé tant que vous n’avez pas confirmé.')+'</p>'
     +'<div class="pub-resume">'+chips.join('')+'</div>'
+    +'<p class="pub-note"><b>'+plan.photos.length+' photo(s) sur '+((r.photos||[]).length)+'</b> partiront sur le site'
+      +(plan.ecartees?' — les '+plan.ecartees+' autres sont écartées (menu ⋯ d’une vignette pour les remettre).':'.')+'</p>'
+    +(plan.couvEcartee?'<p class="pub-note">La photo choisie comme couverture est écartée du site : c’est la première photo publiée qui servira de couverture.</p>':'')
     +(ancienne?'<p class="pub-note">Cette réalisation a été mise en ligne avant que le CRM ne garde trace des versions : on ne peut pas montrer ici ce qui y est en ce moment. Les photos concernées seront réécrites une fois à la prochaine publication, puis le suivi sera exact.</p>':'')
     +'<div class="pub-liste" id="pub-liste"></div>'
     +'<p class="pub-note" id="pub-note"></p>'
@@ -8569,7 +8678,8 @@ async function askPublishRealisation(r){
       +'<div class="pub-paire">'
       +'<div class="pub-cote"><span class="pub-lbl">En ligne</span><div class="pub-vue" data-avant><span>…</span></div></div>'
       +'<div class="pub-fleche">→</div>'
-      +'<div class="pub-cote"><span class="pub-lbl">Va partir</span><div class="pub-vue" data-apres><span>…</span></div></div>'
+      +'<div class="pub-cote"><span class="pub-lbl">Va partir</span><div class="pub-vue" data-apres><span>…</span></div>'
+      +'<span class="pub-ver">'+esc(photoVersionLabel(p,photoActiveId(p)))+'</span></div>'
       +'</div>';
     liste.appendChild(ligne);
     /* Ce qui est en ligne : l'image PUBLIQUE, à son adresse réelle. C'est la seule preuve
@@ -8602,6 +8712,10 @@ async function askPublishRealisation(r){
 async function publishRealisation(r,opts){
   if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
   if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
+  /* Le garde-fou vaut aussi ici, et pas seulement sur l'écran de confirmation : « Tout
+     republier » appelle cette fonction directement. Publier une galerie vide effacerait la
+     réalisation du site sans que personne ne l'ait demandé. */
+  if(!photosPubliees(r).length){toast('Toutes les photos sont écartées du site : il n’y a rien à publier');return;}
   if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
   const tout=!!(opts&&opts.tout);
   const btn=document.querySelector('#rz-body [data-publish]');
@@ -8655,20 +8769,22 @@ async function publishRealisation(r,opts){
            dernière réalisation publiée, écrite à une adresse FIXE. La page publique porte
            cette adresse en dur dans ses balises : elle n'a donc jamais à être modifiée, et
            un lien partagé cesse de s'afficher tout nu. */
-        if(!sharePartage||r.cover===p.id)sharePartage=smallBlob;
+        if(!sharePartage||plan.coverId===p.id)sharePartage=smallBlob;
         const up=async (name,blob)=>{
           const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
           if(error)throw error;
         };
         await up(x.full,bigBlob);await up(x.thumb,smallBlob);
       }
-      const entry={full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:r.cover===p.id};
+      /* `plan.coverId` et non `r.cover` : si la couverture choisie a été écartée du site,
+         c'est la première photo publiée qui la remplace — décidé une fois, dans le plan. */
+      const entry={full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:plan.coverId===p.id};
       /* Seule la LÉGENDE part sur le site. Le titre reste interne : c'est souvent le nom du
          fichier de l'appareil photo, qui n'a rien à faire sur une page publique. */
       if((p.caption||'').trim())entry.caption=p.caption.trim();
       entries.push(entry);
       posees.push({p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
-        cap:(p.caption||'').trim(),cover:r.cover===p.id,
+        cap:(p.caption||'').trim(),cover:plan.coverId===p.id,
         v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
     }
     _glTexKey='';
@@ -8708,8 +8824,8 @@ async function publishRealisation(r,opts){
         photos:(r.pub.photos||{}),label:r.pub.at?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
     }
     r.pub={at:quand,fiche:realisationFicheSig(r),
-      order:(r.photos||[]).map(p=>p.id),pids:(r.photos||[]).map(p=>p.id),
-      photos:Object.fromEntries((r.photos||[]).map(p=>[p.id,p.pub]))};
+      order:photosPubliees(r).map(p=>p.id),pids:photosPubliees(r).map(p=>p.id),
+      photos:Object.fromEntries(photosPubliees(r).map(p=>[p.id,p.pub]))};
 
     /* Ménage : on retire ce qui n'est plus servi NI par la publication actuelle NI par celle
        à laquelle on peut revenir. Effacer plus large casserait le retour en arrière ;

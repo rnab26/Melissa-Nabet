@@ -797,6 +797,61 @@ essais sur vingt photos font 100 Mo sur un plan de 1 Go — c'est l'alerte de sa
 (`fi01`) qui le dira. Un ménage automatique n'a pas été mis : supprimer sans qu'on le demande
 une image qui a été payée serait pire que le problème.
 
+## Choisir ce qui part sur le site (septembre 2026)
+
+**État** : livré, testé, déployé. Chantier `cr06`.
+
+**Le reproche** : « quelle photo je sélectionne en version finale, et ensuite lesquelles je
+choisis pour les pousser sur le site, ce n'est toujours pas assez clair ». Deux manques
+distincts : le choix de la version se faisait au fond d'un onglet de l'éditeur, et le choix
+des photos n'existait pas — publier envoyait forcément toute la réalisation.
+
+**Les deux règles, écrites une seule fois**
+
+- `photosPubliees(r)` — les photos qui partent : celles qui ne portent pas `p.horsSite`.
+- `couvertureEffective(r)` — la couverture choisie, sauf si elle est écartée, auquel cas la
+  première photo publiée.
+
+Le plan (`realisationPublishPlan`), la publication, les décomptes et l'écran de confirmation
+s'en servent tous. **C'est le point à ne pas casser** : une deuxième définition de la
+couverture avait pour effet qu'une photo restait « à republier » pour toujours — publiée
+comme couverture d'un côté, comparée à un autre choix de l'autre. Trouvé par le test, pas à
+l'œil.
+
+**Interface**
+
+- Menu ⋯ d'une vignette : « 🖼 Version publiée : … » ouvre la liste des versions (l'active
+  cochée) ; « 🚫 Ne pas publier cette photo » l'écarte, avec une confirmation qui dit ce
+  qu'elle devient.
+- Vignette écartée : pastille « écartée du site » et mise en retrait (`.rz-hors-site`).
+- Écran de publication : « X photo(s) sur Y partiront », les écartées comptées à part, le
+  nom de la version retenue sous chaque « va partir », et l'avertissement si la couverture
+  est écartée.
+- Refus explicite quand tout est écarté, dans `askPublishRealisation` **et** dans
+  `publishRealisation` (« Tout republier » appelle la seconde directement).
+
+**Vérification** : 462 contrôles au navigateur (17 ajoutés ici), 20 de bout en bout, 99 sur
+le site, 20 sur le pont. Parcours réel en 390 px.
+
+## Solde fal.ai : ce qui a été vérifié (septembre 2026)
+
+**État** : diagnostiqué et expliqué à l'écran ; l'affichage lui-même dépend d'une clé que
+seul le titulaire du compte fal.ai peut créer. Chantier `ph12`.
+
+**Preuves, pas déductions** : les journaux de la fonction `photo-ia` en production renvoient
+à chaque appel `balance: HTTP 403 authorization_error — This API key is not permitted to
+perform this action.` Et la documentation de fal (authentification + API de compte) ne
+documente **aucun** point d'entrée donnant le solde avec une clé de portée API ;
+`GET /v1/account/billing` demande une clé ADMIN.
+
+**Ce qui a été changé** : faire disparaître la pastille quand aucune clé ADMIN n'est
+configurée était défendable — pas d'alerte permanente pour une fonction volontairement
+désactivée — mais laissait sans réponse la question « où sont mes crédits ? ». La pastille
+reste, affiche « non lu », ne prétend rien, et un appui ouvre `iaExpliquerSolde()` : trois
+étapes numérotées, lien direct vers `fal.ai → Keys`, lien direct vers les secrets du projet
+Supabase (construit depuis `SB_URL`, pas codé en dur), et le nom exact du secret
+`FAL_ADMIN_KEY`. `FAL_KEY` n'est pas touchée : la retouche continue pendant et après.
+
 ## Savoir ce qu'on regarde dans l'éditeur (septembre 2026)
 
 **État** : livré, testé, déployé. Chantier `ph18`.

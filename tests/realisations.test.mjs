@@ -701,9 +701,11 @@ check('Échec du solde : la raison est lisible à l’écran, pas cachée dans u
   soldeEchec.texte.slice(0, 90));
 soldeKo = false;
 
-// --- SANS clé ADMIN, le solde n'est pas en panne : il est volontairement désactivé. Afficher
-//     « n/c » et une alerte à CHAQUE ouverture de l'éditeur, pour une fonction que l'on a
-//     choisi de ne pas activer, c'est du bruit permanent sous le bouton principal.
+// --- SANS clé ADMIN, le solde n'est pas en panne : il est volontairement désactivé. Pas
+//     d'alerte permanente sous le bouton principal, donc — mais pas de silence total non
+//     plus : faire disparaître la pastille laissait sans réponse la question « où sont mes
+//     crédits ? », l'endroit où on les cherche devenant vide, sans un mot. Elle reste, elle
+//     ne prétend rien, et un appui donne la marche à suivre.
 soldeSansAdmin = true;
 const soldeMuet = await page.evaluate(async () => {
   _iaBalance = null; buildEditorControls();
@@ -711,14 +713,32 @@ const soldeMuet = await page.evaluate(async () => {
   const w = document.querySelector('#ed-controls .ia-warn');
   const s = document.querySelector('#ed-controls .ia-solde');
   const go = document.querySelector('#ed-controls .ia-go');
+  const b = s && s.querySelector('button');
+  b.click();
+  await new Promise(r => setTimeout(r, 300));
+  const mode = (document.querySelector('#modal') || {}).textContent || '';
+  const liens = [...document.querySelectorAll('#modal a')].map(a => a.href);
+  const etapes = document.querySelectorAll('#modal .ias-steps li').length;
+  closeModal();
   return {
     alerte: !!w && w.offsetParent !== null,
     pastille: !!s && s.offsetParent !== null,
+    valeur: (s.querySelector('b') || {}).textContent || '',
     boutonUtilisable: !!go && !go.disabled,
+    mode, liens, etapes,
   };
 });
-check('Sans clé ADMIN, ni pastille de solde ni alerte : c’est un choix, pas une panne',
-  !soldeMuet.alerte && !soldeMuet.pastille, JSON.stringify(soldeMuet));
+check('Sans clé ADMIN : aucune alerte permanente sous le bouton principal',
+  !soldeMuet.alerte, JSON.stringify({ alerte: soldeMuet.alerte }));
+check('Sans clé ADMIN : la pastille reste, mais ne prétend rien',
+  soldeMuet.pastille && /non lu/.test(soldeMuet.valeur), soldeMuet.valeur);
+check('Sans clé ADMIN : un appui donne la marche à suivre, numérotée et avec les adresses',
+  soldeMuet.etapes === 3 && soldeMuet.liens.some(h => /fal\.ai\/dashboard\/keys/.test(h))
+  && soldeMuet.liens.some(h => /supabase\.com\/dashboard\/project\//.test(h))
+  && /FAL_ADMIN_KEY/.test(soldeMuet.mode),
+  soldeMuet.etapes + ' étape(s), liens : ' + soldeMuet.liens.join(' '));
+check('Sans clé ADMIN : la marche à suivre dit que la retouche n’est pas touchée',
+  /FAL_KEY/.test(soldeMuet.mode) && /continue de fonctionner/.test(soldeMuet.mode));
 check('Et la retouche reste utilisable : le solde n’a jamais été un pré-requis',
   soldeMuet.boutonUtilisable, String(soldeMuet.boutonUtilisable));
 soldeSansAdmin = false;
@@ -1461,6 +1481,188 @@ check('Une photo illisible arrête la publication en la nommant, au lieu de la s
   illisible.msg.slice(0, 110));
 check('Le site n’est pas modifié par une publication interrompue',
   illisible.siteIntact && illisible.repare, JSON.stringify({ intact: illisible.siteIntact, repare: illisible.repare }));
+
+// ============================================================================
+//  CHOISIR CE QUI PART SUR LE SITE : la version de chaque photo, et lesquelles
+// ============================================================================
+
+// --- La version publiée se choisit depuis la GRILLE, sans ouvrir l'éditeur. C'est le geste
+//     le plus courant une fois les retouches faites : on compare, on retient, on publie.
+const verGrille = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[0];
+  p.versions = [
+    { id: 'g1', key: 'ra_' + p.id + '_g1', model: 'fal-ai/nano-banana-pro/edit', prompt: 'essai 1', from: 'orig', createdAt: Date.now() },
+    { id: 'g2', key: 'ra_' + p.id + '_g2', model: 'fal-ai/nano-banana-pro/edit', prompt: 'essai 2', from: 'orig', createdAt: Date.now() },
+  ];
+  p.edits = { orig: blankEdit(), g1: blankEdit(), g2: blankEdit() };
+  p.active = 'g1';
+  // les deux images doivent exister, la publication les relira
+  const src = await photoStore.get(fullKey(p.id));
+  for (const v of p.versions) await photoStore.save(v.key, src);
+  _imgCache.clear();
+  _rzOpenId = r.id; renderRealisations();
+  openPhotoMenu(r, p);
+  await new Promise(x => setTimeout(x, 200));
+  const entree = (document.querySelector('#modal [data-ver]') || {}).textContent || '';
+  document.querySelector('#modal [data-ver]').click();
+  await new Promise(x => setTimeout(x, 250));
+  const choix = [...document.querySelectorAll('#modal [data-v]')].map(b => b.textContent.trim());
+  const coche = (document.querySelector('#modal [data-v].on') || {}).textContent || '';
+  [...document.querySelectorAll('#modal [data-v]')].find(b => b.dataset.v === 'g2').click();
+  await new Promise(x => setTimeout(x, 350));
+  return { entree, choix, coche, actif: photoActiveId(p),
+           surVignette: (document.querySelector('#rz-body .rz-ph .rz-tag.t-ia') || {}).textContent || '' };
+});
+check('Grille : le menu ⋯ dit quelle version part sur le site',
+  /Version publiée/.test(verGrille.entree) && /Retouche 1/.test(verGrille.entree), verGrille.entree);
+check('Grille : toutes les versions sont proposées, l’originale comprise, l’active cochée',
+  verGrille.choix.length === 3 && /Photo d’origine/.test(verGrille.choix[0]) && /✓/.test(verGrille.coche),
+  verGrille.choix.join(' | '));
+check('Grille : en choisir une la rend publiée, sans ouvrir l’éditeur',
+  verGrille.actif === 'g2' && /Retouche 2/.test(verGrille.surVignette),
+  verGrille.actif + ' — ' + verGrille.surVignette);
+
+// --- ÉCARTER UNE PHOTO DU SITE. Elle reste dans le CRM ; elle ne part plus sur la page
+//     publique. C'est ce qui manquait : publier envoyait forcément TOUTES les photos.
+const ecart = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[1];
+  const orig = window.askConfirm; let question = '';
+  window.askConfirm = (m, cb) => { question = m; return Promise.resolve(cb()); };
+  openPhotoMenu(r, p);
+  await new Promise(x => setTimeout(x, 200));
+  const libelle = (document.querySelector('#modal [data-site]') || {}).textContent || '';
+  document.querySelector('#modal [data-site]').click();
+  await new Promise(x => setTimeout(x, 350));
+  window.askConfirm = orig;
+  const plan = realisationPublishPlan(r);
+  const tuile = [...document.querySelectorAll('#rz-body .rz-ph')].find(t => t.dataset.pid === p.id);
+  return { libelle, question, horsSite: !!p.horsSite,
+    dansLePlan: plan.photos.some(x => x.p.id === p.id),
+    ecartees: plan.ecartees, retirees: plan.retirees,
+    pastille: tuile ? [...tuile.querySelectorAll('.rz-tag')].map(t => t.textContent).join(' ') : '',
+    enRetrait: !!(tuile && tuile.classList.contains('rz-hors-site')),
+    hist: (p.hist || []).map(h => h.k).join(','),
+    total: (r.photos || []).length, publiees: photosPubliees(r).length };
+});
+check('Site : le menu ⋯ propose d’écarter une photo de la publication',
+  /Ne pas publier/.test(ecart.libelle), ecart.libelle);
+check('Site : la confirmation dit qu’elle reste dans le CRM et qu’elle sera retirée du site',
+  /reste dans le CRM/.test(ecart.question) && /retirée du site/.test(ecart.question), ecart.question.slice(0, 120));
+check('Site : la photo écartée sort du plan de publication et compte comme retirée',
+  ecart.horsSite && !ecart.dansLePlan && ecart.ecartees === 1 && ecart.retirees === 1, JSON.stringify(ecart));
+check('Site : la vignette le montre — pastille et mise en retrait',
+  /écartée du site/.test(ecart.pastille) && ecart.enRetrait, ecart.pastille);
+check('Site : l’historique de la photo en garde la trace', /horssite/.test(ecart.hist), ecart.hist);
+
+// --- ET LA PUBLICATION SUIT : le site ne reçoit que les photos retenues.
+const pubEcart = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  const p = r.photos[1];
+  await publishRealisation(r);
+  const man = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const fiche = man.realisations.find(x => x.id === r.id);
+  return { nPubliees: fiche.photos.length, nTotal: r.photos.length,
+    resteDansLeCrm: !!(r.photos || []).some(x => x.id === p.id),
+    aRepublier: realisationARepublier(r),
+    pourquoi: realisationPublishPlan(r).photos.filter(x => x.etat !== 'inchangee')
+      .map(x => (x.p.name || x.p.id) + ' → ' + x.etat + ' : ' + x.pourquoi).join(' | '),
+    couvertures: fiche.photos.filter(x => x.cover).length };
+});
+check('Site : le manifeste ne contient que les photos retenues',
+  pubEcart.nPubliees === pubEcart.nTotal - 1 && pubEcart.resteDansLeCrm,
+  pubEcart.nPubliees + ' / ' + pubEcart.nTotal);
+check('Site : une fois publiée, la réalisation n’est plus « à republier »',
+  pubEcart.aRepublier === 0, pubEcart.aRepublier + ' — ' + pubEcart.pourquoi);
+
+// --- LA COUVERTURE ÉCARTÉE. Sans règle, le site n'aurait plus de couverture du tout.
+const couvChoix = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  const p = r.photos[0];
+  /* On remet en ligne celle que le contrôle précédent avait écartée : on veut vérifier LA
+     couverture écartée, pas une réalisation entièrement vide. */
+  r.photos.forEach(x => { delete x.horsSite; });
+  r.cover = p.id;
+  p.horsSite = true;
+  const plan = realisationPublishPlan(r);
+  await askPublishRealisation(r);
+  await new Promise(x => setTimeout(x, 400));
+  const texte = (document.querySelector('#modal') || {}).textContent || '';
+  closeModal();
+  await publishRealisation(r);
+  const man = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const fiche = man.realisations.find(x => x.id === r.id);
+  r.photos.forEach(x => { delete x.horsSite; });
+  return { couvEcartee: plan.couvEcartee, coverId: plan.coverId, premierPublie: plan.photos[0].p.id,
+    couvertures: fiche.photos.filter(x => x.cover).length, texte };
+});
+check('Site : couverture écartée → c’est la première photo publiée qui la remplace',
+  couvChoix.couvEcartee && couvChoix.coverId === couvChoix.premierPublie && couvChoix.couvertures === 1,
+  JSON.stringify({ c: couvChoix.couvEcartee, n: couvChoix.couvertures }));
+check('Site : l’écran de publication le dit avant de publier',
+  /couverture est écartée/.test(couvChoix.texte), (couvChoix.texte.match(/couverture[^.]*\./) || [''])[0]);
+
+// --- L'ÉCRAN DE PUBLICATION : combien partent, et sous quelle version.
+const ecranChoix = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  r.photos[1].horsSite = true;
+  r.photos[0].edit.expo = 0.3; photoTouch(r.photos[0], 'reglages');
+  await askPublishRealisation(r);
+  await new Promise(x => setTimeout(x, 500));
+  const texte = (document.querySelector('#modal') || {}).textContent || '';
+  const versions = [...document.querySelectorAll('#modal .pub-ver')].map(e => e.textContent);
+  closeModal();
+  r.photos[1].horsSite = false;
+  return { texte, versions, total: r.photos.length };
+});
+check('Publier : l’écran annonce combien de photos partent sur combien',
+  new RegExp((ecranChoix.total - 1) + ' photo\\(s\\) sur ' + ecranChoix.total).test(ecranChoix.texte.replace(/\s+/g, ' ')),
+  (ecranChoix.texte.replace(/\s+/g, ' ').match(/\d+ photo\(s\) sur \d+[^.]*/) || [''])[0]);
+check('Publier : chaque vignette « va partir » est nommée par sa version',
+  ecranChoix.versions.length >= 1 && /Retouche 2|Photo d’origine/.test(ecranChoix.versions[0]),
+  ecranChoix.versions.join(' | '));
+
+// --- TOUT ÉCARTER : refus explicite plutôt qu'une publication vide.
+const toutEcarte = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  (r.photos || []).forEach(p => { p.horsSite = true; });
+  const manAvant = await window.__files.get('test-user/manifest.json').text();
+  await publishRealisation(r);
+  const manApres = await window.__files.get('test-user/manifest.json').text();
+  (r.photos || []).forEach(p => { delete p.horsSite; });
+  return { intact: manAvant === manApres, toast: (document.getElementById('toast') || {}).textContent || '' };
+});
+check('Site : tout écarter ne publie pas une galerie vide, et le dit',
+  toutEcarte.intact && /écartées/.test(toutEcarte.toast), toutEcarte.toast);
+
+// --- PARCOURS TÉLÉPHONE : ces deux gestes se font depuis la grille, au doigt.
+const vueAvantChoix = page.viewportSize();
+await page.setViewportSize({ width: 390, height: 844 });
+const choixTel = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[0];
+  p.horsSite = true;
+  _rzOpenId = r.id; renderRealisations();
+  await new Promise(x => setTimeout(x, 400));
+  const debordGrille = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  openPhotoMenu(r, p);
+  await new Promise(x => setTimeout(x, 300));
+  const entrees = [...document.querySelectorAll('#modal .ph-menu .mini')].map(b => b.textContent.trim());
+  const debordMenu = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  return { debordGrille, debordMenu, entrees };
+});
+await page.screenshot({ path: '/tmp/mn-choix-site-390.png' });
+await page.evaluate(async () => {
+  closeModal();
+  const r = realisations.find(x => x.id === window.__rPub);
+  r.photos.forEach(p => { delete p.horsSite; });
+  renderRealisations();
+});
+check('Écran : le menu ⋯ propose la version publiée ET l’exclusion du site',
+  choixTel.entrees.some(t => /Version publiée/.test(t)) && choixTel.entrees.some(t => /Remettre sur le site/.test(t)),
+  choixTel.entrees.join(' | '));
+check('Écran : rien ne déborde à 390 px, grille et menu',
+  choixTel.debordGrille <= 1 && choixTel.debordMenu <= 1,
+  'grille ' + choixTel.debordGrille + 'px, menu ' + choixTel.debordMenu + 'px');
+await page.setViewportSize(vueAvantChoix);
 
 // --- LES PHOTOS DÉJÀ EN LIGNE AVANT CE MÉCANISME. Elles n'ont pas d'identité publiée :
 //     les compter comme « à republier » ferait crier l'alerte sur un chantier déjà à jour.

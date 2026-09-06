@@ -350,6 +350,82 @@ les anciens `p0.jpg` retirés du seau.
 
 ---
 
+## 6 septembre 2026 — Choisir ce qui part sur le site, et pourquoi le solde reste muet
+
+**Branche** `claude/publication-choix` → fusionnée sur `main`. **Chantiers** `cr06` (nouveau)
+et `ph12`.
+
+**Demandé par Raphaël** : « je ne vois toujours pas mes crédits fal.ai » et « quelle photo je
+sélectionne en version finale, et ensuite lesquelles je choisis pour les pousser sur le
+site, ce n'est toujours pas assez clair ».
+
+### Ce qui est livré
+
+- **La version publiée se choisit depuis la grille.** Menu ⋯ d'une vignette → « 🖼 Version
+  publiée : Retouche 2 » → la liste s'ouvre, l'originale et chaque retouche, l'active
+  cochée. Un appui, c'est fait. Avant, il fallait ouvrir l'éditeur et descendre dans
+  l'onglet Retouche.
+- **Une photo peut être écartée du site.** Menu ⋯ → « 🚫 Ne pas publier cette photo ». Elle
+  reste dans le CRM, dans les sauvegardes et dans l'archive ; elle ne part plus sur la page
+  publique, et elle en est retirée à la prochaine publication. La vignette passe en retrait
+  avec la pastille « écartée du site ». Le geste inverse est au même endroit.
+- **L'écran de publication le dit avant d'envoyer** : « 4 photo(s) sur 5 partiront sur le
+  site », les écartées comptées à part, et **le nom de la version retenue sous chaque
+  vignette « va partir »**. Deux vignettes qui se ressemblent ne laissent plus deviner
+  laquelle est publiée.
+- **Si la couverture choisie est écartée**, c'est la première photo publiée qui la remplace —
+  annoncé sur l'écran de publication, pas décidé en silence.
+- **Tout écarter ne publie pas une galerie vide** : refus explicite, sur l'écran de
+  confirmation comme sur « Tout republier ».
+
+### Le solde fal.ai — vérifié, et voilà où ça bloque
+
+Les journaux de la fonction en ligne disent, à chaque appel :
+`balance: HTTP 403 authorization_error — This API key is not permitted to perform this action.`
+
+Vérifié aussi dans la documentation de fal (page d'authentification et liste des API de
+compte) : **aucun point d'entrée accessible avec une clé de portée API ne donne le solde**.
+Il faut une clé de portée ADMIN, et créer une clé sur un compte fal.ai demande d'être
+connecté à ce compte — je ne peux pas le faire à sa place.
+
+Ce qui a changé, faute de pouvoir le régler moi-même : la pastille **ne disparaît plus en
+silence**. Elle affiche « non lu » et un appui ouvre la marche à suivre — trois étapes
+numérotées, avec le lien direct vers `fal.ai → Keys`, le lien direct vers les secrets du
+projet Supabase, et le nom exact du secret (`FAL_ADMIN_KEY`). La clé qui fait tourner les
+modèles n'est pas touchée. Se taire complètement laissait sans réponse la question « où sont
+mes crédits ? » : l'endroit où on les cherche devenait vide, sans un mot.
+
+### Un défaut trouvé en chemin, par le test
+
+Publier avec une couverture écartée marquait la photo de remplacement « à republier » **pour
+toujours** : la publication la posait comme couverture, la comparaison « qu'est-ce qui a
+changé » la comparait à un autre choix, et les deux ne se rejoignaient jamais.
+`couvertureEffective(r)` est maintenant la seule définition de la couverture, partagée par
+les trois.
+
+**Vérification** : `tests/realisations.test.mjs` → **462 contrôles, 0 échec** (17 nouveaux) ;
+`tests/bout-en-bout.test.mjs` → 20 ; `tests/site.test.mjs` → 99 ; `tests/pont-ia.test.mjs` →
+20. Parcours réel en 390 px sur la grille et le menu ⋯.
+
+### Ce qu'il ne faut pas casser
+
+- `photosPubliees(r)` est **la** liste de ce qui part sur le site, et `couvertureEffective(r)`
+  **la** couverture. Le plan, la publication, les décomptes et l'écran de confirmation
+  s'en servent tous : une deuxième définition et une photo reste « à republier » sans fin.
+- Une photo écartée compte comme **retirée du site** dans le plan, au même titre qu'une photo
+  supprimée : dans les deux cas le visiteur ne la verra plus.
+- Le garde-fou « tout est écarté » vaut aussi dans `publishRealisation`, pas seulement sur
+  l'écran de confirmation : « Tout republier » appelle la publication directement.
+
+### À faire côté Raphaël
+
+**Une seule chose, et elle n'est pas automatisable** : pour voir le solde dans le CRM, créer
+sur [fal.ai → Keys](https://fal.ai/dashboard/keys) une clé de portée **ADMIN** et la déposer
+dans les secrets Supabase sous le nom `FAL_ADMIN_KEY`. Le mode d'emploi est dans le CRM :
+onglet Retouche → pastille « Solde non lu » → **?**.
+
+---
+
 ## 5 septembre 2026 — Savoir ce qu'on regarde (et un geste en moins)
 
 **Branche** `claude/photo-etat-affiche` → fusionnée sur `main`. **Chantier** `ph18`.
