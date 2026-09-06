@@ -1494,6 +1494,25 @@ check('Elle est réécrite une fois à la publication suivante, et le suivi devi
 check('Les anciens fichiers nommés par le rang (p0.jpg…) sont retirés du site',
   heritees.positionnelsPartis, JSON.stringify(heritees.positionnelsPartis));
 
+// --- REMPLACER UNE PHOTO réécrit la MÊME clé de stockage et remet les réglages à zéro.
+//     Sans repère, la signature publiée serait identique et le site garderait l'ancienne
+//     image en se croyant à jour — le symptôme même de ce chantier.
+const remplacee = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub), p = r.photos[1];
+  p.versions = []; p.edits = { orig: blankEdit() }; p.active = 'orig'; p.edit = blankEdit();
+  await publishRealisation(r);
+  const avant = p.pub.full;
+  const refus = await replaceOnePhoto(r, p, await window.__mkPub('neuve.jpg', '#33aa55'));
+  const plan = realisationPublishPlan(r);
+  const ligne = plan.photos.find(x => x.p.id === p.id);
+  await publishRealisation(r);
+  return { refus, avant, apres: p.pub.full, etat: ligne.etat, change: plan.change,
+    servi: window.__files.has('test-user/' + p.pub.full) };
+});
+check('Remplacer une photo la fait repartir sur le site, à une nouvelle adresse',
+  remplacee.refus === '' && remplacee.etat === 'changee' && remplacee.avant !== remplacee.apres
+  && remplacee.servi, JSON.stringify(remplacee));
+
 await page.evaluate(async () => {
   const r = realisations.find(x => x.id === window.__rPub);
   if (r) { const y = window.confirm; window.confirm = () => true;
@@ -1643,6 +1662,29 @@ check('Import : le HEIC d’iPhone explique quoi faire',
 check('Import : un fichier illisible le dit', refus.lignes.some(l => /casse\.jpg.*illisible/.test(l)));
 check('Import : les bonnes photos passent quand même', refus.photos === 4, refus.photos + ' photo(s)');
 check('Import : le bilan des refus reste affiché (pas un toast de 3 s)', refus.encore);
+
+// Un envoi qui échoue en cours de route ne doit pas laisser de fichier orphelin : il
+// occuperait de la place sans être référencé par aucune photo, donc sans pouvoir être vu
+// ni supprimé — et le stockage est plafonné.
+const importOrphelin = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const avant = window.__files.size;
+  const nb = r.photos.length;
+  const vrai = photoStore.save.bind(photoStore);
+  photoStore.save = async (cle, blob) => {
+    if (cle.startsWith('rt_')) throw new Error('réseau indisponible');
+    return vrai(cle, blob);
+  };
+  await addPhotosToRealisation(r, [await window.__mkImg('coupee.jpg', 600, 400, '#556677')]);
+  photoStore.save = vrai;
+  return { avant, apres: window.__files.size, photos: r.photos.length, nb,
+           refus: (document.querySelector('.rz-refus li') || {}).textContent || '' };
+});
+check('Import : un envoi coupé n’ajoute pas la photo…', importOrphelin.photos === importOrphelin.nb,
+  importOrphelin.photos + ' vs ' + importOrphelin.nb);
+check('Import : …et ne laisse aucun fichier orphelin dans le stockage',
+  importOrphelin.apres === importOrphelin.avant, importOrphelin.avant + ' → ' + importOrphelin.apres + ' fichier(s)');
+check('Import : et il dit que la connexion a été perdue', /connexion perdue/.test(importOrphelin.refus), importOrphelin.refus);
 
 // --- Titre et légende par photo
 const txt = await page.evaluate(async () => {
@@ -1811,6 +1853,33 @@ const replKo = await page.evaluate(async () => {
   return { why, intact: (await photoStore.get(fullKey(p.id))).size === octets };
 });
 check('Remplacer : un fichier refusé dit pourquoi', /ce n’est pas une image/.test(replKo.why), replKo.why);
+
+// Deux fichiers à échanger, aucune transaction possible : si le second envoi échoue, la
+// photo doit revenir ENTIÈRE à son état d'avant, pas rester moitié neuve moitié ancienne.
+const replMoitie = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId), p = r.photos[0];
+  const avantFull = (await photoStore.get(fullKey(p.id))).size;
+  const avantThumb = (await photoStore.get(thumbKey(p.id))).size;
+  const largeur = p.w;
+  const vrai = photoStore.save.bind(photoStore);
+  let n = 0;
+  photoStore.save = async (cle, blob) => {
+    // le premier envoi passe (la pleine définition), le second échoue (la vignette)
+    if (cle.startsWith('rt_') && ++n === 1) throw new Error('réseau indisponible');
+    return vrai(cle, blob);
+  };
+  const why = await replaceOnePhoto(r, p, await window.__mkImg('autre.jpg', 500, 400, '#123456'));
+  photoStore.save = vrai;
+  return { why, full: (await photoStore.get(fullKey(p.id))).size, thumb: (await photoStore.get(thumbKey(p.id))).size,
+           avantFull, avantThumb, largeur, largeurApres: p.w };
+});
+check('Remplacer : un envoi qui échoue à mi-chemin remet la photo d’avant',
+  !!replMoitie.why && replMoitie.full === replMoitie.avantFull && replMoitie.thumb === replMoitie.avantThumb
+  && replMoitie.largeurApres === replMoitie.largeur,
+  JSON.stringify(replMoitie).slice(0, 150));
+check('Remplacer : et le message dit que rien n’a bougé, sans laisser craindre un demi-échange',
+  /la photo d’avant est toujours en place/.test(replMoitie.why) && /connexion perdue/.test(replMoitie.why),
+  replMoitie.why);
 check('Remplacer : un refus ne touche pas la photo en place', replKo.intact);
 
 // --- La légende part sur le site, le titre interne n'en sort pas
@@ -3776,7 +3845,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

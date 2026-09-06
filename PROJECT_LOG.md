@@ -1131,3 +1131,18 @@ boucle : tant que le manifeste n'est pas écrit, rien n'est en ligne.
 
 Trouvé en écrivant le test d'échec de « Tout republier » — la publication en lot rend ce
 scénario beaucoup plus probable (plusieurs écritures de manifeste d'affilée).
+
+## Écritures multiples sans transaction (septembre 2026)
+
+Trois corrections de la même famille, trouvées en écrivant des tests d'échec :
+
+1. **Publication** : `p.publishedAt` était posé avant l'écriture du manifeste (voir plus
+   haut). Corrigé.
+2. **`replaceOnePhoto`** : deux fichiers écrasés sans retour possible. Les anciens sont
+   maintenant relus AVANT l'échange et remis en place si un envoi échoue.
+3. **`importOnePhoto`** : le premier fichier envoyé restait orphelin dans le seau si le
+   second échouait. Il est effacé.
+
+**Règle** : rien ne se marque « fait » tant que la dernière écriture n'a pas réussi, et tout
+ce qui a été écrit avant l'échec se nettoie. Les trois cas ont chacun leur test d'échec —
+c'est le seul moyen de les voir, aucun ne se manifeste en usage normal.

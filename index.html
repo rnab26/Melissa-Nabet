@@ -4526,7 +4526,11 @@ function pubHash(s){
    pas réclamer une republication (c'est ce que faisait l'ancien repère par date). */
 function photoPubSig(p){
   const vid=photoActiveId(p), e=p.edit||blankEdit();
-  return [photoVersionKey(p,vid,false),
+  /* `imgRev` compte les remplacements de la photo d'origine. Sans lui, remplacer une photo
+     passerait inaperçu : le remplacement réécrit la MÊME clé de stockage (`rp_<id>`) et
+     remet les réglages à zéro — la signature serait donc identique à celle publiée, et le
+     site garderait l'ancienne image en se croyant à jour. */
+  return [photoVersionKey(p,vid,false),p.imgRev||0,
     e.persp||0,e.rot||0,e.expo||0,e.contrast||0,e.temp||0,e.tint||0,e.sat||0,e.ratio||'libre',e.pan||0,
     PUB_FULL,PUB_FULL_Q,PUB_THUMB,PUB_THUMB_Q].join('|');
 }
@@ -4974,7 +4978,7 @@ function photoFileRefus(file){
    message doit dire quoi faire, pas seulement que ça a raté. */
 function photoFileRaison(file,e){
   const msg=(e&&e.message)||'';
-  if(/hors ligne/i.test(msg))return 'envoi interrompu : connexion perdue. Réessayez une fois reconnectée.';
+  if(/hors ligne|réseau|network|fetch|failed to fetch/i.test(msg))return 'envoi interrompu : connexion perdue ('+msg+'). Réessayez une fois reconnectée.';
   if(/hei[cf]/i.test((file.type||'')+' '+(file.name||'')))
     return 'format HEIC : le navigateur ne sait pas l’ouvrir. Sur iPhone : Réglages → Appareil photo → Formats → « Le plus compatible », ou exportez la photo en JPEG.';
   return 'fichier illisible'+(msg?' ('+msg+')':'');
@@ -4996,8 +5000,17 @@ async function importOnePhoto(r,file){
   try{
     const d=await decodePhotoFile(file);
     const pid=uid();
-    await photoStore.save(fullKey(pid),d.fb);
-    await photoStore.save(thumbKey(pid),d.tb);
+    try{
+      await photoStore.save(fullKey(pid),d.fb);
+      await photoStore.save(thumbKey(pid),d.tb);
+    }catch(e){
+      /* La photo n'entrera pas dans la réalisation : ce qui a déjà été envoyé n'est
+         référencé par rien et occuperait de la place sans que personne puisse le voir ni le
+         supprimer. On nettoie derrière nous — le stockage est plafonné. */
+      try{await photoStore.del(fullKey(pid));}catch(err){}
+      try{await photoStore.del(thumbKey(pid));}catch(err){}
+      throw e;
+    }
     const nouvelle={id:pid,name:file.name||'photo',caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
     photoLog(nouvelle,'import',file.name||'');
     r.photos.push(nouvelle);
@@ -5086,8 +5099,20 @@ async function replaceOnePhoto(r,p,file){
   if(refus)return refus;
   try{
     const d=await decodePhotoFile(file);
-    await photoStore.save(fullKey(p.id),d.fb);
-    await photoStore.save(thumbKey(p.id),d.tb);
+    /* Deux fichiers à échanger (la pleine définition et la vignette) et aucune transaction
+       possible côté stockage : si le second envoi échoue, on se retrouverait avec la
+       NOUVELLE photo en grand et l'ANCIENNE en vignette — un état que rien n'affiche comme
+       anormal. On garde donc de quoi remettre en place ce qui a été écrasé. */
+    const ancienFull=await photoStore.get(fullKey(p.id));
+    const ancienThumb=await photoStore.get(thumbKey(p.id));
+    try{
+      await photoStore.save(fullKey(p.id),d.fb);
+      await photoStore.save(thumbKey(p.id),d.tb);
+    }catch(e){
+      try{if(ancienFull)await photoStore.save(fullKey(p.id),ancienFull);}catch(err){}
+      try{if(ancienThumb)await photoStore.save(thumbKey(p.id),ancienThumb);}catch(err){}
+      throw e;
+    }
     _imgCache.delete(fullKey(p.id));_imgCache.delete(thumbKey(p.id));
     /* La texture WebGL est mise en cache sous une clé dérivée de l'id de la photo, qui ne
        change pas : sans cette remise à zéro, l'écran continuerait d'afficher l'ancienne
@@ -5105,9 +5130,17 @@ async function replaceOnePhoto(r,p,file){
        une autre photo n'a aucun sens. */
     Object.assign(p.edit,blankEdit());
     p.edits={orig:blankEdit()};
+    /* L'image d'origine a changé sous la même clé : c'est ce compteur qui le fait savoir à
+       la publication (voir `photoPubSig`). */
+    p.imgRev=(p.imgRev||0)+1;
     photoTouch(p,'remplacee',file.name||'');
     return '';
-  }catch(e){console.error('remplacement photo',e);return photoFileRaison(file,e);}
+  }catch(e){
+    console.error('remplacement photo',e);
+    /* On sait ici que rien n'a bougé (les fichiers écrasés ont été remis) : autant le dire,
+       plutôt que de laisser craindre une photo à moitié remplacée. */
+    return 'remplacement annulé, la photo d’avant est toujours en place — '+photoFileRaison(file,e);
+  }
 }
 function rzReplacePhoto(r,p){
   const inp=document.createElement('input');
