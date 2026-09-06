@@ -1587,3 +1587,74 @@ projet affiché, aucune erreur JavaScript. Déploiement confirmé en ligne.
 catégorie / texte sur « Bureau Sébastien », choisir un thème dans « Le site public »,
 écrire le texte « À propos », puis republier. Sans ça, la moitié du travail de ces deux
 jours reste invisible.
+
+---
+
+## 6 septembre 2026 — Le bouton retour, l'ordre des projets, et un projet fantôme
+
+Trois initiatives prises pendant l'absence de Raphaël, en regardant ce que font les sites
+d'architectes et ce qui manquait manifestement ici.
+
+### 1. Le bouton « retour » du navigateur ne faisait rien
+
+Ouvrir un projet écrivait une ancre dans l'adresse, mais **rien n'écoutait le retour**. Sur
+un téléphone — donc pour la plupart des visiteurs — le geste ou le bouton « précédent »
+changeait l'adresse sans rien fermer à l'écran : le projet restait ouvert, on appuyait une
+deuxième fois, et **on quittait le site**. Le plein écran, lui, n'avait aucune entrée
+d'historique du tout : le geste retour faisait sortir du projet au lieu de refermer la photo.
+
+Trois vues, trois entrées : la liste, un projet, une photo. Le retour ferme le plein écran
+sans quitter le projet, puis referme le projet et **rend la liste à la position exacte où on
+l'avait laissée** au lieu de renvoyer en haut de page. Le bouton « suivant » refait le chemin
+inverse.
+
+Deux pièges évités, tous deux trouvés par les tests : passer d'un projet à l'autre
+**remplace** l'entrée au lieu de l'empiler (sinon huit chantiers enchaînés = huit retours
+pour ressortir), et la règle est dans `openProject` et non chez chaque appelant — la flèche
+du clavier empilait là où le bouton n'empilait pas. Arrivé par un lien direct, il n'y a rien
+derrière : le bouton de la page remplace l'entrée plutôt que de faire sortir du site.
+
+Au passage, les deux photos voisines sont préchargées **dès l'ouverture** du plein écran,
+plus seulement après un premier changement — donc jamais, avant, pour le tout premier
+balayage.
+
+### 2. L'ordre des projets sur le site était subi
+
+Le dernier publié passait en tête, sans recours. Chez tous les architectes, cet ordre est
+**choisi** : c'est la première chose qu'on règle sur un portfolio. Dans « Le site public »,
+la liste numérotée des projets publiés, avec monter/descendre et « Remettre par date de
+publication ». L'ordre vit dans le manifeste : le changer ne renvoie aucune photo, ne coûte
+rien en stockage, et part avec le bouton « Mettre à jour le site » déjà en place.
+
+Il est appliqué **dans `writeManifest` et nulle part ailleurs** — publication, republication,
+retour arrière, dépublication, mise à jour des infos passent tous par là. Un projet jamais
+classé reste en tête, du plus récent au plus ancien : rien ne bouge tant qu'on n'y touche
+pas, et un projet fraîchement publié ouvre toujours la page.
+
+### 3. Un projet fantôme, trouvé en écrivant les contrôles de l'ordre
+
+Le manifeste du banc d'essai contenait une fiche que le CRM ne connaissait plus. Cause :
+**supprimer une réalisation publiée ne la retirait pas du site**. Elle disparaissait de
+l'appli avec ses photos, mais sa fiche restait dans le manifeste et ses images dans le seau
+public. Le projet restait donc en ligne **définitivement** — la réalisation n'existant plus,
+plus aucun bouton ne permettait de l'enlever, « Retirer du site » vivant sur la fiche qui
+venait de disparaître. Ses images comptaient en plus toujours dans le quota d'un gigaoctet.
+
+Le retrait en ligne passe maintenant avant la suppression locale, et s'il échoue **rien
+n'est effacé**. Au passage, dans le retrait : le manifeste est écrit avant que les images
+soient supprimées. L'ordre inverse laissait, si l'écriture échouait, un projet toujours
+annoncé avec des images qui n'existent plus — des cadres vides sur la page publique.
+
+C'est la même règle que les trois bugs de la veille, avec un ajout : *ce qui reste visible
+compte plus que ce qui reste stocké.*
+
+**Vérification** : 478 contrôles CRM (15 nouveaux), 109 site (10 nouveaux, faits avec le vrai
+bouton précédent du navigateur), 20 bout en bout, 7 sections, 20 langues — tous verts.
+
+**Ce que Raphaël peut refuser sans fouiller** : l'ordre des projets est un réglage en plus
+dans « Le site public » ; s'il le juge inutile, supprimer le bloc `#site-ordre` et l'appel à
+`ordonnerManifeste` suffit. Les deux autres sont des corrections de défauts, pas des ajouts.
+
+**Ce qui demande une manipulation de sa part** : toujours rien de nouveau — les trois
+livraisons fonctionnent avec les données déjà en place. Reste la liste d'hier (remplir la
+fiche de « Bureau Sébastien », choisir un thème, écrire l'« À propos », puis republier).
