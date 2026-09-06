@@ -5832,11 +5832,16 @@ function buildRealisationLiens(r){
 
 /* Missions courantes, proposées sans être imposées : le champ reste libre. */
 const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoration','Agencement sur mesure','Suivi de chantier','Conseil et plans'];
-/* Type de lieu — c'est ce qui sert de filtre au visiteur du site (« Appartement »,
-   « Bureau »…). Champ libre : la liste ci-dessous n'est qu'une proposition, et tout ce qui
-   a déjà été tapé ailleurs vient s'y ajouter. Pas de panneau de réglages à ouvrir pour
-   inventer une catégorie de plus. */
-const RZ_CATS=['Appartement','Maison','Bureau','Commerce','Restaurant','Hôtel','Espace commun'];
+/* Type de lieu — c'est ce qui sert de filtre au visiteur du site. Champ libre : la liste
+   ci-dessous n'est qu'une proposition, et tout ce qui a déjà été tapé ailleurs vient s'y
+   ajouter. Pas de panneau de réglages à ouvrir pour inventer une catégorie de plus.
+
+   Les quatre premières sont celles que Raphaël a demandées mot pour mot sur la fiche
+   d'identité du site (« commercial, habitation, bureaux, réalisation sur mesures ») : ce
+   sont les sections qu'il veut voir sur le site, elles doivent donc être proposées en
+   premier. Les suivantes restent disponibles pour un cas particulier. */
+const RZ_CATS=['Commercial','Habitation','Bureaux','Réalisation sur mesure',
+  'Restaurant','Hôtel','Espace commun'];
 function rzCatsConnues(){
   const vues=realisations.map(x=>(x.categorie||'').trim()).filter(Boolean);
   return RZ_CATS.concat(vues.filter(c=>RZ_CATS.indexOf(c)<0))

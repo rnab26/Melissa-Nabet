@@ -3124,8 +3124,13 @@ const categorie = await page.evaluate(async () => {
   return { valeur: r.categorie, propositions, reproposee, surCarte };
 });
 check('Catégorie : le champ existe et accepte une valeur hors liste', categorie.valeur === 'Loft', JSON.stringify(categorie).slice(0, 80));
-check('Catégorie : des types de lieu sont proposés',
-  categorie.propositions && categorie.propositions.includes('Appartement') && categorie.propositions.includes('Bureau'),
+/* Les quatre premières propositions sont celles que Raphaël a demandées mot pour mot sur
+   la fiche d'identité du site : ce sont les sections qu'il veut voir en ligne. Le champ
+   reste libre, la vérification suivante s'en assure. */
+check('Catégorie : ses quatre sections sont proposées en premier',
+  categorie.propositions
+  && ['Commercial', 'Habitation', 'Bureaux', 'Réalisation sur mesure']
+       .every((c, i) => categorie.propositions[i] === c),
   (categorie.propositions || []).join(', '));
 check('Catégorie : une catégorie inventée est proposée la fois suivante', categorie.reproposee === true);
 check('Catégorie : visible sur la carte de la liste', /Loft/.test(categorie.surCarte || ''), (categorie.surCarte || '').slice(0, 70));

@@ -456,6 +456,36 @@ const apresCharge = await page.evaluate(() => ({
 check('Cartes d’attente effacées une fois les réalisations affichées',
   apresCharge.squelettes === 0 && !apresCharge.occupe && apresCharge.projets > 0, JSON.stringify(apresCharge));
 
+// --- La direction « Index » telle qu'elle arrivera vraiment : portée par le manifeste,
+//     et regardée sur un écran de téléphone. C'est le chemin réel, pas un thème injecté.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto('http://127.0.0.1:8902/index-theme.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(800);
+const idx390 = await page.evaluate(() => {
+  const c = [...document.querySelectorAll('.project:not(.squelette)')];
+  const v = c[0].querySelector('.project-img').getBoundingClientRect();
+  const n = c[0].querySelector('.project-name').getBoundingClientRect();
+  return {
+    theme: document.documentElement.getAttribute('data-theme'),
+    cartes: c.length,
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    vignette: Math.round(v.width),
+    nomADroite: n.left > v.right - 1,
+    images: [...document.querySelectorAll('.project-img img')].filter(i => i.naturalWidth > 0).length,
+    invisibles: [...document.querySelectorAll('.fondu')].filter(e => getComputedStyle(e).opacity === '0').length,
+    meta: (c[2].querySelector('.project-meta') || {}).textContent || '',
+  };
+});
+check('« Index » posé par le manifeste, pas à la main', idx390.theme === 'index', String(idx390.theme));
+check('« Index » sur un écran de 390 px : sommaire lisible, aucun débordement',
+  idx390.debord <= 1 && idx390.vignette <= 80 && idx390.nomADroite && idx390.cartes === 3,
+  JSON.stringify(idx390));
+check('« Index » : toutes les vignettes chargent, rien ne reste invisible',
+  idx390.images === 3 && idx390.invisibles === 0, JSON.stringify(idx390));
+check('Un seul cliché s’écrit « 1 photo », pas « 1 photos »',
+  / 1 photo(?!s)/.test(idx390.meta), idx390.meta);
+await page.setViewportSize({ width: 1280, height: 900 });
+
 // --- Les trois langues -----------------------------------------------------------------
 // L'interface se traduit ; les textes de Melissa, non traduits, retombent sur le français.
 await page.setViewportSize({ width: 1280, height: 900 });
