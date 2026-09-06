@@ -6002,12 +6002,30 @@ function newRealisation(){
   _rzOpenId=r.id;renderRealisations();
   setTimeout(()=>{const i=document.querySelector('#rz-body [data-f="title"]');if(i)i.focus();},60);
 }
+/* Supprimer une réalisation PUBLIÉE ne la retirait pas du site : la fiche restait dans le
+   manifeste et ses images dans le seau public. Le projet restait donc en ligne pour
+   toujours — et comme la réalisation n'existait plus dans l'appli, plus aucun bouton ne
+   permettait de l'enlever. Ses images continuaient en plus à compter dans le quota sans
+   que rien ne les référence. Le retrait en ligne passe donc AVANT, et s'il échoue on
+   n'efface rien du tout : mieux vaut une suppression à refaire qu'un projet fantôme. */
 function delRealisation(id){
   const r=findRealisation(id);if(!r)return;
-  askConfirm('Supprimer « '+(r.title||'cette réalisation')+' » et ses '+(r.photos||[]).length+' photo(s) ? C’est définitif.',async()=>{
+  const enLigne=!!r.published;
+  askConfirm('Supprimer « '+(r.title||'cette réalisation')+' » et ses '+(r.photos||[]).length+' photo(s) ?'
+    +(enLigne?' Elle sera d’abord retirée du site public.':'')+' C’est définitif.',async()=>{
+    if(enLigne){
+      try{await retirerDuSite(r);}
+      catch(e){
+        console.error('suppression réalisation',e);
+        saveRealisations();renderRealisations();
+        toast('Retrait du site impossible : '+((e&&e.message)||'erreur')+'. Rien n’a été supprimé.');
+        return;
+      }
+    }
     for(const p of (r.photos||[])){for(const k of photoAllKeys(p)){await photoStore.del(k);}}
     realisations=realisations.filter(x=>x.id!==id);
-    _rzOpenId=null;storageInvalidate();saveRealisations();renderRealisations();toast('Réalisation supprimée');
+    _rzOpenId=null;storageInvalidate();saveRealisations();renderRealisations();
+    toast(enLigne?'Réalisation supprimée et retirée du site':'Réalisation supprimée');
   });
 }
 function delPhoto(r,pid){
@@ -9090,26 +9108,41 @@ async function rollbackRealisation(r){
   }
 }
 
+/* Le retrait EN LIGNE, sans confirmation ni rendu : c'est la brique. Elle sert au bouton
+   « Retirer du site » et à la suppression d'une réalisation — qui, elle, laissait le projet
+   en ligne pour toujours. Elle laisse remonter ses erreurs : l'appelant décide quoi faire,
+   et surtout ne doit rien effacer localement quand elle échoue. */
+async function retirerDuSite(r){
+  /* LE MANIFESTE D'ABORD, les fichiers ensuite. L'inverse — effacer les images puis écrire
+     le manifeste — laissait, si l'écriture échouait, un projet toujours annoncé sur le site
+     avec des images qui n'existent plus : des cadres vides sur la page publique. Dans cet
+     ordre-ci, le pire cas est un fichier orphelin dans le seau, invisible du visiteur. */
+  const man=await readManifest();
+  man.realisations=man.realisations.filter(x=>x.id!==r.id);
+  man.updatedAt=new Date().toISOString();
+  await writeManifest(man);
+  /* Le projet est déjà hors ligne à cet instant : un ménage qui échoue ne doit plus faire
+     échouer le retrait, sinon on rejouerait tout pour rien. */
+  try{
+    const folder=ownerId+'/'+r.id;
+    const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+    if(existing&&existing.length)await sb.storage.from(GALLERY_BUCKET).remove(existing.map(f=>folder+'/'+f.name));
+  }catch(e){console.error('ménage des images retirées',e);}
+  /* Plus rien en ligne : garder l'image d'aperçu ferait afficher, dans un lien partagé,
+     la photo d'un chantier qu'on vient justement de retirer du site. */
+  if(!man.realisations.length){try{await sb.storage.from(GALLERY_BUCKET).remove([shareImagePath()]);}catch(e){}}
+  /* Les fichiers viennent d'être effacés : garder `pub`/`pubPrev` ferait croire qu'on
+     peut revenir à une publication dont il ne reste rien. */
+  r.published=false;delete r.publishedAt;delete r.pub;delete r.pubPrev;r.updatedAt=Date.now();storageInvalidate();
+  (r.photos||[]).forEach(p=>{delete p.publishedAt;delete p.pub;photoLog(p,'depublie','');});
+}
 async function unpublishRealisation(r){
   askConfirm('Retirer « '+(r.title||'cette réalisation')+' » du site public ? Les photos restent dans l’appli.',async()=>{
     try{
-      const folder=ownerId+'/'+r.id;
-      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
-      if(existing&&existing.length)await sb.storage.from(GALLERY_BUCKET).remove(existing.map(f=>folder+'/'+f.name));
-      const man=await readManifest();
-      man.realisations=man.realisations.filter(x=>x.id!==r.id);
-      man.updatedAt=new Date().toISOString();
-      await writeManifest(man);
-      /* Plus rien en ligne : garder l'image d'aperçu ferait afficher, dans un lien partagé,
-         la photo d'un chantier qu'on vient justement de retirer du site. */
-      if(!man.realisations.length){try{await sb.storage.from(GALLERY_BUCKET).remove([shareImagePath()]);}catch(e){}}
-      /* Les fichiers viennent d'être effacés : garder `pub`/`pubPrev` ferait croire qu'on
-         peut revenir à une publication dont il ne reste rien. */
-      r.published=false;delete r.publishedAt;delete r.pub;delete r.pubPrev;r.updatedAt=Date.now();storageInvalidate();
-      (r.photos||[]).forEach(p=>{delete p.publishedAt;delete p.pub;photoLog(p,'depublie','');});
+      await retirerDuSite(r);
       saveRealisations();renderRealisations();
       toast('Retiré du site');
-    }catch(e){toast('Échec du retrait : '+((e&&e.message)||'erreur'));}
+    }catch(e){console.error('retrait du site',e);toast('Échec du retrait : '+((e&&e.message)||'erreur'));}
   });
 }
 

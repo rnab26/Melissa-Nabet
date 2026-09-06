@@ -4138,12 +4138,57 @@ for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
 await page.evaluate(() => showView('realisations'));
 check('Navigation entre toutes les vues sans erreur', true);
 
+/* --- SUPPRIMER UNE RÉALISATION PUBLIÉE ------------------------------------------------
+   Elle restait EN LIGNE : la fiche demeurait dans le manifeste et ses images dans le seau
+   public. Comme la réalisation n'existait plus dans l'appli, plus rien ne permettait de
+   l'enlever — le projet fantôme était définitif, et ses images comptaient toujours dans le
+   quota. Ces contrôles ferment ce trou, échec du retrait compris. */
+const supprPub = await page.evaluate(async () => {
+  const r = (realisations || []).filter(x => x.published)[0];
+  if (!r) return { pasDeCas: true };
+  const cle = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const avant = JSON.parse(await window.__files.get(cle).text()).realisations.map(f => f.id);
+
+  // 1) le retrait en ligne échoue : rien ne doit être supprimé localement
+  const vrai = sb.storage.from;
+  sb.storage.from = (b) => Object.assign({}, vrai(b), { upload: async () => ({ error: { message: 'réseau indisponible' } }) });
+  delRealisation(r.id);
+  document.getElementById('confirm-yes').click();
+  await new Promise(x => setTimeout(x, 500));
+  sb.storage.from = vrai;
+  const apresEchec = {
+    existeEncore: !!realisations.find(x => x.id === r.id),
+    enLigne: JSON.parse(await window.__files.get(cle).text()).realisations.some(f => f.id === r.id),
+    message: (document.getElementById('toast') || {}).textContent || '',
+  };
+
+  // 2) le retrait réussit : la fiche quitte le manifeste ET la réalisation disparaît
+  const texteConfirm = (() => { delRealisation(r.id);
+    const t = (document.querySelector('#modal .msub') || {}).textContent || '';
+    document.getElementById('confirm-yes').click(); return t; })();
+  await new Promise(x => setTimeout(x, 700));
+  const apres = JSON.parse(await window.__files.get(cle).text()).realisations.map(f => f.id);
+  return { pasDeCas: false, id: r.id, avant, apres, apresEchec, texteConfirm,
+           existeEncore: !!realisations.find(x => x.id === r.id) };
+});
+check('Suppression : le cas existe dans le banc (une réalisation publiée)', supprPub.pasDeCas === false);
+check('Suppression : la confirmation prévient que le projet sera retiré du site',
+  /retirée du site public/.test(supprPub.texteConfirm || ''), supprPub.texteConfirm);
+check('Suppression : si le retrait du site échoue, RIEN n’est supprimé',
+  supprPub.apresEchec.existeEncore && supprPub.apresEchec.enLigne, JSON.stringify(supprPub.apresEchec));
+check('Suppression : et l’échec est dit, avec le fait que rien n’a bougé',
+  /Rien n’a été supprimé/.test(supprPub.apresEchec.message), supprPub.apresEchec.message);
+check('Suppression : une réalisation publiée quitte AUSSI le site',
+  supprPub.avant.indexOf(supprPub.id) >= 0 && supprPub.apres.indexOf(supprPub.id) < 0,
+  supprPub.avant.join(',') + ' → ' + supprPub.apres.join(','));
+check('Suppression : et elle disparaît bien de l’appli', supprPub.existeEncore === false);
+
 // Des pannes sont provoquées VOLONTAIREMENT plus haut — manifeste illisible, retouche
 // refusée par le fournisseur, envoi de fichier coupé, fichiers d'import illisibles (HEIC
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible|suppression réalisation \{message: réseau indisponible\}/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
