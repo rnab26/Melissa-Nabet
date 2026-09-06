@@ -1518,6 +1518,33 @@ const replKo = await page.evaluate(async () => {
   return { why, intact: (await photoStore.get(fullKey(p.id))).size === octets };
 });
 check('Remplacer : un fichier refusé dit pourquoi', /ce n’est pas une image/.test(replKo.why), replKo.why);
+
+// Deux fichiers à échanger, aucune transaction possible : si le second envoi échoue, la
+// photo doit revenir ENTIÈRE à son état d'avant, pas rester moitié neuve moitié ancienne.
+const replMoitie = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId), p = r.photos[0];
+  const avantFull = (await photoStore.get(fullKey(p.id))).size;
+  const avantThumb = (await photoStore.get(thumbKey(p.id))).size;
+  const largeur = p.w;
+  const vrai = photoStore.save.bind(photoStore);
+  let n = 0;
+  photoStore.save = async (cle, blob) => {
+    // le premier envoi passe (la pleine définition), le second échoue (la vignette)
+    if (cle.startsWith('rt_') && ++n === 1) throw new Error('réseau indisponible');
+    return vrai(cle, blob);
+  };
+  const why = await replaceOnePhoto(r, p, await window.__mkImg('autre.jpg', 500, 400, '#123456'));
+  photoStore.save = vrai;
+  return { why, full: (await photoStore.get(fullKey(p.id))).size, thumb: (await photoStore.get(thumbKey(p.id))).size,
+           avantFull, avantThumb, largeur, largeurApres: p.w };
+});
+check('Remplacer : un envoi qui échoue à mi-chemin remet la photo d’avant',
+  !!replMoitie.why && replMoitie.full === replMoitie.avantFull && replMoitie.thumb === replMoitie.avantThumb
+  && replMoitie.largeurApres === replMoitie.largeur,
+  JSON.stringify(replMoitie).slice(0, 150));
+check('Remplacer : et le message dit que rien n’a bougé, sans laisser craindre un demi-échange',
+  /la photo d’avant est toujours en place/.test(replMoitie.why) && /connexion perdue/.test(replMoitie.why),
+  replMoitie.why);
 check('Remplacer : un refus ne touche pas la photo en place', replKo.intact);
 
 // --- La légende part sur le site, le titre interne n'en sort pas
@@ -3475,7 +3502,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

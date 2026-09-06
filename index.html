@@ -4843,7 +4843,7 @@ function photoFileRefus(file){
    message doit dire quoi faire, pas seulement que ça a raté. */
 function photoFileRaison(file,e){
   const msg=(e&&e.message)||'';
-  if(/hors ligne/i.test(msg))return 'envoi interrompu : connexion perdue. Réessayez une fois reconnectée.';
+  if(/hors ligne|réseau|network|fetch|failed to fetch/i.test(msg))return 'envoi interrompu : connexion perdue ('+msg+'). Réessayez une fois reconnectée.';
   if(/hei[cf]/i.test((file.type||'')+' '+(file.name||'')))
     return 'format HEIC : le navigateur ne sait pas l’ouvrir. Sur iPhone : Réglages → Appareil photo → Formats → « Le plus compatible », ou exportez la photo en JPEG.';
   return 'fichier illisible'+(msg?' ('+msg+')':'');
@@ -4955,8 +4955,20 @@ async function replaceOnePhoto(r,p,file){
   if(refus)return refus;
   try{
     const d=await decodePhotoFile(file);
-    await photoStore.save(fullKey(p.id),d.fb);
-    await photoStore.save(thumbKey(p.id),d.tb);
+    /* Deux fichiers à échanger (la pleine définition et la vignette) et aucune transaction
+       possible côté stockage : si le second envoi échoue, on se retrouverait avec la
+       NOUVELLE photo en grand et l'ANCIENNE en vignette — un état que rien n'affiche comme
+       anormal. On garde donc de quoi remettre en place ce qui a été écrasé. */
+    const ancienFull=await photoStore.get(fullKey(p.id));
+    const ancienThumb=await photoStore.get(thumbKey(p.id));
+    try{
+      await photoStore.save(fullKey(p.id),d.fb);
+      await photoStore.save(thumbKey(p.id),d.tb);
+    }catch(e){
+      try{if(ancienFull)await photoStore.save(fullKey(p.id),ancienFull);}catch(err){}
+      try{if(ancienThumb)await photoStore.save(thumbKey(p.id),ancienThumb);}catch(err){}
+      throw e;
+    }
     _imgCache.delete(fullKey(p.id));_imgCache.delete(thumbKey(p.id));
     /* La texture WebGL est mise en cache sous une clé dérivée de l'id de la photo, qui ne
        change pas : sans cette remise à zéro, l'écran continuerait d'afficher l'ancienne
@@ -4976,7 +4988,12 @@ async function replaceOnePhoto(r,p,file){
     p.edits={orig:blankEdit()};
     photoTouch(p,'remplacee',file.name||'');
     return '';
-  }catch(e){console.error('remplacement photo',e);return photoFileRaison(file,e);}
+  }catch(e){
+    console.error('remplacement photo',e);
+    /* On sait ici que rien n'a bougé (les fichiers écrasés ont été remis) : autant le dire,
+       plutôt que de laisser craindre une photo à moitié remplacée. */
+    return 'remplacement annulé, la photo d’avant est toujours en place — '+photoFileRaison(file,e);
+  }
 }
 function rzReplacePhoto(r,p){
   const inp=document.createElement('input');
