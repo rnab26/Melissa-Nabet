@@ -82,6 +82,20 @@ const manifest = {
   realisations: REALISATIONS.map(r => ({ ...r, publishedAt: new Date().toISOString() })),
 };
 
+/* Le manifeste RÉELLEMENT en ligne aujourd'hui est à l'ancien format : sous-titre en
+   chaîne de caractères, aucune rubrique, aucune section. La page doit le lire sans broncher
+   jusqu'à la première « Mise à jour du site » — sinon on casse le site en production. */
+const ancien = local.replace("var OWNER = 'u';", "var OWNER = 'v';");
+mkdirSync(join(DIR, 'galerie/v/r1'), { recursive: true });
+writeFileSync(join(DIR, 'ancien.html'), ancien);
+writeFileSync(join(DIR, 'galerie/v/manifest.json'), JSON.stringify({
+  version: 1, updatedAt: new Date().toISOString(),
+  site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur' },
+  realisations: [{ id: 'r1', title: 'Bureau Sébastien', date: '2026',
+    publishedAt: new Date().toISOString(),
+    photos: [{ full: 'v/r1/p0.jpg', thumb: 'v/r1/t0.jpg', w: 1600, h: 1067, cover: true }] }],
+}, null, 1));
+
 REALISATIONS.forEach(r => mkdirSync(join(DIR, 'galerie/u/' + r.id), { recursive: true }));
 writeFileSync(join(DIR, 'index.html'), local);
 writeFileSync(join(DIR, 'vide.html'), vide);

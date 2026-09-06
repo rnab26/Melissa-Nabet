@@ -257,6 +257,27 @@ await page.waitForTimeout(700);
 await page.screenshot({ path: '/tmp/site-hebreu.png' });
 await page.evaluate(() => { try { localStorage.removeItem('mn-lang'); } catch (e) {} });
 
+// Manifeste à l'ANCIEN format — c'est l'état réel du site en ligne tant que « Mettre le
+// site à jour » n'a pas été cliqué une première fois. Il ne doit rien casser.
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(800);
+const ancien = await page.evaluate(() => ({
+  titre: (document.getElementById('site-name').textContent || '').trim(),
+  sous: (document.getElementById('site-tagline').textContent || '').trim(),
+  projets: document.querySelectorAll('.project').length,
+  rubriques: [...document.querySelectorAll('.cat-name')].map(c => c.textContent.trim()),
+  nav: [...document.querySelectorAll('#nav a')].map(a => a.textContent.trim()),
+  langues: document.querySelectorAll('#langs button').length,
+}));
+check('Ancien manifeste : le sous-titre en simple texte est repris',
+  ancien.sous === 'Architecture d’intérieur', ancien.sous);
+check('Ancien manifeste : la réalisation reste visible, sans rubrique',
+  ancien.projets === 1 && ancien.rubriques.length === 0, JSON.stringify(ancien));
+check('Ancien manifeste : aucune section vide, aucun sélecteur de langue inutile',
+  ancien.nav.join('') === 'Réalisations' && ancien.langues === 1,
+  ancien.nav.join(' · ') + ' / ' + ancien.langues + ' langue(s)');
+
 // État vide : rien de publié encore, la page ne doit pas avoir l'air cassée
 await page.goto('http://127.0.0.1:8902/vide.html', { waitUntil: 'networkidle' });
 await page.waitForTimeout(900);
