@@ -142,6 +142,41 @@ Tout au navigateur (Chromium), rien de déduit :
 - Le manifeste reste **rétrocompatible** : `subtitle` et `apropos` sont le français, `i18n`
   est un supplément. Déplacer le français dans `i18n.fr` casserait le site en ligne.
 
+### Vérifié après coup : « Index » s'affiche-t-il vraiment ? (oui, mais il faut son clic)
+
+Personne n'avait regardé. C'est fait, et par le chemin réel — un manifeste portant
+`theme: "index"`, pas un thème posé à la main par le test : **le sommaire s'affiche
+correctement, y compris sur un écran de 390 px** (petite vignette de 58 px à gauche, nom à
+sa droite, aucun débordement, aucune image restée invisible). Capture `/tmp/index-390.png`.
+
+**MAIS le site en ligne n'est PAS encore en « Index ».** Le manifeste publié aujourd'hui ne
+porte aucun `theme` — la page retombe donc sur `atelier`, l'habillage par défaut. Vérifié
+en lisant le manifeste public :
+`{title, subtitle, email, tel, instagram}` et une seule réalisation, sans catégorie.
+
+> **Une manipulation de Raphaël, et une seule :** CRM → Réalisations → **⚙ Le site public**
+> → cliquer **Index** dans « Allure du site » → **« Mettre à jour le site »**. Aucune session
+> ne peut le faire à sa place : écrire le manifeste demande sa clé Supabase, qui reste dans
+> son navigateur. Le même clic met aussi en ligne les langues et le journal.
+
+Deux détails relevés en regardant l'écran :
+
+- **« 1 photos »** s'affichait sur une réalisation qui n'a qu'un cliché. Corrigé (`nbPhotos`),
+  dans les trois langues.
+- Sur un projet qui porte à la fois un lieu et une mission, la ligne d'information **passe à
+  la ligne** en 390 px (« 2026 · TEL AVIV · RÉNOVATION / COMPLÈTE »). Ça tient, rien n'est
+  coupé, mais c'est serré. Pas touché : l'habillage appartient au chantier voisin, et c'est
+  une question de goût, pas un défaut.
+
+### Ses quatre sections, proposées d'emblée
+
+Ses mots : « commercial, habitation, bureaux, réalisation sur mesures ». La catégorie d'une
+réalisation est un **champ libre** avec des suggestions, et le site construit ses filtres à
+partir de ce qui est publié — la modularité qu'il demande est donc déjà là, sans code à
+toucher. Ce qui manquait : ses quatre mots n'étaient nulle part. Ils sont maintenant **les
+quatre premières suggestions**, avant les autres. Le champ reste libre, et tout ce qui a
+déjà été tapé continue de s'y ajouter.
+
 ### Ce qui reste, et qu'il faut dire à Raphaël
 
 1. **Une seule réalisation est réellement en ligne.** Aucune identité ne donnera l'effet d'un

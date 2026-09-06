@@ -32,6 +32,9 @@ const panne = local.replace("var OWNER = 'u';", "var OWNER = 'pas-de-manifeste';
 /* Et le manifeste RÉELLEMENT en ligne aujourd'hui, qui ne connaît ni langues ni journal :
    la page doit le lire sans broncher, sinon on casse le site en production. */
 const ancien = local.replace("var OWNER = 'u';", "var OWNER = 'v';");
+/* La direction « Index » telle qu'elle ARRIVERA vraiment : portée par le manifeste, pas
+   posée à la main par le test. C'est la seule façon d'éprouver le chemin réel. */
+const enIndex = local.replace("var OWNER = 'u';", "var OWNER = 'i';");
 
 mkdirSync(join(DIR, 'galerie/u/r1'), { recursive: true });
 mkdirSync(join(DIR, 'galerie/rien-publie'), { recursive: true });
@@ -93,6 +96,28 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
     publishedAt: new Date().toISOString(),
     photos: [photo(2, '')],
   }],
+}, null, 1));
+
+mkdirSync(join(DIR, 'galerie/i'), { recursive: true });
+writeFileSync(join(DIR, 'index-theme.html'), enIndex);
+/* Mêmes photos que le banc principal : c'est l'habillage qu'on éprouve, pas les images. */
+writeFileSync(join(DIR, 'galerie/i/manifest.json'), JSON.stringify({
+  version: 1, updatedAt: new Date().toISOString(),
+  site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur',
+          theme: 'index', mouvement: 'discret',
+          apropos: 'Texte de présentation du banc d’essai.', email: 'essai@example.com' },
+  realisations: [
+    { id: 'r1', title: 'Bureau Sébastien', date: '2026', lieu: 'Tel Aviv',
+      mission: 'Rénovation complète', categorie: 'Bureau',
+      publishedAt: new Date().toISOString(),
+      photos: [{ full: 'u/r1/p0.jpg', thumb: 'u/r1/t0.jpg', w: 1600, h: 1067, cover: true }] },
+    { id: 'r2', title: 'Duplex Ben Yehuda', date: '2025', lieu: 'Tel Aviv', categorie: 'Appartement',
+      publishedAt: new Date().toISOString(),
+      photos: [{ full: 'u/r1/p1.jpg', thumb: 'u/r1/t1.jpg', w: 1600, h: 1067, cover: true }] },
+    { id: 'r3', title: 'Trois pièces Florentin', date: '2025', categorie: 'Appartement',
+      publishedAt: new Date().toISOString(),
+      photos: [{ full: 'u/r1/p2.jpg', thumb: 'u/r1/t2.jpg', w: 1067, h: 1600, cover: true }] },
+  ],
 }, null, 1));
 
 mkdirSync(join(DIR, 'galerie/v/r1'), { recursive: true });

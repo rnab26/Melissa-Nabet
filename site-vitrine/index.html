@@ -438,6 +438,8 @@ var MOTS = {
    exactement l'état dans lequel le site est livré, tant que les traductions manquent. */
 var langue = 'fr';
 function mot(k) { return (MOTS[langue] && MOTS[langue][k]) || MOTS.fr[k] || ''; }
+/* « 1 photos » sur une carte de portfolio, ça se remarque. */
+function nbPhotos(n) { return n + ' ' + mot(n > 1 ? 'photos' : 'photo'); }
 
 /* Un texte de Melissa, dans la langue courante — à défaut, le français d'origine.
    `src` permet de le demander sur un objet précis plutôt que sur l'état global : une
@@ -604,7 +606,7 @@ function renderIndex() {
     // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
     // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
     var infos = [p.date, p.lieu, p.mission].filter(Boolean);
-    if (infos.length < 2) infos.push(p.photos.length + ' ' + mot('photos'));
+    if (infos.length < 2) infos.push(nbPhotos(p.photos.length));
     b.querySelector('.project-meta').textContent = infos.join(' · ');
     b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
     host.appendChild(b);
@@ -641,7 +643,7 @@ function openProject(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
   el('d-meta').textContent = [current.date, current.categorie, current.lieu, current.surface,
-    current.mission, current.photos.length + ' ' + mot('photos')].filter(Boolean).join(' · ');
+    current.mission, nbPhotos(current.photos.length)].filter(Boolean).join(' · ');
   el('d-text').textContent = current.texte || '';
   el('d-text').hidden = !current.texte;
   var host = el('d-shots');
