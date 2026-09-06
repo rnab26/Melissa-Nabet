@@ -89,16 +89,47 @@ const publication = await crm.evaluate(async () => {
   saveRealisations();
   await publishRealisation(r);
 
-  const sortie = { fichiers: {}, manifest: null };
-  for (const [chemin, blob] of files) {
-    if (chemin.endsWith('manifest.json')) { sortie.manifest = JSON.parse(await blob.text()); continue; }
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    let brut = '';
-    for (let i = 0; i < buf.length; i += 8192) brut += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
-    sortie.fichiers[chemin] = btoa(brut);
-  }
+  const geler = async () => {
+    const etat = { fichiers: {}, manifest: null };
+    for (const [chemin, blob] of files) {
+      if (chemin.endsWith('manifest.json')) { etat.manifest = JSON.parse(await blob.text()); continue; }
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let brut = '';
+      for (let i = 0; i < buf.length; i += 8192) brut += String.fromCharCode.apply(null, buf.subarray(i, i + 8192));
+      etat.fichiers[chemin] = btoa(brut);
+    }
+    return etat;
+  };
+  const sortie = await geler();
   sortie.erreur = _pubLastError;
   sortie.publiee = r.published;
+
+  // --- Puis on RETOUCHE la première photo, et on republie.
+  // La retouche est posée exactement comme le fait `iaStoreResult`, mais sans appeler le
+  // modèle : aucun crédit n'est dépensé. La couleur est franchement différente — c'est ce
+  // qu'on ira mesurer sur le site public.
+  const p = r.photos[0];
+  const vid = 'vretouche', key = 'ra_' + p.id + '_' + vid;
+  const retouchee = await mk('retouche.jpg', 1200, 800, '#1e6fd9');
+  await photoStore.save(key, retouchee);
+  if (!p.edits) p.edits = {};
+  p.edits[photoActiveId(p)] = JSON.parse(JSON.stringify(p.edit || blankEdit()));
+  photoVersions(p).push({ id: vid, key, model: 'test', prompt: 'essai', params: {}, from: 'orig', createdAt: Date.now(), label: 'Retouche 1' });
+  p.edits[vid] = blankEdit(); p.active = vid; p.edit = blankEdit();
+  photoTouch(p, 'ia', 'Retouche 1');
+
+  const plan = realisationPublishPlan(r);
+  const avantChemin = p.pub.full;
+  await publishRealisation(r);
+  const apres = await geler();
+  apres.erreur = _pubLastError;
+  sortie.retouche = {
+    avantChemin, apresChemin: p.pub.full, vlabel: p.pub.vlabel,
+    planChange: plan.change, pourquoi: (plan.photos.find(x => x.p.id === p.id) || {}).pourquoi || '',
+    etat2: apres,
+  };
+  // et le retour en arrière, une fois le site à jour
+  sortie.retouche.peutRevenir = !!(r.pubPrev && r.pubPrev.fiche);
   return sortie;
 });
 await crm.close();
@@ -107,15 +138,20 @@ check('Le CRM publie sans erreur', publication.publiee === true && !publication.
 check('Le CRM a bien écrit un manifeste', !!publication.manifest, publication.manifest ? Object.keys(publication.manifest).join(',') : 'aucun');
 
 // ---------------------------------------------------------------- 2. on sert CE stockage
+const servir = (etat) => {
+  rmSync(join(DIR, 'galerie'), { recursive: true, force: true });
+  mkdirSync(join(DIR, 'galerie'), { recursive: true });
+  for (const [chemin, b64] of Object.entries(etat.fichiers)) {
+    const dest = join(DIR, 'galerie', chemin);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, Buffer.from(b64, 'base64'));
+  }
+  mkdirSync(join(DIR, 'galerie', 'u'), { recursive: true });
+  writeFileSync(join(DIR, 'galerie', 'u', 'manifest.json'), JSON.stringify(etat.manifest));
+};
 rmSync(DIR, { recursive: true, force: true });
-mkdirSync(join(DIR, 'galerie'), { recursive: true });
-for (const [chemin, b64] of Object.entries(publication.fichiers)) {
-  const dest = join(DIR, 'galerie', chemin);
-  mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, Buffer.from(b64, 'base64'));
-}
-mkdirSync(join(DIR, 'galerie', 'u'), { recursive: true });
-writeFileSync(join(DIR, 'galerie', 'u', 'manifest.json'), JSON.stringify(publication.manifest));
+mkdirSync(DIR, { recursive: true });
+servir(publication);
 
 // la page publique, avec pour seule modification l'adresse du stockage
 const source = readFileSync(join(RACINE, 'site-vitrine/index.html'), 'utf8');
@@ -176,6 +212,72 @@ const bruit = e => /favicon|net::ERR|Failed to load resource|fonts\.googleapis|f
 check('Aucune erreur JavaScript des deux côtés',
   erreursCrm.filter(e => !bruit(e)).length === 0 && erreursSite.filter(e => !bruit(e)).length === 0,
   [...erreursCrm, ...erreursSite].filter(e => !bruit(e)).slice(0, 2).join(' | '));
+
+// ================================================================================
+//  LA QUESTION QUI A FAIT PERDRE DES HEURES : je retouche, je republie — le visiteur
+//  voit-il la retouche, ou l'ancienne photo ?
+//  On ne le déduit pas : on MESURE la couleur des pixels réellement affichés par la page
+//  publique. L'originale est un gris chaud (#b9ada0), la retouche un bleu franc (#1e6fd9).
+// ================================================================================
+const teinteDe = async (pg) => pg.evaluate(async () => {
+  const im = [...document.querySelectorAll('.shot img')].find(i => i.naturalWidth > 0);
+  if (!im) return null;
+  const cv = document.createElement('canvas');
+  cv.width = 40; cv.height = 30;
+  cv.getContext('2d').drawImage(im, 0, 0, 40, 30);
+  const d = cv.getContext('2d').getImageData(0, 0, 40, 30).data;
+  let r = 0, g = 0, b = 0;
+  for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+  const n = d.length / 4;
+  return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n), src: im.getAttribute('src') };
+});
+const ouvrirProjet = async (pg) => {
+  await pg.goto('http://127.0.0.1:' + PORT + '/index.html', { waitUntil: 'networkidle' });
+  await pg.waitForTimeout(700);
+  await pg.locator('.project').first().click();
+  await pg.waitForTimeout(900);
+};
+
+check('La retouche change l’ADRESSE publique de la photo',
+  publication.retouche.avantChemin !== publication.retouche.apresChemin,
+  publication.retouche.avantChemin + ' → ' + publication.retouche.apresChemin);
+check('Le CRM annonce la retouche avant de publier, en la nommant',
+  publication.retouche.planChange === 1 && /Retouche 1/.test(publication.retouche.pourquoi),
+  publication.retouche.pourquoi);
+
+// (a) le visiteur qui avait DÉJÀ ouvert le site avant la republication — c'est lui que le
+//     cache pénalisait, et c'est le cas que Raphaël vit depuis son téléphone.
+const dejaVenu = await browser.newPage({ viewport: { width: 390, height: 844 } });
+await ouvrirProjet(dejaVenu);
+const avant = await teinteDe(dejaVenu);
+check('Avant republication, le site montre bien la photo d’origine (gris chaud)',
+  !!avant && avant.r > avant.b, JSON.stringify(avant));
+
+servir(publication.retouche.etat2);          // le CRM vient de republier
+await ouvrirProjet(dejaVenu);                 // même navigateur, même cache
+const apresChaud = await teinteDe(dejaVenu);
+await dejaVenu.screenshot({ path: '/tmp/mn-site-apres-retouche-390.png' });
+check('APRÈS republication, un visiteur déjà venu voit la RETOUCHE, pas l’ancienne photo',
+  !!apresChaud && apresChaud.b > apresChaud.r + 40, JSON.stringify(apresChaud));
+check('Et il la voit parce que l’adresse a changé, pas par chance',
+  !!apresChaud && !!avant && apresChaud.src !== avant.src, (avant && avant.src) + ' → ' + (apresChaud && apresChaud.src));
+await dejaVenu.close();
+
+// (b) un navigateur entièrement neuf, sans le moindre cache
+const neuf = await browser.newContext({ viewport: { width: 390, height: 844 } });
+const pageNeuve = await neuf.newPage();
+await ouvrirProjet(pageNeuve);
+const vueNeuve = await teinteDe(pageNeuve);
+check('Dans un navigateur neuf aussi, c’est la retouche qui s’affiche',
+  !!vueNeuve && vueNeuve.b > vueNeuve.r + 40, JSON.stringify(vueNeuve));
+await neuf.close();
+
+check('Le retour à la publication précédente est possible après cette republication',
+  publication.retouche.peutRevenir === true);
+// L'image d'avant n'a pas été effacée : c'est ce qui rend le retour immédiat et gratuit.
+check('L’image d’avant est toujours servie par le stockage',
+  Object.keys(publication.retouche.etat2.fichiers).some(k => k === 'u/' + publication.retouche.avantChemin),
+  publication.retouche.avantChemin);
 
 serveur.kill();
 await browser.close();
