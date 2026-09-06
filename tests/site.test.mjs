@@ -7,6 +7,11 @@ const DIR = process.env.SITE_DIR || '/tmp/mn-sitetest';
 const ok = [], ko = [];
 const check = (n, p, d = '') => { (p ? ok : ko).push(n); console.log((p ? '  OK   ' : '  ECHEC') + ' ' + n + (d ? ' — ' + d : '')); };
 
+/* Le banc d'essai est une COPIE de `site-vitrine/index.html` : le reconstruire ici évite
+   d'éprouver une page périmée après une modification du site — c'est une erreur qui ne se
+   voit pas, le test passe ou échoue sur du code qui n'est plus celui du dépôt. */
+await import('./sitetest-build.mjs');
+
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const gen = await browser.newPage();
 await gen.goto('about:blank');
@@ -706,6 +711,220 @@ const apresLienDirect = await page.evaluate(() => ({
 }));
 check('Lien direct vers un projet : « Toutes les réalisations » ramène à la liste, sans sortir du site',
   !apresLienDirect.vue && apresLienDirect.hash === '' && apresLienDirect.cartes > 0, JSON.stringify(apresLienDirect));
+
+// ============================================================================
+//  LE BANDEAU D'ACCUEIL : deux photos qui se suivent, projets au hasard, fondu doux
+// ============================================================================
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+/* Le bandeau se met en pause quand le pointeur est dessus (c'est voulu, et vérifié plus
+   bas). On écarte donc la souris avant de mesurer le défilement automatique — sinon le
+   contrôle dépendrait de l'endroit où un clic précédent l'a laissée. */
+await page.mouse.move(4, 4);
+await page.waitForTimeout(1200);
+
+/* Le manifeste, relu ici : les contrôles doivent porter sur ce qui est PUBLIÉ, pas sur des
+   chemins recopiés à la main dans le test. */
+const manif = await page.evaluate(() => fetch('galerie/u/manifest.json').then(r => r.json()));
+const fichier = (u) => String(u || '').split('/').slice(-1)[0];
+
+const lireBandeau = () => page.evaluate(() => {
+  const b = document.getElementById('bandeau');
+  const on = document.querySelector('.bd-couche.on');
+  return {
+    visible: !b.hidden,
+    couche: on ? on.id : '',
+    srcs: on ? [...on.querySelectorAll('img')].map(i => i.currentSrc || i.src) : [],
+    chargees: on ? [...on.querySelectorAll('img')].filter(i => i.naturalWidth > 0).length : 0,
+    nom: (document.getElementById('bd-nom') || {}).textContent || '',
+    meta: (document.getElementById('bd-meta') || {}).textContent || '',
+    duo: !!(on && on.classList.contains('duo')),
+    opaciteAutre: (() => {
+      const autre = [...document.querySelectorAll('.bd-couche')].filter(c => c !== on)[0];
+      return autre ? getComputedStyle(autre).opacity : '';
+    })(),
+    transition: on ? getComputedStyle(on).transitionDuration : '',
+  };
+});
+
+const bd1 = await lireBandeau();
+check('Bandeau : une grande image s’affiche en haut de l’accueil',
+  bd1.visible && bd1.chargees === bd1.srcs.length && bd1.srcs.length > 0,
+  bd1.srcs.length + ' photo(s), ' + bd1.chargees + ' chargée(s)');
+check('Bandeau : le nom du projet montré est affiché', !!bd1.nom.trim(), bd1.nom + ' — ' + bd1.meta);
+
+/* Le fondu : deux couches superposées, l'une visible, l'autre à zéro, avec une transition
+   d'opacité. Un changement sec passerait tous les autres contrôles. */
+check('Bandeau : le changement se fait en fondu, pas en saut',
+  parseFloat(bd1.transition) >= 0.6 && bd1.opaciteAutre === '0',
+  'transition ' + bd1.transition + ', autre couche à ' + bd1.opaciteAutre);
+
+/* LE point demandé : deux photos DU MÊME projet et QUI SE SUIVENT. On le vérifie contre le
+   manifeste — un couple pris dans deux chantiers différents passerait ici.
+   L'ordre des projets étant tiré au hasard, on ne peut rien conclure d'UNE vue : un projet
+   d'une seule photo donne légitimement une vue solitaire. On en observe donc plusieurs. */
+const verifierPaire = (vu) => {
+  const p = (manif.realisations || []).filter(x => x.title === vu.nom)[0];
+  if (!p) return { ok: false, why: 'projet « ' + vu.nom + ' » introuvable dans le manifeste' };
+  /* Deux tailles existent pour chaque photo (1600 px et 700 px) et le navigateur prend la
+     plus petite quand elle suffit : les deux nomment la même photo. */
+  const rangDe = (f) => {
+    for (let i = 0; i < p.photos.length; i++) {
+      if (fichier(p.photos[i].full) === f || fichier(p.photos[i].thumb) === f) return i;
+    }
+    return -1;
+  };
+  const vus = vu.srcs.map(fichier);
+  const rangs = vus.map(rangDe);
+  if (rangs.some(r => r < 0)) return { ok: false, why: 'photo étrangère au projet : ' + vus.join(', ') };
+  if (rangs.length === 2 && rangs[1] !== rangs[0] + 1) return { ok: false, why: 'photos non consécutives : rangs ' + rangs.join(' et ') };
+  return { ok: true, why: vu.nom + ' · rangs ' + rangs.join('+'), n: rangs.length, projet: p };
+};
+const paire1 = verifierPaire(bd1);
+check('Bandeau : la première vue vient bien d’un projet publié, dans l’ordre',
+  paire1.ok, paire1.why);
+
+/* On attend le changement au lieu de photographier un instant précis, et on le repère à la
+   COUCHE qui s'échange — pas au rang, qui avance dès que l'envoi commence, ni aux adresses
+   d'images, que le banc d'essai fait volontairement partager entre projets. */
+const attendreVue = async (coucheAvant) => {
+  try {
+    await page.waitForFunction((c) => {
+      const on = document.querySelector('.bd-couche.on');
+      return !!on && on.id !== c;
+    }, coucheAvant, { timeout: 12000 });
+    return await lireBandeau();
+  } catch (e) { return null; }
+};
+const bd2 = await attendreVue(bd1.couche);
+check('Bandeau : la vue change toute seule après le temps réglé, et les couches s’échangent',
+  !!bd2 && bd2.couche !== bd1.couche && bd2.chargees === bd2.srcs.length,
+  bd2 ? (bd1.couche + ' → ' + bd2.couche + ' · ' + bd2.nom) : 'aucun changement en 12 s');
+
+/* Plusieurs vues d'affilée : c'est là que la règle se voit. Chacune doit appartenir à un
+   seul projet, ses photos se suivre, et un projet qui a de quoi faire une paire doit en
+   montrer une sur un écran large. */
+const vues = [bd1, bd2].filter(Boolean);
+let derniere = vues[vues.length - 1];
+for (let i = 0; i < 4 && derniere; i++) {
+  derniere = await attendreVue(derniere.couche);
+  if (derniere) vues.push(derniere);
+}
+const analyses = vues.map(verifierPaire);
+check('Bandeau : chaque vue vient d’un seul projet, photos qui se suivent',
+  analyses.length >= 4 && analyses.every(a => a.ok),
+  analyses.map(a => a.why).join(' | '));
+check('Bandeau : sur un écran large, un projet à plusieurs photos en montre DEUX côte à côte',
+  vues.some((v, k) => v.duo && analyses[k].ok && analyses[k].n === 2),
+  vues.map(v => v.srcs.length + (v.duo ? ' (duo)' : '')).join(' | '));
+/* Un projet d'une seule photo ne peut pas faire de paire : sa vue s'affiche seule et prend
+   toute la largeur, elle ne doit pas laisser une case vide à côté. */
+const solos = vues.filter(v => v.srcs.length === 1);
+check('Bandeau : une vue solitaire occupe toute la largeur, sans case vide',
+  solos.every(v => !v.duo), solos.length + ' vue(s) solitaire(s)');
+
+/* Le survol suspend le défilement : on ne change pas une image sous les yeux de quelqu'un
+   qui la regarde — et surtout pas sous son doigt au moment où il appuie. C'est aussi ce qui
+   rend le clic fiable : sans cette pause, on ouvrirait le projet suivant. */
+await page.hover('#bandeau');
+const avantPause = await lireBandeau();
+await page.waitForTimeout(4500);            // au-delà des 3 s réglées
+const apresPause = await lireBandeau();
+check('Bandeau : le survol suspend le défilement',
+  apresPause.couche === avantPause.couche && apresPause.nom === avantPause.nom,
+  avantPause.nom + ' → ' + apresPause.nom);
+
+// Un appui ouvre le projet montré — c'est ce qui en fait autre chose qu'une décoration.
+const nomAvantClic = apresPause.nom;
+await page.locator('#bandeau').click();
+await page.waitForTimeout(700);
+const apresClic = await page.evaluate(() => ({
+  vue: document.body.classList.contains('viewing'),
+  titre: (document.getElementById('d-title') || {}).textContent || '',
+  bandeauVu: getComputedStyle(document.getElementById('bandeau')).display,
+}));
+check('Bandeau : un appui ouvre le projet montré',
+  apresClic.vue && apresClic.titre === nomAvantClic, apresClic.titre + ' / attendu ' + nomAvantClic);
+check('Bandeau : il disparaît dès qu’un projet est ouvert', apresClic.bandeauVu === 'none', apresClic.bandeauVu);
+
+await page.locator('#back').click();
+await page.waitForTimeout(600);
+check('Bandeau : il revient quand on retourne à la liste',
+  (await page.evaluate(() => getComputedStyle(document.getElementById('bandeau')).display)) !== 'none');
+
+// --- Le réglage, lu du manifeste, avec repli sur une valeur absurde
+const reglage = await page.evaluate(() => {
+  const lu = bdRegle();
+  const sauve = infosSite.diaporamaSec;
+  infosSite.diaporamaSec = 0.2;   // valeur absurde : clignoterait
+  const absurde = bdRegle();
+  infosSite.diaporamaSec = sauve;
+  return { lu, absurde, defaut: BD_SEC_DEFAUT };
+});
+check('Bandeau : la durée d’affichage vient du CRM', reglage.lu.delai === 3000, reglage.lu.delai + ' ms');
+check('Bandeau : une durée absurde retombe sur le défaut, elle ne fait pas clignoter le site',
+  reglage.absurde.delai === reglage.defaut * 1000, reglage.absurde.delai + ' ms');
+
+// --- Sur téléphone : une photo à la fois, et rien qui déborde
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1400);
+const tel = await lireBandeau();
+const debordTel = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+await page.screenshot({ path: '/tmp/mn-bandeau-390.png' });
+check('Bandeau sur téléphone : une seule photo à la fois, pas deux timbres-poste',
+  tel.visible && tel.srcs.length === 1 && !tel.duo, tel.srcs.length + ' photo(s)');
+check('Bandeau sur téléphone : la page ne déborde pas', debordTel <= 1, debordTel + 'px');
+const paireTel = verifierPaire(tel);
+check('Bandeau sur téléphone : la photo appartient bien au projet nommé', paireTel.ok, paireTel.why);
+await page.setViewportSize({ width: 1280, height: 900 });
+
+/* Au doigt : un appui suspend, mais le doigt finit toujours par se lever. Sans reprise, un
+   simple effleurement figeait le bandeau pour le reste de la visite — et sur un écran
+   tactile, aucun `mouseleave` ne vient jamais le réveiller. */
+await page.mouse.move(4, 4);
+const tactile = await page.evaluate(async () => {
+  const b = document.getElementById('bandeau');
+  /* Le survol suspend aussi, et le pointeur peut être resté sur le bandeau après les
+     contrôles précédents : on repart d'un état franc, sinon ce contrôle mesurerait la
+     position de la souris au lieu du geste du doigt. */
+  b.dispatchEvent(new Event('mouseleave'));
+  const avant = bdPause;
+  b.dispatchEvent(new Event('touchstart'));
+  const pendant = bdPause;
+  b.dispatchEvent(new Event('touchend'));
+  await new Promise(r => setTimeout(r, 60));
+  return { avant, pendant, apres: bdPause, minuteur: !!bdMinuteur };
+});
+check('Bandeau au doigt : l’appui suspend, et le doigt levé relance',
+  tactile.avant === false && tactile.pendant === true && tactile.apres === false && tactile.minuteur,
+  JSON.stringify(tactile));
+
+// --- « Masqué » : le site commence par la liste, sans bandeau du tout
+await page.goto('http://127.0.0.1:8902/index-theme.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
+check('Bandeau : réglé sur « masqué », il n’existe pas',
+  await page.evaluate(() => document.getElementById('bandeau').hidden),
+  await page.evaluate(() => document.getElementById('bandeau').hidden ? 'absent' : 'encore là'));
+
+// --- Aucun projet publié : pas de bandeau vide au-dessus du message
+await page.goto('http://127.0.0.1:8902/vide.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(700);
+check('Bandeau : rien de publié, pas de cadre vide au-dessus du message',
+  await page.evaluate(() => document.getElementById('bandeau').hidden));
+
+// --- Un manifeste ancien, sans le réglage : le bandeau marche quand même, sur son défaut
+await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+const ancienBd = await page.evaluate(() => ({
+  visible: !document.getElementById('bandeau').hidden,
+  delai: bdRegle().delai,
+  photos: [...document.querySelectorAll('.bd-couche.on img')].filter(i => i.naturalWidth > 0).length,
+}));
+check('Bandeau : un manifeste publié avant ce réglage l’affiche quand même, sur son défaut',
+  ancienBd.visible && ancienBd.delai === 7000 && ancienBd.photos === 1, JSON.stringify(ancienBd));
+
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
 
 const realErrs = errs.filter(e => !envNoise(e));
 check('Aucune erreur JavaScript du site', realErrs.length === 0, realErrs.slice(0, 3).join(' | '));

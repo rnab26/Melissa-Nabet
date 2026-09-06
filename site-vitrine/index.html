@@ -96,6 +96,60 @@
     color:var(--stone);font-weight:500;
   }
 
+  /* ---- BANDEAU D'ACCUEIL ----
+     Une grande image sous le nom du studio, qui fait défiler les projets. Deux photos qui
+     se suivent dans un même projet, puis les deux suivantes, projets tirés au hasard.
+     Deux couches superposées : on prépare celle qui est cachée, et on ne croise les
+     opacités qu'une fois les images CHARGÉES — sinon le fondu révélerait un trou blanc. */
+  .bandeau{
+    position:relative;width:100%;overflow:hidden;background:var(--travertine);
+    height:clamp(210px,44vh,520px);border-bottom:1px solid var(--hair);
+    display:block;padding:0;border-left:0;border-right:0;border-top:0;
+    cursor:pointer;font-family:inherit;color:inherit;text-align:left;
+  }
+  .bd-couche{
+    position:absolute;inset:0;display:grid;gap:2px;
+    opacity:0;transition:opacity 1.3s ease;
+  }
+  .bd-couche.on{opacity:1;}
+  .bd-couche.duo{grid-template-columns:1fr 1fr;}
+  .bd-case{position:relative;overflow:hidden;background:var(--travertine);}
+  .bd-case img{
+    width:100%;height:100%;object-fit:cover;display:block;
+    /* Un lent rapprochement pendant que la photo est à l'écran : le mouvement se sent sans
+       se voir. La durée suit le délai réglé (variable posée en JS), pour que le zoom
+       finisse quand la photo s'en va, et pas au milieu. */
+    transform:scale(1.001);
+  }
+  .bd-couche.on .bd-case img{transform:scale(1.055);transition:transform var(--bd-duree,7s) linear;}
+  /* Le voile ne suit PAS le thème : il est posé sur une photo, pas sur le fond de page.
+     C'est la photo qu'il doit rendre lisible, quelle que soit l'allure du site. */
+  .bd-voile{
+    position:absolute;left:0;right:0;bottom:0;height:38%;pointer-events:none;
+    background:linear-gradient(to top,rgba(0,0,0,.46),rgba(0,0,0,0));
+  }
+  .bd-legende{
+    position:absolute;left:clamp(16px,3vw,34px);bottom:clamp(13px,2.6vw,26px);right:clamp(16px,3vw,34px);
+    color:#fff;pointer-events:none;
+  }
+  .bd-nom{
+    display:block;font-family:var(--titre);font-size:clamp(17px,2.6vw,27px);
+    line-height:1.2;margin:0;text-shadow:0 1px 12px rgba(0,0,0,.45);
+  }
+  .bd-meta{
+    display:block;margin-top:5px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+    opacity:.85;text-shadow:0 1px 10px rgba(0,0,0,.5);
+  }
+  .bandeau:hover .bd-nom,.bandeau:focus-visible .bd-nom{text-decoration:underline;text-underline-offset:5px;}
+  .bandeau:focus-visible{outline:2px solid var(--oxblood);outline-offset:-3px;}
+  /* Un projet ouvert : le bandeau appartient à l'accueil, il n'a rien à faire au-dessus
+     d'un projet. */
+  body.viewing .bandeau{display:none;}
+  @media (prefers-reduced-motion:reduce){
+    .bd-couche{transition:none;}
+    .bd-couche.on .bd-case img{transform:none;transition:none;}
+  }
+
   main{max-width:1240px;margin:0 auto;padding:clamp(30px,6vw,64px) 22px 90px;}
 
   .eyebrow{
@@ -365,6 +419,16 @@
   <div class="langs" id="langs" hidden role="group" aria-label="Langue"></div>
 </header>
 
+<button class="bandeau" id="bandeau" type="button" hidden>
+  <div class="bd-couche" id="bd-0"></div>
+  <div class="bd-couche" id="bd-1"></div>
+  <span class="bd-voile" id="bd-voile" hidden></span>
+  <span class="bd-legende" id="bd-legende" hidden>
+    <span class="bd-nom" id="bd-nom" dir="auto"></span>
+    <span class="bd-meta" id="bd-meta" dir="auto"></span>
+  </span>
+</button>
+
 <main>
   <p class="eyebrow index-head" id="t-realisations">Réalisations</p>
   <nav class="filtres" id="filtres" hidden aria-label="Filtrer les réalisations"></nav>
@@ -546,6 +610,7 @@ function toutRedessiner() {
   renderBoutique();
   renderJournal(s);
   if (projects.length) { renderFiltres(); renderIndex(); }
+  bdDemarrer();
   if (current) openProject(projects.indexOf(current));
 }
 
@@ -781,6 +846,176 @@ function renderIndex() {
   });
 }
 
+/* ---- LE BANDEAU D'ACCUEIL -------------------------------------------------------------
+   Une grande image sous le nom du studio, qui fait défiler les projets réalisés. Trois
+   règles, et elles viennent de l'usage :
+
+   - **Deux photos qui se suivent.** Deux vues du MÊME projet, prises l'une après l'autre
+     dans l'ordre de la galerie : côte à côte, elles se répondent. Deux photos tirées au
+     hasard dans deux chantiers différents, non — ça fait catalogue, pas portfolio.
+   - **Les projets, eux, passent au hasard.** L'ordre des projets est mélangé à chaque
+     tour ; à l'intérieur d'un projet, on avance par paires dans l'ordre. Personne ne voit
+     donc deux fois la même chose avant d'avoir tout vu.
+   - **Le changement est un fondu, jamais un saut.** La couche cachée est remplie et on
+     n'échange les opacités qu'une fois les images RÉELLEMENT chargées : sinon le fondu
+     découvrirait une case vide, ce qui est pire que pas de mouvement du tout.
+
+   Sur un téléphone, deux photos côte à côte font deux timbres-poste : on garde les mêmes
+   photos et le même ordre, mais une par une. */
+var BD_SEC_DEFAUT = 7, BD_SEC_MIN = 3, BD_SEC_MAX = 60;
+var bdVues = [], bdRang = 0, bdCouche = -1, bdMinuteur = null;
+var bdProjet = null, bdPause = false, bdEchecs = 0, bdLargeur = null, bdParti = false;
+
+function bdRegle() {
+  var s = infosSite || {};
+  var n = parseFloat(s.diaporamaSec);
+  if (!isFinite(n) || n < BD_SEC_MIN || n > BD_SEC_MAX) n = BD_SEC_DEFAUT;
+  return { actif: s.diaporama !== 'aucun', delai: n * 1000 };
+}
+/* Deux refus à ne pas confondre :
+   - `diaporama: 'aucun'` — Melissa ne VEUT PAS de bandeau : il n'existe pas, le site
+     commence par la liste des projets ;
+   - `animer` faux (réglage « aucun mouvement », ou visiteur qui demande moins d'animation) —
+     le bandeau reste, mais figé sur une image. Le faire disparaître serait décider à sa
+     place qu'elle ne veut plus l'image parce qu'elle ne veut plus le mouvement. */
+function bdDoitDefiler() { return animer && bdVues.length > 1; }
+function bdLarge() { return (window.innerWidth || 0) >= 700; }
+
+function melanger(liste) {
+  var t = liste.slice();
+  for (var i = t.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1)), x = t[i];
+    t[i] = t[j]; t[j] = x;
+  }
+  return t;
+}
+/* La liste des vues : projets mélangés, et dans chacun les photos prises deux par deux
+   dans l'ordre. Un projet à trois photos donne donc [1,2] puis [3] — la vue solitaire
+   occupe toute la largeur, ce qui casse agréablement le rythme. */
+function bdConstruire() {
+  var pas = bdLarge() ? 2 : 1;
+  var vues = [];
+  melanger(projects.filter(function (p) { return (p.photos || []).length; })).forEach(function (p) {
+    for (var i = 0; i < p.photos.length; i += pas) vues.push({ p: p, photos: p.photos.slice(i, i + pas) });
+  });
+  bdVues = vues;
+  bdRang = 0;
+  bdLargeur = bdLarge();
+}
+/* Remplit une couche et ne rend la main qu'une fois les images arrivées. Une image qui
+   échoue ou qui traîne fait abandonner CETTE vue : on passera à la suivante plutôt que de
+   croiser vers un trou. */
+function bdRemplir(indice, vue) {
+  var couche = el('bd-' + indice);
+  couche.innerHTML = '';
+  couche.className = 'bd-couche' + (vue.photos.length > 1 ? ' duo' : '');
+  var attentes = vue.photos.map(function (ph, k) {
+    var case_ = document.createElement('span');
+    case_.className = 'bd-case';
+    var im = document.createElement('img');
+    im.decoding = 'async';
+    im.alt = ph.caption || (vue.p.title + ' — ' + mot('photo') + ' ' + (k + 1));
+    if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
+    /* Le bandeau est large : la pleine définition est la bonne source sur un écran
+       d'ordinateur, la vignette suffit sur un téléphone. Les deux existent déjà dans le
+       stockage, aucune image n'est produite pour l'occasion. */
+    im.src = url(ph.full);
+    if (ph.thumb) {
+      im.srcset = url(ph.thumb) + ' 700w, ' + url(ph.full) + ' 1600w';
+      im.sizes = vue.photos.length > 1 ? '(max-width:700px) 100vw, 50vw' : '100vw';
+    }
+    case_.appendChild(im);
+    couche.appendChild(case_);
+    return new Promise(function (res, rej) {
+      if (im.complete && im.naturalWidth > 0) return res();
+      var fini = false;
+      var minuteur = setTimeout(function () { if (!fini) { fini = true; rej(new Error('lente')); } }, 8000);
+      im.addEventListener('load', function () { if (!fini) { fini = true; clearTimeout(minuteur); res(); } });
+      im.addEventListener('error', function () { if (!fini) { fini = true; clearTimeout(minuteur); rej(new Error('absente')); } });
+    });
+  });
+  return Promise.all(attentes);
+}
+function bdProgrammer() {
+  clearTimeout(bdMinuteur);
+  if (!bdDoitDefiler() || bdPause) return;
+  bdMinuteur = setTimeout(bdAvancer, bdRegle().delai);
+}
+function bdAvancer() {
+  if (!bdVues.length) return;
+  /* Le tour est fini : on re-mélange l'ordre des projets. Le hasard se renouvelle sans
+     jamais répéter une vue avant d'avoir montré les autres. */
+  if (bdRang >= bdVues.length) bdConstruire();
+  var vue = bdVues[bdRang++];
+  var cible = bdCouche === 0 ? 1 : 0;
+  bdRemplir(cible, vue).then(function () {
+    el('bd-0').classList.toggle('on', cible === 0);
+    el('bd-1').classList.toggle('on', cible === 1);
+    bdCouche = cible;
+    bdProjet = vue.p;
+    bdEchecs = 0;
+    el('bd-nom').textContent = vue.p.title;
+    el('bd-meta').textContent = [vue.p.date, vue.p.lieu].filter(Boolean).join(' · ');
+    el('bd-legende').hidden = false;
+    el('bd-voile').hidden = false;
+    el('bandeau').setAttribute('aria-label', vue.p.title);
+  }, function () {
+    /* Une image absente ne doit pas arrêter le bandeau — ni le faire tourner à vide sur un
+       stockage entièrement injoignable. On tente les autres vues, une fois chacune. */
+    bdEchecs++;
+    if (bdEchecs < bdVues.length) { bdAvancer(); return; }
+    if (bdCouche < 0) bdArreter();
+  }).then(bdProgrammer, bdProgrammer);
+}
+function bdArreter() {
+  clearTimeout(bdMinuteur);
+  el('bandeau').hidden = true;
+}
+function bdDemarrer() {
+  var hote = el('bandeau');
+  if (!projects.length || !bdRegle().actif) { bdArreter(); return; }
+  hote.hidden = false;
+  /* La durée du rapprochement suit le délai réglé : le mouvement doit finir quand la photo
+     s'en va, pas rester figé la moitié du temps. */
+  hote.style.setProperty('--bd-duree', Math.round(bdRegle().delai / 1000) + 1 + 's');
+  if (bdParti) { bdConstruire(); bdProgrammer(); return; }
+  bdParti = true;
+  bdConstruire();
+  bdAvancer();
+  /* Suspendre, oui — mais chaque geste doit avoir sa FIN, sinon on ne suspend pas, on
+     arrête. C'était le cas d'un `touchstart` sans contrepartie : sur un téléphone, un doigt
+     posé une fois sur le bandeau le figeait définitivement, puisque aucun `mouseleave` ne
+     vient jamais sur un écran tactile. */
+  var suspendre = function () { bdPause = true; clearTimeout(bdMinuteur); };
+  var reprendre = function () { bdPause = false; bdProgrammer(); };
+  hote.addEventListener('mouseenter', suspendre);
+  hote.addEventListener('mouseleave', reprendre);
+  hote.addEventListener('focusin', suspendre);
+  hote.addEventListener('focusout', reprendre);
+  hote.addEventListener('touchstart', suspendre, { passive: true });
+  hote.addEventListener('touchend', reprendre, { passive: true });
+  hote.addEventListener('touchcancel', reprendre, { passive: true });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) clearTimeout(bdMinuteur); else bdProgrammer();
+  });
+  hote.addEventListener('click', function () {
+    if (!bdProjet) return;
+    var i = projects.indexOf(bdProjet);
+    if (i >= 0) openProject(i);
+  });
+  /* Passer du téléphone à l'ordinateur (rotation, fenêtre agrandie) change le nombre de
+     photos par vue : on reconstruit, mais seulement quand le seuil est franchi. */
+  var attente = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(attente);
+    attente = setTimeout(function () {
+      if (bdLarge() === bdLargeur) return;
+      bdConstruire();
+      bdProgrammer();
+    }, 250);
+  });
+}
+
 /* Un projet ouvert change l'adresse (ancre) : le titre de l'onglet et la description
    doivent suivre, sinon un lien copié depuis la barre d'adresse arrive avec le titre du
    site entier. Les robots qui lisent le JavaScript (Google) y gagnent aussi. */
@@ -859,6 +1094,9 @@ function afficherProjet(i) {
     if (k > 1) guetter(b);
   });
   document.body.classList.add('viewing');
+  /* Le bandeau n'est plus à l'écran : le laisser tourner téléchargerait des photos que
+     personne ne regarde. */
+  clearTimeout(bdMinuteur);
   window.scrollTo({ top: 0, behavior: 'auto' });
   peindreSuivant();
   peindreContactProjet();
@@ -915,6 +1153,7 @@ var posListe = 0;
 function afficherListe() {
   document.body.classList.remove('viewing');
   current = null;
+  bdProgrammer();   /* de retour sur l'accueil : le bandeau reprend son défilement */
   majSeo(TITRE_SITE, DESC_SITE, IMG_SITE);
   window.scrollTo({ top: posListe, behavior: 'auto' });
 }
