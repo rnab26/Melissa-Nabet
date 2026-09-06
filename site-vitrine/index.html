@@ -298,6 +298,31 @@
 
   /* MOUVEMENT. La classe n'est posée QUE si un observateur existe et va la retirer : sans
      ça, un lien partagé s'ouvrirait sur une page blanche chez qui n'a pas le script. */
+  /* --- Langues --- */
+  .langs{display:flex;gap:0;align-items:baseline;justify-content:center;margin:16px 0 0;}
+  .langs button{
+    background:none;border:none;padding:4px 10px;cursor:pointer;font-family:inherit;
+    font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone-light);
+    transition:color .3s;
+  }
+  .langs button+button{border-inline-start:1px solid var(--hair);}
+  .langs button:hover{color:var(--ink);}
+  .langs button[aria-current="true"]{color:var(--ink);}
+
+  /* --- Journal --- */
+  .journal{padding:clamp(30px,6vw,56px) 0 0;border-top:1px solid var(--hair);margin-top:clamp(34px,6vw,64px);}
+  .entrees{display:flex;flex-direction:column;gap:clamp(22px,3.4vw,34px);max-width:64ch;}
+  .entree+.entree{border-top:1px solid var(--hair);padding-top:clamp(16px,2.4vw,24px);}
+  .entree-date{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone-light);margin:0 0 6px;}
+  .entree-titre{font-family:var(--titre);font-weight:500;font-size:clamp(18px,2.2vw,22px);margin:0 0 8px;line-height:1.3;color:var(--ink);}
+  .entree-texte{font-family:var(--texte);font-size:15.5px;line-height:1.7;color:var(--stone);margin:0;white-space:pre-line;}
+
+  /* Hébreu : la page entière se lit de droite à gauche. Les positions écrites en
+     `left`/`right` doivent suivre, sinon les flèches du plein écran restent à l'envers. */
+  [dir="rtl"] .lb-close{right:auto;left:16px;}
+  [dir="rtl"] .lb-prev{left:auto;right:14px;}
+  [dir="rtl"] .lb-next{right:auto;left:14px;}
+
   .fondu{opacity:0;transform:translateY(9px);}
   .fondu.vu{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.3,1);}
 
@@ -309,11 +334,12 @@
 
 <header>
   <h1 class="name" id="site-name">Melissa Nabet</h1>
-  <p class="tagline" id="site-tagline">Architecture d’intérieur</p>
+  <p class="tagline" id="site-tagline" dir="auto">Architecture d’intérieur</p>
+  <div class="langs" id="langs" hidden role="group" aria-label="Langue"></div>
 </header>
 
 <main>
-  <p class="eyebrow index-head">Réalisations</p>
+  <p class="eyebrow index-head" id="t-realisations">Réalisations</p>
   <nav class="filtres" id="filtres" hidden aria-label="Filtrer les réalisations"></nav>
   <div class="projects" id="projects" aria-busy="true">
     <div class="project squelette" aria-hidden="true"><div class="project-img"></div><div class="sq-l"></div><div class="sq-l court"></div></div>
@@ -324,19 +350,24 @@
 
   <section class="detail" id="detail">
     <button class="back" id="back">← Toutes les réalisations</button>
-    <h2 id="d-title"></h2>
-    <p class="project-meta" id="d-meta"></p>
-    <p class="detail-text" id="d-text" hidden></p>
+
+    <h2 id="d-title" dir="auto"></h2>
+    <p class="project-meta" id="d-meta" dir="auto"></p>
+    <p class="detail-text" id="d-text" hidden dir="auto"></p>
     <div class="shots" id="d-shots"></div>
     <p class="projet-contact" id="projet-contact" hidden></p>
     <button class="suivant" id="suivant" hidden>
-      <span class="eyebrow">Projet suivant</span>
-      <span class="suivant-nom" id="suivant-nom"></span>
+      <span class="eyebrow" id="t-suivant">Projet suivant</span>
+      <span class="suivant-nom" id="suivant-nom" dir="auto"></span>
     </button>
   </section>
+  <section class="journal" id="journal" hidden>
+    <p class="eyebrow" id="t-journal">Journal</p>
+    <div class="entrees" id="journal-list"></div>
+  </section>
   <section class="apropos" id="apropos" hidden>
-    <p class="eyebrow">À propos</p>
-    <p class="apropos-txt" id="apropos-txt" hidden></p>
+    <p class="eyebrow" id="t-apropos">À propos</p>
+    <p class="apropos-txt" id="apropos-txt" hidden dir="auto"></p>
     <div class="liens" id="contact"></div>
   </section>
 </main>
@@ -345,7 +376,7 @@
 
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Photo en plein écran">
   <img id="lb-img" alt="">
-  <p class="lb-cap" id="lb-cap" hidden></p>
+  <p class="lb-cap" id="lb-cap" hidden dir="auto"></p>
   <p class="lb-rang" id="lb-rang" aria-live="polite"></p>
   <button class="lb-close" id="lb-close" aria-label="Fermer">✕</button>
   <button class="lb-prev" id="lb-prev" aria-label="Photo précédente">‹</button>
@@ -361,6 +392,140 @@ var OWNER = '797ad2e5-a27a-45c3-a987-d4897d1cadbf';
 
 var el = function (id) { return document.getElementById(id); };
 var projects = [], current = null, lbIndex = 0, filtre = '';
+
+/* ---- Les trois langues ---------------------------------------------------------------
+   Deux natures de texte, à ne jamais confondre :
+   - les mots d'APPAREIL (navigation, états, boutons) sont traduits ici, une fois pour
+     toutes : ce ne sont pas les mots de Melissa ;
+   - ses TEXTES à elle (sous-titre, à propos, journal, noms de projets) viennent du CRM,
+     langue par langue. Quand une traduction manque, c'est le français d'origine qui
+     s'affiche — jamais une traduction automatique publiée sous son nom.
+   Le sélecteur n'apparaît que si le manifeste annonce plus d'une langue. */
+var LANGUES = [
+  { code: 'fr', label: 'FR', dir: 'ltr' },
+  { code: 'en', label: 'EN', dir: 'ltr' },
+  { code: 'he', label: 'עב', dir: 'rtl' }
+];
+var MOTS = {
+  fr: { realisations:'Réalisations', apropos:'À propos', journal:'Journal',
+        retour:'← Toutes les réalisations', suivant:'Projet suivant', tout:'Tout',
+        photos:'photos', agrandir:'Agrandir la photo', photo:'photo',
+        vide:'Bientôt en ligne', videTxt:'Les premières réalisations seront publiées ici prochainement.',
+        panne:'Les réalisations n’ont pas pu être chargées',
+        panneTxt:'La connexion n’a pas abouti. Vérifiez votre réseau, puis réessayez.',
+        reessayer:'Réessayer', genre:'Un projet de ce genre ? ',
+        ecrire:'écrivez-moi', whatsapp:'écrivez-moi sur WhatsApp' },
+  en: { realisations:'Works', apropos:'About', journal:'Journal',
+        retour:'← All works', suivant:'Next project', tout:'All',
+        photos:'photographs', agrandir:'Enlarge photograph', photo:'photograph',
+        vide:'Coming soon', videTxt:'The first projects will be published here shortly.',
+        panne:'The projects could not be loaded',
+        panneTxt:'The connection failed. Check your network, then try again.',
+        reessayer:'Try again', genre:'A project like this one? ',
+        ecrire:'write to me', whatsapp:'message me on WhatsApp' },
+  he: { realisations:'עבודות', apropos:'אודות', journal:'יומן',
+        retour:'→ כל העבודות', suivant:'הפרויקט הבא', tout:'הכול',
+        photos:'תמונות', agrandir:'הגדלת התמונה', photo:'תמונה',
+        vide:'בקרוב', videTxt:'העבודות הראשונות יפורסמו כאן בקרוב.',
+        panne:'לא ניתן היה לטעון את העבודות',
+        panneTxt:'החיבור נכשל. בדקו את הרשת ונסו שוב.',
+        reessayer:'נסו שוב', genre:'רוצים פרויקט כזה? ',
+        ecrire:'כתבו לי', whatsapp:'כתבו לי בוואטסאפ' }
+};
+/* `dir="auto"` sur tout ce que MELISSA écrit : la page peut être en hébreu (lecture de
+   droite à gauche) et le texte, lui, rester français faute de traduction. Sans ce marquage,
+   le point final d'une phrase française part se coller au début de la ligne — c'est
+   exactement l'état dans lequel le site est livré, tant que les traductions manquent. */
+var langue = 'fr';
+function mot(k) { return (MOTS[langue] && MOTS[langue][k]) || MOTS.fr[k] || ''; }
+
+/* Un texte de Melissa, dans la langue courante — à défaut, le français d'origine.
+   `src` permet de le demander sur un objet précis plutôt que sur l'état global : une
+   fonction de rendu doit afficher ce qu'on lui passe, sinon elle devient intestable. */
+function texteSite(cle, src) {
+  var s = src || infosSite || {};
+  var tr = (s.i18n || {})[langue] || {};
+  return (tr[cle] || '').trim() || (s[cle] || '').trim();
+}
+function texteEntree(j, cle) {
+  var tr = ((j.i18n || {})[langue]) || {};
+  return (tr[cle] || '').trim() || (j[cle] || '').trim();
+}
+function languesDuSite() {
+  var l = (infosSite && infosSite.langues) || [];
+  var codes = LANGUES.map(function (x) { return x.code; }).filter(function (c) { return l.indexOf(c) >= 0; });
+  return codes.length > 1 ? codes : [];
+}
+function langueRetenue() {
+  try { var v = localStorage.getItem('mn-langue'); if (v && MOTS[v]) return v; } catch (e) {}
+  return 'fr';
+}
+/* `garder` sépare un choix du visiteur d'un repli technique. Sans ça, l'affichage en
+   français d'avant l'arrivée du manifeste écraserait le choix de la visite précédente. */
+function poserLangue(code, garder) {
+  langue = MOTS[code] ? code : 'fr';
+  if (garder) { try { localStorage.setItem('mn-langue', langue); } catch (e) {} }
+  var def = LANGUES.filter(function (l) { return l.code === langue; })[0] || LANGUES[0];
+  document.documentElement.lang = langue;
+  document.documentElement.dir = def.dir;
+}
+function renderLangues() {
+  var codes = languesDuSite(), host = el('langs');
+  host.innerHTML = '';
+  if (!codes.length) { host.hidden = true; return; }
+  if (codes.indexOf(langue) < 0) poserLangue(codes[0], false);
+  host.hidden = false;
+  LANGUES.filter(function (l) { return codes.indexOf(l.code) >= 0; }).forEach(function (l) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = l.label;
+    b.lang = l.code;
+    b.setAttribute('aria-current', l.code === langue ? 'true' : 'false');
+    b.addEventListener('click', function () { poserLangue(l.code, true); toutRedessiner(); });
+    host.appendChild(b);
+  });
+}
+
+/* Rejoué à chaque changement de langue : tout ce qui porte du texte doit suivre, y
+   compris un projet resté ouvert. */
+function toutRedessiner() {
+  var s = infosSite || {};
+  var sous = texteSite('subtitle');
+  if (s.title) { el('site-name').textContent = s.title; el('footer').textContent = s.title + (sous ? ' — ' + sous : ''); }
+  if (sous) el('site-tagline').textContent = sous;
+  el('t-realisations').textContent = mot('realisations');
+  el('t-apropos').textContent = mot('apropos');
+  el('t-journal').textContent = mot('journal');
+  el('t-suivant').textContent = mot('suivant');
+  el('back').textContent = mot('retour');
+  renderLangues();
+  renderApropos(s);
+  renderJournal(s);
+  if (projects.length) { renderFiltres(); renderIndex(); }
+  if (current) openProject(projects.indexOf(current));
+}
+
+function renderJournal(site) {
+  var entrees = ((site || {}).journal || []).filter(function (j) {
+    return texteEntree(j, 'titre') || texteEntree(j, 'texte');
+  });
+  var sec = el('journal'), host = el('journal-list');
+  host.innerHTML = '';
+  sec.hidden = !entrees.length;
+  if (!entrees.length) return;
+  entrees.forEach(function (j) {
+    var art = document.createElement('article');
+    art.className = 'entree';
+    art.dir = 'auto';
+    if (j.date) { var d = document.createElement('p'); d.className = 'entree-date'; d.textContent = j.date; art.appendChild(d); }
+    var ti = texteEntree(j, 'titre');
+    if (ti) { var h = document.createElement('h2'); h.className = 'entree-titre'; h.textContent = ti; art.appendChild(h); }
+    var tx = texteEntree(j, 'texte');
+    if (tx) { var pp = document.createElement('p'); pp.className = 'entree-texte'; pp.textContent = tx; art.appendChild(pp); }
+    host.appendChild(art);
+    guetter(art);
+  });
+}
 
 function url(p) { return STORAGE + p; }
 
@@ -401,7 +566,8 @@ function renderFiltres() {
     var b = document.createElement('button');
     b.type = 'button';
     var n = c ? projects.filter(function (p) { return (p.categorie || '').trim() === c; }).length : projects.length;
-    b.textContent = (c || 'Tout') + ' (' + n + ')';
+    b.dir = 'auto';
+    b.textContent = (c || mot('tout')) + ' (' + n + ')';
     b.setAttribute('aria-pressed', filtre === c ? 'true' : 'false');
     b.addEventListener('click', function () { filtre = c; renderFiltres(); renderIndex(); });
     host.appendChild(b);
@@ -433,10 +599,12 @@ function renderIndex() {
     vign.loading = i > 1 ? 'lazy' : 'eager';
     guetter(b);
     b.querySelector('.project-name').textContent = p.title;
+    b.querySelector('.project-name').dir = 'auto';
+    b.querySelector('.project-meta').dir = 'auto';
     // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
     // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
     var infos = [p.date, p.lieu, p.mission].filter(Boolean);
-    if (infos.length < 2) infos.push(p.photos.length + ' photos');
+    if (infos.length < 2) infos.push(p.photos.length + ' ' + mot('photos'));
     b.querySelector('.project-meta').textContent = infos.join(' · ');
     b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
     host.appendChild(b);
@@ -473,7 +641,7 @@ function openProject(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
   el('d-meta').textContent = [current.date, current.categorie, current.lieu, current.surface,
-    current.mission, current.photos.length + ' photos'].filter(Boolean).join(' · ');
+    current.mission, current.photos.length + ' ' + mot('photos')].filter(Boolean).join(' · ');
   el('d-text').textContent = current.texte || '';
   el('d-text').hidden = !current.texte;
   var host = el('d-shots');
@@ -482,7 +650,7 @@ function openProject(i) {
     var b = document.createElement('button');
     b.className = 'shot';
     b.type = 'button';
-    b.setAttribute('aria-label', 'Agrandir la photo ' + (k + 1));
+    b.setAttribute('aria-label', mot('agrandir') + ' ' + (k + 1));
     var portrait = !!(ph.w && ph.h && ph.h > ph.w);
     if (portrait) b.className = 'shot portrait';
     var im = document.createElement('img');
@@ -498,7 +666,7 @@ function openProject(i) {
     im.decoding = 'async';
     if (k === 0) im.setAttribute('fetchpriority', 'high');
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
-    im.alt = ph.caption || (current.title + ' — photo ' + (k + 1));
+    im.alt = ph.caption || (current.title + ' — ' + mot('photo') + ' ' + (k + 1));
     // `complete` couvre le cas d'une image déjà en cache : l'événement `load` serait déjà passé.
     if (im.complete) im.classList.add('chargee');
     else im.addEventListener('load', function () { im.classList.add('chargee'); });
@@ -506,6 +674,7 @@ function openProject(i) {
     if (ph.caption) {
       var cap = document.createElement('span');
       cap.className = 'shot-cap';
+      cap.dir = 'auto';
       cap.textContent = ph.caption;
       b.appendChild(cap);
     }
@@ -536,12 +705,12 @@ function peindreContactProjet() {
   var lien = null;
   if (s.tel) {
     var wa = versWhatsApp(s.tel);
-    if (wa) lien = { href: 'https://wa.me/' + wa, texte: 'écrivez-moi sur WhatsApp', ext: true };
+    if (wa) lien = { href: 'https://wa.me/' + wa, texte: mot('whatsapp'), ext: true };
   }
-  if (!lien && s.email) lien = { href: 'mailto:' + s.email, texte: 'écrivez-moi' };
+  if (!lien && s.email) lien = { href: 'mailto:' + s.email, texte: mot('ecrire') };
   if (!lien) { p.hidden = true; p.textContent = ''; return; }
   p.hidden = false;
-  p.textContent = 'Un projet de ce genre ? ';
+  p.textContent = mot('genre');
   var a = document.createElement('a');
   a.href = lien.href; a.textContent = lien.texte;
   if (lien.ext) { a.target = '_blank'; a.rel = 'noopener'; }
@@ -710,7 +879,7 @@ function renderApropos(site) {
   var s = site || {};
   var host = el('contact');
   host.innerHTML = '';
-  var txt = (s.apropos || '').trim();
+  var txt = texteSite('apropos', s);
   el('apropos-txt').textContent = txt;
   el('apropos-txt').hidden = !txt;
   var liens = [];
@@ -734,6 +903,11 @@ function renderApropos(site) {
   });
   el('apropos').hidden = !txt && !liens.length;
 }
+
+/* La langue du visiteur est posée AVANT la lecture du manifeste : la page ne doit pas
+   s'afficher une seconde en français si son choix était l'hébreu. Le sélecteur, lui, attend
+   de savoir quelles langues le site propose. */
+poserLangue(langueRetenue(), false);
 
 /* Remet les cartes d'attente : au premier chargement elles sont déjà dans le HTML servi,
    mais après un échec et un « Réessayer » il faut les redessiner. */
@@ -769,20 +943,19 @@ function charger() {
   .then(function (m) {
     if (m.site) {
       appliquerTheme(m.site.theme, m.site.mouvement);
-      if (m.site.title) { el('site-name').textContent = m.site.title; el('footer').textContent = m.site.title + ' — ' + (m.site.subtitle || ''); }
-      if (m.site.subtitle) el('site-tagline').textContent = m.site.subtitle;
       infosSite = m.site;
-      renderApropos(m.site);
     }
     projects = (m.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
+    /* Un seul point d'entrée du rendu : nom, sous-titre, sélecteur de langue, index,
+       filtres, journal et à-propos. C'est aussi ce qu'on rejoue à chaque changement de
+       langue — deux chemins de rendu finiraient par diverger. */
+    toutRedessiner();
     if (!projects.length) {
-      showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
+      showState(mot('vide'), mot('videTxt'));
       return;
     }
-    renderFiltres();
-    renderIndex();
     var h = location.hash.replace('#p-', '');
-    if (h) {
+    if (h && h !== location.hash) {
       for (var i = 0; i < projects.length; i++) if (projects[i].id === h) { openProject(i); break; }
     }
   })
@@ -791,9 +964,9 @@ function charger() {
      personne n'apprenait que le site était en panne. Ce sont deux messages distincts, et
      celui de la panne propose de réessayer sur place. */
   .catch(function () {
-    showState('Les réalisations n’ont pas pu être chargées',
-      'La connexion n’a pas abouti. Vérifiez votre réseau, puis réessayez.',
-      { texte: 'Réessayer', faire: function () { squelettes(); charger(); } });
+    toutRedessiner();
+    showState(mot('panne'), mot('panneTxt'),
+      { texte: mot('reessayer'), faire: function () { squelettes(); charger(); } });
   });
 }
 charger();

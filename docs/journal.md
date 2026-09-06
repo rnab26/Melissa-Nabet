@@ -54,6 +54,108 @@ point est plus bas, dans l'ordre chronologique.)*
 
 ---
 
+## 6 septembre 2026 — Le site en trois langues, et un journal
+
+**Branche** `claude/site-langues-journal-0509`. **Chantier** `eaf36cf0-9664-45ed-b536-a7f861a489ee`
+(identité du site). **Fiche de décision**
+<https://claude.ai/code/artifact/0a5981ec-e66c-4ec9-86dd-500d76843969>.
+
+### Ce qui s'est passé, et pourquoi ce chantier a changé de forme
+
+La fiche d'identité demandait cinq choses : direction **index**, accueil en **grille**,
+mouvement **discret**, **trois langues** (français, anglais, hébreu), et quatre sections
+(**réalisations, studio, contact, journal**).
+
+Une session parallèle a livré, pendant que celle-ci travaillait, le thème « index », la
+grille, le mouvement discret, les catégories et la section « À propos / contact ». Une
+première version de ce chantier, écrite sur un `main` plus ancien, refaisait tout ça de son
+côté : **la fusionner aurait écrasé leur travail**. Elle a donc été abandonnée — elle reste
+poussée sur `claude/site-identite-index-0509` si quelque chose y était bon à reprendre, mais
+elle n'a pas vocation à être fusionnée.
+
+Il restait deux demandes non couvertes, et ce sont elles qui sont livrées ici : **les trois
+langues** et **le journal**.
+
+### Les trois langues
+
+- **Sélecteur FR / EN / עב** dans l'en-tête, qui n'apparaît que si le site propose plus d'une
+  langue. Le choix est retenu d'une visite à l'autre.
+- **L'hébreu bascule toute la page en lecture de droite à gauche** : mise en page en miroir,
+  flèches du plein écran inversées.
+- **L'interface est traduite** (navigation, filtres, états, « projet suivant », « écrivez-moi »).
+  Ce sont des mots d'appareil, pas les mots de Melissa.
+- **Ses textes à elle ne sont pas traduits automatiquement.** Tant qu'une traduction manque,
+  c'est le **français d'origine** qui s'affiche. Poser une traduction machine sous son nom
+  n'était pas une option : c'est elle qui parle sur ce site.
+- Dans le CRM (⚙ Le site public), un onglet par langue : les mêmes champs, langue par langue,
+  et une mention explicite « Non traduit — le français s'affichera » là où il manque du texte.
+
+**La forme des données est volontairement ADDITIVE** : le français reste dans les champs
+d'origine du manifeste (`subtitle`, `apropos`), et les autres langues arrivent à côté, dans
+`i18n`. Rien à migrer, et le manifeste actuellement en ligne — qui ne connaît ni langues ni
+journal — continue de s'afficher correctement (vérifié : il a son propre banc d'essai).
+
+### Le journal
+
+Des notes datées, affichées après les projets, alimentées depuis le CRM : ajouter, écrire,
+réordonner, supprimer avec confirmation. **Sans entrée, la section n'existe pas sur le site**
+— pas d'onglet « Journal » qui ouvre sur du vide. La date est commune aux trois langues (elle
+ne se traduit pas) ; titre et texte se traduisent.
+
+### Trois défauts corrigés en route
+
+1. **`siteSettings()` remplaçait `library.site` par un nouvel objet à chaque appel.** Garder
+   son résultat puis appeler une fonction qui la rappelle — ce que fait n'importe quelle
+   poignée un peu composée — laissait écrire dans un objet devenu orphelin, jamais sauvegardé,
+   sans le moindre signal. C'est ce qui faisait qu'activer une langue « ne prenait pas ».
+   Elle complète maintenant **en place**. Même famille de bug que celui documenté sur les
+   fiches clients.
+2. **`renderApropos()` lisait l'état global** au lieu de l'objet qu'on lui passe : la fonction
+   n'affichait plus ce qu'on lui donnait, et devenait intestable.
+3. **Ponctuation cassée en hébreu.** Un texte français non traduit, affiché dans une page en
+   lecture de droite à gauche, voyait son point final partir au début de la ligne
+   (« .Texte de présentation »). C'est exactement l'état dans lequel le site est livré tant
+   que les traductions manquent. Tout ce que Melissa écrit porte maintenant `dir="auto"` :
+   chaque texte garde son propre sens de lecture.
+
+### Vérification
+
+Tout au navigateur (Chromium), rien de déduit :
+
+- `tests/site.test.mjs` — **86 contrôles, 0 échec** (langues, hébreu en miroir, ponctuation
+  bidirectionnelle, journal, ancien manifeste).
+- `tests/site-langues.test.mjs` — **nouveau, 20 contrôles, 0 échec** : le panneau du CRM en
+  390 px, jusqu'à ce qui part réellement dans le manifeste.
+- `tests/realisations.test.mjs` — **442 contrôles, 0 échec**. Aucune régression.
+- `tests/bout-en-bout.test.mjs` — **20 contrôles, 0 échec**.
+- Captures : `/tmp/v2-mobile-fr.png`, `/tmp/v2-hebreu-corrige.png`.
+
+### Ce qu'il ne faut pas casser
+
+- **Le français est la langue de repli**, pas une langue comme les autres : il ne peut pas
+  être décoché, et un champ vide dans une autre langue **ne part pas** dans le manifeste —
+  sinon le site afficherait du vide au lieu de retomber sur le français.
+- `siteSettings()` **complète en place**. Ne pas revenir à un `Object.assign` qui réaffecte
+  `library.site` : ça réintroduit le bug de l'objet orphelin.
+- `dir="auto"` sur tout ce qui vient du CRM. Un titre de projet ajouté ailleurs sans ce
+  marquage se cassera en hébreu, et personne ne le verra en français.
+- Le manifeste reste **rétrocompatible** : `subtitle` et `apropos` sont le français, `i18n`
+  est un supplément. Déplacer le français dans `i18n.fr` casserait le site en ligne.
+
+### Ce qui reste, et qu'il faut dire à Raphaël
+
+1. **Une seule réalisation est réellement en ligne.** Aucune identité ne donnera l'effet d'un
+   site de studio avec une photo : les cinq références du relevé reposent sur dix projets et
+   de grandes images. Le chantier suivant n'est pas graphique, il est photographique.
+2. **Trois langues, c'est trois fois le texte à écrire.** La mécanique est livrée et le
+   français est en place ; l'anglais et l'hébreu attendent ses mots, dans ⚙ Le site public,
+   onglet par onglet.
+3. **Les titres et textes des projets ne sont pas encore traduisibles** — seuls le sous-titre,
+   l'à-propos et le journal le sont. C'est volontaire : ça se décide quand il y aura de quoi
+   traduire.
+
+---
+
 ## 5 septembre 2026 — Quelle version part sur le site (et comment revenir en arrière)
 
 **Branche** `claude/photos-version-publiee-0509` → fusionnée sur `main`. **Chantier Jarvis** `ae41e91f-1660-4afb-ab23-b0406d0f3ffe`.
