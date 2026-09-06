@@ -649,7 +649,11 @@ function majSeo(titre, description, image) {
     if (ogi) ogi.content = image;
   }
 }
-function openProject(i) {
+/* RENDU PUR — `afficherProjet` ne touche jamais à l'adresse ni à l'historique : c'est
+   `ouvrirProjet` qui décide de l'entrée d'historique, et `rendreDepuisUrl` qui rejoue un
+   état déjà posé (retour navigateur). Deux chemins qui écrivent l'URL finiraient par se
+   contredire. */
+function afficherProjet(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
   el('d-meta').textContent = [current.date, current.categorie, current.lieu, current.surface,
@@ -698,7 +702,6 @@ function openProject(i) {
   });
   document.body.classList.add('viewing');
   window.scrollTo({ top: 0, behavior: 'auto' });
-  location.hash = 'p-' + current.id;
   peindreSuivant();
   peindreContactProjet();
   var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
@@ -744,20 +747,24 @@ function peindreSuivant() {
 }
 el('suivant').addEventListener('click', function () {
   var p = projetSuivant(1);
-  if (p) openProject(projects.indexOf(p));
+  if (p) openProject(projects.indexOf(p), 'remplacer');
 });
 
-function closeProject() {
+/* Où en était la liste quand on a ouvert un projet. Revenir en haut de page à chaque
+   retour oblige à refaire tout le défilement pour retrouver le projet suivant : au
+   douzième chantier, plus personne ne remonte. */
+var posListe = 0;
+function afficherListe() {
   document.body.classList.remove('viewing');
   current = null;
-  if (location.hash) history.replaceState(null, '', location.pathname);
   majSeo(TITRE_SITE, DESC_SITE, IMG_SITE);
+  window.scrollTo({ top: posListe, behavior: 'auto' });
 }
 
 /* Qui a ouvert le plein écran : au clavier, il faut lui rendre le focus en refermant,
    sinon on se retrouve renvoyé en haut de page sans savoir où l'on en était. */
 var lbRetour = null;
-function openLightbox(k) {
+function afficherPhoto(k) {
   if (!current) return;
   if (!el('lightbox').classList.contains('open')) lbRetour = document.activeElement;
   lbIndex = k;
@@ -770,20 +777,105 @@ function openLightbox(k) {
   el('lightbox').classList.add('open');
   var fermer = el('lb-close');
   if (fermer) fermer.focus();
+  /* Les deux voisines sont chargées pendant qu'on regarde celle-ci : le balayage suivant
+     est instantané, dans un sens comme dans l'autre. Le préchargement ne se faisait
+     qu'après un premier changement de photo — donc jamais pour le tout premier geste,
+     celui qu'on fait le plus souvent. */
+  precharger(k + 1); precharger(k - 1);
+}
+function precharger(k) {
+  if (!current || !current.photos.length) return;
+  var ph = current.photos[(k + current.photos.length) % current.photos.length];
+  if (ph) { var pre = new Image(); pre.src = url(ph.full); }
 }
 function stepLightbox(d) {
   if (!current) return;
   lbIndex = (lbIndex + d + current.photos.length) % current.photos.length;
   openLightbox(lbIndex);
-  // La suivante est chargée pendant qu'on regarde celle-ci.
-  var apres = current.photos[(lbIndex + d + current.photos.length) % current.photos.length];
-  if (apres) { var pre = new Image(); pre.src = url(apres.full); }
 }
-function closeLightbox() {
+function fermerPhoto() {
+  if (!el('lightbox').classList.contains('open')) return;
   el('lightbox').classList.remove('open');
   if (lbRetour && document.contains(lbRetour)) lbRetour.focus();
   lbRetour = null;
 }
+
+/* ------------------------------------------------------------------------------------
+   LE BOUTON « RETOUR » DU NAVIGATEUR
+
+   Ouvrir un projet écrivait une ancre dans l'adresse, mais rien n'écoutait le retour :
+   sur un téléphone, le geste ou le bouton « précédent » changeait l'adresse sans rien
+   fermer à l'écran. Le visiteur appuyait une deuxième fois — et quittait le site. Le
+   plein écran, lui, n'avait aucune entrée d'historique du tout : le geste retour sortait
+   carrément du projet.
+
+   Trois vues, trois entrées d'historique : la liste, un projet, une photo en plein écran.
+   Une seule règle : ces fonctions-ci écrivent l'historique et laissent le rendu aux
+   fonctions `afficher…`, qui n'y touchent jamais. `rendreDepuisUrl` rejoue l'état que le
+   navigateur vient de rétablir.
+
+   « Projet suivant » REMPLACE l'entrée au lieu de l'empiler : sinon, après avoir parcouru
+   huit chantiers d'affilée, il faudrait appuyer huit fois sur retour pour sortir — et le
+   bouton « ← Toutes les réalisations » ne ramènerait qu'au projet précédent.
+------------------------------------------------------------------------------------ */
+function urlDe(etat) {
+  var base = location.pathname + location.search;
+  return etat.vue === 'liste' ? base : base + '#p-' + etat.id;
+}
+function profondeur() {
+  var st = history.state;
+  return st && typeof st.profondeur === 'number' ? st.profondeur : 0;
+}
+function pousser(etat) { etat.profondeur = profondeur() + 1; history.pushState(etat, '', urlDe(etat)); }
+function remplacer(etat) { etat.profondeur = profondeur(); history.replaceState(etat, '', urlDe(etat)); }
+function vueCourante() { return (history.state && history.state.vue) || 'liste'; }
+
+/* Passer d'un projet à un autre REMPLACE toujours l'entrée — bouton « projet suivant »,
+   flèches du clavier, peu importe : après huit chantiers enchaînés il faudrait sinon huit
+   retours pour ressortir. La règle est ici, pas chez chaque appelant, sans quoi il suffit
+   d'oublier un `mode` quelque part pour la casser. `mode` reste utile pour l'arrivée par
+   un lien direct, où il n'y a pas encore de projet ouvert et où il ne faut pourtant pas
+   empiler par-dessus l'entrée d'arrivée. */
+function openProject(i, mode) {
+  if (!current) posListe = window.scrollY || window.pageYOffset || 0;
+  var etat = { vue: 'projet', id: projects[i].id };
+  if (mode === 'remplacer' || current) remplacer(etat); else pousser(etat);
+  fermerPhoto();
+  afficherProjet(i);
+}
+function closeProject() {
+  /* Une entrée nous précède : on la rejoue, pour que le bouton « précédent » du navigateur
+     et celui de la page racontent la même histoire. Arrivé par un lien direct, il n'y a
+     rien derrière — on remplace l'entrée plutôt que de faire sortir du site. */
+  if (profondeur() > 0) { history.back(); return; }
+  remplacer({ vue: 'liste' });
+  fermerPhoto();
+  afficherListe();
+}
+function openLightbox(k) {
+  if (!current) return;
+  var etat = { vue: 'photo', id: current.id, photo: k };
+  /* Passer d'une photo à l'autre remplace : trente photos ne doivent pas devenir trente
+     entrées d'historique. */
+  if (vueCourante() === 'photo') remplacer(etat); else pousser(etat);
+  afficherPhoto(k);
+}
+function closeLightbox() {
+  if (vueCourante() === 'photo' && profondeur() > 0) { history.back(); return; }
+  if (current) remplacer({ vue: 'projet', id: current.id });
+  fermerPhoto();
+}
+function rendreDepuisUrl() {
+  var st = history.state || {};
+  var id = st.id || location.hash.replace(/^#p-/, '');
+  var idx = -1;
+  for (var i = 0; i < projects.length; i++) if (projects[i].id === id) { idx = i; break; }
+  if (idx < 0) { fermerPhoto(); afficherListe(); return; }
+  if (!current || current.id !== projects[idx].id) afficherProjet(idx);
+  if (st.vue === 'photo' && typeof st.photo === 'number') afficherPhoto(st.photo);
+  else fermerPhoto();
+}
+window.addEventListener('popstate', rendreDepuisUrl);
 
 /* Sur un téléphone, on fait défiler les photos au doigt : sans ça il faut viser des
    flèches de 46 px, ce que personne ne fait. Un glissement franc et horizontal seulement,
@@ -968,7 +1060,7 @@ function charger() {
     }
     var h = location.hash.replace('#p-', '');
     if (h && h !== location.hash) {
-      for (var i = 0; i < projects.length; i++) if (projects[i].id === h) { openProject(i); break; }
+      for (var i = 0; i < projects.length; i++) if (projects[i].id === h) { openProject(i, 'remplacer'); break; }
     }
   })
   /* Un portfolio vide et une lecture qui échoue se ressemblaient : les deux affichaient

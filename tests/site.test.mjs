@@ -614,6 +614,99 @@ check('« Réessayer » qui échoue encore réaffiche la panne, pas une page vid
   /n’ont pas pu être chargées/.test((await page.textContent('#state')) || '')
   && (await page.locator('#state button').count()) === 1);
 
+/* ------------------------------------------------------------------------------------
+   LE BOUTON « RETOUR » DU NAVIGATEUR — c'est le geste le plus utilisé sur téléphone, et
+   il ne faisait rien : l'adresse changeait, l'écran non. Ces contrôles se font avec le
+   VRAI bouton précédent (page.goBack), pas en appelant les fonctions du site.
+------------------------------------------------------------------------------------ */
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(400);
+/* On descend dans la liste avant d'ouvrir : le retour doit rendre cette position. Le clic
+   est déclenché DANS la page et non par Playwright : `locator.click()` fait d'abord
+   défiler jusqu'à l'élément, ce qui changerait la position juste avant l'ouverture et
+   ferait passer le contrôle pour de mauvaises raisons. */
+await page.evaluate(() => window.scrollTo(0, 120));
+await page.waitForTimeout(150);
+const posAvant = await page.evaluate(() => window.scrollY);
+/* `.click()` sur un bouton lui donne le focus, et le navigateur fait défiler pour l'amener
+   à l'écran : la position mesurée juste avant ne serait alors plus celle de l'ouverture.
+   Un événement de clic synthétique ne déplace rien. */
+await page.evaluate(() => document.querySelectorAll('.project:not(.squelette)')[1]
+  .dispatchEvent(new MouseEvent('click', { bubbles: true })));
+await page.waitForTimeout(250);
+check('Historique : ouvrir un projet pose bien une entrée',
+  (await page.evaluate(() => location.hash)) !== '' && (await page.evaluate(() => document.body.classList.contains('viewing'))));
+await page.goBack();
+await page.waitForTimeout(400);
+const apresRetour = await page.evaluate(() => ({
+  vue: document.body.classList.contains('viewing'), hash: location.hash, y: window.scrollY,
+}));
+check('Le bouton « précédent » referme le projet et rend la liste',
+  !apresRetour.vue && apresRetour.hash === '', JSON.stringify(apresRetour));
+check('Le retour rend la position où on avait laissé la liste',
+  posAvant > 0 && Math.abs(apresRetour.y - posAvant) < 30,
+  'attendu ' + posAvant + ', obtenu ' + apresRetour.y);
+check('Le titre de l’onglet revient à celui du site après un retour',
+  !/—/.test(await page.title()) || (await page.title()) === (await page.evaluate(() => TITRE_SITE)));
+await page.goForward();
+await page.waitForTimeout(400);
+check('Le bouton « suivant » rouvre le projet quitté',
+  (await page.evaluate(() => document.body.classList.contains('viewing'))) && /#p-/.test(await page.evaluate(() => location.hash)));
+
+// Plein écran : il n'avait aucune entrée d'historique, le geste retour sortait du projet.
+await page.locator('.shot').first().click();
+await page.waitForTimeout(300);
+check('Historique : le plein écran pose son entrée',
+  await page.evaluate(() => document.getElementById('lightbox').classList.contains('open')));
+await page.goBack();
+await page.waitForTimeout(400);
+const apresRetourPhoto = await page.evaluate(() => ({
+  photo: document.getElementById('lightbox').classList.contains('open'),
+  projet: document.body.classList.contains('viewing'),
+}));
+check('Le bouton « précédent » ferme le plein écran SANS quitter le projet',
+  !apresRetourPhoto.photo && apresRetourPhoto.projet, JSON.stringify(apresRetourPhoto));
+
+// Trente photos ne doivent pas devenir trente entrées d'historique.
+await page.locator('.shot').first().click();
+await page.waitForTimeout(200);
+await page.locator('#lb-next').click();
+await page.locator('#lb-next').click();
+await page.waitForTimeout(250);
+await page.goBack();
+await page.waitForTimeout(400);
+check('Changer de photo ne s’empile pas dans l’historique',
+  !(await page.evaluate(() => document.getElementById('lightbox').classList.contains('open')))
+  && (await page.evaluate(() => document.body.classList.contains('viewing'))));
+
+// Enchaîner « projet suivant » ne doit pas exiger huit retours pour ressortir — au bouton
+// comme à la flèche du clavier, qui empilait alors que le bouton non.
+await page.evaluate(() => closeLightbox());
+await page.waitForTimeout(250);
+await page.locator('#suivant').click();
+await page.waitForTimeout(250);
+await page.keyboard.press('ArrowRight');
+await page.waitForTimeout(250);
+await page.locator('#suivant').click();
+await page.waitForTimeout(250);
+await page.goBack();
+await page.waitForTimeout(400);
+check('« Projet suivant » enchaîné : un seul retour ramène à la liste',
+  !(await page.evaluate(() => document.body.classList.contains('viewing')))
+  && (await page.evaluate(() => location.hash)) === '');
+
+// Arrivé par un lien direct : rien derrière. Le bouton de la page ne doit pas faire sortir.
+await page.goto('http://127.0.0.1:8902/index.html#p-r1', { waitUntil: 'networkidle' });
+await page.waitForTimeout(500);
+await page.locator('#back').click();
+await page.waitForTimeout(400);
+const apresLienDirect = await page.evaluate(() => ({
+  vue: document.body.classList.contains('viewing'), hash: location.hash,
+  cartes: document.querySelectorAll('.project:not(.squelette)').length,
+}));
+check('Lien direct vers un projet : « Toutes les réalisations » ramène à la liste, sans sortir du site',
+  !apresLienDirect.vue && apresLienDirect.hash === '' && apresLienDirect.cartes > 0, JSON.stringify(apresLienDirect));
+
 const realErrs = errs.filter(e => !envNoise(e));
 check('Aucune erreur JavaScript du site', realErrs.length === 0, realErrs.slice(0, 3).join(' | '));
 
