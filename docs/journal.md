@@ -54,6 +54,81 @@ point est plus bas, dans l'ordre chronologique.)*
 
 ---
 
+## 6 septembre 2026 — « À la vente » : le magasin de revêtement mural sur le site
+
+**Branche** `claude/boutique-vente-0609`. **Chantier** `4a660bd2`.
+
+Ses mots : « on va rajouter une nouvelle catégorie, en fait, de vente […] on a un magasin de
+revêtement mural — ça s'appelle "חיפוי קיר" en hébreu — et on aimerait montrer ce qu'on
+propose à la vente aussi. »
+
+**Catalogue maintenant, encaissement plus tard** : le paiement est un chantier à part
+(`26af62e0`, à cadrer — prestataire, qui facture, TVA israélienne, livraison et pose). Le
+catalogue ne l'attend pas.
+
+### Livré côté CRM
+
+Un **onglet Boutique**, distinct des Réalisations : un chantier terminé se montre, un produit
+s'achète. Un produit porte un nom, plusieurs photos, une description, une matière/finition,
+un **prix facultatif**, une disponibilité (disponible / sur commande / épuisé) et un rayon.
+
+- **Le prix vide n'est pas un oubli** : il affiche « prix sur demande » en ligne. Melissa ne
+  veut pas forcément publier ses tarifs.
+- **Les rayons se gèrent depuis le CRM** (⚙ Le site public → Catégories de la boutique),
+  exactement comme les sections des réalisations : ajouter, renommer — le renommage suit sur
+  les produits —, réordonner, supprimer avec le nombre de produits concernés.
+- **Une langue à la fois** dans la fiche produit, avec le champ en écriture de droite à
+  gauche quand on écrit l'hébreu. Ici l'hébreu n'est pas cosmétique : c'est la langue des
+  clients du magasin.
+- La fiche dit **quel numéro WhatsApp** les visiteurs verront — ou qu'il en manque un.
+- Publier sans photo est **refusé** : un produit sans photo n'afficherait rien.
+
+### Livré côté site
+
+Une section **« À la vente »**, sa propre grille (carrés, prix, disponibilité), ses propres
+filtres par rayon dans l'ordre du CRM. Chaque produit disponible porte un **bouton WhatsApp**
+avec le nom du produit déjà écrit dans le message — **dans la langue affichée** : en hébreu,
+le message part en hébreu avec le nom hébreu du produit. Un produit épuisé n'a pas de bouton.
+Sans produit publié, la section n'existe pas.
+
+### Ce qui n'est PAS fait, volontairement
+
+Panier, compte client, frais de port, gestion de stock, paiement en ligne. Rien de tout ça
+n'a été demandé, et un test vérifie qu'aucun de ces mots n'apparaît sur la page.
+
+### Deux défauts trouvés à l'écran, pas par un test
+
+1. **Un prix faux en hébreu.** « 180 ₪ / m² » s'affichait « m² / ₪ 180 » : la carte entière
+   portait `dir="auto"`, donc un nom hébreu en tête basculait tout le bloc — prix compris —
+   en lecture de droite à gauche. Les phrases françaises y perdaient aussi leur point final,
+   renvoyé en début de ligne. Chaque texte porte maintenant SA direction. Un prix mal lu est
+   un prix faux : c'est le genre de défaut qu'aucun test ne trouve, seulement l'œil.
+2. **`.rz-new` était devenue ambiguë** : la tuile « Nouveau produit » réutilisait la classe de
+   la tuile « Nouvelle réalisation », et la suite Réalisations, qui les compte dans toute la
+   page, en voyait une de trop dès que la boutique était rendue par une synchro. Classe
+   distincte, apparence partagée.
+
+### Ce qu'il ne faut pas casser
+
+- Les photos de produits utilisent **le même moteur** que celles des réalisations
+  (`importOnePhoto`, `photoStore`, `renderThumbInto`, `glRenderTo`). Ne pas le dupliquer :
+  les deux chemins divergeraient au premier correctif.
+- Les produits sont publiés dans `manifest.produits`, leurs images sous `prod-<id>/` —
+  séparés des réalisations pour qu'un dossier ne se marche pas sur l'autre.
+- Les produits voyagent dans la synchro sous `kind:'produits'`, avec la même protection de
+  saisie en cours (`isEditingBoutique`) que les réalisations.
+- Le numéro WhatsApp est **celui du contact du site** : une seule source. Deux numéros qui
+  divergent, c'est une commande qui n'arrive jamais.
+
+### Vérification
+
+`tests/boutique.test.mjs` — **nouveau, 34 contrôles, 0 échec**, en 390 px, CRM et site,
+français et hébreu. `tests/realisations.test.mjs` **463/463**, `tests/site.test.mjs`
+**109/109**, catégories 18/18, langues 20/20, sections 7/7, bout-en-bout 20/20.
+Captures : `/tmp/crm-boutique.png`, `/tmp/boutique-fr.png`, `/tmp/boutique-he.png`.
+
+---
+
 ## 6 septembre 2026 — Les catégories deviennent une liste, et créer un projet se voit
 
 **Branche** `claude/categories-liste-0609`. **Chantier** `eaf36cf0`.

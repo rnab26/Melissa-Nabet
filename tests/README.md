@@ -10,6 +10,10 @@ Trois suites :
   navigateur irait chercher n'importe quelle adresse avec la clé du compte. Se lance avec
   `bun tests/pont-ia.test.mjs` (bun exécute le TypeScript du pont). Aucune dépense : ce sont
   des fonctions pures, aucun appel n'est émis.
+- `tests/boutique.test.mjs` — la **boutique** : l'onglet du CRM (fiche produit, rayons, prix
+  facultatif, hébreu dans la fiche) et la section « À la vente » du site, en français et en
+  hébreu, bouton WhatsApp compris. Demande les DEUX serveurs (8899 et 8902) :
+  `node tests/boutique.test.mjs`.
 - `tests/categories.test.mjs` — les **catégories** : menu déroulant dans la fiche (plus de
   champ libre), liste modifiable depuis le CRM, renommage qui suit sur les réalisations,
   ordre publié dans le manifeste, et le bouton « + Nouvelle réalisation » visible sans

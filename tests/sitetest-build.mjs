@@ -71,6 +71,7 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
           /* L'ordre des sections vient du CRM. Ici il est VOLONTAIREMENT contraire à
              l'alphabet : c'est ce qui prouve que le site suit la liste et non un tri. */
           categories: ['Bureau', 'Appartement'],
+          categoriesProduits: ['Revêtement mural', 'Panneau décoratif'],
           langues: ['fr', 'en', 'he'],
           i18n: { en: { subtitle: 'Interior architecture' } },
           journal: [
@@ -79,6 +80,24 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
               i18n: { en: { titre: 'Sébastien’s office delivered' } } },
             { id: 'j2', date: 'Juin 2026', titre: 'Atelier photographie', texte: '' },
           ] },
+  /* La boutique : trois produits, deux rayons, un prix rempli et deux vides (« sur
+     demande »), un épuisé (pas de bouton d'achat), et une traduction hébreu partielle —
+     c'est la langue des clients du magasin de revêtement mural. */
+  produits: [{
+    id: 'pr1', nom: 'Panneau chêne rainuré', matiere: 'Chêne massif, huilé',
+    prix: '180 ₪ / m²', dispo: 'oui', categorie: 'Revêtement mural',
+    description: 'Lames verticales de 12 mm, posées sur tasseaux.',
+    i18n: { he: { nom: 'לוח אלון מחורץ' } },
+    photos: [{ full: 'u/r1/p0.jpg', thumb: 'u/r1/t0.jpg', w: 1600, h: 1067, cover: true }],
+  }, {
+    id: 'pr2', nom: 'Béton ciré mural', matiere: 'Enduit minéral', prix: '', dispo: 'commande',
+    categorie: 'Revêtement mural',
+    photos: [{ full: 'u/r1/p1.jpg', thumb: 'u/r1/t1.jpg', w: 1600, h: 1067, cover: true }],
+  }, {
+    id: 'pr3', nom: 'Panneau acoustique feutre', matiere: 'Feutre recyclé', prix: '', dispo: 'rupture',
+    categorie: 'Panneau décoratif',
+    photos: [{ full: 'u/r1/p2.jpg', thumb: 'u/r1/t2.jpg', w: 1067, h: 1600, cover: true }],
+  }],
   /* Trois projets et deux catégories : c'est le minimum pour que le filtre du site ait un
      sens et soit vérifiable. Les deux derniers réutilisent les mêmes fichiers d'image —
      le banc d'essai teste la page, pas les photos. */

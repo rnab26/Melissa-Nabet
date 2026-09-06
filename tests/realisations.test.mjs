@@ -3235,10 +3235,11 @@ check('Site public : tout est vide au départ',
   siteVide.apropos === '' && siteVide.email === '' && siteVide.tel === '' && siteVide.insta === '');
 // Rien de VIDE ne part : une coordonnée non remplie afficherait une étiquette creuse sur le
 // site. L'allure part toujours — ce n'est pas une étiquette, c'est la façon dont la page
-// s'habille, et elle a toujours une valeur. La liste des catégories aussi : c'est elle qui
-// donne au site l'ORDRE de ses sections, et elle n'est jamais vide.
+// s'habille, et elle a toujours une valeur. Les deux listes de catégories aussi — celle des
+// réalisations et celle de la boutique : ce sont elles qui donnent au site l'ORDRE de ses
+// sections et de ses rayons, et elles ne sont jamais vides.
 check('Site public : aucune coordonnée vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,categories', siteVide.infos.join(','));
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,categories,categoriesProduits', siteVide.infos.join(','));
 
 const siteAllure = await page.evaluate(() => {
   library.site = null;
