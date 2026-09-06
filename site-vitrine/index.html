@@ -1168,14 +1168,29 @@ function afficherProjet(i) {
     var portrait = !!(ph.w && ph.h && ph.h > ph.w);
     if (portrait) b.className = 'shot portrait';
     var im = document.createElement('img');
-    im.src = url(ph.full);
     /* Deux tailles existent déjà dans le stockage (1600 px et 700 px) : autant laisser le
        navigateur prendre la plus petite quand elle suffit, plutôt qu'un fichier de 400 Ko
-       pour une image affichée sur 350 px. Aucune image supplémentaire n'est produite. */
+       pour une image affichée sur 350 px. Aucune image supplémentaire n'est produite.
+       `srcset` et `sizes` sont posés AVANT `src` : dans l'autre ordre, le navigateur a déjà
+       lancé le téléchargement de la grande image quand il découvre qu'une plus petite
+       suffisait — et les deux partent. */
     if (ph.thumb) {
       im.srcset = url(ph.thumb) + ' 700w, ' + url(ph.full) + ' 1600w';
-      im.sizes = portrait ? '(max-width:700px) 100vw, 45vw' : '(max-width:700px) 100vw, 90vw';
+      /* `sizes` DIT AU NAVIGATEUR la largeur d'affichage : s'il la surestime, il télécharge
+         la grande image alors que la petite suffisait. On annonçait 100vw (390 px sur un
+         téléphone) alors que la photo s'affiche sur 346 px — `main` a 22 px de marge de
+         chaque côté. Sur un écran à deux pixels physiques par pixel CSS (le cas le plus
+         courant), 390 × 2 = 780 dépassait les 700 px de la vignette : le navigateur prenait
+         donc la version 1600 px, quatre fois plus lourde, pour l'afficher sur 692 px réels.
+         Une fiche de douze photos pesait 4,5 Mo. Avec la vraie largeur, 346 × 2 = 692 tient
+         dans la vignette. Rien n'est dégradé : c'est du 1:1. Les écrans à trois pixels
+         continuent de recevoir la grande image, comme il se doit. */
+      var large = 'calc(100vw - 44px)';
+      im.sizes = portrait
+        ? '(max-width:700px) ' + large + ', (max-width:1240px) calc((100vw - 70px) / 2), 585px'
+        : '(max-width:700px) ' + large + ', (max-width:1240px) ' + large + ', 1196px';
     }
+    im.src = url(ph.full);
     im.loading = k < 2 ? 'eager' : 'lazy';
     im.decoding = 'async';
     if (k === 0) im.setAttribute('fetchpriority', 'high');

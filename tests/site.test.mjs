@@ -448,6 +448,39 @@ await sansObs.close();
 check('Navigateur sans observateur : rien n’est marqué, donc rien n’est invisible',
   rSansObs.total > 0 && rSansObs.invisibles === 0 && rSansObs.marquees === 0, JSON.stringify(rSansObs));
 
+/* LE POIDS D'UNE FICHE PROJET — `sizes` annonçait 100vw alors que la photo s'affiche sur
+   100vw moins les 44 px de marge. Sur un écran à deux pixels physiques par pixel CSS (le
+   plus courant), l'écart faisait basculer le navigateur sur l'image 1600 px pour l'afficher
+   sur 692 px : une fiche de douze photos pesait 4,5 Mo au lieu de 0,6. */
+{
+  const mesure = async (dpr) => {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: dpr });
+    const pg = await c.newPage();
+    let octets = 0;
+    pg.on('response', async r => { try { octets += (await r.body()).length; } catch {} });
+    /* On arrive DIRECTEMENT sur le projet : en passant par la liste, le bandeau d'accueil a
+       déjà mis la grande image en cache, et un navigateur a le droit de la réutiliser plutôt
+       que de télécharger la petite — le contrôle passerait alors pour de mauvaises raisons. */
+    await pg.goto('http://127.0.0.1:8902/index.html#p-r1', { waitUntil: 'networkidle' });
+    await pg.waitForTimeout(600);
+    await pg.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await pg.waitForTimeout(1200);
+    const r = await pg.evaluate(() => {
+      const im = document.querySelector('.shot img');
+      return { css: Math.round(im.getBoundingClientRect().width), src: (im.currentSrc || '').split('/').pop() };
+    });
+    await c.close();
+    return r;
+  };
+  const d2 = await mesure(2), d3 = await mesure(3);
+  check('Poids : à deux pixels par point, la vignette 700 px suffit et c’est elle qui est prise',
+    /^t\d/.test(d2.src), JSON.stringify(d2));
+  check('Poids : à trois pixels par point, la grande image est toujours servie',
+    /^p\d/.test(d3.src), JSON.stringify(d3));
+  check('Poids : la largeur annoncée correspond à la largeur réelle d’affichage',
+    d2.css === d3.css && d2.css > 300 && d2.css < 390, d2.css + 'px');
+}
+
 /* LA SURFACE — saisie librement dans le CRM. Tapée seule (« 110 »), elle s'affichait telle
    quelle entre le lieu et la mission, sans dire de quoi il s'agit : c'est exactement l'état
    du vrai site aujourd'hui. L'unité est ajoutée au nombre nu, et seulement à lui. */
