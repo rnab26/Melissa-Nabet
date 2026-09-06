@@ -4055,6 +4055,7 @@ function renderDashboard(){
   if(!kpiRoot||!todoRoot)return;
   renderTaskList();
   const {relances,brouillons,enAttente,republier}=computeTodos();
+  const bilanLot=buildPubLotPanel();
   const gt=globalTotals(clients);
   kpiRoot.innerHTML=`
     <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.montant)} ₪</div><div class="dash-kpi-lbl">Facturé (total)</div></div>
@@ -4063,6 +4064,7 @@ function renderDashboard(){
     <div class="dash-kpi-item"><div class="dash-kpi-val">${brouillons.length}</div><div class="dash-kpi-lbl">Devis en brouillon</div></div>`;
   if(!relances.length&&!brouillons.length&&!enAttente.length&&!republier.length){
     todoRoot.innerHTML=`<div class="empty">Rien à signaler pour l'instant — tout est à jour.</div>`;
+    if(bilanLot)todoRoot.insertBefore(bilanLot,todoRoot.firstChild);
     return;
   }
   let html='';
@@ -4077,12 +4079,16 @@ function renderDashboard(){
   if(republier.length){
     html+=`<div class="dash-sec-title">🖼 À republier sur le site (${republier.length})</div>`;
     html+=republier.map(({r,n})=>`<div class="dash-todo" onclick="gotoRealisation('${r.id}')"><span class="dash-todo-main">${esc(r.title||'Réalisation sans titre')}</span><span class="dash-todo-amt due">${n} photo(s)</span></div>`).join('');
+    /* Ouvrir chaque fiche pour recliquer « Publier » est exactement ce que personne ne fait.
+       Le rappel porte donc le geste avec lui. */
+    html+=`<button class="mini" style="margin-top:6px" onclick="republierToutes()">🌐 Tout republier (${republier.length})</button>`;
   }
   if(brouillons.length){
     html+=`<div class="dash-sec-title">📝 Devis à finaliser (${brouillons.length})</div>`;
     html+=brouillons.map(d=>`<div class="dash-todo" onclick="editDevis('${d.id}')"><span class="dash-todo-main">${esc(d.title||'Devis')} · N°${esc(d.num)}</span><span class="dash-todo-amt">${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</span></div>`).join('');
   }
   todoRoot.innerHTML=html;
+  if(bilanLot)todoRoot.insertBefore(bilanLot,todoRoot.firstChild);
 }
 
 /* ============ SAUVEGARDE (export / import) ============ */
@@ -7227,6 +7233,96 @@ async function runIaSerie(r,photos,consigne,modelId,depart){
   saveRealisations();renderRealisations();
   toast(ok+' photo(s) retouchée(s)'+(bilan.echecs.length?' · '+bilan.echecs.length+' échec(s)':''));
 }
+/* ---- Republier plusieurs réalisations d'un coup ----
+   Même forme que la retouche en série : on annonce, on montre où on en est, on peut
+   interrompre, et un échec sur l'une n'arrête pas les autres. */
+let _pubLot=null;
+let _pubLotReport=null;   /* bilan de la dernière republication en lot, affiché sur le tableau de bord */
+function buildPubLotPanel(){
+  if(!_pubLotReport)return null;
+  const b=_pubLotReport;
+  const box=document.createElement('div');box.className='ia-erreur pub-lot'+(b.echecs.length?'':' ia-ok');
+  const t=document.createElement('p');
+  t.textContent='🌐 Republication : '+b.ok+' réalisation(s) sur '+b.total+' remises à jour sur le site.'
+    +(b.interrompu?' Interrompu à votre demande.':'')
+    +(b.echecs.length?' '+b.echecs.length+' n’ont pas pu être republiées :':' Le site est à jour.');
+  box.appendChild(t);
+  if(b.echecs.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    b.echecs.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.titre;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+  f.addEventListener('click',()=>{_pubLotReport=null;renderDashboard();});
+  box.appendChild(f);
+  return box;
+}
+async function republierToutes(){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  const liste=(realisations||[]).filter(r=>realisationARepublier(r)>0);
+  if(!liste.length){toast('Tout est déjà à jour sur le site');return;}
+  const total=liste.reduce((a,r)=>a+realisationARepublier(r),0);
+  askConfirm('Republier '+liste.length+' réalisation(s) sur le site ? '+total+' photo(s) seront renvoyées.',async()=>{
+    _pubLot={n:0,total:liste.length,stop:false,echecs:[]};
+    openModal(`<h3>Republication en cours</h3>
+      <p class="msub">Une réalisation à la fois. Le site n'est modifié qu'au fur et à mesure.</p>
+      <p class="msub" id="lot-etat"></p>
+      <div class="rz-bar"><i style="width:0%"></i></div>
+      <ul class="rz-refus" id="lot-echecs"></ul>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px">
+        <button class="mini" id="lot-stop">Interrompre</button>
+      </div>`);
+    const stop=$('lot-stop');
+    stop.addEventListener('click',()=>{
+      if(!_pubLot)return;
+      _pubLot.stop=true;stop.disabled=true;stop.textContent='Arrêt après celle-ci…';
+    });
+    const peindre=()=>{
+      const e=$('lot-etat');
+      if(e&&_pubLot)e.textContent='Réalisation '+Math.min(_pubLot.n+1,_pubLot.total)+' sur '+_pubLot.total+' · '+(_pubLot.nom||'');
+      const b=document.querySelector('#modal .rz-bar i');
+      if(b&&_pubLot)b.style.width=Math.round(_pubLot.n/_pubLot.total*100)+'%';
+      const ul=$('lot-echecs');
+      if(ul&&_pubLot&&ul.childElementCount!==_pubLot.echecs.length){
+        ul.innerHTML='';
+        _pubLot.echecs.forEach(x=>{
+          const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+          li.querySelector('b').textContent=x.titre;li.querySelector('span').textContent=x.why;
+          ul.appendChild(li);
+        });
+      }
+    };
+    let ok=0;
+    for(const r of liste){
+      if(_pubLot.stop)break;
+      _pubLot.nom=r.title||'Réalisation sans titre';peindre();
+      _pubLastError=null;
+      await publishRealisation(r);
+      /* publishRealisation garde son message d'échec à l'écran : on le récupère ici pour
+         en faire un bilan, au lieu de le laisser écraser par la réalisation suivante. */
+      if(_pubLastError)_pubLot.echecs.push({titre:_pubLot.nom,why:_pubLastError.replace(/^Publication interrompue : /,'')});
+      else ok++;
+      _pubLot.n++;peindre();
+    }
+    const bilan={ok,total:liste.length,echecs:_pubLot.echecs.slice(),interrompu:_pubLot.stop&&_pubLot.n<liste.length};
+    _pubLot=null;
+    closeModal();
+    /* Le bilan s'affiche LÀ OÙ LE GESTE A ÉTÉ FAIT — le tableau de bord — et y reste
+       jusqu'à ce qu'on le masque. Le laisser dans la fiche d'une réalisation obligerait à
+       aller le chercher dans celle qui a échoué, c'est-à-dire à deviner laquelle. */
+    _pubLotReport=bilan;
+    _pubLastError=null;
+    renderDashboard();renderRealisations();
+    toast(bilan.ok+' réalisation(s) republiée(s)'
+      +(bilan.echecs.length?' · '+bilan.echecs.length+' échec(s)':'')
+      +(bilan.interrompu?' · interrompu':''));
+  });
+}
+
 /* Bilan de la série : il reste à l'écran. Un toast de trois secondes ne suffit pas à lire
    pourquoi trois photos sur douze n'ont pas abouti. */
 function buildIaSeriePanel(){
@@ -8311,6 +8407,12 @@ async function publishRealisation(r,opts){
     const aEcrire=plan.photos.filter(x=>tout||x.etat!=='inchangee'
       ||!(presents&&presents.has(x.full.split('/').pop())&&presents.has(x.thumb.split('/').pop())));
     const entries=[];
+    /* Les identités publiées sont préparées ici mais POSÉES plus bas, après l'écriture du
+       manifeste. Tant qu'il n'est pas écrit, le site ne sait rien de ces images : les
+       marquer « en ligne » ici ferait disparaître le rappel « à republier » alors que rien
+       n'est parti. (Correction venue du chantier « Tout republier d'un coup » ; elle vaut
+       aussi pour `p.pub`, qui dit maintenant CE QUI est en ligne, pas seulement quand.) */
+    const posees=[];
     let sharePartage=null,ecrites=0;
     for(const x of plan.photos){
       const p=x.p;
@@ -8335,6 +8437,10 @@ async function publishRealisation(r,opts){
         w=big.width;h=big.height;
         const small=glRenderTo(img,edit,PUB_THUMB,tk);
         const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+        /* Image d'aperçu du site (WhatsApp, Instagram, moteurs) : la couverture de la
+           dernière réalisation publiée, écrite à une adresse FIXE. La page publique porte
+           cette adresse en dur dans ses balises : elle n'a donc jamais à être modifiée, et
+           un lien partagé cesse de s'afficher tout nu. */
         if(!sharePartage||r.cover===p.id)sharePartage=smallBlob;
         const up=async (name,blob)=>{
           const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
@@ -8347,10 +8453,9 @@ async function publishRealisation(r,opts){
          fichier de l'appareil photo, qui n'a rien à faire sur une page publique. */
       if((p.caption||'').trim())entry.caption=p.caption.trim();
       entries.push(entry);
-      p.pub={sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
+      posees.push({p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
         cap:(p.caption||'').trim(),cover:r.cover===p.id,
-        v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p)),at:Date.now()};
-      p.publishedAt=Date.now();photoLog(p,'publie',p.pub.vlabel);
+        v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
     }
     _glTexKey='';
 
@@ -8376,14 +8481,19 @@ async function publishRealisation(r,opts){
     man.realisations.unshift(fiche);
     await writeManifest(man);
 
+    /* Le manifeste est écrit : à partir d'ici seulement, ces photos sont vraiment en ligne.
+       C'est aussi le seul moment où l'on peut dire QUELLE version l'est. */
+    const quand=Date.now();
+    posees.forEach(({p,pub})=>{p.pub=Object.assign({at:quand},pub);p.publishedAt=quand;photoLog(p,'publie',pub.vlabel);});
+
     /* Le pas d'avant est gardé — un seul, celui auquel « revenir » veut dire quelque chose.
        Ses fichiers ne sont pas effacés (voir le ménage ci-dessous) : le retour est donc
        immédiat et ne recalcule ni ne repaie rien. */
     if(avant&&r.pub){
-      r.pubPrev={at:r.pub.at||Date.now(),fiche:avant,
+      r.pubPrev={at:r.pub.at||quand,fiche:avant,
         photos:(r.pub.photos||{}),label:r.pub.at?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
     }
-    r.pub={at:Date.now(),fiche:realisationFicheSig(r),
+    r.pub={at:quand,fiche:realisationFicheSig(r),
       order:(r.photos||[]).map(p=>p.id),pids:(r.photos||[]).map(p=>p.id),
       photos:Object.fromEntries((r.photos||[]).map(p=>[p.id,p.pub]))};
 
@@ -8399,7 +8509,7 @@ async function publishRealisation(r,opts){
       if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
     }catch(e){}
 
-    r.published=true;r.publishedAt=Date.now();r.updatedAt=Date.now();
+    r.published=true;r.publishedAt=quand;r.updatedAt=quand;
     _pubLastError=null;storageInvalidate();
     saveRealisations();renderRealisations();
     toast(ecrites?('Publié — '+ecrites+' photo(s) mise(s) à jour'):'Publié — aucune image à réécrire');

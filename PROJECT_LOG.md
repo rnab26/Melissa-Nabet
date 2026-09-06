@@ -1116,3 +1116,18 @@ thème inventé qui ne part pas, le catalogue).
       c'est le plus lourd des trois chantiers de langue. Et surtout : chaque projet devra
       être **écrit trois fois** (titre, lieu, mission, texte de présentation). C'est du
       contenu que Mélissa doit produire, pas du code. À chiffrer avec eux avant de lancer.
+
+## Publication — dater les photos APRÈS le manifeste (septembre 2026)
+
+**Défaut corrigé** : `publishRealisation` posait `p.publishedAt` dans la boucle d'envoi des
+photos, avant `writeManifest`. Une écriture de manifeste qui échoue laissait donc les photos
+marquées « en ligne » côté CRM alors que le site n'avait rien reçu : la pastille passait à
+« ● en ligne », le rappel « à republier » disparaissait, et l'écart entre le CRM et le site
+devenait invisible.
+
+Les photos envoyées sont maintenant collectées dans `posees` et datées **après** l'écriture
+du manifeste, en même temps que `r.publishedAt`. Ne jamais remonter cette datation dans la
+boucle : tant que le manifeste n'est pas écrit, rien n'est en ligne.
+
+Trouvé en écrivant le test d'échec de « Tout republier » — la publication en lot rend ce
+scénario beaucoup plus probable (plusieurs écritures de manifeste d'affilée).

@@ -145,8 +145,18 @@ page publique servie depuis le stockage écrit par le CRM.
   `rgb(33,98,183)` — le bleu de la retouche, à une adresse différente ;
 - idem dans un contexte de navigateur entièrement neuf.
 
-**Total : 543 contrôles, 0 échec** (après fusion avec les chantiers arrivés entre-temps). `realisations` 430 (21 nouveaux), `bout-en-bout` 20
-(8 nouveaux), `site` 73, `pont-ia` 20. Parcours réel à 390 px : écran de publication, fiche
+**Total : 549 contrôles, 0 échec** (après fusion avec les chantiers arrivés entre-temps). `realisations` 436 (21 nouveaux), `bout-en-bout` 20
+(8 nouveaux), `site` 73, `pont-ia` 20.
+
+**Croisement avec « Tout republier d'un coup »** (arrivé sur `main` pendant ce chantier) :
+sa correction est juste et a été reportée dans la nouvelle publication — `p.pub` et
+`p.publishedAt` ne sont posés qu'**après** l'écriture du manifeste. Tant qu'il n'est pas
+écrit, le site ne sait rien des images envoyées : les marquer en ligne avant ferait
+disparaître le rappel « à republier » alors que rien n'est parti. Deux de ses tests
+simulaient « des photos qui ont bougé » en **antidatant** ; l'état ne se déduisant plus de
+dates mais de ce qui est réellement en ligne, ils font maintenant bouger l'image pour de
+bon. Un garde-fou de 30 s a été ajouté sur leur attente de confirmation : une mise en place
+devenue fausse doit échouer, pas attendre indéfiniment. Parcours réel à 390 px : écran de publication, fiche
 avec le retour en arrière, barre d'actions — aucun débordement horizontal
 (`/tmp/mn-publication-390.png`).
 
@@ -1121,3 +1131,34 @@ reste de toute façon en bas.
 **Si ce n'était pas ça, le problème** : dis-le-moi, la description du chantier était courte
 (« la barre de menu mange la vue quand on clique la moitié de l'écran ») et j'ai traité ce que
 j'ai pu constater à l'écran.
+
+---
+
+## 6 septembre 2026 — Tout republier d'un coup, et un mensonge silencieux corrigé
+
+**Branche** `claude/crm-republier-lot` → fusionnée sur `main`. **Initiative**, dans la suite
+directe du rappel « à republier ».
+
+Le tableau de bord disait « 2 réalisations à republier » et laissait ouvrir chaque fiche pour
+recliquer « Publier ». Il porte maintenant le geste : **« 🌐 Tout republier (2) »** —
+confirmation (nombre de réalisations et de photos), progression, interruption possible, et un
+bilan qui reste affiché **là où le geste a été fait**. Un échec sur l'une n'arrête pas les
+autres ; le bilan nomme laquelle et pourquoi.
+
+### Le bug trouvé en écrivant le test d'échec — celui-là comptait
+
+`publishRealisation` datait chaque photo comme « publiée » **dans la boucle d'envoi**, donc
+**avant** l'écriture du manifeste. Si cette écriture échouait (coupure réseau, manifeste
+illisible), les photos étaient marquées en ligne alors que **le site n'en savait rien** : la
+réalisation affichait « ● en ligne », le rappel « à republier » disparaissait, et plus rien ne
+signalait que le site était resté en arrière.
+
+C'est exactement le mensonge silencieux que ce rappel existe pour empêcher — et il était dans
+le code depuis la première version de la publication. Les dates ne sont désormais posées
+**qu'après** l'écriture du manifeste. Un test le vérifie : une publication qui échoue laisse
+bien sa réalisation « en attente ».
+
+**Ne pas casser** : ne jamais remonter `p.publishedAt=…` dans la boucle d'envoi des photos.
+Tant que le manifeste n'est pas écrit, rien n'est en ligne.
+
+**Vérification** : 413 contrôles au navigateur (6 nouveaux), bout en bout inchangé.
