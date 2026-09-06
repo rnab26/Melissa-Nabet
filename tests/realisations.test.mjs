@@ -1351,6 +1351,29 @@ check('Import : un fichier illisible le dit', refus.lignes.some(l => /casse\.jpg
 check('Import : les bonnes photos passent quand même', refus.photos === 4, refus.photos + ' photo(s)');
 check('Import : le bilan des refus reste affiché (pas un toast de 3 s)', refus.encore);
 
+// Un envoi qui échoue en cours de route ne doit pas laisser de fichier orphelin : il
+// occuperait de la place sans être référencé par aucune photo, donc sans pouvoir être vu
+// ni supprimé — et le stockage est plafonné.
+const importOrphelin = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const avant = window.__files.size;
+  const nb = r.photos.length;
+  const vrai = photoStore.save.bind(photoStore);
+  photoStore.save = async (cle, blob) => {
+    if (cle.startsWith('rt_')) throw new Error('réseau indisponible');
+    return vrai(cle, blob);
+  };
+  await addPhotosToRealisation(r, [await window.__mkImg('coupee.jpg', 600, 400, '#556677')]);
+  photoStore.save = vrai;
+  return { avant, apres: window.__files.size, photos: r.photos.length, nb,
+           refus: (document.querySelector('.rz-refus li') || {}).textContent || '' };
+});
+check('Import : un envoi coupé n’ajoute pas la photo…', importOrphelin.photos === importOrphelin.nb,
+  importOrphelin.photos + ' vs ' + importOrphelin.nb);
+check('Import : …et ne laisse aucun fichier orphelin dans le stockage',
+  importOrphelin.apres === importOrphelin.avant, importOrphelin.avant + ' → ' + importOrphelin.apres + ' fichier(s)');
+check('Import : et il dit que la connexion a été perdue', /connexion perdue/.test(importOrphelin.refus), importOrphelin.refus);
+
 // --- Titre et légende par photo
 const txt = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId), p = r.photos[1];
@@ -3502,7 +3525,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

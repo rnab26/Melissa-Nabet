@@ -4865,8 +4865,17 @@ async function importOnePhoto(r,file){
   try{
     const d=await decodePhotoFile(file);
     const pid=uid();
-    await photoStore.save(fullKey(pid),d.fb);
-    await photoStore.save(thumbKey(pid),d.tb);
+    try{
+      await photoStore.save(fullKey(pid),d.fb);
+      await photoStore.save(thumbKey(pid),d.tb);
+    }catch(e){
+      /* La photo n'entrera pas dans la réalisation : ce qui a déjà été envoyé n'est
+         référencé par rien et occuperait de la place sans que personne puisse le voir ni le
+         supprimer. On nettoie derrière nous — le stockage est plafonné. */
+      try{await photoStore.del(fullKey(pid));}catch(err){}
+      try{await photoStore.del(thumbKey(pid));}catch(err){}
+      throw e;
+    }
     const nouvelle={id:pid,name:file.name||'photo',caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
     photoLog(nouvelle,'import',file.name||'');
     r.photos.push(nouvelle);
