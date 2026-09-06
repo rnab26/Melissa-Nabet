@@ -9,6 +9,137 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 6 septembre 2026 — Identité « index » du site vitrine, et des rubriques qui se gèrent depuis le CRM
+
+**Branche** `claude/site-identite-index-0509`. **Chantier** `eaf36cf0-9664-45ed-b536-a7f861a489ee`.
+**Fiche de décision** <https://claude.ai/code/artifact/0a5981ec-e66c-4ec9-86dd-500d76843969>
+(collection `reponses`, document `site-theme`) — c'est elle qui fait foi sur les choix ci-dessous.
+
+### Ce qui a été demandé
+
+Direction retenue : **« index »** (liste typographique, EB Garamond + Jost, fond clair,
+vignette sous le nom), accueil en **grille**, mouvement **discret**, langues **fr / en / he**,
+sections **réalisations, studio, contact, journal**. Et cette phrase, qui est la vraie
+exigence : *« il y a une section par thème […] commercial, habitation, bureaux, réalisation
+sur mesures. Le site doit être facilement modulable avec la même logique, j'applique pour
+tous mes projets et chantiers. »*
+
+### La décision structurante
+
+Les rubriques **ne sont pas écrites dans le HTML du site**. Elles vivent dans
+`library.site.categories` côté CRM, partent dans le manifeste, et le site les lit dans
+l'ordre reçu. Ajouter « Hôtellerie » dans les réglages la fait apparaître en ligne sans
+qu'une ligne de code soit touchée. C'est le point à ne pas casser : dès qu'on écrira une
+catégorie en dur quelque part, la promesse « modulable » tombe.
+
+Même logique pour tout le reste du contenu non-photo : nom, sous-titre, texte du Studio,
+Contact, entrées du Journal, langues proposées — tout est dans les réglages, tout part dans
+le manifeste, rien n'est en dur.
+
+### Livré côté CRM (`index.html`)
+
+- **Réalisations → « ⚙ Réglages du site »** : panneau unique avec onglets de langue
+  (une seule langue affichée à la fois — trois colonnes de texte sur un téléphone sont
+  illisibles). Identité, rubriques, Studio, Journal, Contact, langues proposées.
+- **Rubriques** : ajouter, renommer, réordonner (↑ ↓), supprimer avec confirmation qui
+  annonce combien de réalisations sont concernées. Une suppression ne perd aucune
+  réalisation : elle repasse « sans rubrique ».
+- **Fiche d'une réalisation** : nouveau champ « Rubrique du site », alimenté par cette liste.
+- **« Mettre le site à jour »** : réécrit le manifeste — réglages **et** nom/date/rubrique des
+  réalisations déjà en ligne — **sans retoucher une seule photo**. Republier une réalisation
+  refait le rendu de toutes ses images : c'était inacceptable pour un simple changement de
+  rubrique. Succès et échec s'affichent dans le panneau (le message reste), pas seulement en
+  toast qui disparaît.
+
+### Livré côté site (`site-vitrine/index.html`, réécrit)
+
+- **Identité « index »** : EB Garamond sur les noms, Jost sur l'appareil de lecture, fond
+  clair, **le nom du projet au-dessus de sa vignette** (vérifié par mesure : 318 px contre
+  376 px), rubriques numérotées `01 · Commercial` avec filet.
+- **Grille** par rubrique, une colonne pleine largeur sur téléphone.
+- **Mouvement discret** : apparition de quelques pixels à l'entrée dans l'écran, agrandissement
+  de 2,8 % de la vignette au survol, filet qui se trace sous le nom. `prefers-reduced-motion`
+  coupe tout.
+- **Sections Studio / Journal / Contact** dans l'ordre choisi, **masquées tant qu'elles sont
+  vides** — pas d'onglet « Journal » qui ouvre sur du néant.
+- **États** : squelette au chargement, « Bientôt en ligne » quand rien n'est publié, message
+  de panne **avec bouton Réessayer** quand le manifeste ne se charge pas (avant, les deux cas
+  donnaient le même message : une panne réseau se faisait passer pour un site vide).
+- Un projet **sans rubrique** reste visible, rangé en fin d'index sous « Autres réalisations ».
+
+### Les trois langues : mécanique livrée, textes en attente
+
+Sélecteur FR / EN / עב, choix retenu d'une visite à l'autre, hébreu en **lecture de droite à
+gauche** (mise en page en miroir, flèches du plein écran inversées). L'**interface** est
+traduite dans les trois langues — ce sont des mots d'appareil (navigation, états, boutons).
+
+Les **textes de Melissa** ne le sont pas et ne le seront pas automatiquement : tant qu'une
+traduction manque, c'est le **français d'origine** qui s'affiche. Poser une traduction
+automatique sous son nom n'était pas une option. Le panneau du CRM signale, langue par
+langue, ce qui n'est pas encore traduit.
+
+### Décisions prises seul, faute de pouvoir demander
+
+- **« index » + accueil « grille »** semblaient se contredire (la maquette C était une liste).
+  Réconciliés ainsi : registre typographique de l'index — le nom d'abord, l'image ensuite —
+  mais disposés en grille. Les deux réponses sont respectées.
+- **Journal** : il l'a choisi alors qu'aucune des cinq références (Chipperfield, Studio KO,
+  Norm, Van Duysen, Yovanovitch) n'a de blog. Sa réponse l'emporte, mais la section reste
+  masquée tant qu'aucune entrée n'est écrite.
+- **Langue par défaut** : français, sans détection du navigateur. Détecter l'anglais afficherait
+  une interface anglaise sur des textes français — ça a l'air cassé.
+- **Aucun formulaire de contact** : aucune des cinq références n'en a. E-mail, téléphone,
+  ville, Instagram, et c'est tout.
+
+### Vérification
+
+Tout au navigateur, Chromium réel, rien de déduit :
+
+- `tests/site.test.mjs` — **46 contrôles, 0 échec.** Site public réécrit : rubriques, sections,
+  trois langues, RTL, états, 390 px. Manifeste d'essai avec quatre réalisations, une rubrique
+  sans projet et une réalisation sans rubrique.
+- `tests/reglages-site.test.mjs` — **nouveau, 18 contrôles, 0 échec.** Le panneau du CRM, de la
+  création d'une rubrique jusqu'à sa présence dans le manifeste, en 390 px.
+- `tests/realisations.test.mjs` — **222 contrôles, 0 échec.** Aucune régression sur l'existant.
+- Captures : `/tmp/site-mobile.png`, `/tmp/site-desktop.png`, `/tmp/site-hebreu.png`,
+  `/tmp/crm-reglages-390.png`.
+
+### Trois défauts trouvés et corrigés en cours de route
+
+1. **Le choix de langue ne tenait pas.** La page s'affiche avant que le manifeste soit arrivé,
+   donc en français faute de mieux — et elle **écrivait** ce français dans le stockage local,
+   effaçant le choix de la visite précédente. Un repli technique ne s'enregistre plus, seul un
+   choix explicite le fait.
+2. **Le squelette de chargement restait affiché** sous l'index, pour toujours : masqué par
+   l'attribut `hidden`, mais son `display:grid` l'emportait sur le `display:none` du
+   navigateur. Trouvé à l'œil sur la capture, pas par un test — d'où le contrôle ajouté depuis.
+   Un `[hidden]{display:none!important}` couvre maintenant tous les blocs masqués de la page.
+3. **`input[type=tel]` manquait** dans la règle CSS des champs du CRM : le champ Téléphone
+   gardait sa largeur native et débordait de l'écran d'un téléphone. Corrigé à la racine,
+   c'est le seul champ `tel` du dépôt.
+
+### Ce qu'il ne faut pas casser
+
+- `siteManifestBlock()` est **la** source du bloc `site` du manifeste. `emptyManifest()`,
+  `publishRealisation()` et `publishSiteSettings()` passent tous par elle : ne pas
+  reconstruire ce bloc ailleurs, les trois chemins divergeraient en silence.
+- Le site ne connaît **aucune** catégorie en dur. Il lit `site.categories`. Un projet dont la
+  catégorie n'existe plus doit rester visible (il retombe en fin d'index) — c'est le cas que
+  le test `Un projet sans rubrique reste visible` protège.
+- Les champs vides ne partent pas dans le manifeste (`siteI18n`) : le site sait retomber sur
+  le français, une chaîne vide publiée l'en empêcherait.
+- `normalizeRealisation` doit garder `category` dans ses valeurs par défaut, sinon la rubrique
+  est perdue à chaque synchronisation.
+
+### Ce qui reste, et qu'il faut lui dire
+
+1. **Une seule réalisation en ligne.** Aucune identité ne donnera l'effet d'un site de studio
+   avec une photo. Les cinq références reposent sur dix projets et de grandes images.
+2. **Trois langues = trois fois le texte à écrire.** La mécanique est là, le français est
+   rempli, l'anglais et l'hébreu attendent ses mots.
+
+---
+
 ## 4 septembre 2026 — Galerie : l'ordre, les mots, le remplacement, un import qui se voit
 
 **Branche** `claude/galerie-ordre-legendes` → fusionnée sur `main`.

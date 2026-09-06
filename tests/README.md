@@ -10,7 +10,14 @@ Trois suites :
   `buildPayload` est une fonction pure, aucun appel n'est émis.
 - `tests/site.test.mjs` — le **site vitrine public** (`site-vitrine/index.html`), servi
   depuis un banc d'essai local avec un faux manifeste. Vérifie notamment qu'aucune clé
-  d'accès ne figure dans la page publique.
+  d'accès ne figure dans la page publique, que les rubriques et les sections viennent bien
+  du manifeste (rien en dur), et que les trois langues fonctionnent — hébreu compris, en
+  lecture de droite à gauche.
+- `tests/reglages-site.test.mjs` — les **réglages du site** dans le CRM. Suit une rubrique
+  créée dans le panneau jusqu'à sa présence dans le manifeste, en 390 px de large. Supabase
+  est remplacé par un stockage en mémoire : aucun compte, aucune donnée réelle.
+  Se lance comme la suite Réalisations (serveur sur le port 8899) :
+  `node tests/reglages-site.test.mjs`.
 
 Le test ouvre l'appli dans un vrai navigateur avec WebGL, remplace Supabase par un
 stockage en mémoire (aucun compte réel n'est nécessaire, aucune donnée réelle n'est

@@ -56,3 +56,8 @@ Questions ouvertes posées à l'utilisateur sous forme d'artefact cliquable plut
 
 - **Photos de chantier (qualité pro pour le site)** — https://claude.ai/code/artifact/46d7e74d-3f5e-45a6-b922-3cc10d562254
   Réponses : collection `reponses`, document `photos-chantier` (`choices` + `notes`).
+- **Identité du site vitrine** — https://claude.ai/code/artifact/0a5981ec-e66c-4ec9-86dd-500d76843969
+  Réponses : collection `reponses`, document `site-theme` (thème `index`, accueil en grille,
+  mouvement discret, langues fr/en/he, sections réalisations / studio / contact / journal,
+  et la demande de rubriques modulables dans `notes`). **Livré** le 6 septembre 2026 — voir
+  `docs/journal.md`.

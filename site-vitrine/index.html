@@ -10,136 +10,270 @@
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Jost:wght@300;400;500&display=swap">
 <style>
+  /* ============================================================
+     Identité « index » — répertoire typographique.
+     Le nom du projet vient AVANT son image : la page se lit comme un
+     index, l'image confirme. EB Garamond pour les noms, Jost pour tout
+     ce qui est appareil de lecture (rubriques, dates, navigation).
+     ============================================================ */
   :root{
-    --ink:#3d3934;
-    --stone:#8a8074;
-    --stone-light:#b4aa9b;
-    --travertine:#e8e2d7;
-    --paper:#f4efe6;
-    --hair:#d3cabb;
-    --oxblood:#9a8574;
+    --ink:#2f2c28;
+    --stone:#867d71;
+    --stone-light:#aaa090;
+    --travertine:#e9e4da;
+    --paper:#faf7f1;
+    --hair:#ded6c9;
+    --accent:#8c6f5b;
+    --serif:'EB Garamond',Georgia,'Times New Roman',serif;
+    --sans:'Jost',system-ui,-apple-system,'Helvetica Neue',sans-serif;
+    --gut:clamp(20px,4vw,54px);
   }
   *{box-sizing:border-box;}
+  /* Une règle d'affichage écrite ici (`display:grid` sur le squelette, par exemple) prend
+     le pas sur le `display:none` que le navigateur applique à `[hidden]` : sans ce rappel,
+     un bloc masqué en JavaScript reste visible. */
+  [hidden]{display:none!important;}
   html{scroll-behavior:smooth;}
   body{
     margin:0;background:var(--paper);color:var(--ink);
-    font-family:'Inter',system-ui,-apple-system,sans-serif;
-    font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+    font-family:var(--sans);font-weight:300;
+    font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
   }
-  a{color:inherit;}
+  a{color:inherit;text-decoration:none;}
+  img{max-width:100%;}
 
+  /* --- Appareil typographique commun --- */
+  .rubrique{
+    font-family:var(--sans);font-weight:400;
+    font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--stone);
+  }
+  .num{font-variant-numeric:tabular-nums;color:var(--stone-light);}
+
+  /* --- En-tête --- */
   header{
-    padding:clamp(38px,9vw,86px) 22px clamp(26px,5vw,44px);
-    text-align:center;border-bottom:1px solid var(--hair);
+    padding:clamp(30px,6vw,56px) var(--gut) clamp(18px,3vw,26px);
+    border-bottom:1px solid var(--hair);
   }
+  .head-in{max-width:1300px;margin:0 auto;}
   .name{
-    font-family:'Cormorant Garamond',Georgia,serif;
-    font-weight:500;font-size:clamp(29px,7vw,52px);
-    letter-spacing:.16em;text-transform:uppercase;margin:0;line-height:1.1;
+    font-family:var(--serif);font-weight:400;
+    font-size:clamp(27px,6.4vw,46px);
+    letter-spacing:.14em;text-transform:uppercase;margin:0;line-height:1.05;
   }
-  .tagline{
-    margin:16px 0 0;font-size:10.5px;letter-spacing:.28em;text-transform:uppercase;
-    color:var(--stone);font-weight:500;
+  .tagline{margin:12px 0 0;}
+  .head-bar{
+    display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;
+    gap:14px 22px;margin-top:clamp(20px,3.4vw,34px);
+  }
+  nav.sections{display:flex;flex-wrap:wrap;gap:0 22px;}
+  nav.sections a{
+    font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone);
+    font-weight:400;padding:4px 0;border-bottom:1px solid transparent;transition:color .3s,border-color .3s;
+  }
+  nav.sections a:hover,nav.sections a:focus-visible{color:var(--ink);border-bottom-color:var(--accent);}
+
+  /* --- Sélecteur de langue --- */
+  .langs{display:flex;gap:0;align-items:baseline;}
+  .langs button{
+    background:none;border:none;padding:4px 9px;cursor:pointer;font-family:var(--sans);
+    font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone-light);
+    font-weight:400;transition:color .3s;
+  }
+  .langs button+button{border-inline-start:1px solid var(--hair);}
+  .langs button:hover{color:var(--ink);}
+  .langs button[aria-current="true"]{color:var(--ink);}
+
+  main{max-width:1300px;margin:0 auto;padding:clamp(28px,5vw,58px) var(--gut) 0;}
+
+  /* --- Titre de section --- */
+  .sec{padding:0 0 clamp(44px,7vw,86px);}
+  .sec-head{display:flex;align-items:baseline;gap:12px;margin:0 0 clamp(18px,2.6vw,30px);}
+  .sec-head::after{content:"";flex:1;height:1px;background:var(--hair);}
+  .sec-title{
+    font-family:var(--serif);font-weight:400;font-size:clamp(20px,3vw,26px);
+    margin:0;letter-spacing:.02em;
   }
 
-  main{max-width:1240px;margin:0 auto;padding:clamp(30px,6vw,64px) 22px 90px;}
+  /* --- Rubrique d'une catégorie (le cœur de l'index) --- */
+  .cat{margin:0 0 clamp(34px,5vw,60px);}
+  .cat-head{display:flex;align-items:baseline;gap:12px;margin:0 0 clamp(14px,2vw,22px);}
+  /* Le filet court entre le nom de la rubrique et son compte, comme dans un sommaire.
+     Le pseudo-élément est le dernier enfant : `order` le remet à sa place. */
+  .cat-head::after{content:"";flex:1;height:1px;background:var(--hair);order:2;}
+  .cat-name{margin:0;order:1;}
+  .cat-count{font-size:10px;letter-spacing:.16em;color:var(--stone-light);font-variant-numeric:tabular-nums;order:3;}
 
-  .eyebrow{
-    display:flex;align-items:center;gap:14px;margin:0 0 26px;
-    font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--stone);font-weight:600;
-  }
-  .eyebrow::after{content:"";flex:1;height:1px;background:var(--hair);}
-
-  .projects{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:clamp(18px,3vw,34px);}
+  /* --- Grille de projets : le NOM d'abord, la vignette dessous --- */
+  .projects{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:clamp(26px,3.4vw,44px) clamp(20px,3vw,38px);}
   .project{
-    border:none;background:none;padding:0;margin:0;text-align:left;cursor:pointer;
-    font-family:inherit;color:inherit;display:block;
+    border:none;background:none;padding:0;margin:0;text-align:start;cursor:pointer;
+    font-family:inherit;color:inherit;display:block;width:100%;
   }
+  .project-name{
+    font-family:var(--serif);font-weight:400;font-size:clamp(19px,2.3vw,23px);
+    margin:0;line-height:1.25;
+    display:inline;
+    background-image:linear-gradient(var(--accent),var(--accent));
+    background-repeat:no-repeat;background-position:0 100%;background-size:0 1px;
+    transition:background-size .45s cubic-bezier(.2,.7,.3,1);
+  }
+  [dir="rtl"] .project-name{background-position:100% 100%;}
+  .project:hover .project-name,.project:focus-visible .project-name{background-size:100% 1px;}
+  .project-meta{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--stone-light);margin:7px 0 13px;}
   .project-img{
-    aspect-ratio:4/3;overflow:hidden;background:var(--travertine);
-    display:flex;align-items:center;justify-content:center;
+    aspect-ratio:4/3;overflow:hidden;background:var(--travertine);display:block;
   }
   .project-img img{
     width:100%;height:100%;object-fit:cover;display:block;
-    transition:transform .6s cubic-bezier(.2,.7,.3,1);
+    transition:transform .8s cubic-bezier(.2,.7,.3,1),opacity .6s ease;
   }
-  .project:hover .project-img img,.project:focus-visible .project-img img{transform:scale(1.035);}
-  .project-name{
-    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
-    font-size:22px;margin:15px 0 0;line-height:1.25;
-  }
-  .project-meta{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone);margin:6px 0 0;}
-  .project:focus-visible{outline:2px solid var(--oxblood);outline-offset:6px;}
+  .project:hover .project-img img,.project:focus-visible .project-img img{transform:scale(1.028);}
+  .project:focus-visible{outline:1px solid var(--accent);outline-offset:8px;}
 
-  .state{padding:70px 0;text-align:center;color:var(--stone);}
-  .state h2{font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;font-size:25px;color:var(--ink);margin:0 0 10px;}
+  /* --- Mouvement discret : apparition à l'entrée dans l'écran --- */
+  .rise{opacity:0;transform:translateY(9px);}
+  .rise.in{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.3,1);}
+
+  /* --- Texte éditorial (studio, contact, journal) --- */
+  .prose{max-width:60ch;font-family:var(--serif);font-size:clamp(17px,2vw,19px);line-height:1.72;color:var(--ink);}
+  .prose p{margin:0 0 1em;}
+  .prose p:last-child{margin-bottom:0;}
+  .contact-list{list-style:none;padding:0;margin:22px 0 0;display:flex;flex-direction:column;gap:9px;}
+  .contact-list a,.contact-list span{font-size:14px;letter-spacing:.02em;color:var(--ink);}
+  .contact-list a{border-bottom:1px solid var(--hair);padding-bottom:2px;transition:border-color .3s;}
+  .contact-list a:hover{border-bottom-color:var(--accent);}
+  .contact-k{display:block;font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--stone-light);margin-bottom:2px;}
+
+  .entries{display:flex;flex-direction:column;gap:clamp(24px,3.4vw,38px);max-width:64ch;}
+  .entry{border-top:1px solid var(--hair);padding-top:clamp(14px,2vw,20px);}
+  .entry-date{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone-light);margin:0 0 6px;}
+  .entry-title{font-family:var(--serif);font-weight:400;font-size:clamp(19px,2.3vw,23px);margin:0 0 8px;line-height:1.3;}
+  .entry-text{font-family:var(--serif);font-size:16.5px;line-height:1.7;color:var(--stone);margin:0;white-space:pre-line;}
+
+  /* --- États --- */
+  .state{padding:clamp(46px,9vw,86px) 0;text-align:center;color:var(--stone);}
+  .state h2{font-family:var(--serif);font-weight:400;font-size:clamp(21px,3vw,26px);color:var(--ink);margin:0 0 10px;}
   .state p{margin:0 auto;max-width:46ch;font-size:14px;}
+  .state button{
+    margin-top:20px;background:none;border:1px solid var(--hair);color:var(--ink);
+    font-family:var(--sans);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+    padding:11px 22px;cursor:pointer;transition:border-color .3s,color .3s;
+  }
+  .state button:hover{border-color:var(--accent);color:var(--accent);}
+  .skeleton{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:clamp(26px,3.4vw,44px) clamp(20px,3vw,38px);}
+  .sk-line{height:13px;background:var(--travertine);margin:0 0 9px;width:52%;}
+  .sk-line.short{width:30%;height:9px;margin-bottom:14px;}
+  .sk-img{aspect-ratio:4/3;background:var(--travertine);}
+  .skeleton>div{animation:pulse 1.5s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
 
   /* --- Vue projet --- */
   .detail{display:none;}
-  body.viewing .projects,body.viewing .index-head{display:none;}
+  body.viewing .index-view{display:none;}
   body.viewing .detail{display:block;}
   .back{
-    background:none;border:none;padding:0 0 24px;cursor:pointer;font-family:inherit;
-    font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone);font-weight:600;
+    background:none;border:none;padding:0 0 clamp(20px,3vw,30px);cursor:pointer;font-family:var(--sans);
+    font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone);font-weight:400;
   }
-  .back:hover{color:var(--oxblood);}
+  .back:hover{color:var(--accent);}
   .detail h2{
-    font-family:'Cormorant Garamond',Georgia,serif;font-weight:500;
-    font-size:clamp(28px,5vw,40px);margin:0;line-height:1.15;
+    font-family:var(--serif);font-weight:400;
+    font-size:clamp(26px,5vw,42px);margin:0;line-height:1.12;letter-spacing:.01em;
   }
-  .detail .project-meta{margin:8px 0 34px;}
-  .shots{display:flex;flex-direction:column;gap:clamp(14px,2.5vw,26px);}
-  .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;}
+  .detail .project-meta{margin:10px 0 clamp(26px,4vw,40px);}
+  .shots{display:flex;flex-direction:column;gap:clamp(16px,2.6vw,30px);}
+  .shot{width:100%;background:var(--travertine);cursor:zoom-in;display:block;border:none;padding:0;text-align:start;}
   .shot img{width:100%;height:auto;display:block;}
   /* Légende écrite depuis le CRM. Absente, rien ne s'affiche : une photo sans légende ne
      doit pas laisser un blanc sous elle. */
-  .shot-cap{display:block;padding:9px 2px 0;text-align:left;font-size:13px;line-height:1.55;
-    color:var(--stone);font-style:italic;}
+  .shot-cap{display:block;padding:10px 2px 0;text-align:start;font-family:var(--serif);
+    font-size:15px;line-height:1.6;color:var(--stone);font-style:italic;}
 
   /* --- Plein écran --- */
   .lightbox{
-    position:fixed;inset:0;z-index:50;background:rgba(30,28,25,.96);
+    position:fixed;inset:0;z-index:50;background:rgba(28,26,23,.965);
     display:none;align-items:center;justify-content:center;padding:18px;
   }
   .lightbox.open{display:flex;}
   .lightbox img{max-width:100%;max-height:calc(100% - 54px);object-fit:contain;}
   .lb-cap{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);
-    max-width:min(720px,86vw);margin:0;text-align:center;font-style:italic;
-    font-size:13.5px;line-height:1.5;color:var(--paper);}
+    max-width:min(720px,86vw);margin:0;text-align:center;font-style:italic;font-family:var(--serif);
+    font-size:15px;line-height:1.5;color:var(--paper);}
   .lightbox button{
-    position:absolute;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);
+    position:absolute;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.26);
     color:var(--paper);width:46px;height:46px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;
   }
-  .lb-close{top:16px;right:16px;}
-  .lb-prev{left:14px;top:50%;transform:translateY(-50%);}
-  .lb-next{right:14px;top:50%;transform:translateY(-50%);}
-  .lightbox button:hover{background:rgba(255,255,255,.2);}
+  .lb-close{top:16px;inset-inline-end:16px;}
+  .lb-prev{inset-inline-start:14px;top:50%;transform:translateY(-50%);}
+  .lb-next{inset-inline-end:14px;top:50%;transform:translateY(-50%);}
+  .lightbox button:hover{background:rgba(255,255,255,.18);}
 
   footer{
-    border-top:1px solid var(--hair);padding:34px 22px 46px;text-align:center;
-    font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-light);
+    border-top:1px solid var(--hair);margin-top:clamp(30px,5vw,60px);
+    padding:28px var(--gut) 44px;text-align:center;
+    font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone-light);
   }
 
-  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto;}}
+  /* Hébreu : la page bascule en lecture de droite à gauche, y compris la grille,
+     les flèches du plein écran et les traits de rubrique. */
+  [dir="rtl"] .prose,[dir="rtl"] .entry-text{font-family:var(--serif);}
+  [dir="rtl"] .name{letter-spacing:.06em;}
+
+  @media (max-width:600px){
+    .head-bar{flex-direction:column;align-items:flex-start;gap:12px;}
+    nav.sections{gap:0 18px;}
+    .langs{margin-inline-start:-9px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important;animation:none!important;scroll-behavior:auto;}
+    .rise{opacity:1;transform:none;}
+  }
 </style>
 </head>
 <body>
 
 <header>
-  <h1 class="name" id="site-name">Melissa Nabet</h1>
-  <p class="tagline" id="site-tagline">Architecture d’intérieur</p>
+  <div class="head-in">
+    <h1 class="name" id="site-name">Melissa Nabet</h1>
+    <p class="tagline rubrique" id="site-tagline">Architecture d’intérieur</p>
+    <div class="head-bar">
+      <nav class="sections" id="nav" aria-label="Sections"></nav>
+      <div class="langs" id="langs" role="group" aria-label="Langue"></div>
+    </div>
+  </div>
 </header>
 
 <main>
-  <p class="eyebrow index-head">Réalisations</p>
-  <div class="projects" id="projects"></div>
-  <div class="state" id="state" hidden></div>
+  <div class="index-view" id="index-view">
+    <section class="sec" id="sec-realisations">
+      <div id="cats"></div>
+      <div class="state" id="state" hidden></div>
+      <div class="skeleton" id="skeleton">
+        <div><p class="sk-line"></p><p class="sk-line short"></p><div class="sk-img"></div></div>
+        <div><p class="sk-line"></p><p class="sk-line short"></p><div class="sk-img"></div></div>
+        <div><p class="sk-line"></p><p class="sk-line short"></p><div class="sk-img"></div></div>
+      </div>
+    </section>
+    <section class="sec" id="sec-studio" hidden>
+      <div class="sec-head"><h2 class="sec-title" id="t-studio"></h2></div>
+      <div class="prose" id="studio-text"></div>
+    </section>
+    <section class="sec" id="sec-journal" hidden>
+      <div class="sec-head"><h2 class="sec-title" id="t-journal"></h2></div>
+      <div class="entries" id="journal-list"></div>
+    </section>
+    <section class="sec" id="sec-contact" hidden>
+      <div class="sec-head"><h2 class="sec-title" id="t-contact"></h2></div>
+      <div class="prose" id="contact-text"></div>
+      <ul class="contact-list" id="contact-list"></ul>
+    </section>
+  </div>
 
   <section class="detail" id="detail">
-    <button class="back" id="back">← Toutes les réalisations</button>
+    <button class="back" id="back"></button>
     <h2 id="d-title"></h2>
     <p class="project-meta" id="d-meta"></p>
     <div class="shots" id="d-shots"></div>
@@ -159,49 +293,327 @@
 <script>
 /* Le site ne porte AUCUNE clé d'accès. Il lit un fichier public et des images publiques,
    déposés par le CRM au moment de la publication. Il ne peut, par construction, atteindre
-   aucune donnée de l'application de gestion. */
+   aucune donnée de l'application de gestion.
+
+   TOUT ce que cette page affiche vient du manifeste : le nom, les rubriques, les sections
+   Studio / Journal / Contact, l'ordre des catégories. Ajouter une catégorie dans le CRM la
+   fait apparaître ici sans toucher à ce fichier. C'est la seule règle à ne pas casser. */
 var STORAGE = 'https://njaamykxnvohoesrtpvv.supabase.co/storage/v1/object/public/galerie/';
 var OWNER = '797ad2e5-a27a-45c3-a987-d4897d1cadbf';
 
+/* ---- Textes d'INTERFACE (pas les textes de Melissa) --------------------------------
+   Ce sont des mots d'appareil : navigation, états, boutons. Les traduire ici est sans
+   risque. Les textes éditoriaux (studio, contact, journal, noms de projets), eux, ne
+   sont JAMAIS traduits automatiquement : ils viennent du CRM, langue par langue, et à
+   défaut de traduction c'est le français d'origine qui s'affiche. */
+var LANGS = [
+  { code: 'fr', label: 'FR', dir: 'ltr' },
+  { code: 'en', label: 'EN', dir: 'ltr' },
+  { code: 'he', label: 'עב', dir: 'rtl' }
+];
+var UI = {
+  fr: { realisations:'Réalisations', studio:'Studio', contact:'Contact', journal:'Journal',
+        back:'Toutes les réalisations', photos:'photos', photo:'photo',
+        vide:'Bientôt en ligne', videTxt:'Les premières réalisations seront publiées ici prochainement.',
+        panne:'Page momentanément indisponible', panneTxt:'Les réalisations n’ont pas pu être chargées.',
+        reessayer:'Réessayer', autres:'Autres réalisations', email:'E-mail', tel:'Téléphone',
+        ville:'Atelier', instagram:'Instagram' },
+  en: { realisations:'Works', studio:'Studio', contact:'Contact', journal:'Journal',
+        back:'All works', photos:'photographs', photo:'photograph',
+        vide:'Coming soon', videTxt:'The first projects will be published here shortly.',
+        panne:'Page temporarily unavailable', panneTxt:'The projects could not be loaded.',
+        reessayer:'Try again', autres:'Other works', email:'Email', tel:'Phone',
+        ville:'Studio', instagram:'Instagram' },
+  he: { realisations:'עבודות', studio:'הסטודיו', contact:'צור קשר', journal:'יומן',
+        back:'כל העבודות', photos:'תמונות', photo:'תמונה',
+        vide:'בקרוב', videTxt:'העבודות הראשונות יפורסמו כאן בקרוב.',
+        panne:'הדף אינו זמין כרגע', panneTxt:'לא ניתן היה לטעון את העבודות.',
+        reessayer:'נסו שוב', autres:'עבודות נוספות', email:'דוא״ל', tel:'טלפון',
+        ville:'הסטודיו', instagram:'אינסטגרם' }
+};
+
 var el = function (id) { return document.getElementById(id); };
-var projects = [], current = null, lbIndex = 0;
+var manifest = null, projects = [], current = null, lbIndex = 0;
+var lang = 'fr';
 
 function url(p) { return STORAGE + p; }
+function ui(k) { return (UI[lang] && UI[lang][k]) || UI.fr[k] || ''; }
 
-function showState(title, text) {
-  var s = el('state');
-  s.hidden = false;
-  s.innerHTML = '<h2></h2><p></p>';
-  s.querySelector('h2').textContent = title;
-  s.querySelector('p').textContent = text;
+/* Un champ traduisible peut être une chaîne (ancien manifeste) ou {fr,en,he}.
+   Rien dans la langue demandée : on retombe sur le français, jamais sur du vide —
+   un visiteur anglophone préfère lire le texte français que rien du tout. */
+function t(v) {
+  if (v == null) return '';
+  if (typeof v === 'string') return v;
+  var order = [lang, 'fr', 'en', 'he'], i;
+  for (i = 0; i < order.length; i++) {
+    if (typeof v[order[i]] === 'string' && v[order[i]].trim()) return v[order[i]].trim();
+  }
+  return '';
 }
+function has(v) { return !!t(v); }
 
-function renderIndex() {
-  var host = el('projects');
+function readLang() {
+  var stored = null;
+  try { stored = localStorage.getItem('mn-lang'); } catch (e) {}
+  var codes = LANGS.map(function (l) { return l.code; });
+  return codes.indexOf(stored) >= 0 ? stored : 'fr';
+}
+/* `garder` distingue un choix du visiteur (on le retient) d'un repli technique (on ne
+   l'écrit pas). Sans cette distinction, la page — qui s'affiche avant que le manifeste
+   soit arrivé, donc en français faute de mieux — effaçait le choix fait à la visite
+   précédente : l'hébreu ne « tenait » jamais d'une visite à l'autre. */
+function applyLang(code, garder) {
+  lang = code;
+  if (garder) { try { localStorage.setItem('mn-lang', code); } catch (e) {} }
+  var def = LANGS.filter(function (l) { return l.code === code; })[0] || LANGS[0];
+  document.documentElement.lang = code;
+  document.documentElement.dir = def.dir;
+  renderAll();
+}
+function setLang(code) { applyLang(code, true); }
+
+function paragraphs(host, text) {
   host.innerHTML = '';
-  projects.forEach(function (p, i) {
-    var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
-    if (!cover) return;
-    var b = document.createElement('button');
-    b.className = 'project';
-    b.type = 'button';
-    b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
-      + '<p class="project-name"></p><p class="project-meta"></p>';
-    b.querySelector('img').src = url(cover.thumb);
-    b.querySelector('.project-name').textContent = p.title;
-    b.querySelector('.project-meta').textContent = [p.date, p.photos.length + ' photos'].filter(Boolean).join(' · ');
-    b.addEventListener('click', function () { openProject(i); });
-    host.appendChild(b);
+  String(text).split(/\n{2,}/).forEach(function (block) {
+    var p = document.createElement('p');
+    p.textContent = block.trim();
+    if (p.textContent) host.appendChild(p);
   });
 }
 
-function openProject(i) {
-  current = projects[i];
-  el('d-title').textContent = current.title;
-  el('d-meta').textContent = [current.date, current.photos.length + ' photos'].filter(Boolean).join(' · ');
+function nbPhotos(n) { return n + ' ' + (n > 1 ? ui('photos') : ui('photo')); }
+
+/* ---- Mouvement discret : chaque bloc monte de quelques pixels en entrant dans l'écran.
+   Sans IntersectionObserver (vieux navigateur), tout est simplement visible. */
+var observer = null;
+if (typeof IntersectionObserver !== 'undefined') {
+  observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); observer.unobserve(e.target); } });
+    /* Marge basse volontairement faible : plus elle est grande, plus un bloc situé tout
+       en bas de page attend le dernier pixel de défilement pour apparaître. */
+  }, { rootMargin: '0px 0px -4% 0px', threshold: 0.01 });
+}
+function rise(node) {
+  if (!observer) return node;
+  node.classList.add('rise');
+  observer.observe(node);
+  return node;
+}
+
+/* ---- États ------------------------------------------------------------------------- */
+function showSkeleton(on) { el('skeleton').hidden = !on; }
+function showState(title, text, action) {
+  var s = el('state');
+  s.hidden = false;
+  s.innerHTML = '';
+  var h = document.createElement('h2'); h.textContent = title; s.appendChild(h);
+  var p = document.createElement('p'); p.textContent = text; s.appendChild(p);
+  if (action) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = action.label;
+    b.addEventListener('click', action.run);
+    s.appendChild(b);
+  }
+}
+function hideState() { el('state').hidden = true; }
+
+/* ---- Navigation et langues ---------------------------------------------------------- */
+function renderChrome() {
+  var site = (manifest && manifest.site) || {};
+  el('site-name').textContent = site.title || 'Melissa Nabet';
+  var sub = t(site.subtitle) || 'Architecture d’intérieur';
+  el('site-tagline').textContent = sub;
+  el('footer').textContent = (site.title || 'Melissa Nabet') + ' — ' + sub;
+  document.title = (site.title || 'Melissa Nabet') + ' — ' + sub;
+  el('back').textContent = (document.documentElement.dir === 'rtl' ? '→ ' : '← ') + ui('back');
+
+  var codes = Array.isArray(site.langues) && site.langues.length ? site.langues : ['fr'];
+  var box = el('langs');
+  box.innerHTML = '';
+  LANGS.filter(function (l) { return codes.indexOf(l.code) >= 0; }).forEach(function (l) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = l.label;
+    b.lang = l.code;
+    b.setAttribute('aria-current', l.code === lang ? 'true' : 'false');
+    b.addEventListener('click', function () { setLang(l.code); });
+    box.appendChild(b);
+  });
+  /* Tant que le manifeste n'est pas arrivé, on ne sait pas quelles langues sont
+     proposées : surtout ne pas conclure que celle du visiteur n'existe pas. */
+  if (manifest && codes.indexOf(lang) < 0) { applyLang(codes[0], false); return false; }
+
+  var nav = el('nav');
+  nav.innerHTML = '';
+  navSections().forEach(function (s) {
+    var a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.textContent = ui(s.key);
+    a.addEventListener('click', function () { if (current) closeProject(); });
+    nav.appendChild(a);
+  });
+  return true;
+}
+
+/* L'ordre des sections est celui qu'il a choisi. Une section vide n'apparaît pas :
+   pas d'onglet « Journal » qui ouvre sur du vide. */
+function navSections() {
+  var site = (manifest && manifest.site) || {};
+  var out = [{ id: 'sec-realisations', key: 'realisations' }];
+  if (has(site.studio)) out.push({ id: 'sec-studio', key: 'studio' });
+  if ((site.journal || []).filter(function (j) { return has(j.titre) || has(j.texte); }).length)
+    out.push({ id: 'sec-journal', key: 'journal' });
+  if (contactLines().length || has((site.contact || {}).texte)) out.push({ id: 'sec-contact', key: 'contact' });
+  return out;
+}
+
+function contactLines() {
+  var c = (manifest && manifest.site && manifest.site.contact) || {};
+  var out = [];
+  if ((c.email || '').trim()) out.push({ k: 'email', v: c.email.trim(), href: 'mailto:' + c.email.trim() });
+  if ((c.tel || '').trim()) out.push({ k: 'tel', v: c.tel.trim(), href: 'tel:' + c.tel.replace(/[^\d+]/g, '') });
+  if ((c.ville || '').trim()) out.push({ k: 'ville', v: c.ville.trim(), href: '' });
+  if ((c.instagram || '').trim()) {
+    var handle = c.instagram.trim().replace(/^@/, '');
+    var href = /^https?:/.test(handle) ? handle : 'https://instagram.com/' + handle;
+    out.push({ k: 'instagram', v: '@' + handle.replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/$/, ''), href: href });
+  }
+  return out;
+}
+
+/* ---- Sections éditoriales ------------------------------------------------------------ */
+function renderEditorial() {
+  var site = (manifest && manifest.site) || {};
+
+  var studioOn = has(site.studio);
+  el('sec-studio').hidden = !studioOn;
+  if (studioOn) { el('t-studio').textContent = ui('studio'); paragraphs(el('studio-text'), t(site.studio)); }
+
+  var entries = (site.journal || []).filter(function (j) { return has(j.titre) || has(j.texte); });
+  el('sec-journal').hidden = !entries.length;
+  if (entries.length) {
+    el('t-journal').textContent = ui('journal');
+    var host = el('journal-list');
+    host.innerHTML = '';
+    entries.forEach(function (j) {
+      var art = document.createElement('article');
+      art.className = 'entry';
+      if (j.date) { var d = document.createElement('p'); d.className = 'entry-date'; d.textContent = j.date; art.appendChild(d); }
+      if (has(j.titre)) { var h = document.createElement('h3'); h.className = 'entry-title'; h.textContent = t(j.titre); art.appendChild(h); }
+      if (has(j.texte)) { var p = document.createElement('p'); p.className = 'entry-text'; p.textContent = t(j.texte); art.appendChild(p); }
+      host.appendChild(rise(art));
+    });
+  }
+
+  var lines = contactLines(), c = site.contact || {};
+  var contactOn = lines.length || has(c.texte);
+  el('sec-contact').hidden = !contactOn;
+  if (contactOn) {
+    el('t-contact').textContent = ui('contact');
+    if (has(c.texte)) { paragraphs(el('contact-text'), t(c.texte)); el('contact-text').hidden = false; }
+    else { el('contact-text').innerHTML = ''; el('contact-text').hidden = true; }
+    var list = el('contact-list');
+    list.innerHTML = '';
+    lines.forEach(function (l) {
+      var li = document.createElement('li');
+      var k = document.createElement('span'); k.className = 'contact-k'; k.textContent = ui(l.k); li.appendChild(k);
+      var v;
+      if (l.href) { v = document.createElement('a'); v.href = l.href; if (/^https?:/.test(l.href)) { v.target = '_blank'; v.rel = 'noopener'; } }
+      else { v = document.createElement('span'); }
+      v.textContent = l.v;
+      li.appendChild(v);
+      list.appendChild(li);
+    });
+  }
+}
+
+/* ---- L'index des réalisations, groupé par catégorie ---------------------------------- */
+/* Les catégories viennent du manifeste, dans l'ordre défini dans le CRM. Une catégorie
+   sans projet publié ne s'affiche pas (elle existe mais reste vide côté site). Les projets
+   sans catégorie sont regroupés à la fin — jamais perdus. */
+function groupsFromManifest() {
+  var site = (manifest && manifest.site) || {};
+  var cats = Array.isArray(site.categories) ? site.categories : [];
+  var groups = [], used = {};
+  cats.forEach(function (c) {
+    var list = projects.filter(function (p) { return p.category === c.id; });
+    used[c.id] = true;
+    if (list.length) groups.push({ name: t(c.label), list: list });
+  });
+  var rest = projects.filter(function (p) { return !p.category || !used[p.category]; });
+  if (rest.length) groups.push({ name: groups.length ? ui('autres') : '', list: rest });
+  return groups;
+}
+
+function renderIndex() {
+  var host = el('cats');
+  host.innerHTML = '';
+  var groups = groupsFromManifest();
+  groups.forEach(function (g, gi) {
+    var sec = document.createElement('section');
+    sec.className = 'cat';
+    if (g.name) {
+      var head = document.createElement('div');
+      head.className = 'cat-head';
+      var h = document.createElement('h2');
+      h.className = 'cat-name rubrique';
+      /* Numérotation d'index : « 01 · Commercial ». C'est le registre du répertoire. */
+      h.innerHTML = '<span class="num">' + (gi + 1 < 10 ? '0' : '') + (gi + 1) + '</span>&nbsp;&nbsp;';
+      h.appendChild(document.createTextNode(g.name));
+      head.appendChild(h);
+      var cnt = document.createElement('span');
+      cnt.className = 'cat-count';
+      cnt.textContent = String(g.list.length);
+      head.appendChild(cnt);
+      sec.appendChild(head);
+    }
+    var grid = document.createElement('div');
+    grid.className = 'projects';
+    g.list.forEach(function (p) { grid.appendChild(rise(projectCard(p))); });
+    sec.appendChild(grid);
+    host.appendChild(sec);
+  });
+}
+
+function projectCard(p) {
+  var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
+  var b = document.createElement('button');
+  b.className = 'project';
+  b.type = 'button';
+  /* Le NOM d'abord, la vignette dessous : c'est ce qui fait l'identité « index ». */
+  var name = document.createElement('p');
+  var span = document.createElement('span');
+  span.className = 'project-name';
+  span.textContent = p.title;
+  name.style.margin = '0';
+  name.appendChild(span);
+  b.appendChild(name);
+  var meta = document.createElement('p');
+  meta.className = 'project-meta';
+  meta.textContent = [p.date, nbPhotos(p.photos.length)].filter(Boolean).join(' · ');
+  b.appendChild(meta);
+  var box = document.createElement('div');
+  box.className = 'project-img';
+  var im = document.createElement('img');
+  im.alt = '';
+  im.loading = 'lazy';
+  im.src = url(cover.thumb);
+  box.appendChild(im);
+  b.appendChild(box);
+  b.addEventListener('click', function () { openProject(p); });
+  return b;
+}
+
+/* ---- Vue projet ---------------------------------------------------------------------- */
+function openProject(p) {
+  current = p;
+  el('d-title').textContent = p.title;
+  el('d-meta').textContent = [p.date, categoryName(p), nbPhotos(p.photos.length)].filter(Boolean).join(' · ');
   var host = el('d-shots');
   host.innerHTML = '';
-  current.photos.forEach(function (ph, k) {
+  p.photos.forEach(function (ph, k) {
     var b = document.createElement('button');
     b.className = 'shot';
     b.type = 'button';
@@ -210,7 +622,7 @@ function openProject(i) {
     im.src = url(ph.full);
     im.loading = k < 2 ? 'eager' : 'lazy';
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
-    im.alt = ph.caption || (current.title + ' — photo ' + (k + 1));
+    im.alt = ph.caption || (p.title + ' — photo ' + (k + 1));
     b.appendChild(im);
     if (ph.caption) {
       var cap = document.createElement('span');
@@ -219,19 +631,24 @@ function openProject(i) {
       b.appendChild(cap);
     }
     b.addEventListener('click', function () { openLightbox(k); });
-    host.appendChild(b);
+    host.appendChild(k < 2 ? b : rise(b));
   });
   document.body.classList.add('viewing');
   window.scrollTo({ top: 0, behavior: 'auto' });
-  location.hash = 'p-' + current.id;
+  location.hash = 'p-' + p.id;
 }
-
+function categoryName(p) {
+  var cats = (manifest && manifest.site && manifest.site.categories) || [];
+  var c = cats.filter(function (x) { return x.id === p.category; })[0];
+  return c ? t(c.label) : '';
+}
 function closeProject() {
   document.body.classList.remove('viewing');
   current = null;
   if (location.hash) history.replaceState(null, '', location.pathname);
 }
 
+/* ---- Plein écran --------------------------------------------------------------------- */
 function openLightbox(k) {
   if (!current) return;
   lbIndex = k;
@@ -260,31 +677,74 @@ document.addEventListener('keydown', function (e) {
     return;
   }
   if (e.key === 'Escape') closeLightbox();
-  if (e.key === 'ArrowLeft') stepLightbox(-1);
-  if (e.key === 'ArrowRight') stepLightbox(1);
+  /* En hébreu la page se lit de droite à gauche : les flèches suivent le sens de lecture. */
+  var rtl = document.documentElement.dir === 'rtl';
+  if (e.key === 'ArrowLeft') stepLightbox(rtl ? 1 : -1);
+  if (e.key === 'ArrowRight') stepLightbox(rtl ? -1 : 1);
 });
 
-fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
-  .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
-  .then(function (m) {
-    if (m.site) {
-      if (m.site.title) { el('site-name').textContent = m.site.title; el('footer').textContent = m.site.title + ' — ' + (m.site.subtitle || ''); }
-      if (m.site.subtitle) el('site-tagline').textContent = m.site.subtitle;
-    }
-    projects = (m.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
-    if (!projects.length) {
-      showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
-      return;
-    }
-    renderIndex();
-    var h = location.hash.replace('#p-', '');
-    if (h) {
-      for (var i = 0; i < projects.length; i++) if (projects[i].id === h) { openProject(i); break; }
-    }
-  })
-  .catch(function () {
-    showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
-  });
+/* ---- Rendu complet (rejoué à chaque changement de langue) ----------------------------- */
+function renderAll() {
+  if (!renderChrome()) return;
+  /* Avant que le manifeste soit arrivé, seul l'en-tête est connu : on ne montre ni index
+     ni « bientôt en ligne », le squelette de chargement tient la place. */
+  if (!manifest) return;
+  renderEditorial();
+  if (!projects.length) {
+    el('cats').innerHTML = '';
+    showState(ui('vide'), ui('videTxt'));
+    return;
+  }
+  hideState();
+  renderIndex();
+  if (current) {
+    var again = projects.filter(function (p) { return p.id === current.id; })[0];
+    if (again) openProject(again); else closeProject();
+  }
+}
+
+function load() {
+  hideState();
+  showSkeleton(true);
+  fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
+    .then(function (m) {
+      showSkeleton(false);
+      manifest = m || {};
+      projects = (manifest.realisations || []).filter(function (p) { return p.photos && p.photos.length; });
+      renderAll();
+      var h = location.hash.replace('#p-', '');
+      if (h && h !== location.hash) {
+        var p = projects.filter(function (x) { return x.id === h; })[0];
+        if (p) openProject(p);
+      }
+    })
+    .catch(function (err) {
+      showSkeleton(false);
+      manifest = manifest || {};
+      projects = [];
+      renderChrome();
+      renderEditorial();
+      /* Manifeste absent = rien n'a encore été publié : ce n'est pas une panne, et la page
+         doit le dire calmement. Une vraie erreur réseau, elle, propose de réessayer. */
+      var jamaisPublie = /manifest 40[034]/.test(String(err && err.message));
+      if (jamaisPublie) showState(ui('vide'), ui('videTxt'));
+      else showState(ui('panne'), ui('panneTxt'), { label: ui('reessayer'), run: load });
+    });
+}
+
+window.addEventListener('hashchange', function () {
+  var h = location.hash.replace('#p-', '');
+  if (location.hash.indexOf('#p-') === 0) {
+    var p = projects.filter(function (x) { return x.id === h; })[0];
+    if (p && (!current || current.id !== p.id)) openProject(p);
+  } else if (current) {
+    closeProject();
+  }
+});
+
+applyLang(readLang(), false);
+load();
 </script>
 </body>
 </html>
