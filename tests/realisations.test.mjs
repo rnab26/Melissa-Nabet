@@ -3179,6 +3179,74 @@ check('Republier : le rappel ouvre directement la bonne réalisation',
   rappelClic.vue === 'block' && rappelClic.ouverte, JSON.stringify(rappelClic));
 
 // ============================================================================
+//  REPUBLIER PLUSIEURS RÉALISATIONS D'UN COUP
+// ============================================================================
+const lot = await page.evaluate(async () => {
+  // deux réalisations en ligne dont les photos ont bougé depuis
+  const avecPhotos = realisations.filter(r => (r.photos || []).length);
+  const deux = avecPhotos.slice(0, 2);
+  if (deux.length < 2) return { pasAssez: true };
+  const t = Date.now() - 10000;
+  deux.forEach(r => { r.published = true; r.photos.forEach(p => { p.publishedAt = t; p.touchedAt = t + 1000; }); });
+  realisations.filter(r => deux.indexOf(r) < 0).forEach(r => { r.published = false; });
+  saveRealisations();
+  showView('dashboard'); renderDashboard();
+  const bouton = [...document.querySelectorAll('#dash-todos button')].find(b => /Tout republier/.test(b.textContent));
+  const libelle = bouton ? bouton.textContent : '';
+  const aRepublierAvant = realisations.filter(r => realisationARepublier(r) > 0).length;
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    republierToutes();
+  });
+  return { libelle, aRepublierAvant,
+           aRepublierApres: realisations.filter(r => realisationARepublier(r) > 0).length,
+           publiees: deux.filter(r => r.published).length,
+           modale: document.getElementById('overlay').classList.contains('open') };
+});
+check('Republier en lot : le rappel porte le geste, avec le nombre',
+  lot.pasAssez || /Tout republier \(2\)/.test(lot.libelle), lot.libelle);
+check('Republier en lot : tout est republié d’un coup',
+  lot.pasAssez || (lot.aRepublierAvant === 2 && lot.aRepublierApres === 0 && lot.publiees === 2),
+  JSON.stringify(lot));
+check('Republier en lot : la fenêtre de progression se referme à la fin', lot.pasAssez || lot.modale === false);
+
+const lotKo = await page.evaluate(async () => {
+  const deux = realisations.filter(r => (r.photos || []).length).slice(0, 2);
+  const t = Date.now() - 10000;
+  deux.forEach(r => { r.published = true; r.photos.forEach(p => { p.publishedAt = t; p.touchedAt = t + 1000; }); });
+  saveRealisations();
+  // la PREMIÈRE publication échoue : la seconde doit quand même partir
+  let appels = 0;
+  const vrai = sb.storage.from;
+  sb.storage.from = (b) => {
+    const o = vrai(b);
+    return Object.assign({}, o, {
+      upload: async (path, blob) => {
+        if (path.endsWith('manifest.json') && ++appels === 1) return { error: { message: 'réseau indisponible' } };
+        return o.upload(path, blob);
+      },
+    });
+  };
+  await new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res, rej); };
+    republierToutes();
+  });
+  sb.storage.from = vrai;
+  return { restant: realisations.filter(r => realisationARepublier(r) > 0).length,
+           message: (document.querySelector('#dash-todos .pub-lot p') || {}).textContent || '',
+           lignes: [...document.querySelectorAll('#dash-todos .pub-lot .rz-refus li')].map(li => li.textContent) };
+});
+check('Republier en lot : un échec n’arrête pas les suivantes',
+  lotKo.restant === 1, lotKo.restant + ' réalisation(s) encore en attente');
+check('Republier en lot : le bilan reste sur le tableau de bord, là où le geste a été fait',
+  /Republication : 1 réalisation\(s\) sur 2/.test(lotKo.message), lotKo.message.slice(0, 110));
+check('Republier en lot : il nomme celle qui a échoué et pourquoi',
+  lotKo.lignes.length === 1 && /réseau indisponible/.test(lotKo.lignes[0]), lotKo.lignes.join(' | '));
+await page.evaluate(() => { _pubLastError = null; _pubLotReport = null; renderDashboard(); showView('realisations'); _rzOpenId = null; renderRealisations(); });
+
+// ============================================================================
 //  ÉDITEUR : déplacer le cadrage au doigt
 // ============================================================================
 await page.setViewportSize({ width: 1280, height: 900 });
@@ -3407,7 +3475,7 @@ check('Navigation entre toutes les vues sans erreur', true);
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
