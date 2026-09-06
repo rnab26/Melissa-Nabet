@@ -53,8 +53,10 @@ const filtres = await page.evaluate(() => ({
   boutons: [...document.querySelectorAll('#filtres button')].map(b => b.textContent),
   actif: (document.querySelector('#filtres button[aria-pressed="true"]') || {}).textContent || '',
 }));
-check('Filtre : une case par catégorie publiée, avec le décompte',
-  filtres.visible && filtres.boutons.join(' | ') === 'Tout (3) | Appartement (2) | Bureau (1)', filtres.boutons.join(' | '));
+/* L'ordre est celui du CRM, pas l'alphabet : le manifeste d'essai annonce
+   « Bureau » avant « Appartement », et le site doit le respecter. */
+check('Filtre : une case par catégorie publiée, dans l’ordre défini dans le CRM',
+  filtres.visible && filtres.boutons.join(' | ') === 'Tout (3) | Bureau (1) | Appartement (2)', filtres.boutons.join(' | '));
 check('Filtre : « Tout » est actif au départ', /^Tout/.test(filtres.actif), filtres.actif);
 const filtre1 = await page.evaluate(async () => {
   [...document.querySelectorAll('#filtres button')].find(b => /Appartement/.test(b.textContent)).click();

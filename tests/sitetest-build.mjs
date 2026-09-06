@@ -68,6 +68,9 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
   site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur',
           apropos: 'Texte de présentation du banc d’essai.',
           email: 'essai@example.com', tel: '052 000 00 00', instagram: '@essai',
+          /* L'ordre des sections vient du CRM. Ici il est VOLONTAIREMENT contraire à
+             l'alphabet : c'est ce qui prouve que le site suit la liste et non un tri. */
+          categories: ['Bureau', 'Appartement'],
           langues: ['fr', 'en', 'he'],
           i18n: { en: { subtitle: 'Interior architecture' } },
           journal: [

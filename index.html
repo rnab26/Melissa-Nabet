@@ -915,6 +915,15 @@
   .st-txt i{font-style:normal;font-size:11px;color:var(--stone-light);}
   .st-txt em{font-style:normal;font-size:12px;color:var(--stone);line-height:1.45;}
   /* --- Langues et journal du site (greffés sur le panneau existant) --- */
+  .site-sections{font-size:12.5px;line-height:1.55;padding:9px 11px;border-radius:3px;margin:2px 0 8px;}
+  .site-sections.ok{background:#eef3ec;color:#3f5a3a;border:1px solid #cfe0ca;}
+  .site-sections.ko{background:#f6f2e8;color:#6b5b3a;border:1px solid #e2d8c2;}
+  .site-enligne{font-size:12px;line-height:1.5;color:var(--stone);margin:10px 0 0;padding:8px 10px;
+    border-radius:3px;background:var(--panel);border:1px solid var(--panel-edge);}
+  .site-enligne.ok{background:#eef3ec;color:#3f5a3a;border-color:#cfe0ca;}
+  .site-enligne.ko{background:#f8eeec;color:#7d3a30;border-color:#e6cdc8;}
+  .site-cat-n{flex:0 0 auto;min-width:20px;text-align:center;font-size:11px;color:var(--stone);
+    background:var(--travertine);border-radius:9px;padding:2px 7px;}
   .site-langues{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 4px;}
   .site-chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);}
   .site-onglets{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:10px 0 0;
@@ -1191,6 +1200,7 @@
         <button class="btn btn-onlight" onclick="openShootingMemo()">📷 Bien photographier</button>
         <button class="btn btn-onlight" onclick="openSitePanel()">⚙ Le site public</button>
         <button class="btn btn-onlight" onclick="window.open(SITE_URL,'_blank')">🌐 Voir le site</button>
+        <button class="btn btn-primary" style="color:#fff" onclick="newRealisation()">+ Nouvelle réalisation</button>
       </div>
     </div>
     <p class="rz-intro">Les photos de chantiers terminés, retouchées et prêtes à publier sur le site. Rien à voir avec les documents d'une fiche client : ici les photos sont gardées en pleine définition et les retouches ne modifient jamais l'original.</p>
@@ -5565,9 +5575,19 @@ function renderRealisationDetail(host,r){
     <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Type de mission</span>
       <input type="text" data-f="mission" list="rz-missions" placeholder="ex. Rénovation complète" value="${esc(r.mission||'')}">
       <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>
-    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Catégorie (filtre du site)</span>
-      <input type="text" data-f="categorie" list="rz-cats" placeholder="ex. Appartement" value="${esc(r.categorie||'')}">
-      <datalist id="rz-cats">${rzCatsConnues().map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>`;
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Catégorie — la section du site</span>
+      <select data-f="categorie"></select></label>`;
+  /* Un menu, pas un champ libre : deux orthographes du même mot fabriquaient deux sections
+     sur le site. La dernière ligne ouvre les réglages pour ajouter ou renommer une
+     catégorie — la liste se gère depuis le CRM, sans toucher au code. */
+  const selCat=meta.querySelector('[data-f="categorie"]');
+  selCat.innerHTML='<option value="">— aucune (le projet n’est rangé nulle part) —</option>'
+    +siteCategories().map(c=>`<option value="${esc(c)}"${(r.categorie||'')===c?' selected':''}>${esc(c)}</option>`).join('')
+    +'<option value="__gerer">✎ Gérer les catégories…</option>';
+  selCat.addEventListener('change',()=>{
+    if(selCat.value==='__gerer'){selCat.value=r.categorie||'';openSitePanel();return;}
+    r.categorie=selCat.value;r.updatedAt=Date.now();saveRealisationsDebounced();
+  });
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
   head.appendChild(meta);
@@ -5587,7 +5607,9 @@ function renderRealisationDetail(host,r){
   const majN=()=>{cpt.textContent=(ta.value.length||0)+' / 900 caractères'+(ta.value.trim()?'':' — sans texte, le site n’affiche que les photos');};
   ta.addEventListener('input',majN);majN();
   pres.querySelector('[data-redige]').addEventListener('click',e=>redigerTexteRealisation(r,e.target,ta,majN));
-  [...meta.querySelectorAll('[data-f]'),...pres.querySelectorAll('[data-f]')].forEach(el=>{
+  /* La catégorie a sa propre poignée (elle porte une option « Gérer… » qui n'est pas une
+     valeur) : l'écriture générique ci-dessous y inscrirait « __gerer » dans la fiche. */
+  [...meta.querySelectorAll('[data-f]:not([data-f="categorie"])'),...pres.querySelectorAll('[data-f]')].forEach(el=>{
     const ecrire=()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();};
     el.addEventListener('input',ecrire);
     /* Changer de client change les raccourcis affichés juste en dessous : on redessine. */
@@ -5930,21 +5952,11 @@ function buildRealisationLiens(r){
 
 /* Missions courantes, proposées sans être imposées : le champ reste libre. */
 const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoration','Agencement sur mesure','Suivi de chantier','Conseil et plans'];
-/* Type de lieu — c'est ce qui sert de filtre au visiteur du site. Champ libre : la liste
-   ci-dessous n'est qu'une proposition, et tout ce qui a déjà été tapé ailleurs vient s'y
-   ajouter. Pas de panneau de réglages à ouvrir pour inventer une catégorie de plus.
-
-   Les quatre premières sont celles que Raphaël a demandées mot pour mot sur la fiche
-   d'identité du site (« commercial, habitation, bureaux, réalisation sur mesures ») : ce
-   sont les sections qu'il veut voir sur le site, elles doivent donc être proposées en
-   premier. Les suivantes restent disponibles pour un cas particulier. */
-const RZ_CATS=['Commercial','Habitation','Bureaux','Réalisation sur mesure',
-  'Restaurant','Hôtel','Espace commun'];
-function rzCatsConnues(){
-  const vues=realisations.map(x=>(x.categorie||'').trim()).filter(Boolean);
-  return RZ_CATS.concat(vues.filter(c=>RZ_CATS.indexOf(c)<0))
-    .filter((c,i,t)=>t.indexOf(c)===i);
-}
+/* Les catégories vivent dans les réglages du site (`siteCategories()`) : une liste
+   ordonnée, modifiable depuis le CRM, et c'est elle qui remplit le menu de la fiche comme
+   les sections du site public. L'ancien couple RZ_CATS / rzCatsConnues — une liste figée
+   plus un champ de saisie libre — a été retiré : deux orthographes du même mot y
+   fabriquaient deux sections sur le site. */
 
 /* Rédaction assistée du texte de présentation. Passe par la MÊME fonction serveur que le
    bouton « Embellir » des devis (la clé Anthropic reste côté serveur) mais avec `kind`
@@ -8343,7 +8355,10 @@ const SITE_THEMES=[
 /* `atelier` par défaut : c'est l'habillage que le site portait avant qu'on puisse choisir.
    Un manifeste publié avant cette version n'a pas de thème — il ne doit pas changer d'allure
    tout seul. */
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret'};
+/* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
+   libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
+const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',categories:null};
 /* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
    comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
    français plutôt que de laisser un blanc — et jamais dans une traduction automatique, qui
@@ -8392,6 +8407,22 @@ function journalSetTexte(j,cle,lang,val){
    `library.site` à chaque appel : deux appels imbriqués — garder le résultat du premier
    puis appeler une fonction qui rappelle celle-ci — laissaient écrire dans un objet
    devenu orphelin, jamais sauvegardé, sans que rien ne le signale. */
+/* La liste des catégories, dans l'ordre où elles s'afficheront sur le site.
+   Deux garanties, et ce sont elles qui comptent :
+   - une catégorie déjà portée par une réalisation est TOUJOURS dans la liste, même si elle
+     vient de l'ancien champ libre — sinon un projet perdrait son rangement en silence ;
+   - la liste ne se vide jamais complètement : sans catégorie, plus rien à choisir. */
+function siteCategories(){
+  const st=siteSettings();
+  if(!Array.isArray(st.categories))st.categories=SITE_CATS_DEFAUT.slice();
+  st.categories=st.categories.map(c=>String(c||'').trim()).filter(Boolean).filter((c,i,t)=>t.indexOf(c)===i);
+  (realisations||[]).forEach(r=>{
+    const c=(r.categorie||'').trim();
+    if(c&&st.categories.indexOf(c)<0)st.categories.push(c);
+  });
+  if(!st.categories.length)st.categories=SITE_CATS_DEFAUT.slice();
+  return st.categories;
+}
 function siteSettings(){
   if(!library.site||typeof library.site!=='object')library.site={};
   const s=library.site;
@@ -8428,6 +8459,10 @@ function siteInfos(){
     });
     if(Object.keys(i18n).length)o.i18n=i18n;
   }
+  /* L'ordre des catégories part en ligne : le filtre du site suit l'ordre défini ici, pas
+     l'alphabet. « Commercial, Habitation, Bureaux » est un ordre voulu, pas un hasard. */
+  const cats=siteCategories();
+  if(cats.length)o.categories=cats.slice();
   const journal=siteJournal()
     .filter(j=>langues.some(l=>journalTexte(j,'titre',l).trim()||journalTexte(j,'texte',l).trim()))
     .map(j=>{
@@ -8494,6 +8529,16 @@ function openSitePanel(){
     if(cats.length===1)return {ok:false,html:'Une seule catégorie publiée (« '+esc(cats[0])+' ») : le site n’affiche pas de sections, un choix unique n’est pas un choix. Il en faut <b>au moins deux</b>.'+orphelines};
     return {ok:false,html:'<b>'+pub.length+'</b> réalisation(s) publiée(s), <b>aucune</b> catégorie renseignée — c’est pour ça qu’aucune section n’apparaît. Ouvrez une réalisation, remplissez son champ « Catégorie » (Commercial, Habitation, Bureaux, Réalisation sur mesure…), puis republiez-la.'};
   })();
+  /* La liste des catégories, modifiable ici. Le compteur dit combien de réalisations
+     portent chacune : supprimer n'est jamais un geste aveugle. */
+  const listeCats=siteCategories();
+  const compteCat=c=>(realisations||[]).filter(r=>(r.categorie||'')===c).length;
+  const listeCatsHtml=listeCats.map((c,i)=>`<div class="lib-item" data-cat="${i}">
+      <input type="text" value="${esc(c)}" data-cat-nom placeholder="Nom de la section" style="flex:2">
+      <span class="site-cat-n">${compteCat(c)}</span>
+      <button class="mini" data-cat-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+      <button class="mini" data-cat-move="1" ${i===listeCats.length-1?'disabled':''} title="Descendre">↓</button>
+      <button class="mini danger" data-cat-del title="Supprimer">×</button></div>`).join('');
   const jrn=siteJournal();
   const journalHtml=jrn.map((j,i)=>`<div class="site-entree" data-i="${i}">
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
@@ -8516,6 +8561,7 @@ function openSitePanel(){
         <span class="st-pastille" style="background:${esc(t.fond)};color:${esc(t.encre)}">Aa</span>
         <span class="st-txt"><b>${esc(t.nom)}</b><i>${esc(t.ref)}</i><em>${esc(t.note)}</em></span>
       </button>`).join('')}</div>
+    <p class="site-enligne" id="site-enligne">Lecture de ce qui est en ligne…</p>
     <div class="ed-eyebrow" style="margin-top:14px">Mouvement</div>
     <div class="site-mvt" id="site-mvt">
       <button type="button" class="mini" data-mvt="discret" aria-pressed="${st.mouvement!=='aucun'?'true':'false'}">Discret — les images apparaissent en douceur</button>
@@ -8524,6 +8570,8 @@ function openSitePanel(){
     <div class="ed-eyebrow" style="margin-top:14px">Sections du site</div>
     <p class="ias-note">Les sections du site (« Commercial », « Habitation »…) ne sont pas un réglage à activer : ce sont les <b>catégories</b> des réalisations publiées. Chacune porte la sienne, dans sa fiche.</p>
     <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
+    <div id="site-cats">${listeCatsHtml}</div>
+    <button class="add-btn" id="site-cat-add">+ Ajouter une catégorie</button>
     <div class="ed-eyebrow" style="margin-top:14px">Langues du site</div>
     <p class="ias-note">Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.</p>
     <div class="site-langues" id="site-langues">${SITE_LANGUES.map(l=>`
@@ -8580,6 +8628,65 @@ function openSitePanel(){
       if(st.langues.indexOf('fr')<0)st.langues.unshift('fr');
       saveLibraryDebounced();openSitePanel();rappel();
     });
+  });
+  /* Renommer une catégorie DOIT suivre sur les réalisations qui la portent : sans ça, le
+     projet garde l'ancien mot, disparaît de sa section et réapparaît dans une section
+     fantôme — une perte de rangement parfaitement silencieuse. */
+  document.querySelectorAll('#site-cats [data-cat]').forEach(ligne=>{
+    const i=+ligne.dataset.cat, avant=siteCategories()[i];
+    const champ=ligne.querySelector('[data-cat-nom]');
+    champ.addEventListener('change',()=>{
+      const neuf=champ.value.trim(), liste=siteCategories();
+      if(!neuf){champ.value=avant;return;}                       /* un nom vide n'est pas un nom */
+      if(liste.some((c,j)=>j!==i&&c===neuf)){toast('Cette catégorie existe déjà');champ.value=avant;return;}
+      liste[i]=neuf;
+      (realisations||[]).forEach(r=>{if((r.categorie||'')===avant){r.categorie=neuf;r.updatedAt=Date.now();}});
+      saveRealisations();store.set(K_LIB,library);renderRealisations();openSitePanel();rappel();
+    });
+    ligne.querySelectorAll('[data-cat-move]').forEach(b=>b.addEventListener('click',()=>{
+      const liste=siteCategories(), j=i+(+b.dataset.catMove);
+      if(j<0||j>=liste.length)return;
+      const t=liste[i];liste[i]=liste[j];liste[j]=t;
+      saveLibraryDebounced();openSitePanel();rappel();
+    }));
+    ligne.querySelector('[data-cat-del]').addEventListener('click',()=>{
+      const liste=siteCategories(), mort=liste[i], n=compteCat(mort);
+      askConfirm('Supprimer la catégorie « '+mort+' » ?'
+        +(n?' '+n+' réalisation(s) la portent : elles resteront en ligne, mais rangées dans aucune section.':'')
+        +' Le site ne changera qu’après « Mettre à jour le site ».',()=>{
+        const l=siteCategories();
+        l.splice(l.indexOf(mort),1);
+        (realisations||[]).forEach(r=>{if((r.categorie||'')===mort){r.categorie='';r.updatedAt=Date.now();}});
+        saveRealisations();store.set(K_LIB,library);renderRealisations();openSitePanel();
+      });
+    });
+  });
+  /* Ce qui est CHOISI ici et ce qui est EN LIGNE sont deux choses différentes tant qu'on
+     n'a pas cliqué « Mettre à jour le site ». Raphaël a cru son choix appliqué alors que le
+     manifeste portait encore l'ancien : la page le dit maintenant, en lisant le manifeste
+     réel plutôt qu'en supposant. */
+  (async()=>{
+    const zone=document.getElementById('site-enligne');
+    if(!zone)return;
+    const nom=id=>{const t=SITE_THEMES.find(x=>x.id===id);return t?t.nom:(id||'aucun');};
+    if(!(sb&&sbUser&&ownerId)){zone.textContent='Connexion requise pour lire ce qui est en ligne.';return;}
+    try{
+      const man=await readManifest();
+      const enLigne=(man.site&&man.site.theme)||'atelier';
+      const choisi=siteSettings().theme||'atelier';
+      if(enLigne===choisi){zone.className='site-enligne ok';zone.textContent='En ligne actuellement : « '+nom(enLigne)+' ». C’est bien ce qui est choisi ici.';}
+      else{zone.className='site-enligne ko';
+        zone.textContent='Attention : le site affiche « '+nom(enLigne)+' », pas « '+nom(choisi)+' ». Votre choix ne sera en ligne qu’après « Mettre à jour le site », en bas de ce panneau.';}
+    }catch(e){zone.textContent='Impossible de lire ce qui est en ligne pour l’instant.';}
+  })();
+  const cadd=document.getElementById('site-cat-add');
+  if(cadd)cadd.addEventListener('click',()=>{
+    const liste=siteCategories();
+    let n='Nouvelle section', k=2;
+    while(liste.indexOf(n)>=0)n='Nouvelle section '+(k++);
+    liste.push(n);saveLibraryDebounced();openSitePanel();
+    const dernier=document.querySelector('#site-cats [data-cat]:last-child [data-cat-nom]');
+    if(dernier){dernier.focus();dernier.select();}
   });
   const jadd=document.getElementById('site-journal-add');
   if(jadd)jadd.addEventListener('click',()=>{
