@@ -9,6 +9,32 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 6 septembre 2026 — Estimation du Projet devient une sous-catégorie de Devis
+
+**Chantier `9d4f7282`** (dispatch Jarvis). Ses mots : « le bouton Estimation ainsi que la
+redirection de la page en question doit passer dans les sous-catégories de Devis. Et
+être renommé : Estimation du Projet. »
+
+**Livré** : « Estimation » disparaît du niveau principal de navigation (bureau ET
+téléphone). Elle vit maintenant dans le menu Devis — la même liste déroulante que
+« Composer » / « Mes devis » côté bureau, la même modale côté téléphone — sous le nom
+**« Estimation du Projet »**, y compris dans le titre de la page elle-même (`<h2>`).
+L'écran ne change ni de contenu ni de logique : `showView('chantier')` est identique,
+seul son point d'entrée bouge. La navigation marque désormais « Devis » actif quand on y
+est, puisque c'est sa sous-catégorie.
+
+**L'ancienne adresse ne rend pas une page blanche** : `#/chantier` (posée par le chantier
+précédent, `46e782c5`) reste une route valide et ouvre toujours l'écran — rien n'a été
+supprimé sèchement, seul l'endroit d'où on y accède a changé.
+
+**Vérifié** : `tests/estimation-sous-devis.test.mjs` — **nouveau, 14 contrôles, 0
+échec**, bureau et téléphone (390 px), y compris le lien direct `#/chantier`.
+`tests/realisations.test.mjs` **482/482** (une assertion adaptée : le menu Devis
+téléphone porte désormais 3 entrées, pas 2), `tests/categories.test.mjs` 18/18,
+`tests/onglet-persistant.test.mjs` 6/6 — aucune régression.
+
+---
+
 ## 6 septembre 2026 — Le CRM garde l’onglet ouvert après un rechargement
 
 **Chantier `46e782c5`** (dispatch Jarvis). Ses mots : « lorsqu'on recharge la page du

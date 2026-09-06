@@ -4139,8 +4139,9 @@ check('Menu téléphone : « ⋯ » donne accès à la vue, aux réglages, à la
   menus.plus.length === 4 && /Réglages/.test(menus.plus.join(' ')) && /Sauvegarde/.test(menus.plus.join(' ')) && /Synchronisation/.test(menus.plus.join(' ')),
   menus.plus.join(' | '));
 check('Menu téléphone : une entrée du menu ouvre vraiment son panneau', menus.ouvert);
-check('Menu téléphone : « Devis » propose Composer et Mes devis',
-  menus.devis.length === 2 && /Composer/.test(menus.devis[0]), menus.devis.join(' | '));
+check('Menu téléphone : « Devis » propose Composer, Mes devis et Estimation du Projet',
+  menus.devis.length === 3 && /Composer/.test(menus.devis[0]) && /Estimation du Projet/.test(menus.devis[2]),
+  menus.devis.join(' | '));
 check('Menu téléphone : et le choix ouvre bien la vue devis', menus.vueDevis);
 
 // L'aperçu d'un devis se lit en entier : sur téléphone, la barre du haut ne doit pas

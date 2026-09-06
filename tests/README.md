@@ -24,6 +24,11 @@ Trois suites :
   part parce qu'il fait de VRAIS `page.reload()`/`page.goto()`, ce qui efface tout mock
   injecté (Supabase, `window.__files`) — le faire dans `realisations.test.mjs` casserait
   les contrôles qui suivent. Port 8899 : `node tests/onglet-persistant.test.mjs`.
+- `tests/estimation-sous-devis.test.mjs` — « Estimation » n'est plus un onglet à son
+  propre niveau : c'est une sous-catégorie de **Devis**, renommée « Estimation du
+  Projet » (menu, titre de la page). Bureau (menu déroulant Devis) et téléphone (menu
+  Devis en modale), plus la vérification qu'un ancien lien `#/chantier` ouvre toujours
+  l'écran. Port 8899 : `node tests/estimation-sous-devis.test.mjs`.
 - `tests/site-sections.test.mjs` — le bloc **« Sections du site »** du panneau ⚙ Le site
   public : il doit expliquer, avec les chiffres réels, pourquoi le site n'affiche aucune
   section (rien de publié / aucune catégorie / une seule catégorie) et le confirmer quand

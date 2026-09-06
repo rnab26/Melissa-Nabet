@@ -1029,10 +1029,10 @@
       <div class="vnav-menu" id="vn-devis-menu">
         <button onclick="gotoComposer()">📝 Composer</button>
         <button onclick="gotoMesDevis()">📂 Mes devis</button>
+        <button onclick="gotoEstimation()">📐 Estimation du Projet</button>
       </div>
     </div>
     <button class="vnav" id="vn-clients" onclick="showView('clients')">Clients</button>
-    <button class="vnav" id="vn-chantier" onclick="showView('chantier')">Estimation</button>
     <button class="vnav" id="vn-real" onclick="showView('realisations')">Réalisations</button>
     <button class="vnav" id="vn-boutique" onclick="showView('boutique')">Boutique</button>
   </div>
@@ -1058,7 +1058,6 @@
   <button data-vue="dashboard" onclick="showView('dashboard')"><span>◫</span>Tableau</button>
   <button data-vue="devis" onclick="devisMenuMobile()"><span>📝</span>Devis</button>
   <button data-vue="clients" onclick="showView('clients')"><span>👤</span>Clients</button>
-  <button data-vue="chantier" onclick="showView('chantier')"><span>📐</span>Estimation</button>
   <button data-vue="realisations" onclick="showView('realisations')"><span>🖼</span>Réalisations</button>
   <button data-vue="boutique" onclick="showView('boutique')"><span>🧱</span>Boutique</button>
 </nav>
@@ -1189,7 +1188,7 @@
 <div id="chantier-view">
   <div class="ch-wrap">
     <div class="ch-top">
-      <h2>Estimation chantier</h2>
+      <h2>Estimation du Projet</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-onlight" onclick="openChantierCatsPanel()">Catégories</button>
         <button class="btn btn-onlight" onclick="openChantierListPanel()">Mes estimations</button>
@@ -3608,16 +3607,18 @@ function showView(v){
   $('chantier-view').style.display=ch?'block':'none';
   $('realisations-view').style.display=rz?'block':'none';
   $('boutique-view').style.display=bt?'block':'none';
-  $('vn-devis').classList.toggle('active',dev);
+  /* L'Estimation du Projet est une sous-catégorie de Devis (pas son propre onglet) :
+     son écran s'ouvre depuis le menu Devis, et c'est donc Devis qui s'allume. */
+  $('vn-devis').classList.toggle('active',dev||ch);
   $('vn-clients').classList.toggle('active',cli);
   $('vn-dash').classList.toggle('active',dash);
-  $('vn-chantier').classList.toggle('active',ch);
   $('vn-real').classList.toggle('active',rz);
   $('vn-boutique').classList.toggle('active',bt);
   /* Les deux navigations disent la même chose : celle du haut (bureau) et celle du bas
      (téléphone). Une seule des deux est visible à la fois, mais l'état suit dans les deux
      cas — sinon un changement de taille d'écran affiche un onglet actif faux. */
-  document.querySelectorAll('#navbas button[data-vue]').forEach(b=>b.classList.toggle('active',b.dataset.vue===v));
+  const vNavBas=ch?'devis':v;
+  document.querySelectorAll('#navbas button[data-vue]').forEach(b=>b.classList.toggle('active',b.dataset.vue===vNavBas));
   if(cli)renderClients();
   if(dash)renderDashboard();
   if(ch)renderChantier();
@@ -3651,10 +3652,12 @@ function devisMenuMobile(){
     <div class="ph-menu">
       <button class="mini" id="dv-composer">📝 Composer un devis</button>
       <button class="mini" id="dv-mes">📂 Mes devis</button>
+      <button class="mini" id="dv-estim">📐 Estimation du Projet</button>
     </div>`);
   const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
   go('dv-composer',gotoComposer);
   go('dv-mes',gotoMesDevis);
+  go('dv-estim',gotoEstimation);
 }
 /* ============ RECHERCHE GLOBALE ============
    Un seul champ pour les clients, les devis, les tâches et les réalisations. Sans ça, il
@@ -4521,6 +4524,10 @@ function toggleDevisMenu(e){if(e)e.stopPropagation();const m=$('vn-devis-menu');
 function closeDevisMenu(){const m=$('vn-devis-menu');if(m)m.classList.remove('open');}
 function gotoComposer(){closeDevisMenu();showView('devis');showTab('editor');}
 function gotoMesDevis(){closeDevisMenu();showView('devis');openDevisPanel();}
+/* L'Estimation du Projet est une sous-catégorie de Devis, pas un onglet à son niveau :
+   même écran qu'avant (`chantier-view`), atteint depuis le menu Devis plutôt que depuis
+   sa propre entrée de navigation. */
+function gotoEstimation(){closeDevisMenu();showView('chantier');}
 document.addEventListener('click',e=>{if(!e.target.closest('#vn-devis-wrap'))closeDevisMenu();});
 function applySplitView(on){
   document.body.classList.toggle('force-split',on);
