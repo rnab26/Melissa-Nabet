@@ -8824,7 +8824,7 @@ const SITE_THEMES=[
 /* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,categories:null,ordre:null};
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null};
 /* Le bandeau d'accueil montre deux photos qui se suivent, projet après projet, tirés au
    hasard. Sa durée d'affichage est un réglage : trop court on n'a pas le temps de regarder,
    trop long le site paraît figé. Les bornes évitent les valeurs absurdes (0,5 s clignote,
@@ -8833,6 +8833,13 @@ const BANDEAU_SEC_MIN=3, BANDEAU_SEC_MAX=60, BANDEAU_SEC_DEFAUT=7;
 function bandeauSec(){
   const n=parseFloat(siteSettings().diaporamaSec);
   return (isFinite(n)&&n>=BANDEAU_SEC_MIN&&n<=BANDEAU_SEC_MAX)?n:BANDEAU_SEC_DEFAUT;
+}
+/* Une ou deux photos par vue. Rien d'autre : à trois, sur un bandeau large de 1200 px,
+   chaque photo tombe sous 400 px — ce n'est plus une image d'accueil, c'est une planche
+   contact. Sur téléphone, le site ramène de toute façon à une seule. */
+function bandeauPar(){
+  const n=parseInt(siteSettings().diaporamaPar,10);
+  return (n===1||n===2)?n:2;
 }
 /* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
    comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
@@ -8916,6 +8923,7 @@ function siteInfos(){
      coordonnées qu'on pourrait vouloir laisser vides, ils ont toujours une valeur. */
   o.diaporama=(st.diaporama==='aucun')?'aucun':'actif';
   o.diaporamaSec=bandeauSec();
+  o.diaporamaPar=bandeauPar();
   ['apropos','email','tel','instagram'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
@@ -9067,12 +9075,16 @@ function openSitePanel(){
       <button type="button" class="mini" data-mvt="aucun" aria-pressed="${st.mouvement==='aucun'?'true':'false'}">Aucun — net et immédiat</button>
     </div>
     <div class="ed-eyebrow" style="margin-top:14px">Bandeau d’accueil</div>
-    <p class="ias-note">Une grande image en haut du site, qui fait défiler vos projets : <b>deux photos qui se suivent</b> dans un même chantier, puis les deux suivantes, projets tirés au hasard. Un appui dessus ouvre le projet montré. Sur téléphone, les photos passent une par une.</p>
+    <p class="ias-note">Une grande image en haut du site, qui fait défiler vos projets : <b>des photos qui se suivent</b> dans un même chantier, puis les suivantes, projets tirés au hasard. Un appui dessus ouvre le projet montré. Des flèches ‹ › permettent de défiler à la main (et le doigt, en glissant). Sur téléphone, les photos passent toujours une par une.</p>
     <div class="site-mvt" id="site-diapo">
       <button type="button" class="mini" data-diapo="actif" aria-pressed="${st.diaporama!=='aucun'?'true':'false'}">Affiché — les projets défilent en fondu</button>
       <button type="button" class="mini" data-diapo="aucun" aria-pressed="${st.diaporama==='aucun'?'true':'false'}">Masqué — le site commence par la liste</button>
     </div>
-    <label class="fld" style="margin-top:9px"><span class="lbl">Temps d’affichage de chaque paire (secondes)</span>
+    <div class="site-mvt" id="site-diapo-par" style="margin-top:9px">
+      <button type="button" class="mini" data-par="2" aria-pressed="${bandeauPar()===2?'true':'false'}">Deux photos côte à côte</button>
+      <button type="button" class="mini" data-par="1" aria-pressed="${bandeauPar()===1?'true':'false'}">Une seule photo, en grand</button>
+    </div>
+    <label class="fld" style="margin-top:9px"><span class="lbl">Temps d’affichage de chaque vue (secondes)</span>
       <input type="number" id="site-diapo-sec" min="${BANDEAU_SEC_MIN}" max="${BANDEAU_SEC_MAX}" step="1" value="${bandeauSec()}"></label>
     <p class="ias-note" id="site-diapo-msg"></p>
     <div class="ed-eyebrow" style="margin-top:14px">Sections du site</div>
@@ -9299,6 +9311,13 @@ function openSitePanel(){
     b.addEventListener('click',()=>{
       siteSettings().mouvement=b.dataset.mvt;saveLibraryDebounced();
       document.querySelectorAll('#site-mvt [data-mvt]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-diapo-par [data-par]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().diaporamaPar=parseInt(b.dataset.par,10);saveLibraryDebounced();
+      document.querySelectorAll('#site-diapo-par [data-par]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
       rappel();
     });
   });

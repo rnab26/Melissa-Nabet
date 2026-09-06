@@ -514,6 +514,52 @@ déjà été tapé continue de s'y ajouter.
 
 ---
 
+## 6 septembre 2026 — Le bandeau se règle, et se pilote à la main
+
+**Branche** `claude/bandeau-reglable`. Premier des cinq chantiers demandés par Raphaël sur
+le site public.
+
+### Livré
+
+- **Une ou deux photos par vue**, au choix, dans le CRM → ⚙ Le site public → *Bandeau
+  d'accueil*. Deux, c'est le portfolio : les images se répondent. Une, c'est l'affiche.
+  **Sur téléphone, c'est toujours une** — le réglage ne peut pas forcer deux timbres-poste
+  sur 390 px. Tout autre nombre est ramené à deux : à trois, chaque photo tombe sous
+  400 px, ce n'est plus une image d'accueil mais une planche contact.
+- **Des flèches ‹ ›**, discrètes au survol sur ordinateur et **visibles en permanence au
+  doigt** — sans survol, une commande qui n'apparaît qu'au survol n'existe pas.
+- **Les touches ← →** quand le bandeau a le focus, et **le balayage au doigt** (45 px de
+  seuil : en dessous, c'est un appui tremblant, pas un geste).
+- **Reculer ramène exactement là d'où l'on vient**, et reboucle sur la fin depuis la
+  première vue. C'est tout l'intérêt : une photo est passée trop vite, on la revoit.
+- **Un geste manuel relance le compte à zéro**, il ne coupe pas le défilement.
+
+### Ce qu'il ne faut pas casser
+
+- `bdAller(pas)` est **le seul chemin** pour changer de vue — minuteur, flèche, clavier,
+  balayage. Deux chemins finiraient par diverger, et c'est ce qui fait qu'une flèche
+  « saute » une image.
+- Les flèches sont **voisines** du bouton d'ouverture, pas ses enfants : un bouton dans un
+  bouton n'existe pas en HTML, le clavier et les lecteurs d'écran s'y perdent.
+- Un balayage se termine par un `click` : sans le garde `bdGlisse`, glisser ouvrirait le
+  projet au lieu de montrer la photo suivante.
+- La reconstruction au redimensionnement ne se déclenche que si le **nombre de photos par
+  vue** change : passer de 1200 à 1100 px ne doit pas remettre le bandeau au début.
+
+### Vérification
+
+`realisations` **498** (5 nouveaux), `site` **142** (12 nouveaux, deux passages consécutifs
+identiques), `bout-en-bout` 20 — **660 contrôles, 0 échec**. Les flèches au doigt sont
+éprouvées sur un contexte **réellement tactile** (`hasTouch`), pas déduites de la feuille de
+style. Captures : `/tmp/mn-bandeau-tactile.png`.
+
+### À faire côté Raphaël
+
+**Rien.** Le réglage est dans ⚙ Le site public ; il ne part en ligne qu'avec « Mettre à jour
+le site ».
+
+---
+
 ## 6 septembre 2026 — Un bandeau qui fait défiler les projets, et l'import qui ne s'ouvrait pas sur iPhone
 
 **Branche** `claude/site-bandeau-accueil`.

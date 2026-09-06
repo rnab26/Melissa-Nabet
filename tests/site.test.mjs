@@ -847,16 +847,132 @@ const solos = vues.filter(v => v.srcs.length === 1);
 check('Bandeau : une vue solitaire occupe toute la largeur, sans case vide',
   solos.every(v => !v.duo), solos.length + ' vue(s) solitaire(s)');
 
+// --- DÉFILER À LA MAIN : les flèches, le clavier, le doigt
+const parGeste = async (faire) => {
+  const avant = await page.evaluate(() => ({
+    couche: (document.querySelector('.bd-couche.on') || {}).id || '',
+    rang: bdRang, nom: (document.getElementById('bd-nom') || {}).textContent || '',
+  }));
+  await faire();
+  try {
+    await page.waitForFunction((c) => {
+      const on = document.querySelector('.bd-couche.on');
+      return !!on && on.id !== c;
+    }, avant.couche, { timeout: 9000 });
+  } catch (e) { return { avant, apres: null }; }
+  const apres = await lireBandeau();
+  const rang = await page.evaluate(() => bdRang);
+  return { avant, apres: Object.assign({ rang }, apres) };
+};
+
+const bdFleches = await page.evaluate(() => {
+  const p = document.getElementById('bd-prec'), s = document.getElementById('bd-suiv');
+  return { existent: !!p && !!s, visibles: !p.hidden && !s.hidden,
+           dansLeBouton: !!document.querySelector('.bd-ouvrir button'),
+           labels: [p.getAttribute('aria-label'), s.getAttribute('aria-label')] };
+});
+check('Bandeau : deux flèches ‹ › pour défiler à la main',
+  bdFleches.existent && bdFleches.visibles && bdFleches.labels.every(Boolean), JSON.stringify(bdFleches));
+/* Un bouton dans un bouton n'existe pas en HTML : le clavier et les lecteurs d'écran s'y
+   perdent. Les flèches sont donc voisines du bouton d'ouverture, pas ses enfants. */
+check('Bandeau : les flèches ne sont pas imbriquées dans le bouton d’ouverture',
+  bdFleches.dansLeBouton === false);
+
+const suiv = await parGeste(() => page.locator('#bd-suiv').click());
+check('Bandeau : la flèche › passe à la vue suivante',
+  !!suiv.apres && suiv.apres.rang === suiv.avant.rang + 1 && suiv.apres.chargees === suiv.apres.srcs.length,
+  suiv.apres ? ('rang ' + suiv.avant.rang + ' → ' + suiv.apres.rang) : 'rien ne s’est passé');
+/* Reculer doit ramener EXACTEMENT là d'où l'on vient — c'est tout l'intérêt : on a vu une
+   photo passer trop vite et on veut la revoir. */
+const prec = await parGeste(() => page.locator('#bd-prec').click());
+check('Bandeau : la flèche ‹ ramène à la vue précédente, celle qu’on vient de quitter',
+  !!prec.apres && prec.apres.rang === suiv.avant.rang && prec.apres.nom === suiv.avant.nom,
+  prec.apres ? ('rang ' + prec.avant.rang + ' → ' + prec.apres.rang + ' · ' + prec.apres.nom) : 'rien ne s’est passé');
+
+const clavier = await parGeste(async () => {
+  await page.locator('#bd-ouvrir').focus();
+  await page.keyboard.press('ArrowRight');
+});
+check('Bandeau : les touches ← → font défiler au clavier',
+  !!clavier.apres && clavier.apres.rang === clavier.avant.rang + 1,
+  clavier.apres ? ('rang ' + clavier.avant.rang + ' → ' + clavier.apres.rang) : 'rien ne s’est passé');
+
+/* Le balayage au doigt : un glissement franc change de vue, et n'ouvre PAS le projet —
+   un balayage se termine par un `click`, c'est le piège classique. */
+const glisse = await parGeste(() => page.evaluate(() => {
+  const b = document.getElementById('bandeau');
+  const t = (x) => ({ clientX: x, clientY: 300 });
+  b.dispatchEvent(Object.assign(new Event('touchstart'), { touches: [t(600)] }));
+  b.dispatchEvent(Object.assign(new Event('touchend'), { changedTouches: [t(500)] }));
+}));
+check('Bandeau : glisser le doigt change de vue',
+  !!glisse.apres && glisse.apres.rang === glisse.avant.rang + 1,
+  glisse.apres ? ('rang ' + glisse.avant.rang + ' → ' + glisse.apres.rang) : 'rien ne s’est passé');
+const ouvertApresGlisse = await page.evaluate(() => {
+  document.getElementById('bd-ouvrir').click();
+  return document.body.classList.contains('viewing');
+});
+check('Bandeau : un balayage n’ouvre pas le projet par accident', ouvertApresGlisse === false);
+
+/* Un geste manuel RELANCE le compte à zéro : il ne débranche pas le bandeau. On regarde une
+   image de plus, on ne coupe pas le défilement. */
+const apresGeste = await parGeste(() => Promise.resolve());
+check('Bandeau : après un geste manuel, le défilement automatique reprend',
+  !!apresGeste.apres, apresGeste.apres ? 'reprend' : 'ne reprend plus');
+
+/* Une seule photo par vue : le réglage de Melissa, même sur un écran large. */
+const solo = await page.evaluate(async () => {
+  infosSite.diaporamaPar = 1;
+  bdConstruire();
+  clearTimeout(bdMinuteur);
+  bdAller(1);
+  await new Promise(r => setTimeout(r, 1500));
+  const on = document.querySelector('.bd-couche.on');
+  const r = { par: bdRegle().par, parVue: bdParVue(),
+    cases: on ? on.querySelectorAll('img').length : 0,
+    solo: !!(on && on.classList.contains('solo')), duo: !!(on && on.classList.contains('duo')),
+    largeur: on ? Math.round(on.getBoundingClientRect().width) : 0,
+    /* On mesure la CASE, pas l'image : l'image est volontairement agrandie par le
+       rapprochement lent, et rognée par la case (`overflow:hidden`). */
+    caseLargeur: on && on.querySelector('.bd-case') ? Math.round(on.querySelector('.bd-case').getBoundingClientRect().width) : 0,
+    imageDeborde: (() => { const c = on && on.querySelector('.bd-case');
+      return c ? getComputedStyle(c).overflow !== 'hidden' : true; })() };
+  /* Le tirage étant au hasard, la vue affichée après le retour peut légitimement être
+     solitaire (un projet d'une seule photo, ou la dernière d'un nombre impair). Ce qui se
+     vérifie sans dépendre du hasard, c'est la LISTE DES VUES construite : à une photo par
+     vue, aucune ne doit en porter deux ; à deux, il doit y en avoir. */
+  r.vuesA1 = bdVues.map(v => v.photos.length);
+  infosSite.diaporamaPar = 2; bdConstruire();
+  r.vuesA2 = bdVues.map(v => v.photos.length);
+  r.parApres = bdRegle().par;
+  clearTimeout(bdMinuteur); bdAller(1);
+  await new Promise(r2 => setTimeout(r2, 1500));
+  return r;
+});
+check('Bandeau : réglé sur UNE photo, il n’en montre qu’une, sur toute la largeur',
+  solo.par === 1 && solo.cases === 1 && solo.solo && !solo.duo
+  && Math.abs(solo.caseLargeur - solo.largeur) < 4 && !solo.imageDeborde,
+  JSON.stringify(solo));
+check('Bandeau : à UNE photo par vue, aucune vue n’en porte deux',
+  solo.vuesA1.length > 0 && solo.vuesA1.every(n => n === 1), solo.vuesA1.join(','));
+check('Bandeau : remis sur deux, les vues repassent par paires',
+  solo.parApres === 2 && solo.vuesA2.some(n => n === 2), solo.vuesA2.join(','));
+
 /* Le survol suspend le défilement : on ne change pas une image sous les yeux de quelqu'un
    qui la regarde — et surtout pas sous son doigt au moment où il appuie. C'est aussi ce qui
    rend le clic fiable : sans cette pause, on ouvrirait le projet suivant. */
+/* On sort d'abord le pointeur du bandeau : les contrôles précédents ont cliqué sur les
+   flèches, qui sont dedans. Sans ce retour à zéro, il n'y a pas de « survol » à mesurer —
+   on y était déjà. */
+await page.mouse.move(4, 4);
+await page.waitForTimeout(300);
 await page.hover('#bandeau');
-const avantPause = await lireBandeau();
+const avantPause = Object.assign({ pause: await page.evaluate(() => bdPause) }, await lireBandeau());
 await page.waitForTimeout(4500);            // au-delà des 3 s réglées
 const apresPause = await lireBandeau();
 check('Bandeau : le survol suspend le défilement',
-  apresPause.couche === avantPause.couche && apresPause.nom === avantPause.nom,
-  avantPause.nom + ' → ' + apresPause.nom);
+  avantPause.pause === true && apresPause.couche === avantPause.couche && apresPause.nom === avantPause.nom,
+  'pause=' + avantPause.pause + ' · ' + avantPause.couche + ' → ' + apresPause.couche);
 
 // Un appui ouvre le projet montré — c'est ce qui en fait autre chose qu'une décoration.
 const nomAvantClic = apresPause.nom;
@@ -923,6 +1039,24 @@ const tactile = await page.evaluate(async () => {
 check('Bandeau au doigt : l’appui suspend, et le doigt levé relance',
   tactile.avant === false && tactile.pendant === true && tactile.apres === false && tactile.minuteur,
   JSON.stringify(tactile));
+
+/* Sans survol possible (téléphone, tablette), une commande qui n'apparaît qu'au survol
+   n'existe pas. Les flèches doivent donc être visibles en permanence — vérifié sur un
+   contexte réellement tactile, pas déduit de la feuille de style. */
+const ctxTactile = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+const pageTactile = await ctxTactile.newPage();
+await pageTactile.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await pageTactile.waitForTimeout(1600);
+const tact = await pageTactile.evaluate(() => {
+  const p = document.getElementById('bd-prec');
+  return { hoverNone: matchMedia('(hover:none)').matches, cachee: p.hidden,
+           opacite: parseFloat(getComputedStyle(p).opacity),
+           taille: Math.round(p.getBoundingClientRect().width) };
+});
+await pageTactile.screenshot({ path: '/tmp/mn-bandeau-tactile.png' });
+await ctxTactile.close();
+check('Bandeau au doigt : les flèches sont visibles en permanence, et assez grandes pour le pouce',
+  tact.hoverNone && !tact.cachee && tact.opacite > 0.5 && tact.taille >= 40, JSON.stringify(tact));
 
 // --- « Masqué » : le site commence par la liste, sans bandeau du tout
 await page.goto('http://127.0.0.1:8902/index-theme.html', { waitUntil: 'networkidle' });

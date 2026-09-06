@@ -3278,7 +3278,7 @@ check('Site public : tout est vide au départ',
 // réalisations et celle de la boutique : ce sont elles qui donnent au site l'ORDRE de ses
 // sections et de ses rayons, et elles ne sont jamais vides.
 check('Site public : aucune coordonnée vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,categories,categoriesProduits', siteVide.infos.join(','));
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,diaporamaPar,categories,categoriesProduits', siteVide.infos.join(','));
 
 const siteAllure = await page.evaluate(() => {
   library.site = null;
@@ -3351,6 +3351,35 @@ check('Bandeau : une durée refusée se remet d’aplomb en disant pourquoi',
   bandeauPanel.mauvais.valeur === 11 && bandeauPanel.mauvais.champ === '11' && /Entre 3 et 60/.test(bandeauPanel.mauvais.msg),
   JSON.stringify(bandeauPanel.mauvais));
 check('Bandeau : on peut le masquer depuis l’écran', bandeauPanel.masque === 'aucun', bandeauPanel.masque);
+
+// --- UNE OU DEUX PHOTOS PAR VUE. Deux, c'est le portfolio ; une, c'est l'affiche.
+const bandeauPar = await page.evaluate(async () => {
+  library.site = null;
+  const parDefaut = siteInfos().diaporamaPar;
+  const absurdes = [3, 0, -1, '', null, 'deux'].map(v => { siteSettings().diaporamaPar = v; return siteInfos().diaporamaPar; });
+  siteSettings().diaporamaPar = 1;
+  const choisi = siteInfos().diaporamaPar;
+  openSitePanel();
+  await new Promise(r => setTimeout(r, 300));
+  const boutons = [...document.querySelectorAll('#site-diapo-par [data-par]')].map(b => b.textContent.trim());
+  const actif = (document.querySelector('#site-diapo-par [data-par][aria-pressed="true"]') || {}).dataset;
+  document.querySelector('#site-diapo-par [data-par="2"]').click();
+  const apresClic = siteSettings().diaporamaPar;
+  const debord = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  closeModal();
+  return { parDefaut, absurdes, choisi, boutons, actif: actif && actif.par, apresClic, debord };
+});
+check('Bandeau : deux photos par vue par défaut',
+  bandeauPar.parDefaut === 2, String(bandeauPar.parDefaut));
+check('Bandeau : le choix « une seule photo » part dans le manifeste',
+  bandeauPar.choisi === 1, String(bandeauPar.choisi));
+// Trois photos sur un bandeau large font une planche contact, pas une image d'accueil.
+check('Bandeau : tout autre nombre que 1 ou 2 est ramené à 2',
+  bandeauPar.absurdes.every(v => v === 2), bandeauPar.absurdes.join(', '));
+check('Bandeau : le choix se fait depuis l’écran, et l’état en cours est marqué',
+  bandeauPar.boutons.length === 2 && bandeauPar.actif === '1' && bandeauPar.apresClic === 2,
+  bandeauPar.boutons.join(' | ') + ' · actif ' + bandeauPar.actif);
+check('Réglages du site : rien ne déborde à l’écran', bandeauPar.debord <= 1, bandeauPar.debord + 'px');
 
 // ============================================================================
 //  OUVRIR LE SÉLECTEUR DE FICHIERS — le défaut signalé depuis un iPhone
