@@ -70,6 +70,9 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
           email: 'essai@example.com', tel: '052 000 00 00', instagram: '@essai',
           /* L'ordre des sections vient du CRM. Ici il est VOLONTAIREMENT contraire à
              l'alphabet : c'est ce qui prouve que le site suit la liste et non un tri. */
+          /* Le bandeau d'accueil, réglé au minimum permis (3 s) : le test doit pouvoir
+             observer un vrai changement automatique sans attendre sept secondes. */
+          diaporama: 'actif', diaporamaSec: 3,
           categories: ['Bureau', 'Appartement'],
           categoriesProduits: ['Revêtement mural', 'Panneau décoratif'],
           langues: ['fr', 'en', 'he'],
@@ -125,8 +128,10 @@ writeFileSync(join(DIR, 'index-theme.html'), enIndex);
 /* Mêmes photos que le banc principal : c'est l'habillage qu'on éprouve, pas les images. */
 writeFileSync(join(DIR, 'galerie/i/manifest.json'), JSON.stringify({
   version: 1, updatedAt: new Date().toISOString(),
+  /* Bandeau refusé : la page doit commencer par la liste, sans bandeau du tout. C'est
+     l'autre moitié du réglage, et elle ne se déduit pas de la première. */
   site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur',
-          theme: 'index', mouvement: 'discret',
+          theme: 'index', mouvement: 'discret', diaporama: 'aucun',
           apropos: 'Texte de présentation du banc d’essai.', email: 'essai@example.com' },
   realisations: [
     { id: 'r1', title: 'Bureau Sébastien', date: '2026', lieu: 'Tel Aviv',

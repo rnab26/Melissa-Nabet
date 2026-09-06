@@ -3278,7 +3278,7 @@ check('Site public : tout est vide au départ',
 // réalisations et celle de la boutique : ce sont elles qui donnent au site l'ORDRE de ses
 // sections et de ses rayons, et elles ne sont jamais vides.
 check('Site public : aucune coordonnée vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,categories,categoriesProduits', siteVide.infos.join(','));
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,categories,categoriesProduits', siteVide.infos.join(','));
 
 const siteAllure = await page.evaluate(() => {
   library.site = null;
@@ -3301,6 +3301,94 @@ check('Allure : un thème inconnu du catalogue ne part pas',
   siteAllure.faux === undefined, String(siteAllure.faux));
 check('Allure : les quatre directions sont au catalogue',
   siteAllure.catalogue.join(',') === 'index,epure,atelier,nuit', siteAllure.catalogue.join(','));
+
+// --- LE BANDEAU D'ACCUEIL : son état et sa durée voyagent par le manifeste, comme le reste.
+const bandeau = await page.evaluate(() => {
+  library.site = null;
+  const parDefaut = siteInfos();
+  siteSettings().diaporama = 'aucun'; siteSettings().diaporamaSec = 12;
+  const choisi = siteInfos();
+  // Des valeurs qu'on ne veut pas voir arriver sur le site : un clignotement, une éternité,
+  // et un champ vidé à la main.
+  const absurdes = [0.4, 900, '', null].map(v => { siteSettings().diaporamaSec = v; return siteInfos().diaporamaSec; });
+  siteSettings().diaporamaSec = 12;
+  return { parDefaut, choisi, absurdes, defaut: BANDEAU_SEC_DEFAUT };
+});
+check('Bandeau : affiché par défaut, avec une durée par défaut',
+  bandeau.parDefaut.diaporama === 'actif' && bandeau.parDefaut.diaporamaSec === bandeau.defaut,
+  JSON.stringify({ d: bandeau.parDefaut.diaporama, s: bandeau.parDefaut.diaporamaSec }));
+check('Bandeau : le choix et la durée partent dans le manifeste',
+  bandeau.choisi.diaporama === 'aucun' && bandeau.choisi.diaporamaSec === 12,
+  JSON.stringify({ d: bandeau.choisi.diaporama, s: bandeau.choisi.diaporamaSec }));
+check('Bandeau : une durée absurde ne part jamais en ligne',
+  bandeau.absurdes.every(v => v === bandeau.defaut), bandeau.absurdes.join(', '));
+
+// Et le réglage se règle DEPUIS L'ÉCRAN, pas seulement en mémoire : un champ hors bornes
+// doit se remettre d'aplomb en disant pourquoi, sinon on repart en croyant l'avoir changé.
+const bandeauPanel = await page.evaluate(async () => {
+  library.site = null;
+  openSitePanel();
+  await new Promise(r => setTimeout(r, 300));
+  const champ = document.getElementById('site-diapo-sec');
+  const boutons = [...document.querySelectorAll('#site-diapo [data-diapo]')].map(b => b.textContent.trim());
+  champ.value = '11'; champ.dispatchEvent(new Event('change'));
+  const bon = { valeur: siteSettings().diaporamaSec, msg: document.getElementById('site-diapo-msg').textContent };
+  champ.value = '0.5'; champ.dispatchEvent(new Event('change'));
+  const mauvais = { valeur: siteSettings().diaporamaSec, champ: champ.value,
+                    msg: document.getElementById('site-diapo-msg').textContent };
+  document.querySelector('#site-diapo [data-diapo="aucun"]').click();
+  const masque = siteSettings().diaporama;
+  const debord = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  closeModal();
+  return { boutons, bon, mauvais, masque, debord };
+});
+check('Bandeau : le réglage existe dans « Le site public », avec ses deux états',
+  bandeauPanel.boutons.length === 2 && /Affiché/.test(bandeauPanel.boutons[0]) && /Masqué/.test(bandeauPanel.boutons[1]),
+  bandeauPanel.boutons.join(' | '));
+check('Bandeau : une durée valable est retenue', bandeauPanel.bon.valeur === 11 && !bandeauPanel.bon.msg,
+  JSON.stringify(bandeauPanel.bon));
+check('Bandeau : une durée refusée se remet d’aplomb en disant pourquoi',
+  bandeauPanel.mauvais.valeur === 11 && bandeauPanel.mauvais.champ === '11' && /Entre 3 et 60/.test(bandeauPanel.mauvais.msg),
+  JSON.stringify(bandeauPanel.mauvais));
+check('Bandeau : on peut le masquer depuis l’écran', bandeauPanel.masque === 'aucun', bandeauPanel.masque);
+
+// ============================================================================
+//  OUVRIR LE SÉLECTEUR DE FICHIERS — le défaut signalé depuis un iPhone
+//  « j'essaie d'ajouter des photos à un projet, il ne se passe rien du tout ». Sur iOS
+//  (Safari comme Chrome, même moteur), un input créé en mémoire et cliqué SANS être dans
+//  le document n'ouvre pas le sélecteur. Ce qu'on éprouve ici : l'entrée est bien POSÉE
+//  DANS LA PAGE au moment du clic, elle n'est pas masquée d'une façon qu'iOS ignore, et
+//  elle ne reste pas derrière elle.
+const picker = await page.evaluate(async () => {
+  const vus = [];
+  const vrai = HTMLInputElement.prototype.click;
+  HTMLInputElement.prototype.click = function () {
+    const st = getComputedStyle(this);
+    vus.push({
+      dansLaPage: document.body.contains(this),
+      display: st.display, visibility: st.visibility,
+      multiple: this.multiple, accept: this.accept,
+    });
+  };
+  rzPickPhotos({ id: 'x', photos: [] });
+  choisirFichiers({ accept: '.csv,text/csv' }, () => {});
+  HTMLInputElement.prototype.click = vrai;
+  const restants = document.querySelectorAll('body > input[type=file]').length;
+  // le nettoyage se fait au retour du focus quand le sélecteur a été annulé
+  window.dispatchEvent(new Event('focus'));
+  await new Promise(r => setTimeout(r, 1600));
+  return { vus, restants, apresAnnulation: document.querySelectorAll('body > input[type=file]').length };
+});
+check('Sélecteur de fichiers : l’entrée est DANS la page au moment du clic (sinon iOS n’ouvre rien)',
+  picker.vus.length === 2 && picker.vus.every(v => v.dansLaPage), JSON.stringify(picker.vus));
+check('Sélecteur de fichiers : elle n’est pas masquée d’une façon qu’iOS ignore',
+  picker.vus.length === 2 && picker.vus.every(v => v.display !== 'none' && v.visibility !== 'hidden'),
+  picker.vus.map(v => v.display + '/' + v.visibility).join(' | '));
+check('Ajouter des photos : le sélecteur accepte plusieurs images',
+  picker.vus.length === 2 && picker.vus[0].multiple === true && /image/.test(picker.vus[0].accept),
+  JSON.stringify(picker.vus[0]));
+check('Sélecteur de fichiers : rien ne reste dans la page après une annulation',
+  picker.apresAnnulation === 0, picker.restants + ' pendant, ' + picker.apresAnnulation + ' après');
 
 const sitePanel = await page.evaluate(async () => {
   library.branding = Object.assign({}, library.branding, { email: 'contact@exemple.fr', phone: '052 111 22 33' });

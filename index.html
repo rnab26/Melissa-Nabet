@@ -1252,8 +1252,7 @@
       <h2>Clients &amp; comptes</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-onlight" onclick="exportClientsCSV()">⬇ Export CSV</button>
-        <button class="btn btn-onlight" onclick="document.getElementById('import-clients-csv').click()">⬆ Import CSV</button>
-        <input type="file" id="import-clients-csv" accept=".csv,text/csv" style="display:none">
+        <button class="btn btn-onlight" onclick="pickImportClientsCSV()">⬆ Import CSV</button>
         <button class="btn btn-onlight" onclick="openClientStatusesPanel()">⚙ Statuts</button>
         <button class="btn btn-primary" style="color:#fff" onclick="addClient()">+ Nouveau client</button>
       </div>
@@ -2137,11 +2136,46 @@ function applyImageCrop(){
   closeModal();
   onSave(dataUri);
 }
-/* Boilerplate commun à tous les imports d'image (input file caché + garde fichier vide + click). */
-function pickImageFile(onFile){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{if(inp.files&&inp.files[0])onFile(inp.files[0]);};
+/* ---- CHOISIR DES FICHIERS ----
+   UN SEUL chemin pour tous les imports de l'application. Il l'est devenu pour une raison
+   précise : sur iPhone (Safari comme Chrome, qui est le même moteur), un
+   `input[type=file]` créé en mémoire et cliqué SANS avoir été attaché au document
+   n'ouvre pas le sélecteur. Rien ne se passe, et rien ne le dit — c'est exactement ce que
+   Raphaël a constaté en essayant d'ajouter des photos à un chantier depuis son téléphone.
+
+   Trois précautions, et chacune répond à un comportement réel d'iOS :
+   - l'entrée est POSÉE DANS LA PAGE avant d'être cliquée ;
+   - elle est rendue invisible sans `display:none` ni `visibility:hidden` (une entrée
+     ainsi masquée est ignorée par WebKit) : hors écran, transparente, non cliquable ;
+   - elle est retirée APRÈS le choix, ou au retour dans la page si le sélecteur a été
+     annulé — iOS n'émet aucun événement dans ce cas, et une entrée oubliée s'accumule.
+   Le clic doit rester dans le geste de l'utilisateur : n'appelez jamais cette fonction
+   après un `await`, le navigateur refuserait d'ouvrir le sélecteur. */
+function choisirFichiers(opts,onFiles){
+  const o=opts||{};
+  const inp=document.createElement('input');
+  inp.type='file';
+  inp.accept=o.accept||'image/*';
+  if(o.multiple)inp.multiple=true;
+  inp.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;';
+  let range=false;
+  const ranger=()=>{if(range)return;range=true;window.removeEventListener('focus',plusTard);
+    setTimeout(()=>{if(inp.parentNode)inp.parentNode.removeChild(inp);},0);};
+  /* Annulation : aucun `change` n'arrive. Le retour du focus sur la fenêtre est le seul
+     signal disponible — on laisse un délai, `focus` précédant parfois `change`. */
+  const plusTard=()=>setTimeout(()=>{if(!inp.files||!inp.files.length)ranger();},1200);
+  inp.addEventListener('change',()=>{
+    const f=inp.files;
+    ranger();
+    if(f&&f.length)onFiles(f);
+  });
+  window.addEventListener('focus',plusTard);
+  document.body.appendChild(inp);
   inp.click();
+}
+/* Boilerplate commun à tous les imports d'image : un fichier, une image. */
+function pickImageFile(onFile){
+  choisirFichiers({accept:'image/*'},files=>{if(files[0])onFile(files[0]);});
 }
 function pickLogo(){
   pickImageFile(file=>openImageCropper(file,dataUri=>{
@@ -3367,8 +3401,7 @@ const docStore={
   },
 };
 function pickFiles(c,ligneId){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf,.dwg,.dxf';
-  inp.onchange=()=>attachFiles(c,ligneId,inp.files);inp.click();
+  choisirFichiers({multiple:true,accept:'image/*,application/pdf,.dwg,.dxf'},files=>attachFiles(c,ligneId,files));
 }
 const CAD_EXT=/\.(dwg|dxf)$/i;
 const CAD_MAX_SIZE=20*1024*1024;
@@ -3555,8 +3588,11 @@ function addClient(){
 function wireClientFilters(){
   const q=$('cl-q');
   if(q)q.addEventListener('input',()=>{clientFilters.q=q.value;renderClients();});
-  const cf=$('import-clients-csv');
-  if(cf)cf.addEventListener('change',()=>{if(cf.files&&cf.files[0])importClientsCSV(cf.files[0]);cf.value='';});
+}
+/* Passe par `choisirFichiers` comme tous les autres imports : une entrée `display:none`
+   posée dans la page est, elle aussi, ignorée par le sélecteur de fichiers d'iOS. */
+function pickImportClientsCSV(){
+  choisirFichiers({accept:'.csv,text/csv'},files=>{if(files[0])importClientsCSV(files[0]);});
 }
 /* Puces de filtre par statut + légende : régénérées à chaque rendu (statuts modulables via
    ⚙ Statuts) — pas de liste figée dans le HTML, sinon un statut renommé/ajouté/supprimé ne
@@ -4027,8 +4063,7 @@ function deleteTaskConfirm(id){
   });
 }
 function pickTaskFiles(id){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf,.dwg,.dxf';
-  inp.onchange=()=>attachTaskFiles(id,inp.files);inp.click();
+  choisirFichiers({multiple:true,accept:'image/*,application/pdf,.dwg,.dxf'},files=>attachTaskFiles(id,files));
 }
 async function attachTaskFiles(id,files){
   const t=tasks.find(x=>x.id===id);if(!t)return;
@@ -4197,8 +4232,7 @@ function openBackupPanel(){
     <p class="msub">Vos clients, devis, tâches, bibliothèque et documents sont enregistrés sur cet appareil. Exportez un fichier de secours — et réimportez-le sur un autre appareil (ou un nouveau téléphone) pour y retrouver toutes vos données.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
       <button class="btn btn-primary" onclick="exportData()">⬇ Exporter mes données</button>
-      <button class="btn btn-onlight" onclick="document.getElementById('import-file').click()">⬆ Importer une sauvegarde</button>
-      <input type="file" id="import-file" accept="application/json,.json" style="display:none">
+      <button class="btn btn-onlight" onclick="choisirFichiers({accept:'application/json,.json'},f=>importData(f[0]))">⬆ Importer une sauvegarde</button>
     </div>
     <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>
 
@@ -4209,11 +4243,10 @@ function openBackupPanel(){
     <div id="bk-prog" hidden><div class="rz-bar"><i style="width:0%"></i></div><p class="msub" id="bk-prog-txt"></p></div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
       <button class="btn btn-primary" id="bk-go">⬇ Sauvegarde complète (.zip)</button>
-      <button class="btn btn-onlight" onclick="document.getElementById('bk-file').click()">⬆ Importer une sauvegarde complète (.zip)</button>
-      <input type="file" id="bk-file" accept=".zip,application/zip" style="display:none">
+      <button class="btn btn-onlight" onclick="choisirFichiers({accept:'.zip,application/zip'},f=>importComplet(f[0]))">⬆ Importer une sauvegarde complète (.zip)</button>
     </div>
     <p class="ias-msg" id="bk-msg"></p>`);
-  const f=$('import-file');if(f)f.addEventListener('change',()=>{if(f.files&&f.files[0])importData(f.files[0]);});
+
   const sel=$('bk-portee');
   if(sel){
     const total=realisations.reduce((a,r)=>a+(r.photos||[]).length,0);
@@ -4233,8 +4266,6 @@ function openBackupPanel(){
     if(!_storageStat)loadStorageStat().then(()=>{if($('bk-taille'))majTaille();});
     $('bk-go').addEventListener('click',()=>exportComplet(sel.value));
   }
-  const bf=$('bk-file');
-  if(bf)bf.addEventListener('change',()=>{if(bf.files&&bf.files[0])importComplet(bf.files[0]);});
 }
 
 /* ============ SAUVEGARDE COMPLÈTE (données + photos) ============
@@ -5215,10 +5246,7 @@ function buildImportPanel(){
   return null;
 }
 function rzPickPhotos(r){
-  const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;inp.accept='image/*';
-  inp.onchange=()=>addPhotosToRealisation(r,inp.files);
-  inp.click();
+  choisirFichiers({multiple:true,accept:'image/*'},files=>addPhotosToRealisation(r,files));
 }
 /* ---- Remplacer une photo sans perdre sa place ----
    Une photo refaite (mieux cadrée, mieux éclairée) doit garder son rang, son titre et sa
@@ -5273,10 +5301,8 @@ async function replaceOnePhoto(r,p,file){
   }
 }
 function rzReplacePhoto(r,p){
-  const inp=document.createElement('input');
-  inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    const file=(inp.files||[])[0];if(!file)return;
+  choisirFichiers({accept:'image/*'},files=>{
+    const file=files[0];if(!file)return;
     const pertes=[];
     const nv=photoVersions(p).length;
     if(nv)pertes.push(nv>1?('ses '+nv+' retouches IA seront supprimées'):'sa retouche IA sera supprimée');
@@ -5289,8 +5315,7 @@ function rzReplacePhoto(r,p){
       if(_ed&&_ed.p===p){await reloadEditorImage();buildEditorControls();}
       renderRealisations();toast('Photo remplacée');
     });
-  };
-  inp.click();
+  });
 }
 
 /* ============ MOTEUR DE RENDU (WebGL) ============
@@ -6339,10 +6364,7 @@ function buildProduitPhotos(p){
   return wrap;
 }
 function btPickPhotos(p){
-  const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;inp.accept='image/*';
-  inp.onchange=()=>addPhotosToProduit(p,inp.files);
-  inp.click();
+  choisirFichiers({multiple:true,accept:'image/*'},files=>addPhotosToProduit(p,files));
 }
 /* Même moteur d'import que les réalisations : `importOnePhoto` ne connaît que « un objet
    qui a des photos ». Le seul écart est ce qu'on sauvegarde et ce qu'on redessine. */
@@ -8802,7 +8824,16 @@ const SITE_THEMES=[
 /* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',categories:null,ordre:null};
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,categories:null,ordre:null};
+/* Le bandeau d'accueil montre deux photos qui se suivent, projet après projet, tirés au
+   hasard. Sa durée d'affichage est un réglage : trop court on n'a pas le temps de regarder,
+   trop long le site paraît figé. Les bornes évitent les valeurs absurdes (0,5 s clignote,
+   dix minutes n'est plus un diaporama). */
+const BANDEAU_SEC_MIN=3, BANDEAU_SEC_MAX=60, BANDEAU_SEC_DEFAUT=7;
+function bandeauSec(){
+  const n=parseFloat(siteSettings().diaporamaSec);
+  return (isFinite(n)&&n>=BANDEAU_SEC_MIN&&n<=BANDEAU_SEC_MAX)?n:BANDEAU_SEC_DEFAUT;
+}
 /* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
    comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
    français plutôt que de laisser un blanc — et jamais dans une traduction automatique, qui
@@ -8881,6 +8912,10 @@ function siteInfos(){
      sans que rien ne l'explique. */
   if(SITE_THEMES.some(t=>t.id===st.theme))o.theme=st.theme;
   if(st.mouvement==='aucun'||st.mouvement==='discret')o.mouvement=st.mouvement;
+  /* Le bandeau d'accueil : son état et sa durée. Toujours envoyés — ce ne sont pas des
+     coordonnées qu'on pourrait vouloir laisser vides, ils ont toujours une valeur. */
+  o.diaporama=(st.diaporama==='aucun')?'aucun':'actif';
+  o.diaporamaSec=bandeauSec();
   ['apropos','email','tel','instagram'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
@@ -9031,6 +9066,15 @@ function openSitePanel(){
       <button type="button" class="mini" data-mvt="discret" aria-pressed="${st.mouvement!=='aucun'?'true':'false'}">Discret — les images apparaissent en douceur</button>
       <button type="button" class="mini" data-mvt="aucun" aria-pressed="${st.mouvement==='aucun'?'true':'false'}">Aucun — net et immédiat</button>
     </div>
+    <div class="ed-eyebrow" style="margin-top:14px">Bandeau d’accueil</div>
+    <p class="ias-note">Une grande image en haut du site, qui fait défiler vos projets : <b>deux photos qui se suivent</b> dans un même chantier, puis les deux suivantes, projets tirés au hasard. Un appui dessus ouvre le projet montré. Sur téléphone, les photos passent une par une.</p>
+    <div class="site-mvt" id="site-diapo">
+      <button type="button" class="mini" data-diapo="actif" aria-pressed="${st.diaporama!=='aucun'?'true':'false'}">Affiché — les projets défilent en fondu</button>
+      <button type="button" class="mini" data-diapo="aucun" aria-pressed="${st.diaporama==='aucun'?'true':'false'}">Masqué — le site commence par la liste</button>
+    </div>
+    <label class="fld" style="margin-top:9px"><span class="lbl">Temps d’affichage de chaque paire (secondes)</span>
+      <input type="number" id="site-diapo-sec" min="${BANDEAU_SEC_MIN}" max="${BANDEAU_SEC_MAX}" step="1" value="${bandeauSec()}"></label>
+    <p class="ias-note" id="site-diapo-msg"></p>
     <div class="ed-eyebrow" style="margin-top:14px">Sections du site</div>
     <p class="ias-note">Les sections du site (« Commercial », « Habitation »…) ne sont pas un réglage à activer : ce sont les <b>catégories</b> des réalisations publiées. Chacune porte la sienne, dans sa fiche.</p>
     <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
@@ -9257,6 +9301,28 @@ function openSitePanel(){
       document.querySelectorAll('#site-mvt [data-mvt]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
       rappel();
     });
+  });
+  document.querySelectorAll('#site-diapo [data-diapo]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().diaporama=b.dataset.diapo;saveLibraryDebounced();
+      document.querySelectorAll('#site-diapo [data-diapo]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  const dsec=document.getElementById('site-diapo-sec');
+  dsec.addEventListener('change',()=>{
+    const n=parseFloat(dsec.value);
+    const msg=document.getElementById('site-diapo-msg');
+    /* Une valeur refusée doit dire POURQUOI et se remettre d'aplomb toute seule : sinon on
+       repart avec un champ rouge et un réglage qu'on croit changé. */
+    if(!isFinite(n)||n<BANDEAU_SEC_MIN||n>BANDEAU_SEC_MAX){
+      dsec.value=bandeauSec();
+      msg.textContent='Entre '+BANDEAU_SEC_MIN+' et '+BANDEAU_SEC_MAX+' secondes. Valeur remise à '+bandeauSec()+' s.';
+      return;
+    }
+    siteSettings().diaporamaSec=n;saveLibraryDebounced();
+    msg.textContent='';
+    rappel();
   });
   const cop=document.getElementById('site-copier');
   cop.addEventListener('click',()=>{

@@ -514,6 +514,100 @@ déjà été tapé continue de s'y ajouter.
 
 ---
 
+## 6 septembre 2026 — Un bandeau qui fait défiler les projets, et l'import qui ne s'ouvrait pas sur iPhone
+
+**Branche** `claude/site-bandeau-accueil`.
+
+### Demandé
+
+« Une grande image sur la page de présentation qui fait défiler au hasard les projets, par
+lot de deux photos qui se suivent, avec un changement dynamique mais léger, doux. »
+
+### Livré — le bandeau d'accueil
+
+- **Deux photos qui se suivent dans le MÊME projet**, côte à côte, sous le nom du studio.
+  Les projets passent dans un ordre **mélangé à chaque tour** ; à l'intérieur d'un projet on
+  avance par paires dans l'ordre de la galerie. Personne ne revoit donc deux fois la même
+  vue avant d'avoir tout vu.
+- **Fondu croisé de 1,3 s** et un lent rapprochement de l'image pendant qu'elle est à
+  l'écran. Deux couches superposées : la cachée est remplie et les opacités ne s'échangent
+  qu'une fois les images **réellement chargées** — sinon le fondu découvrirait une case vide.
+- **Un appui ouvre le projet montré**, dont le nom, l'année et le lieu s'affichent dessus.
+- **Sur téléphone, une photo à la fois** : mêmes photos, même ordre, mais deux vues côte à
+  côte à 390 px font deux timbres-poste. Le passage d'un format à l'autre reconstruit la
+  liste.
+- **Réglable** dans le CRM → ⚙ Le site public → *Bandeau d'accueil* : affiché ou masqué, et
+  le temps d'affichage (3 à 60 s, défaut 7). Une valeur hors bornes est refusée en disant
+  pourquoi et se remet d'aplomb.
+- **Il se suspend** au survol, au doigt posé, au clavier, quand l'onglet passe en arrière-plan
+  et quand un projet est ouvert. Rien n'est téléchargé pour un écran que personne ne regarde.
+- **États traités** : aucun projet publié → pas de bandeau du tout ; une image qui n'arrive
+  pas → on passe à la vue suivante (et si aucune n'arrive, le bandeau s'efface au lieu de
+  tourner à vide) ; réglage « aucun mouvement » ou visiteur qui demande moins d'animation →
+  le bandeau reste, figé sur une image.
+
+### Corrigé au passage — signalé depuis un iPhone
+
+**« J'essaie d'ajouter des photos à un projet, il ne se passe rien du tout. »** Cause trouvée
+dans le code : six endroits créaient un `input[type=file]` **en mémoire**, sans jamais
+l'attacher au document, puis le cliquaient. Sur iOS — Safari comme Chrome, c'est le même
+moteur — le sélecteur de fichiers **ne s'ouvre pas** dans ce cas. Rien ne se passe, et rien
+ne le dit.
+
+Tous les imports passent maintenant par **un seul chemin**, `choisirFichiers()` :
+l'entrée est posée dans la page avant d'être cliquée, rendue invisible **sans** `display:none`
+ni `visibility:hidden` (ainsi masquée, WebKit l'ignore aussi), et retirée après le choix ou
+au retour dans la page si le sélecteur a été annulé — iOS n'émet rien dans ce cas.
+
+Concernés : photos d'une réalisation, photos d'un produit, remplacement d'une photo, pièces
+jointes d'un client, pièces jointes d'une tâche, logo, import CSV clients, import de
+sauvegarde JSON et de sauvegarde complète .zip. Les trois derniers vivaient dans le HTML en
+`display:none` — même piège.
+
+**Non vérifié sur un vrai iPhone** : je n'en ai pas. Le contrôle automatique vérifie ce qui
+est vérifiable ici — l'entrée est bien dans la page au moment du clic, elle n'est pas masquée
+d'une façon qu'iOS ignore, et rien ne reste derrière. **C'est à Raphaël de confirmer que le
+sélecteur s'ouvre.**
+
+### Deux défauts trouvés par les tests, et corrigés
+
+- **Un appui du doigt figeait le bandeau définitivement.** `touchstart` suspendait sans
+  contrepartie : sur un écran tactile, aucun `mouseleave` ne vient jamais le réveiller.
+  Chaque geste a maintenant sa fin (`touchend`, `touchcancel`).
+- **Le banc d'essai du site était testé périmé.** `tests/site.test.mjs` porte sur une COPIE
+  de `site-vitrine/index.html` construite par `sitetest-build.mjs` ; oublier de la
+  reconstruire fait passer (ou échouer) un test sur du code qui n'est plus celui du dépôt.
+  Le test reconstruit désormais son banc lui-même.
+
+### Vérification
+
+`realisations` **493** (11 nouveaux), `site` **130** (21 nouveaux, deux passages consécutifs
+identiques), `bout-en-bout` 20, `pont-ia` 20 — **663 contrôles, 0 échec**. Parcours réel à
+390 px et 1280 px (`/tmp/mn-bandeau-390.png`, `/tmp/mn-bandeau-1280.png`) : aucun débordement.
+
+### Ce qu'il ne faut pas casser
+
+- `choisirFichiers()` doit être appelée **dans le geste de l'utilisateur**, jamais après un
+  `await` : le navigateur refuserait d'ouvrir le sélecteur. Et l'entrée ne doit jamais
+  redevenir `display:none` — c'est tout le correctif.
+- Le bandeau ne croise ses couches qu'après le **chargement** des images. Basculer avant
+  ferait apparaître une case vide, ce qui est pire que pas de mouvement.
+- `diaporama: 'aucun'` (le bandeau n'existe pas) et `animer` faux (le bandeau reste, figé)
+  sont **deux refus différents**. Les confondre ferait disparaître l'image de quelqu'un qui
+  ne voulait que moins de mouvement.
+- Le site public n'a **aucune dépendance** : pas de bibliothèque de carrousel. Le fondu
+  tient en une centaine de lignes ; un Swiper coûterait ~150 Ko à chaque visite et ne sait
+  pas apparier deux photos consécutives d'un même projet.
+
+### À faire côté Raphaël
+
+1. **Rouvrir le CRM sur l'iPhone et essayer d'ajouter une photo** — c'est le seul point que
+   je n'ai pas pu vérifier moi-même.
+2. Regarder le bandeau sur le site public et dire si le rythme (7 s) et la hauteur
+   conviennent : les deux se règlent, le premier depuis ⚙ Le site public.
+
+---
+
 ## 5 septembre 2026 — Quelle version part sur le site (et comment revenir en arrière)
 
 **Branche** `claude/photos-version-publiee-0509` → fusionnée sur `main`. **Chantier Jarvis** `ae41e91f-1660-4afb-ab23-b0406d0f3ffe`.
