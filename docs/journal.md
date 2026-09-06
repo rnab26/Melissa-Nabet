@@ -9,6 +9,46 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 6 septembre 2026 — Les quatre points de la relance : déjà livrés, vérifiés en ligne
+
+**Session de reprise** (remplace une session coûteuse coupée en cours). Avant de toucher au
+code : la session précédente avait en fait terminé et fusionné sur `main` (`cecfca9`,
+09h12) juste avant d'être coupée — les quatre points signalés ce matin étaient déjà
+corrigés dans le code, seul restait à vérifier que c'est réellement en ligne. Rien n'a été
+redéveloppé.
+
+1. **Thème « Index »** : le manifeste public (`manifest.json`, récupéré en direct, sans
+   cache) porte `theme:"index"`. **Chromium ne peut pas sortir vers Internet dans ce
+   bac à sable** (confirmé : même `example.com` réinitialise la connexion depuis le
+   process réseau du navigateur, alors que `curl` et le `fetch` de Node passent par le
+   même proxy sans problème — signalé, pas contourné par un vrai accès réseau
+   fantôme). Contournement honnête : Chromium a chargé la vraie page en direct
+   (`rnab26.github.io/melissa-nabet-site`), chaque requête étant relayée par le fetch de
+   Node (qui, lui, sort) plutôt que simulée — donc un vrai rendu, de vrais octets
+   déployés. Résultat lu **dans la page rendue** : `data-theme = "index"`, aucune erreur
+   JS, capture à l'appui (mise en page en liste fine, pas en grande grille — bien
+   « Index », pas « Épure »).
+2. **Catégories en liste** : le CRM déployé (`rnab26.github.io/Melissa-Nabet/`) est
+   **identique à l'octet près** au dépôt à `HEAD` — celui que `tests/categories.test.mjs`
+   valide (18/18) : menu déroulant, plus de champ libre, liste gérée depuis le CRM,
+   filtre du site dans l'ordre du CRM. Le manifeste en ligne porte déjà les 4 catégories.
+   Une seule réalisation sur deux porte une catégorie (« Commercial ») : avec une seule
+   catégorie utilisée, le site n'affiche pas encore de section — c'est le comportement
+   voulu (« un choix unique n'est pas un choix »), pas un bug. Reste de sa main :
+   catégoriser la seconde réalisation.
+3. **Bouton « + Nouvelle réalisation »** : présent dans le HTML déployé, en tête de
+   l'onglet, vérifié visible sans défiler par le même test (18/18).
+4. **« À la vente » (`4a660bd2`)** : fusionnée et déployée (les deux workflows —
+   *Deploy to GitHub Pages* et *Publier le site vitrine* — verts sur `cecfca9`, dépôt
+   public resynchronisé à l'identique). `tests/boutique.test.mjs` 34/34 en local sur le
+   même code. En ligne, la section n'apparaît pas encore : **0 produit publié** dans le
+   manifeste — c'est le comportement voulu (pas de produit, pas de section), pas un
+   défaut. Reste de sa main : créer un premier produit dans l'onglet Boutique.
+
+**Aucun code changé cette session.** Seule trace : cette entrée de journal.
+
+---
+
 # À ton retour — l'essentiel en une page
 
 *(Écrit le 5 septembre 2026, après une session de nuit menée seule. Le détail de chaque
