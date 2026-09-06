@@ -31,6 +31,36 @@ Consignes de travail pour Claude sur ce dépôt. À lire avant toute interventio
 
 Toujours rendre compte en français, de façon concise et directe. Pas de remplissage, pas de tournures commerciales.
 
+## Requêtes SQL : `scripts/sql.sh`, jamais l'outil MCP, jamais demandé à Raphaël
+
+**N'utilise pas `mcp__Supabase__execute_sql`, et ne demande jamais à Raphaël d'exécuter
+du SQL à ta place.** Le premier impose un pop-up de validation humaine à chaque appel,
+impossible à supprimer ; le second est exactement ce qu'il a demandé de retirer le
+6 sept. 2026 — les sessions autonomes de ce dépôt le sollicitaient encore « de temps à
+autre » pour du SQL.
+
+```bash
+scripts/sql.sh "select id, titre, statut from chantiers where statut <> 'livre';"
+```
+
+Passe par la fonction `public.exec_sql` (migration `20260906_exec_sql_pour_sessions.sql`)
+via l'API HTTPS, avec la clé `SUPABASE_SERVICE_ROLE_KEY_MELISSA` fournie par
+l'environnement cloud (nom distinct de celle du projet Jarvis-assistant, qui partage le
+même environnement — un nom identique écraserait l'autre clé). Repris à l'identique du
+dépôt Jarvis-assistant, où ce chemin existe depuis le 3 sept. 2026.
+
+Une seule instruction par appel quand tu attends un résultat (l'enveloppe qui récupère
+les lignes en JSON ne supporte qu'un seul `select`) ; grouper est bon pour des écritures
+liées dont on n'attend pas de lignes, avec la vérification dans un appel séparé. Sans
+`begin; … commit;` : `exec_sql` refuse les commandes de transaction. Cette clé donne un
+accès total à la base (DDL et suppressions comprises) : la règle ne change pas, on
+demande à Raphaël avant tout `drop`, `delete` massif ou `truncate`.
+
+Si `SUPABASE_SERVICE_ROLE_KEY_MELISSA` est absente de ton environnement, le script le dit
+et s'arrête : c'est que Raphaël n'a pas encore déposé cette clé dans les variables
+d'environnement de l'environnement cloud Claude Code (jamais dans le dépôt, jamais collée
+dans la conversation) — signale-le-lui plutôt que de repasser par l'outil MCP.
+
 ## Déployer une fonction serveur
 
 `scripts/deploy-fonction.sh photo-ia` — appelle l'API de gestion Supabase en HTTPS, avec
@@ -39,7 +69,7 @@ utiliser : les outils MCP marqués « exige une interaction humaine » rouvrent 
 chaque appel, et aucun réglage ne le supprime.
 
 `verify_jwt` reste **false** pour `photo-ia` et `embellish`, volontairement : la clé
-publiable de l'application est elle-même un JWT valide, la vérification générique de Supabase
+publicable de l'application est elle-même un JWT valide, la vérification générique de Supabase
 laisserait donc passer n'importe qui. Le vrai contrôle est `requireUser` dans la fonction.
 
 ## Adresses du projet
