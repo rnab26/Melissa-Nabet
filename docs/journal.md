@@ -54,6 +54,79 @@ point est plus bas, dans l'ordre chronologique.)*
 
 ---
 
+## 6 septembre 2026 — Les catégories deviennent une liste, et créer un projet se voit
+
+**Branche** `claude/categories-liste-0609`. **Chantier** `eaf36cf0`.
+
+Ses mots ce matin : « pas de possibilité de créer un nouveau projet […] pas d'attribution à
+la catégorie du chantier si c'est du commercial, bureau, ou habitation, ou une création
+personnalisée. C'est pas assez logique, j'ai pourtant expliqué toutes ces choses à maintes
+reprises, pourquoi ça ne le fait pas automatiquement ? » Il a raison sur les trois points, et
+la cause était de notre côté.
+
+### La cause racine
+
+La catégorie était un **champ de texte libre** avec « ex. Appartement » en indication. Rien
+ne se rangeait tout seul parce que rien n'était à ranger : il fallait deviner qu'il fallait
+taper un mot, et deux orthographes du même mot auraient fabriqué deux sections sur le site.
+
+### Livré
+
+- **La catégorie est un menu déroulant**, alimenté par SES quatre sections — Commercial,
+  Habitation, Bureaux, Réalisation sur mesure — plus « — aucune — » et une dernière ligne
+  « ✎ Gérer les catégories… » qui ouvre les réglages. Plus aucune saisie libre.
+- **La liste se gère depuis le CRM** (⚙ Le site public → Sections du site) : ajouter,
+  renommer, monter, descendre, supprimer. Chaque ligne affiche **combien de réalisations la
+  portent** — supprimer n'est jamais un geste aveugle.
+- **Renommer suit sur les réalisations** qui portent l'ancien nom. Sans ça le projet gardait
+  le mot d'avant, disparaissait de sa section et réapparaissait dans une section fantôme :
+  une perte de rangement parfaitement silencieuse.
+- **L'ordre part dans le manifeste** (`site.categories`) et le site le respecte : « Commercial,
+  Habitation, Bureaux » est un ordre voulu, pas un tri alphabétique. Une catégorie portée par
+  un projet mais absente de la liste reste affichée, à la fin.
+- **« + Nouvelle réalisation » en tête de l'onglet**, en bouton principal, comme « + Nouveau
+  client ». La tuile en fin de grille existait, mais après la liste : sur un téléphone il
+  fallait la chercher.
+- **Le panneau dit ce qui est RÉELLEMENT en ligne.** Il lit le manifeste publié et compare :
+  « Attention : le site affiche « Épure », pas « Index ». Votre choix ne sera en ligne
+  qu'après Mettre à jour le site. » C'est exactement le piège dans lequel il est tombé.
+
+### Migration, et ce qu'il ne faut pas casser
+
+`siteCategories()` garantit que **toute catégorie déjà portée par une réalisation figure
+dans la liste**, même héritée de l'ancien champ libre. Sans ça, un projet perdrait son
+rangement au premier chargement. Le test « une valeur héritée de l'ancien champ libre n'est
+jamais perdue » protège ce point — ne pas le supprimer.
+
+`RZ_CATS` et `rzCatsConnues()` (liste figée + champ libre) ont été retirés : ils
+fabriquaient exactement le problème que Raphaël décrit.
+
+### Point 4 de la relance : rien à refaire
+
+L'écran des versions de photos livré cette nuit **se voit** dans l'écran qu'il utilise :
+bouton « ⬆ Republier (1) » et la phrase « 1 photo en ligne à jour, en attente : 1 nouvelle —
+Republier montre le détail avant d'envoyer quoi que ce soit ». Vérifié au navigateur en
+390 px, capture `/tmp/crm-versions.png`.
+
+### Ce qui reste de sa main, et une seule fois
+
+Le thème **Index** ne peut pas être posé depuis une session : écrire le manifeste demande sa
+clé Supabase, qui vit dans son navigateur. **⚙ Le site public → première vignette (Index) →
+Mettre à jour le site.** Le panneau lui dira désormais si son choix est appliqué ou non.
+
+À noter, et c'est mesuré et non supposé : avec **un seul projet en ligne**, « Index » réduit
+son chantier à une ligne et une vignette de 58 px, quand « Épure » lui donne une grande
+photo. Le conseil qui lui a été donné est de garder Épure jusqu'à quatre ou cinq chantiers.
+
+### Vérification
+
+`tests/categories.test.mjs` — **nouveau, 18 contrôles, 0 échec**, en 390 px : du bouton de
+création jusqu'à l'ordre des catégories dans le manifeste, renommage et doublons compris.
+`tests/realisations.test.mjs` **463/463**, `tests/site.test.mjs` **99/99** (le filtre suit
+désormais l'ordre du CRM, plus l'alphabet), sections 7/7, langues 20/20, bout-en-bout 20/20.
+
+---
+
 ## 6 septembre 2026 — « Je ne vois rien de spécial » : ce qu'il manquait vraiment
 
 **Branche** `claude/site-sections-lisible-0609`.

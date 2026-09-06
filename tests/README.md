@@ -10,6 +10,10 @@ Trois suites :
   navigateur irait chercher n'importe quelle adresse avec la clé du compte. Se lance avec
   `bun tests/pont-ia.test.mjs` (bun exécute le TypeScript du pont). Aucune dépense : ce sont
   des fonctions pures, aucun appel n'est émis.
+- `tests/categories.test.mjs` — les **catégories** : menu déroulant dans la fiche (plus de
+  champ libre), liste modifiable depuis le CRM, renommage qui suit sur les réalisations,
+  ordre publié dans le manifeste, et le bouton « + Nouvelle réalisation » visible sans
+  défilement. Port 8899 : `node tests/categories.test.mjs`.
 - `tests/site-sections.test.mjs` — le bloc **« Sections du site »** du panneau ⚙ Le site
   public : il doit expliquer, avec les chiffres réels, pourquoi le site n'affiche aucune
   section (rien de publié / aucune catégorie / une seule catégorie) et le confirmer quand

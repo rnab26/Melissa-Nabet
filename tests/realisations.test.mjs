@@ -3234,10 +3234,11 @@ const siteVide = await page.evaluate(() => {
 check('Site public : tout est vide au départ',
   siteVide.apropos === '' && siteVide.email === '' && siteVide.tel === '' && siteVide.insta === '');
 // Rien de VIDE ne part : une coordonnée non remplie afficherait une étiquette creuse sur le
-// site. L'allure, elle, part toujours — ce n'est pas une étiquette, c'est la façon dont la
-// page s'habille, et elle a toujours une valeur.
+// site. L'allure part toujours — ce n'est pas une étiquette, c'est la façon dont la page
+// s'habille, et elle a toujours une valeur. La liste des catégories aussi : c'est elle qui
+// donne au site l'ORDRE de ses sections, et elle n'est jamais vide.
 check('Site public : aucune coordonnée vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement', siteVide.infos.join(','));
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,categories', siteVide.infos.join(','));
 
 const siteAllure = await page.evaluate(() => {
   library.site = null;
@@ -3312,30 +3313,34 @@ check('Site public : un échec le dit, et dit que rien n’a changé en ligne',
   /Échec/.test(sitePushKo) && /Rien n’a été modifié/.test(sitePushKo), sitePushKo);
 
 // --- Catégorie : champ libre, propositions, et filtre du site
+/* La catégorie n'est plus un champ libre mais un MENU : deux orthographes du même mot
+   fabriquaient deux sections sur le site. Ce qui est vérifié ici, c'est que la liste vient
+   des réglages, qu'une valeur héritée de l'ancien champ libre n'est jamais perdue, et
+   qu'elle part bien en ligne. */
 const categorie = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);
+  /* Valeur héritée de l'ancien champ libre : elle doit rester choisie ET proposée. */
+  r.categorie = 'Loft';
+  renderRealisations();
   const el = document.querySelector('#rz-body [data-f="categorie"]');
   if (!el) return { absent: true };
-  el.value = 'Loft'; el.dispatchEvent(new Event('input'));   // valeur hors liste : acceptée
-  const propositions = [...document.querySelectorAll('#rz-cats option')].map(o => o.value);
-  renderRealisations();
-  const reproposee = [...document.querySelectorAll('#rz-cats option')].map(o => o.value).includes('Loft');
+  const options = [...el.options].map(o => o.value);
+  el.value = 'Bureaux'; el.dispatchEvent(new Event('change'));
+  const apresChoix = findRealisation(_rzOpenId).categorie;
   const surCarte = (() => { _rzOpenId = null; renderRealisations();
     const t = [...document.querySelectorAll('.rz-cmeta')].map(x => x.textContent).join(' | ');
     _rzOpenId = r.id; renderRealisations(); return t; })();
-  return { valeur: r.categorie, propositions, reproposee, surCarte };
+  return { balise: el.tagName, options, valeurHeritee: 'Loft', apresChoix, surCarte };
 });
-check('Catégorie : le champ existe et accepte une valeur hors liste', categorie.valeur === 'Loft', JSON.stringify(categorie).slice(0, 80));
-/* Les quatre premières propositions sont celles que Raphaël a demandées mot pour mot sur
-   la fiche d'identité du site : ce sont les sections qu'il veut voir en ligne. Le champ
-   reste libre, la vérification suivante s'en assure. */
-check('Catégorie : ses quatre sections sont proposées en premier',
-  categorie.propositions
-  && ['Commercial', 'Habitation', 'Bureaux', 'Réalisation sur mesure']
-       .every((c, i) => categorie.propositions[i] === c),
-  (categorie.propositions || []).join(', '));
-check('Catégorie : une catégorie inventée est proposée la fois suivante', categorie.reproposee === true);
-check('Catégorie : visible sur la carte de la liste', /Loft/.test(categorie.surCarte || ''), (categorie.surCarte || '').slice(0, 70));
+check('Catégorie : un menu, pas un champ libre — deux orthographes ne font plus deux sections',
+  categorie.balise === 'SELECT', String(categorie.balise));
+check('Catégorie : ses quatre sections sont proposées, dans son ordre',
+  ['Commercial', 'Habitation', 'Bureaux', 'Réalisation sur mesure']
+    .every((c, i) => categorie.options[i + 1] === c), (categorie.options || []).join(', '));
+check('Catégorie : une valeur héritée de l’ancien champ libre n’est jamais perdue',
+  (categorie.options || []).includes('Loft'), (categorie.options || []).join(', '));
+check('Catégorie : le choix s’enregistre', categorie.apresChoix === 'Bureaux', categorie.apresChoix);
+check('Catégorie : visible sur la carte de la liste', /Bureaux/.test(categorie.surCarte || ''), (categorie.surCarte || '').slice(0, 70));
 
 const catManif = await page.evaluate(async () => {
   const r = findRealisation(_rzOpenId);
@@ -3344,7 +3349,7 @@ const catManif = await page.evaluate(async () => {
   const fiche = JSON.parse(await window.__files.get(key).text()).realisations.find(x => x.id === r.id);
   return fiche.categorie || '';
 });
-check('Catégorie : elle part sur le site, c’est elle qui sert de filtre au visiteur', catManif === 'Loft', catManif);
+check('Catégorie : elle part sur le site, c’est elle qui sert de filtre au visiteur', catManif === 'Bureaux', catManif);
 
 // --- Image d'aperçu du site : écrite à chaque publication, effacée quand plus rien n'est en ligne
 const partage = await page.evaluate(async () => {
