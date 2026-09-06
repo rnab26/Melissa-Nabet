@@ -164,6 +164,27 @@
   .state{padding:70px 0;text-align:center;color:var(--stone);}
   .state h2{font-family:var(--titre);font-weight:500;font-size:25px;color:var(--ink);margin:0 0 10px;}
   .state p{margin:0 auto;max-width:46ch;font-size:14px;}
+  .state button{
+    margin-top:20px;font-family:var(--texte);font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;font-weight:600;color:var(--paper);background:var(--ink);
+    border:none;border-radius:999px;padding:11px 22px;cursor:pointer;
+  }
+  .state button:hover{background:var(--oxblood);}
+
+  /* CHARGEMENT — le manifeste met un instant à arriver, et sur un téléphone en 4G cet
+     instant se compte en secondes. Sans rien à l'écran pendant ce temps, la page a l'air
+     vide et cassée. Ces cartes grises tiennent la place exacte des vraies, sont dans le
+     HTML servi (donc peintes avant même que le script tourne) et disparaissent au premier
+     rendu réel. Elles n'annoncent aucun nombre de projets : trois cases neutres. */
+  .squelette{cursor:default;pointer-events:none;}
+  .squelette .project-img{background:var(--travertine);}
+  .sq-l{height:13px;margin-top:17px;background:var(--travertine);}
+  .sq-l.court{width:42%;height:10px;margin-top:9px;}
+  .squelette .project-img,.squelette .sq-l{animation:respire 1.5s ease-in-out infinite;}
+  @keyframes respire{0%,100%{opacity:1;}50%{opacity:.45;}}
+  @media (prefers-reduced-motion:reduce){
+    .squelette .project-img,.squelette .sq-l{animation:none;}
+  }
 
   /* --- Vue projet --- */
   .detail{display:none;}
@@ -294,7 +315,11 @@
 <main>
   <p class="eyebrow index-head">Réalisations</p>
   <nav class="filtres" id="filtres" hidden aria-label="Filtrer les réalisations"></nav>
-  <div class="projects" id="projects"></div>
+  <div class="projects" id="projects" aria-busy="true">
+    <div class="project squelette" aria-hidden="true"><div class="project-img"></div><div class="sq-l"></div><div class="sq-l court"></div></div>
+    <div class="project squelette" aria-hidden="true"><div class="project-img"></div><div class="sq-l"></div><div class="sq-l court"></div></div>
+    <div class="project squelette" aria-hidden="true"><div class="project-img"></div><div class="sq-l"></div><div class="sq-l court"></div></div>
+  </div>
   <div class="state" id="state" hidden></div>
 
   <section class="detail" id="detail">
@@ -339,12 +364,24 @@ var projects = [], current = null, lbIndex = 0, filtre = '';
 
 function url(p) { return STORAGE + p; }
 
-function showState(title, text) {
+/* Un message plein écran remplace la liste : il doit donc effacer ce qui l'occupait,
+   squelettes de chargement compris. Sans ça, un échec de lecture laissait trois cartes
+   grises clignoter sous le message d'erreur. */
+function showState(title, text, action) {
+  el('projects').innerHTML = '';
+  el('projects').removeAttribute('aria-busy');
   var s = el('state');
   s.hidden = false;
   s.innerHTML = '<h2></h2><p></p>';
   s.querySelector('h2').textContent = title;
   s.querySelector('p').textContent = text;
+  if (action) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = action.texte;
+    b.addEventListener('click', action.faire);
+    s.appendChild(b);
+  }
 }
 
 /* Le filtre se construit tout seul à partir de ce qui est publié : aucune liste à tenir
@@ -377,6 +414,8 @@ function projetsVisibles() {
 function renderIndex() {
   var host = el('projects');
   host.innerHTML = '';
+  host.removeAttribute('aria-busy');
+  el('state').hidden = true;
   projetsVisibles().forEach(function (p, i) {
     var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
     if (!cover) return;
@@ -696,7 +735,36 @@ function renderApropos(site) {
   el('apropos').hidden = !txt && !liens.length;
 }
 
-fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
+/* Remet les cartes d'attente : au premier chargement elles sont déjà dans le HTML servi,
+   mais après un échec et un « Réessayer » il faut les redessiner. */
+function squelettes() {
+  var host = el('projects');
+  host.setAttribute('aria-busy', 'true');
+  host.innerHTML = '';
+  for (var i = 0; i < 3; i++) {
+    var d = document.createElement('div');
+    d.className = 'project squelette';
+    d.setAttribute('aria-hidden', 'true');
+    d.innerHTML = '<div class="project-img"></div><div class="sq-l"></div><div class="sq-l court"></div>';
+    host.appendChild(d);
+  }
+  el('state').hidden = true;
+}
+
+/* Une connexion qui ne répond pas n'échoue jamais toute seule : sans limite de temps, le
+   visiteur reste sur des cartes grises indéfiniment. Vingt secondes, puis on le dit. */
+function lireManifeste() {
+  var url_ = url(OWNER + '/manifest.json') + '?t=' + Date.now();
+  if (typeof AbortController !== 'function') return fetch(url_, { cache: 'no-store' });
+  var ctrl = new AbortController();
+  var minuteur = setTimeout(function () { ctrl.abort(); }, 20000);
+  return fetch(url_, { cache: 'no-store', signal: ctrl.signal })
+    .then(function (r) { clearTimeout(minuteur); return r; },
+          function (e) { clearTimeout(minuteur); throw e; });
+}
+
+function charger() {
+  lireManifeste()
   .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
   .then(function (m) {
     if (m.site) {
@@ -718,9 +786,17 @@ fetch(url(OWNER + '/manifest.json') + '?t=' + Date.now(), { cache: 'no-store' })
       for (var i = 0; i < projects.length; i++) if (projects[i].id === h) { openProject(i); break; }
     }
   })
+  /* Un portfolio vide et une lecture qui échoue se ressemblaient : les deux affichaient
+     « Bientôt en ligne ». Le visiteur repartait en croyant qu'il n'y a rien à voir, et
+     personne n'apprenait que le site était en panne. Ce sont deux messages distincts, et
+     celui de la panne propose de réessayer sur place. */
   .catch(function () {
-    showState('Bientôt en ligne', 'Les premières réalisations seront publiées ici prochainement.');
+    showState('Les réalisations n’ont pas pu être chargées',
+      'La connexion n’a pas abouti. Vérifiez votre réseau, puis réessayez.',
+      { texte: 'Réessayer', faire: function () { squelettes(); charger(); } });
   });
+}
+charger();
 </script>
 </body>
 </html>

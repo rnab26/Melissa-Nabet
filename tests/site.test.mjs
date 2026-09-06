@@ -439,11 +439,48 @@ await sansObs.close();
 check('Navigateur sans observateur : rien n’est marqué, donc rien n’est invisible',
   rSansObs.total > 0 && rSansObs.invisibles === 0 && rSansObs.marquees === 0, JSON.stringify(rSansObs));
 
+/* CHARGEMENT — ce que voit un visiteur avant que le manifeste arrive. Les cartes d'attente
+   doivent être dans le HTML SERVI (donc peintes sans attendre le script), et avoir
+   entièrement disparu une fois les vraies réalisations affichées. */
+const brut = await (await fetch('http://127.0.0.1:8902/index.html')).text();
+const nbSquelettesServis = (brut.match(/class="project squelette"/g) || []).length;
+check('Cartes d’attente présentes dans le HTML servi, avant tout script', nbSquelettesServis === 3, 'trouvées : ' + nbSquelettesServis);
+
+const apresCharge = await page.evaluate(() => ({
+  squelettes: document.querySelectorAll('.squelette').length,
+  occupe: document.getElementById('projects').hasAttribute('aria-busy'),
+  projets: document.querySelectorAll('.project:not(.squelette)').length,
+}));
+check('Cartes d’attente effacées une fois les réalisations affichées',
+  apresCharge.squelettes === 0 && !apresCharge.occupe && apresCharge.projets > 0, JSON.stringify(apresCharge));
+
 // État vide : rien de publié encore, la page ne doit pas avoir l'air cassée
 await page.goto('http://127.0.0.1:8902/vide.html', { waitUntil: 'networkidle' });
 await page.waitForTimeout(900);
 const stateTxt = (await page.textContent('#state')) || '';
 check('État « rien de publié » lisible, pas une page cassée', stateTxt.includes('Bientôt en ligne'), stateTxt.trim().slice(0, 50));
+check('Rien de publié : aucune carte d’attente ne clignote sous le message',
+  (await page.locator('.squelette').count()) === 0);
+check('Rien de publié : pas de bouton « Réessayer », il n’y a rien à réessayer',
+  (await page.locator('#state button').count()) === 0);
+
+/* PANNE — manifeste introuvable. Avant, ce cas affichait « Bientôt en ligne » : le visiteur
+   repartait en croyant le portfolio vide, et personne n'apprenait que le site était muet. */
+await page.goto('http://127.0.0.1:8902/panne.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
+const panneTxt = (await page.textContent('#state')) || '';
+check('Lecture impossible : le message dit une panne, pas un portfolio vide',
+  /n’ont pas pu être chargées/.test(panneTxt) && !/Bientôt en ligne/.test(panneTxt), panneTxt.trim().slice(0, 60));
+check('Lecture impossible : les cartes d’attente ont disparu', (await page.locator('.squelette').count()) === 0);
+const btnRetry = page.locator('#state button');
+check('Lecture impossible : un bouton « Réessayer » est offert', (await btnRetry.count()) === 1 && /Réessayer/.test(await btnRetry.textContent()));
+await btnRetry.click();
+check('« Réessayer » remet les cartes d’attente le temps du nouvel essai',
+  (await page.locator('.squelette').count()) === 3);
+await page.waitForTimeout(900);
+check('« Réessayer » qui échoue encore réaffiche la panne, pas une page vide',
+  /n’ont pas pu être chargées/.test((await page.textContent('#state')) || '')
+  && (await page.locator('#state button').count()) === 1);
 
 const realErrs = errs.filter(e => !envNoise(e));
 check('Aucune erreur JavaScript du site', realErrs.length === 0, realErrs.slice(0, 3).join(' | '));
