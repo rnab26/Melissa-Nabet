@@ -924,6 +924,12 @@
   .site-enligne.ko{background:#f8eeec;color:#7d3a30;border-color:#e6cdc8;}
   .site-cat-n{flex:0 0 auto;min-width:20px;text-align:center;font-size:11px;color:var(--stone);
     background:var(--travertine);border-radius:9px;padding:2px 7px;}
+  .site-rang{flex:0 0 auto;min-width:20px;text-align:center;font-size:11px;font-weight:700;
+    color:var(--stone);background:var(--travertine);border-radius:9px;padding:2px 7px;}
+  .site-ordre-nom{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;
+    font-size:12.5px;color:var(--ink);overflow:hidden;}
+  .site-ordre-nom i{font-style:normal;font-size:11px;color:var(--stone);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .site-langues{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 4px;}
   .site-chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);}
   .site-onglets{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:10px 0 0;
@@ -8322,7 +8328,36 @@ async function readManifest(){
   if(!m||!Array.isArray(m.realisations))throw new Error('manifeste illisible (contenu)');
   return m;
 }
+/* L'ORDRE DES PROJETS SUR LE SITE.
+   Il était subi : le dernier publié passait en tête, point. Chez tous les architectes, cet
+   ordre est CHOISI — c'est la première chose qu'on règle sur un portfolio. Il vit dans le
+   manifeste, donc le changer ne renvoie aucune photo et ne coûte rien.
+   Un projet jamais classé reste en tête, du plus récemment publié au plus ancien : c'est
+   exactement ce que faisait le site avant, donc rien ne bouge tant qu'on n'y touche pas. */
+function siteOrdreProjets(){
+  const st=siteSettings();
+  const ordre=Array.isArray(st.ordre)?st.ordre:[];
+  const classes=[],libres=[];
+  (realisations||[]).filter(r=>r.published).forEach(r=>{(ordre.indexOf(r.id)>=0?classes:libres).push(r);});
+  classes.sort((a,b)=>ordre.indexOf(a.id)-ordre.indexOf(b.id));
+  libres.sort((a,b)=>(b.publishedAt||0)-(a.publishedAt||0));
+  return libres.concat(classes);
+}
+/* Appliqué DANS writeManifest et nulle part ailleurs : publication, republication, retour
+   en arrière, dépublication, mise à jour des infos — tous passent par ici. Un appelant qui
+   l'oublierait remettrait silencieusement le site dans le désordre. */
+function ordonnerManifeste(man){
+  const voulu=siteOrdreProjets().map(r=>r.id);
+  if(!voulu.length||!Array.isArray(man.realisations))return man;
+  const rang=id=>{const i=voulu.indexOf(id);return i<0?voulu.length:i;};
+  /* Tri stable : une fiche que le CRM ne connaît pas (publiée depuis un autre appareil)
+     garde sa place relative au lieu d'être jetée en vrac. */
+  man.realisations=man.realisations.map((f,i)=>({f,i}))
+    .sort((a,b)=>(rang(a.f.id)-rang(b.f.id))||(a.i-b.i)).map(x=>x.f);
+  return man;
+}
 async function writeManifest(man){
+  ordonnerManifeste(man);
   const blob=new Blob([JSON.stringify(man)],{type:'application/json'});
   /* cacheControl court : le site doit refléter une republication en une minute, pas
      après l'heure de cache par défaut du CDN. */
@@ -8358,7 +8393,7 @@ const SITE_THEMES=[
 /* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',categories:null};
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',categories:null,ordre:null};
 /* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
    comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
    français plutôt que de laisser un blanc — et jamais dans une traduction automatique, qui
@@ -8539,6 +8574,16 @@ function openSitePanel(){
       <button class="mini" data-cat-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
       <button class="mini" data-cat-move="1" ${i===listeCats.length-1?'disabled':''} title="Descendre">↓</button>
       <button class="mini danger" data-cat-del title="Supprimer">×</button></div>`).join('');
+  /* L'ordre des projets EN LIGNE, tel qu'il sera après la prochaine mise à jour. Le
+     compteur de photos et la date situent chaque ligne : deux chantiers peuvent porter des
+     titres proches. */
+  const ordreListe=siteOrdreProjets();
+  const ordreHtml=ordreListe.map((r,i)=>`<div class="lib-item" data-ordre="${i}">
+      <span class="site-rang">${i+1}</span>
+      <span class="site-ordre-nom">${esc(r.title||'Sans titre')}<i>${esc([r.date,r.categorie].filter(Boolean).join(' · ')||'—')}</i></span>
+      <button class="mini" data-ordre-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+      <button class="mini" data-ordre-move="1" ${i===ordreListe.length-1?'disabled':''} title="Descendre">↓</button>
+    </div>`).join('')||'<p class="ias-note" style="margin:0">Aucune réalisation publiée pour l’instant : il n’y a rien à classer. Publiez un projet depuis l’onglet Réalisations.</p>';
   const jrn=siteJournal();
   const journalHtml=jrn.map((j,i)=>`<div class="site-entree" data-i="${i}">
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
@@ -8572,6 +8617,10 @@ function openSitePanel(){
     <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
     <div id="site-cats">${listeCatsHtml}</div>
     <button class="add-btn" id="site-cat-add">+ Ajouter une catégorie</button>
+    <div class="ed-eyebrow" style="margin-top:14px">Ordre des projets sur le site</div>
+    <p class="ias-note">L’ordre d’affichage en ligne, du premier au dernier. Le changer ne renvoie aucune photo : c’est instantané et gratuit. Sans réglage, le dernier projet publié passe en tête.</p>
+    <div id="site-ordre">${ordreHtml}</div>
+    ${ordreListe.length>1?'<button class="mini" id="site-ordre-reset">Remettre par date de publication</button>':''}
     <div class="ed-eyebrow" style="margin-top:14px">Langues du site</div>
     <p class="ias-note">Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.</p>
     <div class="site-langues" id="site-langues">${SITE_LANGUES.map(l=>`
@@ -8687,6 +8736,22 @@ function openSitePanel(){
     liste.push(n);saveLibraryDebounced();openSitePanel();
     const dernier=document.querySelector('#site-cats [data-cat]:last-child [data-cat-nom]');
     if(dernier){dernier.focus();dernier.select();}
+  });
+  /* Monter/descendre écrit la liste ENTIÈRE des projets publiés dans le réglage : un ordre
+     partiel se réinterpréterait à chaque publication et personne ne saurait plus pourquoi
+     le site a bougé tout seul. */
+  document.querySelectorAll('#site-ordre [data-ordre-move]').forEach(bt=>bt.addEventListener('click',()=>{
+    const i=+bt.closest('[data-ordre]').dataset.ordre, d=+bt.dataset.ordreMove, k=i+d;
+    const liste=siteOrdreProjets().map(r=>r.id);
+    if(k<0||k>=liste.length)return;
+    const t=liste[i];liste[i]=liste[k];liste[k]=t;
+    siteSettings().ordre=liste;
+    saveLibraryDebounced();openSitePanel();rappel();
+  }));
+  const ordreReset=document.getElementById('site-ordre-reset');
+  if(ordreReset)ordreReset.addEventListener('click',()=>{
+    siteSettings().ordre=null;
+    saveLibraryDebounced();openSitePanel();rappel();
   });
   const jadd=document.getElementById('site-journal-add');
   if(jadd)jadd.addEventListener('click',()=>{

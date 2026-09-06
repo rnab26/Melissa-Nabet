@@ -3312,6 +3312,92 @@ const sitePushKo = await page.evaluate(async () => {
 check('Site public : un échec le dit, et dit que rien n’a changé en ligne',
   /Échec/.test(sitePushKo) && /Rien n’a été modifié/.test(sitePushKo), sitePushKo);
 
+/* --- L'ORDRE DES PROJETS SUR LE SITE -------------------------------------------------
+   Il était subi : le dernier publié passait en tête, sans recours. Ces contrôles vérifient
+   qu'on peut le choisir, que le choix part bien dans le manifeste, et qu'il ne se perd pas
+   à la publication suivante — c'est là que ce genre de réglage se casse d'habitude. */
+const ordreEtat = await page.evaluate(() => ({
+  publiees: (realisations || []).filter(r => r.published).length,
+  ordreDefaut: siteOrdreProjets().map(r => r.id),
+  parDate: (realisations || []).filter(r => r.published)
+    .sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0)).map(r => r.id),
+  reglage: siteSettings().ordre,
+}));
+check('Ordre : sans réglage, c’est la date de publication qui décide — le plus récent en tête',
+  ordreEtat.publiees >= 2 && ordreEtat.reglage == null
+  && ordreEtat.ordreDefaut.join(',') === ordreEtat.parDate.join(','),
+  JSON.stringify(ordreEtat));
+
+const ordreGeste = await page.evaluate(async () => {
+  openSitePanel();
+  const avant = siteOrdreProjets().map(r => r.id);
+  const lignes = document.querySelectorAll('#site-ordre [data-ordre]');
+  // on remonte le DERNIER projet à l'avant-dernière place
+  const dernier = lignes[lignes.length - 1];
+  dernier.querySelector('[data-ordre-move="-1"]').click();
+  const apres = siteOrdreProjets().map(r => r.id);
+  const message = document.getElementById('site-msg').textContent;
+  const rangs = [...document.querySelectorAll('#site-ordre .site-rang')].map(e => e.textContent);
+  return { avant, apres, message, rangs, lignes: lignes.length, reglage: siteSettings().ordre };
+});
+check('Ordre : la liste montre tous les projets publiés, numérotés',
+  ordreGeste.lignes === ordreEtat.publiees && ordreGeste.rangs[0] === '1', JSON.stringify(ordreGeste.rangs));
+check('Ordre : « monter » change bien la position',
+  ordreGeste.apres.join(',') !== ordreGeste.avant.join(',')
+  && ordreGeste.apres[ordreGeste.apres.length - 2] === ordreGeste.avant[ordreGeste.avant.length - 1],
+  ordreGeste.avant.join(',') + ' → ' + ordreGeste.apres.join(','));
+check('Ordre : l’écran rappelle que ce n’est pas encore en ligne',
+  /ne sera en ligne qu’après/.test(ordreGeste.message), ordreGeste.message);
+check('Ordre : le réglage retient la liste ENTIÈRE, pas un ordre partiel',
+  Array.isArray(ordreGeste.reglage) && ordreGeste.reglage.length === ordreEtat.publiees,
+  JSON.stringify(ordreGeste.reglage));
+
+const ordreEnLigne = await page.evaluate(async () => {
+  await pushSiteInfos(document.getElementById('site-push'));
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const man = JSON.parse(await window.__files.get(key).text());
+  const connus = (realisations || []).filter(r => r.published).map(r => r.id);
+  return { manifeste: man.realisations.map(f => f.id), voulu: siteOrdreProjets().map(r => r.id),
+           /* Une fiche en ligne que le CRM ne reconnaît plus comme publiée : elle doit
+              rester, et rester DERRIÈRE celles qu'on a classées. */
+           inconnues: man.realisations.map(f => f.id).filter(id => connus.indexOf(id) < 0) };
+});
+check('Ordre : le manifeste part dans l’ordre choisi, sans republier une seule photo',
+  ordreEnLigne.manifeste.slice(0, ordreEnLigne.voulu.length).join(',') === ordreEnLigne.voulu.join(','),
+  ordreEnLigne.manifeste.join(',') + ' vs ' + ordreEnLigne.voulu.join(','));
+check('Ordre : une fiche en ligne inconnue du CRM n’est pas jetée, elle passe derrière',
+  ordreEnLigne.manifeste.length === ordreEnLigne.voulu.length + ordreEnLigne.inconnues.length
+  && ordreEnLigne.manifeste.slice(ordreEnLigne.voulu.length).join(',') === ordreEnLigne.inconnues.join(','),
+  JSON.stringify(ordreEnLigne));
+
+const ordreReset = await page.evaluate(async () => {
+  openSitePanel();
+  document.getElementById('site-ordre-reset').click();
+  await pushSiteInfos(document.getElementById('site-push'));
+  const key = [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const man = JSON.parse(await window.__files.get(key).text());
+  const r = { reglage: siteSettings().ordre, manifeste: man.realisations.map(f => f.id) };
+  closeModal();
+  return r;
+});
+check('Ordre : « Remettre par date de publication » efface le réglage et rétablit l’ordre d’origine',
+  ordreReset.reglage == null
+  && ordreReset.manifeste.slice(0, ordreEtat.parDate.length).join(',') === ordreEtat.parDate.join(','),
+  JSON.stringify(ordreReset));
+
+const ordreVide = await page.evaluate(() => {
+  const sauve = realisations.slice();
+  realisations.length = 0;
+  openSitePanel();
+  const txt = document.getElementById('site-ordre').textContent;
+  const bouton = !!document.getElementById('site-ordre-reset');
+  closeModal();
+  sauve.forEach(r => realisations.push(r));
+  return { txt: txt.trim().slice(0, 60), bouton };
+});
+check('Ordre : rien de publié, l’écran le dit au lieu d’afficher une liste vide',
+  /Aucune réalisation publiée/.test(ordreVide.txt) && !ordreVide.bouton, JSON.stringify(ordreVide));
+
 // --- Catégorie : champ libre, propositions, et filtre du site
 /* La catégorie n'est plus un champ libre mais un MENU : deux orthographes du même mot
    fabriquaient deux sections sur le site. Ce qui est vérifié ici, c'est que la liste vient
