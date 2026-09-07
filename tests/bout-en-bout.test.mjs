@@ -51,7 +51,24 @@ const publication = await crm.evaluate(async () => {
         upload: async (p, b) => { files.set(p, b); return { error: null }; },
         download: async (p) => files.has(p) ? { data: files.get(p), error: null } : { data: null, error: { message: 'Object not found', statusCode: '404' } },
         remove: async (ps) => { ps.forEach(x => files.delete(x)); return { error: null }; },
-        list: async () => ({ data: [], error: null }),
+        /* Le vrai stockage LISTE ce qu'il contient, et la publication s'en sert pour savoir
+           ce qui est réellement en ligne. Un listing toujours vide faisait croire au CRM
+           que tout avait disparu : il réécrivait toutes les photos à chaque publication, et
+           aucun test ne pouvait voir qu'on n'en réécrit qu'une. */
+        list: async (prefixe) => {
+          const p = String(prefixe || '').replace(/\/$/, '');
+          const vus = new Set(), out = [];
+          for (const chemin of files.keys()) {
+            if (p && !chemin.startsWith(p + '/')) continue;
+            const reste = p ? chemin.slice(p.length + 1) : chemin;
+            const nom = reste.split('/')[0];
+            if (!nom || vus.has(nom)) continue;
+            vus.add(nom);
+            /* Un dossier n'a pas de `metadata` chez Supabase — c'est ce qui le distingue. */
+            out.push(reste.indexOf('/') >= 0 ? { name: nom } : { name: nom, metadata: { size: 1 } });
+          }
+          return { data: out, error: null };
+        },
       }),
     },
     from: chain,
@@ -73,8 +90,11 @@ const publication = await crm.evaluate(async () => {
   realisations = [];
   newRealisation();
   const r = realisations[0];
-  r.title = 'Duplex Rothschild';
-  r.date = '2026';
+  /* Espaces volontaires : c'est ce qu'on tape sans le voir, et c'est ce qu'il y avait dans
+     le vrai manifeste (« Bureau Sébastien  »). Le titre publié doit être propre — il finit
+     dans le titre de l'onglet, dans l'adresse partagée et dans les données structurées. */
+  r.title = '  Duplex Rothschild ';
+  r.date = ' 2026 ';
   r.lieu = 'Tel Aviv';
   r.surface = '120 m²';
   r.mission = 'Rénovation complète';
@@ -175,6 +195,10 @@ const vu = await site.evaluate(() => ({
   vignettes: [...document.querySelectorAll('.project-img img')].filter(i => i.naturalWidth > 0).length,
 }));
 check('Le site montre la réalisation publiée', vu.cartes.join('') === 'Duplex Rothschild', vu.cartes.join(' | '));
+check('Le titre publié est nettoyé de ses espaces, pas recopié tel quel',
+  publication.manifest.realisations[0].title === 'Duplex Rothschild'
+  && publication.manifest.realisations[0].date === '2026',
+  JSON.stringify([publication.manifest.realisations[0].title, publication.manifest.realisations[0].date]));
 check('La vignette de couverture écrite par le CRM se charge vraiment', vu.vignettes === 1, vu.vignettes + ' chargée(s)');
 check('Les informations du projet arrivent sur la carte',
   /2026/.test(vu.meta[0]) && /Tel Aviv/.test(vu.meta[0]), vu.meta[0]);

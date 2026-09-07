@@ -96,6 +96,123 @@
     color:var(--stone);font-weight:500;
   }
 
+  /* ---- BANDEAU D'ACCUEIL ----
+     Une grande image sous le nom du studio, qui fait défiler les projets. Deux photos qui
+     se suivent dans un même projet, puis les deux suivantes, projets tirés au hasard.
+     Deux couches superposées : on prépare celle qui est cachée, et on ne croise les
+     opacités qu'une fois les images CHARGÉES — sinon le fondu révélerait un trou blanc. */
+  .bandeau{
+    position:relative;width:100%;overflow:hidden;background:var(--travertine);
+    height:clamp(210px,44vh,520px);border-bottom:1px solid var(--hair);
+    display:block;
+  }
+  /* Le bouton qui ouvre le projet couvre toute la surface ; les flèches sont ses voisines,
+     pas ses enfants — un bouton dans un bouton n'existe pas en HTML, et le lecteur d'écran
+     comme le clavier s'y perdent. */
+  .bd-ouvrir{
+    position:absolute;inset:0;width:100%;height:100%;overflow:hidden;
+    display:block;padding:0;border:0;background:none;
+    cursor:pointer;font-family:inherit;color:inherit;text-align:left;
+  }
+  .bd-couche{
+    position:absolute;inset:0;display:grid;gap:2px;
+    opacity:0;transition:opacity 1.3s ease;
+  }
+  .bd-couche.on{opacity:1;}
+  .bd-couche.duo{grid-template-columns:1fr 1fr;}
+  .bd-case{position:relative;overflow:hidden;background:var(--travertine);}
+  .bd-case img{
+    width:100%;height:100%;object-fit:cover;display:block;
+    /* Un lent rapprochement pendant que la photo est à l'écran : le mouvement se sent sans
+       se voir. La durée suit le délai réglé (variable posée en JS), pour que le zoom
+       finisse quand la photo s'en va, et pas au milieu. */
+    transform:scale(1.001);
+  }
+  .bd-couche.on .bd-case img{transform:scale(1.055);transition:transform var(--bd-duree,7s) linear;}
+  /* Le voile ne suit PAS le thème : il est posé sur une photo, pas sur le fond de page.
+     C'est la photo qu'il doit rendre lisible, quelle que soit l'allure du site. */
+  .bd-voile{
+    position:absolute;left:0;right:0;bottom:0;height:38%;pointer-events:none;
+    background:linear-gradient(to top,rgba(0,0,0,.46),rgba(0,0,0,0));
+  }
+  .bd-legende{
+    position:absolute;left:clamp(16px,3vw,34px);bottom:clamp(13px,2.6vw,26px);right:clamp(16px,3vw,34px);
+    color:#fff;pointer-events:none;
+  }
+  .bd-nom{
+    display:block;font-family:var(--titre);font-size:clamp(17px,2.6vw,27px);
+    line-height:1.2;margin:0;text-shadow:0 1px 12px rgba(0,0,0,.45);
+  }
+  .bd-meta{
+    display:block;margin-top:5px;font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+    opacity:.85;text-shadow:0 1px 10px rgba(0,0,0,.5);
+  }
+  .bd-ouvrir:hover .bd-nom,.bd-ouvrir:focus-visible .bd-nom{text-decoration:underline;text-underline-offset:5px;}
+  .bd-ouvrir:focus-visible{outline:2px solid var(--oxblood);outline-offset:-3px;}
+  /* ---- Défiler à la main ----
+     Les flèches sont discrètes sur ordinateur (elles se révèlent au survol) et TOUJOURS
+     visibles au doigt : sans survol, une commande invisible n'existe pas. */
+  .bd-fleche{
+    position:absolute;top:50%;transform:translateY(-50%);
+    width:44px;height:44px;border-radius:50%;border:0;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    font-family:inherit;font-size:26px;line-height:1;cursor:pointer;
+    /* Assez contrastée pour rester lisible sur une photo claire comme sur une photo
+       sombre : une flèche pâle sur un mur blanc n'est pas une commande, c'est une tache. */
+    background:rgba(0,0,0,.42);color:#fff;
+    box-shadow:0 1px 10px rgba(0,0,0,.28);
+    opacity:0;transition:opacity .25s ease,background .2s ease;
+  }
+  .bd-fleche.prec{left:clamp(8px,1.6vw,18px);}
+  .bd-fleche.suiv{right:clamp(8px,1.6vw,18px);}
+  .bd-fleche:hover{background:rgba(0,0,0,.55);}
+  .bandeau:hover .bd-fleche,.bd-fleche:focus-visible{opacity:1;}
+  .bd-fleche:focus-visible{outline:2px solid #fff;outline-offset:2px;}
+  /* Pas de survol possible : on les montre en permanence, un peu plus discrètes. */
+  @media (hover:none){.bd-fleche{opacity:.82;}}
+  /* Un projet ouvert : le bandeau appartient à l'accueil, il n'a rien à faire au-dessus
+     d'un projet. */
+  body.viewing .bandeau{display:none;}
+  /* Le bandeau tient dans une seule case quand une seule photo est demandée. */
+  .bd-couche.solo{grid-template-columns:1fr;}
+  @media (prefers-reduced-motion:reduce){
+    .bd-couche{transition:none;}
+    .bd-couche.on .bd-case img{transform:none;transition:none;}
+  }
+
+  /* ---- LE MENU DU SITE ----
+     Collant en haut : sur un portfolio, on descend loin dans les photos, et remonter pour
+     changer de section est le geste qu'on ne fait pas. Il défile latéralement sur
+     téléphone plutôt que de se replier derrière un ☰ : trois à cinq entrées se lisent
+     d'un coup d'œil, un menu replié les cache pour rien. */
+  .menu{
+    position:sticky;top:0;z-index:40;
+    background:var(--paper);border-bottom:1px solid var(--hair);
+  }
+  /* Sur téléphone, les entrées débordent et se font défiler du doigt. Un dégradé sur le
+     bord dit qu'il y a une suite : sans lui, la dernière entrée coupée ressemble à un
+     défaut d'affichage, et personne ne pense à glisser. */
+  .menu::after{
+    content:"";position:absolute;top:0;right:0;bottom:1px;width:34px;pointer-events:none;
+    background:linear-gradient(to right,transparent,var(--paper));
+  }
+  @media (min-width:760px){.menu::after{display:none;}}
+  .menu-in{
+    max-width:1240px;margin:0 auto;padding:0 14px;
+    display:flex;align-items:stretch;gap:clamp(4px,1.4vw,20px);
+    overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .menu-in::-webkit-scrollbar{display:none;}
+  .menu-in button{
+    flex:0 0 auto;background:none;border:0;padding:14px 6px;cursor:pointer;
+    font-family:var(--texte);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    font-weight:600;color:var(--stone);white-space:nowrap;
+    border-bottom:2px solid transparent;transition:color .2s ease,border-color .2s ease;
+  }
+  .menu-in button:hover{color:var(--ink);}
+  .menu-in button[aria-current="true"]{color:var(--ink);border-bottom-color:var(--oxblood);}
+  .menu-in button:focus-visible{outline:2px solid var(--oxblood);outline-offset:-4px;}
+
   main{max-width:1240px;margin:0 auto;padding:clamp(30px,6vw,64px) 22px 90px;}
 
   .eyebrow{
@@ -192,6 +309,14 @@
      ils appartiennent à l'index. `hidden` seul ne suffit pas pour les filtres, qui sont
      affichés en `flex` dès qu'il y a plusieurs catégories. */
   body.viewing .projects,body.viewing .index-head,body.viewing .filtres{display:none;}
+  /* Un projet ouvert masque TOUTES les listes, la personnelle comprise : on est dans un
+     projet, pas dans un sommaire. */
+  body.viewing .perso{display:none!important;}
+  .perso{margin-top:clamp(46px,8vw,86px);}
+  /* Deux fois le même mot à trois centimètres d'écart : le menu l'annonce, la liste le
+     répète. On garde celui qui sert à naviguer. Les autres sections gardent leur titre —
+     on y arrive en défilant, il fait repère. */
+  body.avec-menu .index-head{display:none;}
   body.viewing .detail{display:block;}
   .back{
     background:none;border:none;padding:0 0 24px;cursor:pointer;font-family:inherit;
@@ -365,6 +490,22 @@
   <div class="langs" id="langs" hidden role="group" aria-label="Langue"></div>
 </header>
 
+<nav class="menu" id="menu" hidden aria-label="Sections du site"><div class="menu-in" id="menu-in"></div></nav>
+
+<section class="bandeau" id="bandeau" hidden aria-label="Réalisations en images">
+  <button class="bd-ouvrir" id="bd-ouvrir" type="button">
+    <span class="bd-couche" id="bd-0"></span>
+    <span class="bd-couche" id="bd-1"></span>
+    <span class="bd-voile" id="bd-voile" hidden></span>
+    <span class="bd-legende" id="bd-legende" hidden>
+      <span class="bd-nom" id="bd-nom" dir="auto"></span>
+      <span class="bd-meta" id="bd-meta" dir="auto"></span>
+    </span>
+  </button>
+  <button class="bd-fleche prec" id="bd-prec" type="button" hidden aria-label="Photo précédente">‹</button>
+  <button class="bd-fleche suiv" id="bd-suiv" type="button" hidden aria-label="Photo suivante">›</button>
+</section>
+
 <main>
   <p class="eyebrow index-head" id="t-realisations">Réalisations</p>
   <nav class="filtres" id="filtres" hidden aria-label="Filtrer les réalisations"></nav>
@@ -387,6 +528,10 @@
       <span class="eyebrow" id="t-suivant">Projet suivant</span>
       <span class="suivant-nom" id="suivant-nom" dir="auto"></span>
     </button>
+  </section>
+  <section class="perso" id="personnelles" hidden>
+    <p class="eyebrow" id="t-personnelles">Réalisations personnelles</p>
+    <div class="projects" id="projects-perso"></div>
   </section>
   <section class="boutique" id="boutique" hidden>
     <p class="eyebrow" id="t-boutique">À la vente</p>
@@ -439,7 +584,7 @@ var LANGUES = [
   { code: 'he', label: 'עב', dir: 'rtl' }
 ];
 var MOTS = {
-  fr: { realisations:'Réalisations', apropos:'À propos', journal:'Journal',
+  fr: { realisations:'Réalisations', personnelles:'Réalisations personnelles', apropos:'À propos', journal:'Journal',
         retour:'← Toutes les réalisations', suivant:'Projet suivant', tout:'Tout',
         photos:'photos', agrandir:'Agrandir la photo', photo:'photo',
         boutique:'À la vente', surDemande:'Prix sur demande', ecrireWa:'Écrire sur WhatsApp',
@@ -448,9 +593,10 @@ var MOTS = {
         vide:'Bientôt en ligne', videTxt:'Les premières réalisations seront publiées ici prochainement.',
         panne:'Les réalisations n’ont pas pu être chargées',
         panneTxt:'La connexion n’a pas abouti. Vérifiez votre réseau, puis réessayez.',
+        m2:'m²',
         reessayer:'Réessayer', genre:'Un projet de ce genre ? ',
         ecrire:'écrivez-moi', whatsapp:'écrivez-moi sur WhatsApp' },
-  en: { realisations:'Works', apropos:'About', journal:'Journal',
+  en: { realisations:'Works', personnelles:'Personal work', apropos:'About', journal:'Journal',
         retour:'← All works', suivant:'Next project', tout:'All',
         photos:'photographs', agrandir:'Enlarge photograph', photo:'photograph',
         boutique:'For sale', surDemande:'Price on request', ecrireWa:'Message on WhatsApp',
@@ -459,9 +605,10 @@ var MOTS = {
         vide:'Coming soon', videTxt:'The first projects will be published here shortly.',
         panne:'The projects could not be loaded',
         panneTxt:'The connection failed. Check your network, then try again.',
+        m2:'m²',
         reessayer:'Try again', genre:'A project like this one? ',
         ecrire:'write to me', whatsapp:'message me on WhatsApp' },
-  he: { realisations:'עבודות', apropos:'אודות', journal:'יומן',
+  he: { realisations:'עבודות', personnelles:'עבודות אישיות', apropos:'אודות', journal:'יומן',
         retour:'→ כל העבודות', suivant:'הפרויקט הבא', tout:'הכול',
         photos:'תמונות', agrandir:'הגדלת התמונה', photo:'תמונה',
         boutique:'למכירה', surDemande:'מחיר לפי בקשה', ecrireWa:'שלחו הודעה בוואטסאפ',
@@ -470,6 +617,7 @@ var MOTS = {
         vide:'בקרוב', videTxt:'העבודות הראשונות יפורסמו כאן בקרוב.',
         panne:'לא ניתן היה לטעון את העבודות',
         panneTxt:'החיבור נכשל. בדקו את הרשת ונסו שוב.',
+        m2:'מ″ר',
         reessayer:'נסו שוב', genre:'רוצים פרויקט כזה? ',
         ecrire:'כתבו לי', whatsapp:'כתבו לי בוואטסאפ' }
 };
@@ -481,6 +629,16 @@ var langue = 'fr';
 function mot(k) { return (MOTS[langue] && MOTS[langue][k]) || MOTS.fr[k] || ''; }
 /* « 1 photos » sur une carte de portfolio, ça se remarque. */
 function nbPhotos(n) { return n + ' ' + mot(n > 1 ? 'photos' : 'photo'); }
+/* La surface est saisie librement dans le CRM. Tapée seule — « 110 » — elle s'affichait
+   telle quelle au milieu de la fiche technique, entre le lieu et la mission, sans dire de
+   quoi il s'agit. On ajoute l'unité UNIQUEMENT quand la valeur est un nombre nu : si
+   Mélissa a déjà écrit « 110 m² » ou « 1 200 pi² », on ne touche à rien. L'unité suit la
+   langue, comme le reste. */
+function surfaceLisible(v) {
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return '';
+  return /^[0-9]+([.,][0-9]+)?$/.test(t.replace(/[\s\u00a0]/g, '')) ? t + ' ' + mot('m2') : t;
+}
 
 /* Un texte de Melissa, dans la langue courante — à défaut, le français d'origine.
    `src` permet de le demander sur un objet précis plutôt que sur l'état global : une
@@ -537,6 +695,7 @@ function toutRedessiner() {
   if (s.title) { el('site-name').textContent = s.title; el('footer').textContent = s.title + (sous ? ' — ' + sous : ''); }
   if (sous) el('site-tagline').textContent = sous;
   el('t-realisations').textContent = mot('realisations');
+  el('t-personnelles').textContent = texteSite('menuPersonnelles') || mot('personnelles');
   el('t-apropos').textContent = mot('apropos');
   el('t-journal').textContent = mot('journal');
   el('t-suivant').textContent = mot('suivant');
@@ -546,6 +705,11 @@ function toutRedessiner() {
   renderBoutique();
   renderJournal(s);
   if (projects.length) { renderFiltres(); renderIndex(); }
+  /* APRÈS les sections : le menu lit leur état (masquée ou non) pour savoir quelles entrées
+     ont un sens. L'appeler avant, c'est construire un menu sur des sections pas encore
+     dessinées. */
+  renderMenu();
+  bdDemarrer();
   if (current) openProject(projects.indexOf(current));
 }
 
@@ -714,7 +878,10 @@ function showState(title, text, action) {
 function renderFiltres() {
   var host = el('filtres');
   var cats = [];
-  projects.forEach(function (p) {
+  /* Les catégories rangent la VITRINE : une section n'existe que si un projet
+     professionnel la porte. Une catégorie née d'un projet personnel ferait un filtre qui
+     ne montre rien. */
+  projetsPro().forEach(function (p) {
     var c = (p.categorie || '').trim();
     if (c && cats.indexOf(c) < 0) cats.push(c);
   });
@@ -735,7 +902,7 @@ function renderFiltres() {
   [''].concat(cats).forEach(function (c) {
     var b = document.createElement('button');
     b.type = 'button';
-    var n = c ? projects.filter(function (p) { return (p.categorie || '').trim() === c; }).length : projects.length;
+    var n = c ? projetsPro().filter(function (p) { return (p.categorie || '').trim() === c; }).length : projetsPro().length;
     b.dir = 'auto';
     b.textContent = (c || mot('tout')) + ' (' + n + ')';
     b.setAttribute('aria-pressed', filtre === c ? 'true' : 'false');
@@ -744,8 +911,47 @@ function renderFiltres() {
   });
 }
 function projetsVisibles() {
-  if (!filtre) return projects;
-  return projects.filter(function (p) { return (p.categorie || '').trim() === filtre; });
+  var pro = projetsPro();
+  if (!filtre) return pro;
+  return pro.filter(function (p) { return (p.categorie || '').trim() === filtre; });
+}
+/* ---- LES DEUX FAMILLES DE PROJETS ----
+   Une réalisation marquée « personnelle » dans le CRM quitte la liste principale ET le
+   bandeau d'accueil : celui-ci est la vitrine du studio. Elle rejoint sa propre section,
+   plus bas, avec sa propre entrée de menu. Rien n'est caché — c'est un rangement. */
+function estPerso(p) { return !!p.personnelle; }
+function projetsPro() { return projects.filter(function (p) { return !estPerso(p); }); }
+function projetsPerso() { return projects.filter(estPerso); }
+
+/* Une carte de projet. Elle était écrite une fois pour la liste principale ; il en faut
+   maintenant deux listes. Une seule construction, sinon les deux finiraient par diverger
+   (la personnelle sans son lieu, ou sans son fondu au défilement). */
+function carteProjet(p, i) {
+  var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
+  if (!cover) return null;
+  var b = document.createElement('button');
+  b.className = 'project';
+  b.type = 'button';
+  b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
+    + '<p class="project-name"></p><p class="project-meta"></p>';
+  var vign = b.querySelector('img');
+  vign.src = url(cover.thumb);
+  vign.decoding = 'async';
+  // Les deux premières cartes sont vues tout de suite ; les suivantes attendent d'être
+  // approchées. Le format de la case est déjà fixé en CSS (4/3), donc rien ne saute
+  // quand une image arrive.
+  vign.loading = i > 1 ? 'lazy' : 'eager';
+  guetter(b);
+  b.querySelector('.project-name').textContent = p.title;
+  b.querySelector('.project-name').dir = 'auto';
+  b.querySelector('.project-meta').dir = 'auto';
+  // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
+  // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
+  var infos = [p.date, p.lieu, p.mission].filter(Boolean);
+  if (infos.length < 2) infos.push(nbPhotos(p.photos.length));
+  b.querySelector('.project-meta').textContent = infos.join(' · ');
+  b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
+  return b;
 }
 function renderIndex() {
   var host = el('projects');
@@ -753,31 +959,345 @@ function renderIndex() {
   host.removeAttribute('aria-busy');
   el('state').hidden = true;
   projetsVisibles().forEach(function (p, i) {
-    var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
-    if (!cover) return;
+    var c = carteProjet(p, i);
+    if (c) host.appendChild(c);
+  });
+  renderPerso();
+}
+/* La section des réalisations personnelles. Elle n'existe que si au moins un projet est
+   marqué : une section vide sur un portfolio, c'est une promesse non tenue. Les catégories
+   ne la filtrent pas — elles rangent la vitrine professionnelle, pas celle-ci. */
+function renderPerso() {
+  var sec = el('personnelles'), host = el('projects-perso');
+  var liste = projetsPerso();
+  host.innerHTML = '';
+  sec.hidden = !liste.length;
+  if (!liste.length) return;
+  el('t-personnelles').textContent = texteSite('menuPersonnelles') || mot('personnelles');
+  liste.forEach(function (p, i) {
+    var c = carteProjet(p, i);
+    if (c) host.appendChild(c);
+  });
+}
+
+
+/* ---- LE MENU DU SITE ------------------------------------------------------------------
+   Une barre collante sous le nom du studio. Deux principes :
+
+   - **Une entrée n'existe que si sa section existe.** Un menu qui propose « À la vente »
+     sur un site sans boutique, ou « Journal » sans entrée écrite, envoie le visiteur sur du
+     vide. Les sections savent déjà se masquer ; le menu les lit au lieu de les deviner.
+   - **Le mot est celui de Melissa, sinon celui de la page.** Un libellé écrit dans le CRM
+     l'emporte ; vide, c'est le mot d'appareil, qui lui se traduit tout seul.
+
+   Les CATÉGORIES de réalisations restent en second niveau, sous le titre de la liste :
+   elles filtrent une section, elles ne sont pas des sections. Les mêler au menu ferait une
+   barre de dix entrées où « Bureau » et « Journal » auraient l'air d'être de même nature. */
+var MENU = [
+  { cle: 'realisations', mot: 'realisations', champ: 'menuRealisations', cible: 'liste' },
+  { cle: 'personnelles', mot: 'personnelles', champ: 'menuPersonnelles', cible: 'personnelles' },
+  { cle: 'boutique',     mot: 'boutique',     champ: 'menuBoutique',     cible: 'boutique' },
+  { cle: 'journal',      mot: 'journal',      champ: 'menuJournal',      cible: 'journal' },
+  { cle: 'apropos',      mot: 'apropos',      champ: 'menuApropos',      cible: 'apropos' },
+];
+function titreMenu(e) { return texteSite(e.champ) || mot(e.mot); }
+/* Ce qui est réellement affiché : les sections se masquent elles-mêmes quand elles sont
+   vides, on lit leur état plutôt que de refaire le raisonnement une seconde fois. */
+function menuEntrees() {
+  return MENU.filter(function (e) {
+    if (e.cible === 'liste') return projetsPro().length > 0;
+    var sec = el(e.cible);
+    return !!sec && !sec.hidden;
+  });
+}
+function renderMenu() {
+  var host = el('menu-in'), barre = el('menu');
+  var entrees = menuEntrees();
+  host.innerHTML = '';
+  /* Une seule entrée n'est pas un menu : ce serait un titre déguisé en commande. */
+  barre.hidden = entrees.length < 2;
+  document.body.classList.toggle('avec-menu', !barre.hidden);
+  if (barre.hidden) return;
+  entrees.forEach(function (e) {
     var b = document.createElement('button');
-    b.className = 'project';
     b.type = 'button';
-    b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
-      + '<p class="project-name"></p><p class="project-meta"></p>';
-    var vign = b.querySelector('img');
-    vign.src = url(cover.thumb);
-    vign.decoding = 'async';
-    // Les deux premières cartes sont vues tout de suite ; les suivantes attendent d'être
-    // approchées. Le format de la case est déjà fixé en CSS (4/3), donc rien ne saute
-    // quand une image arrive.
-    vign.loading = i > 1 ? 'lazy' : 'eager';
-    guetter(b);
-    b.querySelector('.project-name').textContent = p.title;
-    b.querySelector('.project-name').dir = 'auto';
-    b.querySelector('.project-meta').dir = 'auto';
-    // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
-    // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
-    var infos = [p.date, p.lieu, p.mission].filter(Boolean);
-    if (infos.length < 2) infos.push(nbPhotos(p.photos.length));
-    b.querySelector('.project-meta').textContent = infos.join(' · ');
-    b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
+    b.dataset.menu = e.cible;
+    b.dir = 'auto';
+    b.textContent = titreMenu(e);
+    b.addEventListener('click', function () { allerA(e.cible); });
     host.appendChild(b);
+  });
+  majMenuActif();
+}
+/* Aller à une section. Un projet ouvert est d'abord refermé : sans ça, on ferait défiler
+   la page vers une section cachée sous le détail du projet, et il ne se passerait rien. */
+function allerA(cible) {
+  /* Il faut savoir si un projet était ouvert AVANT de le refermer : `closeProject` passe
+     par l'historique du navigateur, qui est asynchrone — lire `current` après ne dit rien
+     de fiable, et on mesurerait la position d'une section pas encore remise en place. */
+  var etaitOuvert = !!current;
+  if (etaitOuvert) closeProject();
+  var faire = function () {
+    if (cible === 'liste') { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    var sec = el(cible);
+    if (!sec || sec.hidden) return;
+    var h = (el('menu') && !el('menu').hidden) ? el('menu').getBoundingClientRect().height : 0;
+    var y = sec.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0) - h - 12;
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  };
+  /* Refermer un projet redessine la page ET la fait remonter là où on l'avait laissée :
+     on attend que tout soit posé, sinon on mesure une section qui n'est pas à sa place. */
+  if (etaitOuvert) setTimeout(faire, 140); else requestAnimationFrame(faire);
+}
+/* Marquer où l'on est. Sans ça, le menu dit ce qu'on PEUT faire mais jamais où l'on est —
+   et sur une page qui défile longtemps, on se perd. */
+function majMenuActif() {
+  var barre = el('menu');
+  if (!barre || barre.hidden) return;
+  var haut = barre.getBoundingClientRect().height + 24;
+  var actif = 'liste';
+  menuEntrees().forEach(function (e) {
+    if (e.cible === 'liste') return;
+    var sec = el(e.cible);
+    if (sec && !sec.hidden && sec.getBoundingClientRect().top <= haut) actif = e.cible;
+  });
+  [].forEach.call(barre.querySelectorAll('button'), function (b) {
+    b.setAttribute('aria-current', b.dataset.menu === actif ? 'true' : 'false');
+  });
+}
+var _menuT = null;
+window.addEventListener('scroll', function () {
+  if (_menuT) return;
+  _menuT = requestAnimationFrame(function () { _menuT = null; majMenuActif(); });
+}, { passive: true });
+
+/* ---- LE BANDEAU D'ACCUEIL -------------------------------------------------------------
+   Une grande image sous le nom du studio, qui fait défiler les projets réalisés. Trois
+   règles, et elles viennent de l'usage :
+
+   - **Deux photos qui se suivent.** Deux vues du MÊME projet, prises l'une après l'autre
+     dans l'ordre de la galerie : côte à côte, elles se répondent. Deux photos tirées au
+     hasard dans deux chantiers différents, non — ça fait catalogue, pas portfolio.
+   - **Les projets, eux, passent au hasard.** L'ordre des projets est mélangé à chaque
+     tour ; à l'intérieur d'un projet, on avance par paires dans l'ordre. Personne ne voit
+     donc deux fois la même chose avant d'avoir tout vu.
+   - **Le changement est un fondu, jamais un saut.** La couche cachée est remplie et on
+     n'échange les opacités qu'une fois les images RÉELLEMENT chargées : sinon le fondu
+     découvrirait une case vide, ce qui est pire que pas de mouvement du tout.
+
+   Sur un téléphone, deux photos côte à côte font deux timbres-poste : on garde les mêmes
+   photos et le même ordre, mais une par une. */
+var BD_SEC_DEFAUT = 7, BD_SEC_MIN = 3, BD_SEC_MAX = 60;
+var bdVues = [], bdRang = 0, bdCouche = -1, bdMinuteur = null;
+var bdProjet = null, bdPause = false, bdEchecs = 0, bdLargeur = null, bdParti = false;
+var bdParti2 = null, bdGlisse = false, bdX0 = 0;
+
+function bdRegle() {
+  var s = infosSite || {};
+  var n = parseFloat(s.diaporamaSec);
+  if (!isFinite(n) || n < BD_SEC_MIN || n > BD_SEC_MAX) n = BD_SEC_DEFAUT;
+  /* Une ou deux photos par vue. Deux, c'est le portfolio : les images se répondent. Une,
+     c'est l'affiche : une seule photo, en grand. Le choix appartient à Melissa. */
+  var par = parseInt(s.diaporamaPar, 10);
+  if (par !== 1 && par !== 2) par = 2;
+  return { actif: s.diaporama !== 'aucun', delai: n * 1000, par: par };
+}
+/* Deux refus à ne pas confondre :
+   - `diaporama: 'aucun'` — Melissa ne VEUT PAS de bandeau : il n'existe pas, le site
+     commence par la liste des projets ;
+   - `animer` faux (réglage « aucun mouvement », ou visiteur qui demande moins d'animation) —
+     le bandeau reste, mais figé sur une image. Le faire disparaître serait décider à sa
+     place qu'elle ne veut plus l'image parce qu'elle ne veut plus le mouvement. */
+function bdDoitDefiler() { return animer && bdVues.length > 1; }
+function bdLarge() { return (window.innerWidth || 0) >= 700; }
+/* Combien de photos tiennent VRAIMENT dans une vue : le réglage, ramené à ce que l'écran
+   permet. Sur un téléphone, deux photos côte à côte font deux timbres-poste — le réglage ne
+   peut pas forcer ça. */
+function bdParVue() { return bdLarge() ? bdRegle().par : 1; }
+
+function melanger(liste) {
+  var t = liste.slice();
+  for (var i = t.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1)), x = t[i];
+    t[i] = t[j]; t[j] = x;
+  }
+  return t;
+}
+/* La liste des vues : projets mélangés, et dans chacun les photos prises deux par deux
+   dans l'ordre. Un projet à trois photos donne donc [1,2] puis [3] — la vue solitaire
+   occupe toute la largeur, ce qui casse agréablement le rythme. */
+function bdConstruire() {
+  var pas = bdParVue();
+  var vues = [];
+  /* Le bandeau est la vitrine du studio : les projets personnels n'y passent pas. C'est
+     ce que « une section à part, en dehors du bandeau » veut dire. */
+  melanger(projetsPro().filter(function (p) { return (p.photos || []).length; })).forEach(function (p) {
+    for (var i = 0; i < p.photos.length; i += pas) vues.push({ p: p, photos: p.photos.slice(i, i + pas) });
+  });
+  bdVues = vues;
+  bdRang = 0;
+  bdLargeur = bdLarge();
+  bdParti2 = bdParVue();
+  bdMajFleches();
+}
+/* Les flèches n'ont de sens que s'il y a plus d'une vue : sur un site d'un seul projet
+   d'une seule photo, deux commandes qui ne font rien valent moins que rien. */
+function bdMajFleches() {
+  var n = bdVues.length > 1;
+  var p = el('bd-prec'), su = el('bd-suiv');
+  if (p) p.hidden = !n;
+  if (su) su.hidden = !n;
+}
+/* Remplit une couche et ne rend la main qu'une fois les images arrivées. Une image qui
+   échoue ou qui traîne fait abandonner CETTE vue : on passera à la suivante plutôt que de
+   croiser vers un trou. */
+function bdRemplir(indice, vue) {
+  var couche = el('bd-' + indice);
+  couche.innerHTML = '';
+  couche.className = 'bd-couche' + (vue.photos.length > 1 ? ' duo' : ' solo');
+  var attentes = vue.photos.map(function (ph, k) {
+    var case_ = document.createElement('span');
+    case_.className = 'bd-case';
+    var im = document.createElement('img');
+    im.decoding = 'async';
+    im.alt = ph.caption || (vue.p.title + ' — ' + mot('photo') + ' ' + (k + 1));
+    if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
+    /* Le bandeau est large : la pleine définition est la bonne source sur un écran
+       d'ordinateur, la vignette suffit sur un téléphone. Les deux existent déjà dans le
+       stockage, aucune image n'est produite pour l'occasion. */
+    im.src = url(ph.full);
+    if (ph.thumb) {
+      im.srcset = url(ph.thumb) + ' 700w, ' + url(ph.full) + ' 1600w';
+      im.sizes = vue.photos.length > 1 ? '(max-width:700px) 100vw, 50vw' : '100vw';
+    }
+    case_.appendChild(im);
+    couche.appendChild(case_);
+    return new Promise(function (res, rej) {
+      if (im.complete && im.naturalWidth > 0) return res();
+      var fini = false;
+      var minuteur = setTimeout(function () { if (!fini) { fini = true; rej(new Error('lente')); } }, 8000);
+      im.addEventListener('load', function () { if (!fini) { fini = true; clearTimeout(minuteur); res(); } });
+      im.addEventListener('error', function () { if (!fini) { fini = true; clearTimeout(minuteur); rej(new Error('absente')); } });
+    });
+  });
+  return Promise.all(attentes);
+}
+function bdProgrammer() {
+  clearTimeout(bdMinuteur);
+  if (!bdDoitDefiler() || bdPause) return;
+  bdMinuteur = setTimeout(bdAvancer, bdRegle().delai);
+}
+function bdAvancer() { bdAller(1); }
+/* Un seul chemin pour changer de vue, quel que soit ce qui le demande : le minuteur, une
+   flèche, une touche du clavier ou un balayage. Deux chemins finiraient par diverger — et
+   c'est le genre de divergence qui fait qu'une flèche « saute » une image. */
+function bdAller(pas) {
+  if (!bdVues.length) return;
+  var i = bdRang - 1 + pas;
+  /* Le tour est fini : on re-mélange l'ordre des projets. Le hasard se renouvelle sans
+     jamais répéter une vue avant d'avoir montré les autres. En arrière, on reboucle sur la
+     fin — revenir en arrière depuis la première vue ne doit pas être un cul-de-sac. */
+  if (i >= bdVues.length) { bdConstruire(); i = 0; }
+  if (i < 0) i = bdVues.length - 1;
+  bdRang = i + 1;
+  var vue = bdVues[i];
+  var cible = bdCouche === 0 ? 1 : 0;
+  bdRemplir(cible, vue).then(function () {
+    el('bd-0').classList.toggle('on', cible === 0);
+    el('bd-1').classList.toggle('on', cible === 1);
+    bdCouche = cible;
+    bdProjet = vue.p;
+    bdEchecs = 0;
+    el('bd-nom').textContent = vue.p.title;
+    el('bd-meta').textContent = [vue.p.date, vue.p.lieu].filter(Boolean).join(' · ');
+    el('bd-legende').hidden = false;
+    el('bd-voile').hidden = false;
+    el('bandeau').setAttribute('aria-label', vue.p.title);
+  }, function () {
+    /* Une image absente ne doit pas arrêter le bandeau — ni le faire tourner à vide sur un
+       stockage entièrement injoignable. On tente les autres vues, une fois chacune. */
+    bdEchecs++;
+    if (bdEchecs < bdVues.length) { bdAller(pas); return; }
+    if (bdCouche < 0) bdArreter();
+  }).then(bdProgrammer, bdProgrammer);
+}
+function bdArreter() {
+  clearTimeout(bdMinuteur);
+  el('bandeau').hidden = true;
+}
+function bdDemarrer() {
+  var hote = el('bandeau');
+  if (!projetsPro().length || !bdRegle().actif) { bdArreter(); return; }
+  hote.hidden = false;
+  /* La durée du rapprochement suit le délai réglé : le mouvement doit finir quand la photo
+     s'en va, pas rester figé la moitié du temps. */
+  hote.style.setProperty('--bd-duree', Math.round(bdRegle().delai / 1000) + 1 + 's');
+  if (bdParti) { bdConstruire(); bdMajFleches(); bdProgrammer(); return; }
+  bdParti = true;
+  bdConstruire();
+  bdAvancer();
+  /* Suspendre, oui — mais chaque geste doit avoir sa FIN, sinon on ne suspend pas, on
+     arrête. C'était le cas d'un `touchstart` sans contrepartie : sur un téléphone, un doigt
+     posé une fois sur le bandeau le figeait définitivement, puisque aucun `mouseleave` ne
+     vient jamais sur un écran tactile. */
+  var suspendre = function () { bdPause = true; clearTimeout(bdMinuteur); };
+  var reprendre = function () { bdPause = false; bdProgrammer(); };
+  hote.addEventListener('mouseenter', suspendre);
+  hote.addEventListener('mouseleave', reprendre);
+  hote.addEventListener('focusin', suspendre);
+  hote.addEventListener('focusout', reprendre);
+  hote.addEventListener('touchstart', suspendre, { passive: true });
+  hote.addEventListener('touchend', reprendre, { passive: true });
+  hote.addEventListener('touchcancel', reprendre, { passive: true });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) clearTimeout(bdMinuteur); else bdProgrammer();
+  });
+  el('bd-ouvrir').addEventListener('click', function () {
+    /* Un balayage se termine par un `click` : sans ce garde, glisser pour voir la photo
+       suivante ouvrirait le projet au lieu de la montrer. */
+    if (bdGlisse) { bdGlisse = false; return; }
+    if (!bdProjet) return;
+    var i = projects.indexOf(bdProjet);
+    if (i >= 0) openProject(i);
+  });
+  /* ---- Défiler à la main ----
+     Trois gestes pour la même chose, parce qu'aucun ne marche partout : les flèches à
+     l'écran, les touches ← → quand le bandeau a le focus, et le balayage au doigt.
+     Chacun RELANCE le compte à zéro au lieu de couper le défilement : on regarde une image
+     de plus, on ne débranche pas le bandeau. */
+  var main = function (pas) { clearTimeout(bdMinuteur); bdAller(pas); };
+  el('bd-prec').addEventListener('click', function (e) { e.stopPropagation(); main(-1); });
+  el('bd-suiv').addEventListener('click', function (e) { e.stopPropagation(); main(1); });
+  hote.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); main(-1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); main(1); }
+  });
+  hote.addEventListener('touchstart', function (e) {
+    bdGlisse = false;
+    bdX0 = (e.touches && e.touches[0]) ? e.touches[0].clientX : 0;
+  }, { passive: true });
+  hote.addEventListener('touchend', function (e) {
+    var t = (e.changedTouches && e.changedTouches[0]);
+    if (!t || !bdX0) return;
+    var d = t.clientX - bdX0;
+    /* 45 px : au-dessous, c'est un appui un peu tremblant, pas un balayage. Confondre les
+       deux ferait ouvrir un projet quand on voulait passer à l'image suivante. */
+    if (Math.abs(d) < 45) return;
+    bdGlisse = true;
+    main(d < 0 ? 1 : -1);
+  }, { passive: true });
+  /* Passer du téléphone à l'ordinateur (rotation, fenêtre agrandie) change le nombre de
+     photos par vue : on reconstruit, mais seulement quand le seuil est franchi. */
+  var attente = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(attente);
+    attente = setTimeout(function () {
+      /* On ne reconstruit que si le nombre de photos par vue change vraiment : passer de
+         1200 à 1100 px ne doit pas remettre le bandeau au début. */
+      if (bdParVue() === bdParti2) return;
+      bdConstruire();
+      bdProgrammer();
+    }, 250);
   });
 }
 
@@ -814,7 +1334,7 @@ function majSeo(titre, description, image) {
 function afficherProjet(i) {
   current = projects[i];
   el('d-title').textContent = current.title;
-  el('d-meta').textContent = [current.date, current.categorie, current.lieu, current.surface,
+  el('d-meta').textContent = [current.date, current.categorie, current.lieu, surfaceLisible(current.surface),
     current.mission, nbPhotos(current.photos.length)].filter(Boolean).join(' · ');
   el('d-text').textContent = current.texte || '';
   el('d-text').hidden = !current.texte;
@@ -828,14 +1348,29 @@ function afficherProjet(i) {
     var portrait = !!(ph.w && ph.h && ph.h > ph.w);
     if (portrait) b.className = 'shot portrait';
     var im = document.createElement('img');
-    im.src = url(ph.full);
     /* Deux tailles existent déjà dans le stockage (1600 px et 700 px) : autant laisser le
        navigateur prendre la plus petite quand elle suffit, plutôt qu'un fichier de 400 Ko
-       pour une image affichée sur 350 px. Aucune image supplémentaire n'est produite. */
+       pour une image affichée sur 350 px. Aucune image supplémentaire n'est produite.
+       `srcset` et `sizes` sont posés AVANT `src` : dans l'autre ordre, le navigateur a déjà
+       lancé le téléchargement de la grande image quand il découvre qu'une plus petite
+       suffisait — et les deux partent. */
     if (ph.thumb) {
       im.srcset = url(ph.thumb) + ' 700w, ' + url(ph.full) + ' 1600w';
-      im.sizes = portrait ? '(max-width:700px) 100vw, 45vw' : '(max-width:700px) 100vw, 90vw';
+      /* `sizes` DIT AU NAVIGATEUR la largeur d'affichage : s'il la surestime, il télécharge
+         la grande image alors que la petite suffisait. On annonçait 100vw (390 px sur un
+         téléphone) alors que la photo s'affiche sur 346 px — `main` a 22 px de marge de
+         chaque côté. Sur un écran à deux pixels physiques par pixel CSS (le cas le plus
+         courant), 390 × 2 = 780 dépassait les 700 px de la vignette : le navigateur prenait
+         donc la version 1600 px, quatre fois plus lourde, pour l'afficher sur 692 px réels.
+         Une fiche de douze photos pesait 4,5 Mo. Avec la vraie largeur, 346 × 2 = 692 tient
+         dans la vignette. Rien n'est dégradé : c'est du 1:1. Les écrans à trois pixels
+         continuent de recevoir la grande image, comme il se doit. */
+      var large = 'calc(100vw - 44px)';
+      im.sizes = portrait
+        ? '(max-width:700px) ' + large + ', (max-width:1240px) calc((100vw - 70px) / 2), 585px'
+        : '(max-width:700px) ' + large + ', (max-width:1240px) ' + large + ', 1196px';
     }
+    im.src = url(ph.full);
     im.loading = k < 2 ? 'eager' : 'lazy';
     im.decoding = 'async';
     if (k === 0) im.setAttribute('fetchpriority', 'high');
@@ -859,12 +1394,15 @@ function afficherProjet(i) {
     if (k > 1) guetter(b);
   });
   document.body.classList.add('viewing');
+  /* Le bandeau n'est plus à l'écran : le laisser tourner téléchargerait des photos que
+     personne ne regarde. */
+  clearTimeout(bdMinuteur);
   window.scrollTo({ top: 0, behavior: 'auto' });
   peindreSuivant();
   peindreContactProjet();
   var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
   majSeo(current.title + ' — ' + TITRE_SITE,
-    current.texte || [current.lieu, current.surface, current.mission].filter(Boolean).join(' · ') || DESC_SITE,
+    current.texte || [current.lieu, surfaceLisible(current.surface), current.mission].filter(Boolean).join(' · ') || DESC_SITE,
     couv ? url(couv.full) : '');
 }
 
@@ -890,8 +1428,10 @@ function peindreContactProjet() {
   p.appendChild(a);
   p.appendChild(document.createTextNode('.'));
 }
+/* « Projet suivant » reste DANS SA FAMILLE : passer d'un chantier de client à un projet
+   personnel sans prévenir brouillerait la lecture du portfolio. */
 function projetSuivant(d) {
-  var liste = projetsVisibles();
+  var liste = current && estPerso(current) ? projetsPerso() : projetsVisibles();
   if (liste.length < 2 || !current) return null;
   var i = liste.indexOf(current);
   if (i < 0) return null;
@@ -915,6 +1455,7 @@ var posListe = 0;
 function afficherListe() {
   document.body.classList.remove('viewing');
   current = null;
+  bdProgrammer();   /* de retour sur l'accueil : le bandeau reprend son défilement */
   majSeo(TITRE_SITE, DESC_SITE, IMG_SITE);
   window.scrollTo({ top: posListe, behavior: 'auto' });
 }

@@ -40,7 +40,24 @@ await page.evaluate(() => {
         upload: async (path, blob) => { files.set(path, blob); return { error: null }; },
         download: async (path) => files.has(path) ? { data: files.get(path), error: null } : { data: null, error: { message: 'Object not found', statusCode: '404' } },
         remove: async (paths) => { paths.forEach(p => files.delete(p)); return { error: null }; },
-        list: async () => ({ data: [], error: null }),
+        /* Le vrai stockage LISTE ce qu'il contient, et la publication s'en sert pour savoir
+           ce qui est réellement en ligne. Un listing toujours vide faisait croire au CRM
+           que tout avait disparu : il réécrivait toutes les photos à chaque publication, et
+           aucun test ne pouvait voir qu'on n'en réécrit qu'une. */
+        list: async (prefixe) => {
+          const p = String(prefixe || '').replace(/\/$/, '');
+          const vus = new Set(), out = [];
+          for (const chemin of files.keys()) {
+            if (p && !chemin.startsWith(p + '/')) continue;
+            const reste = p ? chemin.slice(p.length + 1) : chemin;
+            const nom = reste.split('/')[0];
+            if (!nom || vus.has(nom)) continue;
+            vus.add(nom);
+            /* Un dossier n'a pas de `metadata` chez Supabase — c'est ce qui le distingue. */
+            out.push(reste.indexOf('/') >= 0 ? { name: nom } : { name: nom, metadata: { size: 1 } });
+          }
+          return { data: out, error: null };
+        },
       }),
     },
     from: chain,
@@ -3278,7 +3295,7 @@ check('Site public : tout est vide au départ',
 // réalisations et celle de la boutique : ce sont elles qui donnent au site l'ORDRE de ses
 // sections et de ses rayons, et elles ne sont jamais vides.
 check('Site public : aucune coordonnée vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,categories,categoriesProduits', siteVide.infos.join(','));
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,diaporamaPar,categories,categoriesProduits', siteVide.infos.join(','));
 
 const siteAllure = await page.evaluate(() => {
   library.site = null;
@@ -3301,6 +3318,123 @@ check('Allure : un thème inconnu du catalogue ne part pas',
   siteAllure.faux === undefined, String(siteAllure.faux));
 check('Allure : les quatre directions sont au catalogue',
   siteAllure.catalogue.join(',') === 'index,epure,atelier,nuit', siteAllure.catalogue.join(','));
+
+// --- LE BANDEAU D'ACCUEIL : son état et sa durée voyagent par le manifeste, comme le reste.
+const bandeau = await page.evaluate(() => {
+  library.site = null;
+  const parDefaut = siteInfos();
+  siteSettings().diaporama = 'aucun'; siteSettings().diaporamaSec = 12;
+  const choisi = siteInfos();
+  // Des valeurs qu'on ne veut pas voir arriver sur le site : un clignotement, une éternité,
+  // et un champ vidé à la main.
+  const absurdes = [0.4, 900, '', null].map(v => { siteSettings().diaporamaSec = v; return siteInfos().diaporamaSec; });
+  siteSettings().diaporamaSec = 12;
+  return { parDefaut, choisi, absurdes, defaut: BANDEAU_SEC_DEFAUT };
+});
+check('Bandeau : affiché par défaut, avec une durée par défaut',
+  bandeau.parDefaut.diaporama === 'actif' && bandeau.parDefaut.diaporamaSec === bandeau.defaut,
+  JSON.stringify({ d: bandeau.parDefaut.diaporama, s: bandeau.parDefaut.diaporamaSec }));
+check('Bandeau : le choix et la durée partent dans le manifeste',
+  bandeau.choisi.diaporama === 'aucun' && bandeau.choisi.diaporamaSec === 12,
+  JSON.stringify({ d: bandeau.choisi.diaporama, s: bandeau.choisi.diaporamaSec }));
+check('Bandeau : une durée absurde ne part jamais en ligne',
+  bandeau.absurdes.every(v => v === bandeau.defaut), bandeau.absurdes.join(', '));
+
+// Et le réglage se règle DEPUIS L'ÉCRAN, pas seulement en mémoire : un champ hors bornes
+// doit se remettre d'aplomb en disant pourquoi, sinon on repart en croyant l'avoir changé.
+const bandeauPanel = await page.evaluate(async () => {
+  library.site = null;
+  openSitePanel();
+  await new Promise(r => setTimeout(r, 300));
+  const champ = document.getElementById('site-diapo-sec');
+  const boutons = [...document.querySelectorAll('#site-diapo [data-diapo]')].map(b => b.textContent.trim());
+  champ.value = '11'; champ.dispatchEvent(new Event('change'));
+  const bon = { valeur: siteSettings().diaporamaSec, msg: document.getElementById('site-diapo-msg').textContent };
+  champ.value = '0.5'; champ.dispatchEvent(new Event('change'));
+  const mauvais = { valeur: siteSettings().diaporamaSec, champ: champ.value,
+                    msg: document.getElementById('site-diapo-msg').textContent };
+  document.querySelector('#site-diapo [data-diapo="aucun"]').click();
+  const masque = siteSettings().diaporama;
+  const debord = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  closeModal();
+  return { boutons, bon, mauvais, masque, debord };
+});
+check('Bandeau : le réglage existe dans « Le site public », avec ses deux états',
+  bandeauPanel.boutons.length === 2 && /Affiché/.test(bandeauPanel.boutons[0]) && /Masqué/.test(bandeauPanel.boutons[1]),
+  bandeauPanel.boutons.join(' | '));
+check('Bandeau : une durée valable est retenue', bandeauPanel.bon.valeur === 11 && !bandeauPanel.bon.msg,
+  JSON.stringify(bandeauPanel.bon));
+check('Bandeau : une durée refusée se remet d’aplomb en disant pourquoi',
+  bandeauPanel.mauvais.valeur === 11 && bandeauPanel.mauvais.champ === '11' && /Entre 3 et 60/.test(bandeauPanel.mauvais.msg),
+  JSON.stringify(bandeauPanel.mauvais));
+check('Bandeau : on peut le masquer depuis l’écran', bandeauPanel.masque === 'aucun', bandeauPanel.masque);
+
+// --- UNE OU DEUX PHOTOS PAR VUE. Deux, c'est le portfolio ; une, c'est l'affiche.
+const bandeauPar = await page.evaluate(async () => {
+  library.site = null;
+  const parDefaut = siteInfos().diaporamaPar;
+  const absurdes = [3, 0, -1, '', null, 'deux'].map(v => { siteSettings().diaporamaPar = v; return siteInfos().diaporamaPar; });
+  siteSettings().diaporamaPar = 1;
+  const choisi = siteInfos().diaporamaPar;
+  openSitePanel();
+  await new Promise(r => setTimeout(r, 300));
+  const boutons = [...document.querySelectorAll('#site-diapo-par [data-par]')].map(b => b.textContent.trim());
+  const actif = (document.querySelector('#site-diapo-par [data-par][aria-pressed="true"]') || {}).dataset;
+  document.querySelector('#site-diapo-par [data-par="2"]').click();
+  const apresClic = siteSettings().diaporamaPar;
+  const debord = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+  closeModal();
+  return { parDefaut, absurdes, choisi, boutons, actif: actif && actif.par, apresClic, debord };
+});
+check('Bandeau : deux photos par vue par défaut',
+  bandeauPar.parDefaut === 2, String(bandeauPar.parDefaut));
+check('Bandeau : le choix « une seule photo » part dans le manifeste',
+  bandeauPar.choisi === 1, String(bandeauPar.choisi));
+// Trois photos sur un bandeau large font une planche contact, pas une image d'accueil.
+check('Bandeau : tout autre nombre que 1 ou 2 est ramené à 2',
+  bandeauPar.absurdes.every(v => v === 2), bandeauPar.absurdes.join(', '));
+check('Bandeau : le choix se fait depuis l’écran, et l’état en cours est marqué',
+  bandeauPar.boutons.length === 2 && bandeauPar.actif === '1' && bandeauPar.apresClic === 2,
+  bandeauPar.boutons.join(' | ') + ' · actif ' + bandeauPar.actif);
+check('Réglages du site : rien ne déborde à l’écran', bandeauPar.debord <= 1, bandeauPar.debord + 'px');
+
+// ============================================================================
+//  OUVRIR LE SÉLECTEUR DE FICHIERS — le défaut signalé depuis un iPhone
+//  « j'essaie d'ajouter des photos à un projet, il ne se passe rien du tout ». Sur iOS
+//  (Safari comme Chrome, même moteur), un input créé en mémoire et cliqué SANS être dans
+//  le document n'ouvre pas le sélecteur. Ce qu'on éprouve ici : l'entrée est bien POSÉE
+//  DANS LA PAGE au moment du clic, elle n'est pas masquée d'une façon qu'iOS ignore, et
+//  elle ne reste pas derrière elle.
+const picker = await page.evaluate(async () => {
+  const vus = [];
+  const vrai = HTMLInputElement.prototype.click;
+  HTMLInputElement.prototype.click = function () {
+    const st = getComputedStyle(this);
+    vus.push({
+      dansLaPage: document.body.contains(this),
+      display: st.display, visibility: st.visibility,
+      multiple: this.multiple, accept: this.accept,
+    });
+  };
+  rzPickPhotos({ id: 'x', photos: [] });
+  choisirFichiers({ accept: '.csv,text/csv' }, () => {});
+  HTMLInputElement.prototype.click = vrai;
+  const restants = document.querySelectorAll('body > input[type=file]').length;
+  // le nettoyage se fait au retour du focus quand le sélecteur a été annulé
+  window.dispatchEvent(new Event('focus'));
+  await new Promise(r => setTimeout(r, 1600));
+  return { vus, restants, apresAnnulation: document.querySelectorAll('body > input[type=file]').length };
+});
+check('Sélecteur de fichiers : l’entrée est DANS la page au moment du clic (sinon iOS n’ouvre rien)',
+  picker.vus.length === 2 && picker.vus.every(v => v.dansLaPage), JSON.stringify(picker.vus));
+check('Sélecteur de fichiers : elle n’est pas masquée d’une façon qu’iOS ignore',
+  picker.vus.length === 2 && picker.vus.every(v => v.display !== 'none' && v.visibility !== 'hidden'),
+  picker.vus.map(v => v.display + '/' + v.visibility).join(' | '));
+check('Ajouter des photos : le sélecteur accepte plusieurs images',
+  picker.vus.length === 2 && picker.vus[0].multiple === true && /image/.test(picker.vus[0].accept),
+  JSON.stringify(picker.vus[0]));
+check('Sélecteur de fichiers : rien ne reste dans la page après une annulation',
+  picker.apresAnnulation === 0, picker.restants + ' pendant, ' + picker.apresAnnulation + ' après');
 
 const sitePanel = await page.evaluate(async () => {
   library.branding = Object.assign({}, library.branding, { email: 'contact@exemple.fr', phone: '052 111 22 33' });
@@ -4179,6 +4313,59 @@ for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
 await page.evaluate(() => showView('realisations'));
 check('Navigation entre toutes les vues sans erreur', true);
 
+/* --- PUBLIER LE TEXTE SANS RENVOYER UNE PHOTO -----------------------------------------
+   Le reproche exact de Raphaël : « j'ai déjà écrit du texte sur Bureau Sébastien, sauf que
+   pour le publier je suis contraint de publier la photo qui n'est pas à jour ». On reproduit
+   la situation : une réalisation en ligne, dont le texte ET une photo ont changé. */
+const partiel = await page.evaluate(async () => {
+  const r = (realisations || []).filter(x => x.published && (x.photos || []).length)[0];
+  if (!r) return { pasDeCas: true };
+  const cle = () => [...window.__files.keys()].find(k => k.endsWith('manifest.json'));
+  const fiche = async () => {
+    const m = JSON.parse(await window.__files.get(cle()).text());
+    return m.realisations.find(f => f.id === r.id);
+  };
+  const avant = await fiche();
+  const photo = r.photos.find(p => p.pub && p.pub.full);
+  const cheminAvant = photo.pub.full;
+  const dateAvant = photo.publishedAt;
+  const clesAvant = new Set(window.__files.keys());
+
+  // le texte change, et la photo aussi (nouveau réglage = nouvelle signature)
+  r.texte = 'Un plateau de bureaux ramené à un seul volume traversant.';
+  photo.edit = Object.assign({}, photo.edit || {}, { expo: 12 });
+  photo.touchedAt = Date.now();
+  r.updatedAt = Date.now();
+  saveRealisations();
+  const planAvant = realisationPublishPlan(r);
+
+  await publishRealisation(r, { garder: [photo.id] });
+  const apres = await fiche();
+  const entree = apres.photos.find(e => e.full.endsWith(cheminAvant));
+  return {
+    pasDeCas: false, texteAvant: avant.texte || '', texteApres: apres.texte || '',
+    cheminInchange: !!entree, memeNombreDePhotos: apres.photos.length === avant.photos.length,
+    /* On compte les fichiers AJOUTÉS, pas la variation nette : la publication fait aussi le
+       ménage des images qu'aucune fiche ne référence plus, et une soustraction cacherait un
+       ajout derrière une suppression. L'aperçu de partage est écrit à chaque publication, à
+       une adresse fixe — il n'appartient pas à la galerie du projet. */
+    ajoutes: [...window.__files.keys()].filter(k => !clesAvant.has(k) && !/share\.jpg$/.test(k)),
+    dateInchangee: photo.publishedAt === dateAvant,
+    encoreARepublier: photoPubChange(r, photo) !== '',
+    planDisaitModifiee: planAvant.changees >= 1,
+  };
+});
+check('Fiche seule : le cas existe (réalisation en ligne avec photo modifiée)',
+  partiel.pasDeCas === false && partiel.planDisaitModifiee === true, JSON.stringify(partiel));
+check('Fiche seule : le texte part bien sur le site',
+  /volume traversant/.test(partiel.texteApres) && partiel.texteApres !== partiel.texteAvant, partiel.texteApres.slice(0, 50));
+check('Fiche seule : la photo gardée pointe toujours sur le fichier déjà en ligne',
+  partiel.cheminInchange && partiel.memeNombreDePhotos, JSON.stringify(partiel));
+check('Fiche seule : aucune image n’a été réécrite (seul le manifeste bouge)',
+  Array.isArray(partiel.ajoutes) && partiel.ajoutes.length === 0, (partiel.ajoutes || []).join(', '));
+check('Fiche seule : la photo reste marquée « à republier », elle n’est pas déclarée à jour',
+  partiel.encoreARepublier && partiel.dateInchangee, JSON.stringify(partiel));
+
 /* --- SUPPRIMER UNE RÉALISATION PUBLIÉE ------------------------------------------------
    Elle restait EN LIGNE : la fiche demeurait dans le manifeste et ses images dans le seau
    public. Comme la réalisation n'existait plus dans l'appli, plus rien ne permettait de
@@ -4229,6 +4416,240 @@ check('Suppression : et elle disparaît bien de l’appli', supprPub.existeEncor
 // et JPEG factice) : les erreurs qu'elles journalisent sont le comportement attendu, pas
 // un défaut — c'est même ce qui rend un refus d'import diagnosticable. Tout le reste doit
 // rester vide.
+// ============================================================================
+//  DEUX DÉFAUTS SIGNALÉS DEPUIS LE TÉLÉPHONE
+// ============================================================================
+
+// 1) « Le nom et le prénom remplis donnent quand même "Nouveau client" partout. »
+//    Le champ du nom existait, mais il ne ressemblait pas à un champ : gros texte sur fond
+//    sombre, sans étiquette. On remplissait « Contact » en croyant nommer le client.
+const nomClient = await page.evaluate(async () => {
+  clients = [];
+  showView('clients');
+  addClient();
+  await new Promise(r => setTimeout(r, 900));
+  const c = clients[0];
+  const groupe = document.querySelector('.cl-group[data-cid="' + c.id + '"]');
+  const champNom = groupe.querySelector('input[data-name]');
+  const etiquette = (groupe.querySelector('.cl-side-lbl') || {}).textContent || '';
+  const focusPose = document.activeElement === champNom;
+  const contact = groupe.querySelector('input[data-cf="contact"]');
+  contact.value = 'Gérard Zouari';
+  contact.dispatchEvent(new Event('change'));
+  await new Promise(r => setTimeout(r, 200));
+  const apres = { nom: c.name, champ: champNom.value,
+    ligne: (groupe.querySelector('.cl-name') || {}).textContent || '' };
+  // Un nom déjà choisi ne doit JAMAIS être écrasé par un changement de contact.
+  c.name = 'Cabinet Lévy';
+  champNom.value = 'Cabinet Lévy';
+  contact.value = 'Autre personne';
+  contact.dispatchEvent(new Event('change'));
+  await new Promise(r => setTimeout(r, 200));
+  return { etiquette, focusPose, apres, nomProtege: c.name };
+});
+check('Client : le champ du nom porte une étiquette, on ne le prend plus pour un titre',
+  /Nom du client/i.test(nomClient.etiquette), nomClient.etiquette);
+check('Client : à la création, le curseur est posé dans le champ du nom',
+  nomClient.focusPose === true);
+check('Client : saisir le contact nomme le client tant que personne ne l’a nommé',
+  nomClient.apres.nom === 'Gérard Zouari' && nomClient.apres.champ === 'Gérard Zouari'
+  && nomClient.apres.ligne === 'Gérard Zouari', JSON.stringify(nomClient.apres));
+check('Client : un nom déjà choisi n’est jamais écrasé par un changement de contact',
+  nomClient.nomProtege === 'Cabinet Lévy', nomClient.nomProtege);
+
+// --- RÉALISATION PERSONNELLE : la case qui la sort de la vitrine professionnelle.
+const persoCase = await page.evaluate(async () => {
+  showView('realisations');
+  const r = realisations[0];
+  r.personnelle = false;
+  const sigAvant = realisationFicheSig(r);
+  _rzOpenId = r.id; renderRealisations();
+  await new Promise(x => setTimeout(x, 400));
+  const c = document.querySelector('#rz-body [data-perso]');
+  const present = !!c;
+  const libelle = present ? c.closest('.fld').textContent.replace(/\s+/g, ' ').trim() : '';
+  if (c) { c.checked = true; c.dispatchEvent(new Event('change')); }
+  await new Promise(x => setTimeout(x, 300));
+  const sigApres = realisationFicheSig(r);
+  return { present, libelle, coche: r.personnelle === true, sigChange: sigAvant !== sigApres };
+});
+check('Réalisation : une case la déclare « personnelle », et dit ce que ça change',
+  persoCase.present && persoCase.coche && /personnelle/i.test(persoCase.libelle)
+  && /liste principale/i.test(persoCase.libelle), persoCase.libelle.slice(0, 110));
+/* Changer de section change ce que le site montre : le rappel « à republier » doit le voir,
+   sinon on coche la case et le site garde le projet dans la vitrine sans rien dire. */
+check('Réalisation : la déclarer personnelle marque la fiche « à republier »',
+  persoCase.sigChange === true);
+
+const persoManifeste = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub) || realisations[0];
+  r.personnelle = true; r.title = r.title || 'Essai';
+  await publishRealisation(r);
+  const m1 = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const f1 = m1.realisations.find(x => x.id === r.id);
+  r.personnelle = false;
+  await publishRealisation(r);
+  const m2 = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const f2 = m2.realisations.find(x => x.id === r.id);
+  return { avec: f1 && f1.personnelle, sans: f2 && ('personnelle' in f2) };
+});
+check('Réalisation : le drapeau part dans le manifeste, et seulement quand il est levé',
+  persoManifeste.avec === true && persoManifeste.sans === false, JSON.stringify(persoManifeste));
+
+// --- REVENIR À LA LISTE : le geste le plus fréquent depuis une fiche. C'était un lien gris
+//     coincé entre le paragraphe d'explication et le nom du chantier — on ne le voyait pas.
+const retourListe = await page.evaluate(async () => {
+  showView('realisations');
+  const r = realisations[0];
+  _rzOpenId = r.id; renderRealisations();
+  await new Promise(x => setTimeout(x, 400));
+  const b = document.querySelector('#rz-body .rz-back');
+  const st = getComputedStyle(b);
+  const intro = document.querySelector('#realisations-view .rz-intro');
+  const ouvert = {
+    haut: Math.round(b.getBoundingClientRect().top),
+    hauteur: Math.round(b.getBoundingClientRect().height),
+    borde: st.borderStyle !== 'none' && st.borderTopWidth !== '0px',
+    fond: st.backgroundColor,
+    introVue: getComputedStyle(intro).display !== 'none',
+    premier: document.querySelector('#rz-body button') === b,
+  };
+  b.click();
+  await new Promise(x => setTimeout(x, 300));
+  return { ouvert, referme: _rzOpenId === null,
+    introRevenue: getComputedStyle(document.querySelector('#realisations-view .rz-intro')).display !== 'none' };
+});
+check('Réalisations : le retour est un vrai bouton, assez grand pour le pouce',
+  retourListe.ouvert.borde && retourListe.ouvert.hauteur >= 36, JSON.stringify(retourListe.ouvert));
+check('Réalisations : il est le premier élément de la fiche, plus rien ne le repousse',
+  retourListe.ouvert.premier === true);
+check('Réalisations : le paragraphe qui explique la LISTE disparaît quand une fiche est ouverte',
+  retourListe.ouvert.introVue === false && retourListe.introRevenue === true,
+  'ouvert : ' + retourListe.ouvert.introVue + ' · refermé : ' + retourListe.introRevenue);
+check('Réalisations : il ramène bien à la liste', retourListe.referme === true);
+
+// 1 bis) Les fiches créées AVANT ce correctif : leur contact est déjà saisi, aucun nouvel
+//        événement ne vient plus — elles resteraient « Nouveau client » pour toujours.
+const nomsRepares = await page.evaluate(async () => {
+  clients = [
+    normalizeClient({ id: 'a', name: 'Nouveau client', contact: 'Gérard Zouari' }),
+    normalizeClient({ id: 'b', name: 'Nouveau client', contact: '' }),
+    normalizeClient({ id: 'c', name: 'Cabinet Lévy', contact: 'Sarah Lévy' }),
+  ];
+  const n = reparerNomsClients();
+  renderClients();
+  await new Promise(r => setTimeout(r, 300));
+  const fiche = document.querySelector('.cl-group[data-cid="b"] .cl-side-alerte');
+  return { n, noms: clients.map(c => c.name), alerte: fiche ? fiche.textContent : '' };
+});
+check('Client : les fiches restées « Nouveau client » reprennent leur contact au chargement',
+  nomsRepares.n === 1 && nomsRepares.noms[0] === 'Gérard Zouari', nomsRepares.noms.join(' | '));
+check('Client : sans contact, on n’invente pas un nom — et un vrai nom n’est pas touché',
+  nomsRepares.noms[1] === 'Nouveau client' && nomsRepares.noms[2] === 'Cabinet Lévy',
+  nomsRepares.noms.join(' | '));
+check('Client : une fiche sans nom le dit, au lieu de se faire passer pour nommée',
+  /remplir/i.test(nomsRepares.alerte), nomsRepares.alerte);
+
+// --- LE SÉPARATEUR DES ARCHIVES. Les clients terminés passent dessous, restent visibles,
+//     et leurs montants comptent toujours dans les totaux.
+const archives = await page.evaluate(async () => {
+  ensureClientStatuses();
+  clients = [
+    normalizeClient({ id: 'x1', name: 'Chantier en cours', statut: 'en_cours', montantFinal: 1000 }),
+    normalizeClient({ id: 'x2', name: 'Devis parti', statut: 'devis' }),
+    normalizeClient({ id: 'x3', name: 'Chantier fini', statut: 'termine', montantFinal: 4000 }),
+    normalizeClient({ id: 'x4', name: 'Affaire annulée', statut: 'annule' }),
+  ];
+  clientFilters.q = ''; clientFilters.statuts = []; clientFilters.archivesOuvert = true;
+  showView('clients'); renderClients();
+  await new Promise(r => setTimeout(r, 300));
+  const ordre = [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
+    .map(e => e.classList.contains('cl-sep') ? '— SÉPARATEUR —' : e.dataset.cid);
+  const sep = document.querySelector('#cl-table .cl-sep');
+  const pied = [...document.querySelectorAll('#cl-table .cl-foot .ft-val')].map(e => e.textContent.trim());
+  const resume = (document.querySelector('#cl-table .cl-foot .ft-label') || {}).textContent || '';
+  // replier : les archives disparaissent, les totaux ne bougent pas
+  sep.click();
+  await new Promise(r => setTimeout(r, 300));
+  const replie = {
+    lignes: [...document.querySelectorAll('#cl-table .cl-group')].map(e => e.dataset.cid),
+    pied: [...document.querySelectorAll('#cl-table .cl-foot .ft-val')].map(e => e.textContent.trim()),
+    sepEncoreLa: !!document.querySelector('#cl-table .cl-sep'),
+  };
+  document.querySelector('#cl-table .cl-sep').click();
+  await new Promise(r => setTimeout(r, 300));
+  return { ordre, sepTxt: sep.textContent.replace(/\s+/g, ' ').trim(), pied, resume, replie,
+           rouvert: [...document.querySelectorAll('#cl-table .cl-group')].length };
+});
+/* Le tri choisi (ici le nom) s'applique À L'INTÉRIEUR de chaque bloc : « Affaire annulée »
+   passe donc avant « Chantier fini » dans les archives. Ce qui est vérifié, c'est la
+   COUPURE — pas un ordre de déclaration. */
+check('Clients : les terminés et annulés passent sous un séparateur, les autres au-dessus',
+  archives.ordre.join(' > ') === 'x1 > x2 > — SÉPARATEUR — > x4 > x3', archives.ordre.join(' > '));
+check('Clients : le séparateur dit combien et pour combien',
+  /Archivés · 2 clients/.test(archives.sepTxt) && /4[  ]?000/.test(archives.sepTxt), archives.sepTxt);
+/* Le point qu'il ne faut surtout pas rater : ranger n'est pas exclure. Le chiffre
+   d'affaires de l'année comprend les chantiers terminés. */
+check('Clients : les archivés comptent toujours dans les totaux',
+  archives.pied[0].replace(/\D/g, '') === '5000', archives.pied[0]);
+check('Clients : le résumé dit combien sont archivés, pour qu’on ne croie pas à une erreur',
+  /4 clients \(dont 2 archivés\)/.test(archives.resume), archives.resume);
+check('Clients : replier les archives les masque SANS changer les totaux',
+  archives.replie.lignes.join(',') === 'x1,x2' && archives.replie.sepEncoreLa
+  && archives.replie.pied[0] === archives.pied[0],
+  archives.replie.lignes.join(',') + ' · total ' + archives.replie.pied[0]);
+check('Clients : on les rouvre du même geste', archives.rouvert === 4, archives.rouvert + ' ligne(s)');
+
+// Les statuts étant modulables, le drapeau « archivé » l'est aussi.
+const drapeau = await page.evaluate(async () => {
+  const st = library.clientStatuses.find(s => s.id === 'devis');
+  st.archive = true;
+  renderClients();
+  await new Promise(r => setTimeout(r, 250));
+  const ordre = [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
+    .map(e => e.classList.contains('cl-sep') ? 'SEP' : e.dataset.cid);
+  st.archive = false;
+  return ordre;
+});
+check('Clients : déclarer un autre statut « archivé » le range aussitôt sous le séparateur',
+  drapeau.join(',') === 'x1,SEP,x4,x3,x2', drapeau.join(','));
+
+// 2) « Il faut valider la tâche pour que le bloc notes s'affiche. »
+const notesTache = await page.evaluate(async () => {
+  tasks = [];
+  /* Les tâches vivent sur le tableau de bord : les contrôles précédents ont laissé la vue
+     sur les clients, où rien de tout cela n'est à l'écran. */
+  showView('dashboard');
+  await new Promise(r => setTimeout(r, 200));
+  openTaskModal();
+  await new Promise(r => setTimeout(r, 200));
+  const champ = document.getElementById('task-detail');
+  const present = !!champ;
+  const label = present ? (champ.closest('.fld').querySelector('.lbl') || {}).textContent : '';
+  document.getElementById('task-title').value = 'Contacter sapak hipouy';
+  if (champ) champ.value = 'Rappeler avant vendredi.';
+  saveTaskFromModal();
+  await new Promise(r => setTimeout(r, 300));
+  const t = tasks[0];
+  /* La tâche qu'on vient de créer est DÉPLIÉE : ses notes sont donc dans son champ, pas
+     dans l'aperçu replié. On vérifie les deux états — écrit à l'écran tout de suite, et
+     résumé une fois la tâche repliée. */
+  /* Uniquement ce qui est VISIBLE : le dialogue refermé garde son contenu dans la page,
+     le compter ferait passer le contrôle pour une mauvaise raison. */
+  const champVu = [...document.querySelectorAll('textarea')]
+    .filter(x => x.offsetParent !== null && /vendredi/.test(x.value)).length;
+  _taskOpenIds.delete(t.id);
+  renderTaskList();
+  await new Promise(r => setTimeout(r, 200));
+  return { present, label, detail: t && t.detail, titre: t && t.title, champVu,
+           apercu: (document.querySelector('.task-detail-preview') || {}).textContent || '' };
+});
+check('Tâche : les notes s’écrivent dès la création, sans avoir à valider puis rouvrir',
+  notesTache.present && /Notes/i.test(notesTache.label), notesTache.label);
+check('Tâche : ce qui est écrit est enregistré et affiché aussitôt, sans rouvrir',
+  notesTache.detail === 'Rappeler avant vendredi.' && notesTache.champVu === 1
+  && /vendredi/.test(notesTache.apercu), JSON.stringify(notesTache));
+
 const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible|suppression réalisation \{message: réseau indisponible\}/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 

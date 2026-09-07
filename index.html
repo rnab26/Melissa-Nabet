@@ -329,6 +329,19 @@
   /* Séparateur visuel entre le bloc « plans » et le bloc « commissions / prestations » */
   .cl-row .col-sep{border-right:1px solid var(--hair);padding-right:9px;margin-right:1px;}
   .cl-row .col-after-sep{padding-left:2px;}
+  /* Le séparateur des archives : une vraie coupure dans le tableau, pas une ligne de plus.
+     Il se replie d'un appui — l'important est ce qui est en cours. */
+  .cl-sep{display:flex;align-items:center;gap:10px;width:100%;
+    padding:9px 10px;margin:10px 0 0;border:0;border-top:2px solid var(--hair);
+    background:var(--travertine);cursor:pointer;font-family:inherit;text-align:left;}
+  .cl-sep:hover{background:#e2dbcd;}
+  .cl-sep-chev{color:var(--stone);font-size:9px;transition:transform .18s ease;flex:0 0 auto;}
+  .cl-sep.ouvert .cl-sep-chev{transform:rotate(90deg);}
+  .cl-sep-txt{flex:1;font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+    font-weight:700;color:var(--stone-deep);}
+  .cl-sep-ca{font-size:12px;color:var(--stone);font-variant-numeric:tabular-nums;}
+  .lib-arch{display:flex;align-items:center;gap:5px;flex:0 0 auto;font-size:11px;color:var(--stone);white-space:nowrap;}
+  .lib-arch input{width:auto;margin:0;}
   .cl-row.head .sortable{cursor:pointer;user-select:none;display:flex;align-items:center;gap:3px;justify-content:inherit;}
   .cl-row.head .num.sortable{justify-content:flex-end;}
   .cl-row.head .sortable:hover{color:var(--oxblood);}
@@ -433,7 +446,14 @@
   .cl-side-head{background:var(--ink);padding:18px 14px;text-align:center;}
   .cl-side-avatar{width:46px;height:46px;border-radius:50%;background:var(--oxblood);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:18px;margin:0 auto 10px;}
   .cl-side-head input.cl-side-name{background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.3);color:#fff;text-align:center;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;padding:2px 4px 6px;margin-bottom:8px;}
-  .cl-side-head input.cl-side-name:focus{border-bottom-color:#fff;}
+  .cl-side-head input.cl-side-name:focus{border-bottom-color:#fff;background:rgba(255,255,255,.07);}
+  /* Sans étiquette, le nom du client ressemblait à un titre, pas à un champ : on remplissait
+     « Contact » en croyant nommer le client, et la fiche restait « Nouveau client ». */
+  .cl-side-lbl{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);margin-bottom:3px;text-align:center;}
+  /* Un client sans nom ne doit pas ressembler à un client nommé « Nouveau client ». */
+  .cl-side-alerte{display:block;text-align:center;font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:#e0a86a;margin:-1px 0 3px;}
   .cl-side-head select.cl-side-statut{background:transparent;border:1px solid rgba(255,255,255,.3);color:#d8d2c8;text-align:center;text-align-last:center;font-size:11px;border-radius:3px;padding:4px 6px;}
   .cl-side-head select.cl-side-statut option{color:#3d3934;}
   .cl-side-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
@@ -637,10 +657,22 @@
   .rz-site a{color:var(--oxblood);}
 
   .rz-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
-  .rz-back{background:transparent;border:none;color:var(--stone);font-family:'Inter';font-size:12.5px;cursor:pointer;padding:0 0 8px;}
-  .rz-back:hover{color:var(--oxblood);}
+  /* Revenir à la liste est le geste le plus fréquent depuis une fiche : c'était un lien
+     gris coincé entre le paragraphe d'explication et le nom de la réalisation, on ne le
+     voyait pas. C'est un bouton, il est en tête, et il est assez grand pour le pouce. */
+  .rz-back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;
+    background:var(--travertine);border:1px solid var(--panel-edge);border-radius:8px;
+    color:var(--stone-deep);font-family:'Inter';font-size:13px;font-weight:600;
+    cursor:pointer;padding:10px 14px;transition:.15s;}
+  .rz-back:hover{background:#e2dbcd;border-color:var(--stone-light);color:var(--ink);}
+  .rz-back:focus-visible{outline:2px solid var(--oxblood);outline-offset:2px;}
+  /* Une fiche ouverte : le paragraphe qui explique LA LISTE n'a plus rien à y faire, et il
+     repoussait le retour de quatre lignes vers le bas. */
+  #realisations-view.rz-ouvert .rz-intro,#boutique-view.rz-ouvert .rz-intro{display:none;}
   .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
   .rz-liens{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
+  .rz-perso-in{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--stone-deep);line-height:1.45;}
+  .rz-perso-in input{width:auto;flex:0 0 auto;margin-top:2px;}
   .rz-pres{margin-bottom:16px;}
   .rz-pres textarea{min-height:74px;}
   .rz-pres-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-4px;}
@@ -945,6 +977,14 @@
     font-size:12.5px;color:var(--ink);overflow:hidden;}
   .site-ordre-nom i{font-style:normal;font-size:11px;color:var(--stone);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .pub-envoi{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--ink);cursor:pointer;}
+  .pub-envoi.off{color:var(--stone);font-style:italic;cursor:default;}
+  .pub-envoi input{margin:0;}
+  .pub-choix{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
+    margin:10px 0 4px;padding:10px 12px;border:1px solid var(--panel-edge);border-radius:8px;
+    background:var(--travertine);font-size:12px;color:var(--stone);}
+  .pub-choix span{flex:1;min-width:180px;}
+  .pub-choix div{display:flex;gap:6px;}
   .site-langues{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 4px;}
   .site-chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);}
   .site-onglets{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:10px 0 0;
@@ -1252,8 +1292,7 @@
       <h2>Clients &amp; comptes</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn btn-onlight" onclick="exportClientsCSV()">⬇ Export CSV</button>
-        <button class="btn btn-onlight" onclick="document.getElementById('import-clients-csv').click()">⬆ Import CSV</button>
-        <input type="file" id="import-clients-csv" accept=".csv,text/csv" style="display:none">
+        <button class="btn btn-onlight" onclick="pickImportClientsCSV()">⬆ Import CSV</button>
         <button class="btn btn-onlight" onclick="openClientStatusesPanel()">⚙ Statuts</button>
         <button class="btn btn-primary" style="color:#fff" onclick="addClient()">+ Nouveau client</button>
       </div>
@@ -1589,11 +1628,15 @@ const DEFAULT_TASK_CATEGORIES=[
 /* id fixes volontairement (pas uid()) : 'annule' est référencé ailleurs dans le code
    (ex. exclusion des relances de paiement) — un statut par défaut doit garder son id
    stable même après un ↺ Réinitialiser, sinon ces liens silencieux se cassent. */
+/* `archive` : ce statut range le client sous le séparateur du tableau. Ce n'est pas la même
+   chose que « supprimé » — le client reste là, ses montants comptent toujours dans les
+   totaux. C'est un rangement, pas une mise à l'écart. Les statuts étant modulables, ce
+   drapeau l'est aussi : un statut ajouté peut être déclaré archivant. */
 const DEFAULT_CLIENT_STATUSES=[
   {id:'en_cours',label:'En cours',color:'#d59a4a'},
   {id:'devis',label:'Devis envoyé',color:'#6aa6cf'},
-  {id:'termine',label:'Terminé',color:'#6a9a5a'},
-  {id:'annule',label:'Annulé',color:'#b6543f'},
+  {id:'termine',label:'Terminé',color:'#6a9a5a',archive:true},
+  {id:'annule',label:'Annulé',color:'#b6543f',archive:true},
 ];
 
 /* ============ STOCKAGE PERSISTANT (avec repli mémoire) ============ */
@@ -2137,11 +2180,46 @@ function applyImageCrop(){
   closeModal();
   onSave(dataUri);
 }
-/* Boilerplate commun à tous les imports d'image (input file caché + garde fichier vide + click). */
-function pickImageFile(onFile){
-  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{if(inp.files&&inp.files[0])onFile(inp.files[0]);};
+/* ---- CHOISIR DES FICHIERS ----
+   UN SEUL chemin pour tous les imports de l'application. Il l'est devenu pour une raison
+   précise : sur iPhone (Safari comme Chrome, qui est le même moteur), un
+   `input[type=file]` créé en mémoire et cliqué SANS avoir été attaché au document
+   n'ouvre pas le sélecteur. Rien ne se passe, et rien ne le dit — c'est exactement ce que
+   Raphaël a constaté en essayant d'ajouter des photos à un chantier depuis son téléphone.
+
+   Trois précautions, et chacune répond à un comportement réel d'iOS :
+   - l'entrée est POSÉE DANS LA PAGE avant d'être cliquée ;
+   - elle est rendue invisible sans `display:none` ni `visibility:hidden` (une entrée
+     ainsi masquée est ignorée par WebKit) : hors écran, transparente, non cliquable ;
+   - elle est retirée APRÈS le choix, ou au retour dans la page si le sélecteur a été
+     annulé — iOS n'émet aucun événement dans ce cas, et une entrée oubliée s'accumule.
+   Le clic doit rester dans le geste de l'utilisateur : n'appelez jamais cette fonction
+   après un `await`, le navigateur refuserait d'ouvrir le sélecteur. */
+function choisirFichiers(opts,onFiles){
+  const o=opts||{};
+  const inp=document.createElement('input');
+  inp.type='file';
+  inp.accept=o.accept||'image/*';
+  if(o.multiple)inp.multiple=true;
+  inp.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;';
+  let range=false;
+  const ranger=()=>{if(range)return;range=true;window.removeEventListener('focus',plusTard);
+    setTimeout(()=>{if(inp.parentNode)inp.parentNode.removeChild(inp);},0);};
+  /* Annulation : aucun `change` n'arrive. Le retour du focus sur la fenêtre est le seul
+     signal disponible — on laisse un délai, `focus` précédant parfois `change`. */
+  const plusTard=()=>setTimeout(()=>{if(!inp.files||!inp.files.length)ranger();},1200);
+  inp.addEventListener('change',()=>{
+    const f=inp.files;
+    ranger();
+    if(f&&f.length)onFiles(f);
+  });
+  window.addEventListener('focus',plusTard);
+  document.body.appendChild(inp);
   inp.click();
+}
+/* Boilerplate commun à tous les imports d'image : un fichier, une image. */
+function pickImageFile(onFile){
+  choisirFichiers({accept:'image/*'},files=>{if(files[0])onFile(files[0]);});
 }
 function pickLogo(){
   pickImageFile(file=>openImageCropper(file,dataUri=>{
@@ -2973,6 +3051,9 @@ function libApplyToCurrent(){askConfirm('Recharger la bibliothèque effacera les
 /* ============ CLIENTS / COMPTES ============ */
 function ensureClientStatuses(){if(!Array.isArray(library.clientStatuses)||!library.clientStatuses.length)library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));}
 function clientStatus(c){ensureClientStatuses();return library.clientStatuses.find(s=>s.id===c.statut)||library.clientStatuses[0];}
+/* Un client est aux archives si SON statut est déclaré archivant. Rien d'autre : ni sa date
+   de fin, ni son solde. Sinon le rangement se mettrait à bouger tout seul. */
+function clientArchive(c){return !!clientStatus(c).archive;}
 function clientStatusOptionsHtml(c){ensureClientStatuses();return library.clientStatuses.map(s=>`<option value="${esc(s.id)}" ${c.statut===s.id?'selected':''}>${esc(s.label)}</option>`).join('');}
 function normalizeClient(c){
   let montantFinal,paiements,commissions;
@@ -3030,7 +3111,7 @@ function sendRelanceWhatsApp(id){
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`,'_blank');
 }
 
-const clientFilters={q:'',statuts:[],sortKey:'name',sortDir:'asc'};
+const clientFilters={q:'',statuts:[],sortKey:'name',sortDir:'asc',archivesOuvert:true};
 const clientOpen={};
 let _saveT;
 function saveClients(){store.set(K_CLIENTS,clients);}
@@ -3076,7 +3157,12 @@ function renderClients(){
     return (val(sk)-valb(sk))*dir;
   });
   if(!list.length){const e=document.createElement('div');e.className='empty';e.textContent='Aucun client.';tbl.appendChild(e);}
-  list.forEach(c=>{
+  /* Deux blocs dans le MÊME tableau, pas deux tableaux : le pied continue de compter tout
+     le monde, et on garde sous les yeux ce qu'on a fait dans l'année. Le tri choisi
+     s'applique à l'intérieur de chaque bloc. */
+  const actifs=list.filter(c=>!clientArchive(c));
+  const archives=list.filter(c=>clientArchive(c));
+  const ligneClient=c=>{
     const t=clientTotals(c);
     const grp=document.createElement('div');grp.className='cl-group'+(clientOpen[c.id]?' open':'');grp.dataset.cid=c.id;
     const row=document.createElement('div');row.className='cl-row';
@@ -3086,18 +3172,44 @@ function renderClients(){
     row.querySelector('.cl-del').addEventListener('click',e=>{e.stopPropagation();askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');});});
     grp.appendChild(row);
     const det=document.createElement('div');det.className='cl-detail';det.appendChild(buildClientDetail(c));grp.appendChild(det);
-    tbl.appendChild(grp);
-  });
-  renderClientsFooter(tbl,list);
+    return grp;
+  };
+  actifs.forEach(c=>tbl.appendChild(ligneClient(c)));
+  if(archives.length){
+    /* Le séparateur porte le compte et le total de la section, et se replie : au bout de
+       deux ans de chantiers terminés, personne ne veut faire défiler cinquante lignes pour
+       atteindre le pied de tableau. L'état est retenu d'une visite à l'autre. */
+    const ta=archives.reduce((a,c)=>a+clientTotals(c).montant,0);
+    const sep=document.createElement('button');
+    sep.type='button';
+    sep.className='cl-sep'+(clientFilters.archivesOuvert?' ouvert':'');
+    sep.innerHTML=`<span class="cl-sep-chev">▶</span>
+      <span class="cl-sep-txt">Archivés · ${archives.length} client${archives.length>1?'s':''}</span>
+      <span class="cl-sep-ca">${fmt(ta)} ₪</span>`;
+    sep.setAttribute('aria-expanded',clientFilters.archivesOuvert?'true':'false');
+    sep.addEventListener('click',()=>{
+      clientFilters.archivesOuvert=!clientFilters.archivesOuvert;
+      try{localStorage.setItem('mn-cl-archives',clientFilters.archivesOuvert?'1':'0');}catch(e){}
+      renderClients();
+    });
+    tbl.appendChild(sep);
+    if(clientFilters.archivesOuvert)archives.forEach(c=>tbl.appendChild(ligneClient(c)));
+  }
+  renderClientsFooter(tbl,list,actifs.length,archives.length);
   const tot=$('cl-totals');if(tot)tot.innerHTML='';
 }
 /* Pied de tableau : sommes des 4 colonnes, calculées sur les clients FILTRÉS, alignées sous chaque colonne. */
-function renderClientsFooter(tbl,list){
+function renderClientsFooter(tbl,list,nActifs,nArchives){
   const ft=list.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.reste+=t.reste;a.comm+=t.commissions;a.commReste+=t.commissionsReste;return a;},{montant:0,reste:0,comm:0,commReste:0});
   const dv='₪';
   // Ligne d'intitulés du résumé
   const lab=document.createElement('div');lab.className='cl-row cl-foot sep-top';
-  lab.innerHTML=`<div></div><div></div><div class="ft-label">Résumé${list.length?` · ${list.length} client${list.length>1?'s':''}`:''}</div><div class="num ft-sub">CA total plans</div><div class="num ft-sub col-sep">Reste dû</div><div class="num ft-sub col-after-sep">CA commissions</div><div class="num ft-sub">Comm. restante</div><div></div><div></div><div></div>`;
+  /* Les archives comptent dans le total : c'est le chiffre d'affaires de l'année, pas
+     seulement celui des chantiers en cours. On le DIT, sinon on croirait à une erreur. */
+  const detail=list.length
+    ? ` · ${list.length} client${list.length>1?'s':''}`+((nArchives|0)?` (dont ${nArchives} archivé${nArchives>1?'s':''})`:'')
+    : '';
+  lab.innerHTML=`<div></div><div></div><div class="ft-label">Résumé${detail}</div><div class="num ft-sub">CA total plans</div><div class="num ft-sub col-sep">Reste dû</div><div class="num ft-sub col-after-sep">CA commissions</div><div class="num ft-sub">Comm. restante</div><div></div><div></div><div></div>`;
   tbl.appendChild(lab);
   // Ligne des sommes alignées
   const row=document.createElement('div');row.className='cl-row cl-foot';
@@ -3113,7 +3225,20 @@ function wireMetaInputs(container,c){
   container.querySelectorAll('input[data-cf]').forEach(inp=>{
     inp.addEventListener('input',()=>{c[inp.dataset.cf]=inp.value;saveClientsDebounced();});
     // À la sortie du champ : on met à jour la ligne concernée seulement (sans refermer la fiche)
-    inp.addEventListener('change',()=>{c[inp.dataset.cf]=inp.value;saveClients();updateClientRow(c);});
+    inp.addEventListener('change',()=>{
+      c[inp.dataset.cf]=inp.value;
+      /* Un contact saisi sur un client que PERSONNE n'a encore nommé lui donne son nom.
+         Rien n'est écrasé : on ne remplace que le nom automatique. Dès que le nom a été
+         choisi, ce chemin ne s'applique plus. Sans ça, la fiche et toute la liste restaient
+         « Nouveau client » alors que le contact était rempli — le défaut signalé. */
+      if(inp.dataset.cf==='contact'&&clientSansNom(c)&&(inp.value||'').trim()){
+        c.name=inp.value.trim();
+        const n=container.closest('.cl-group')&&container.closest('.cl-group').querySelector('input[data-name]');
+        if(n)n.value=c.name;
+        toast('Client nommé « '+c.name+' » — modifiable en haut de la fiche');
+      }
+      saveClients();updateClientRow(c);
+    });
   });
 }
 function cardWrap(icon,title,bodyEl){
@@ -3134,6 +3259,8 @@ function buildClientDetail(c){
   const initials=(c.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
   side.innerHTML=`<div class="cl-side-head">
       <div class="cl-side-avatar">${esc(initials)}</div>
+      <span class="cl-side-lbl">Nom du client</span>
+      ${clientSansNom(c)?'<span class="cl-side-alerte">à remplir</span>':''}
       <input type="text" class="cl-side-name" data-name value="${esc(c.name)}" placeholder="Nom du client">
       <select class="cl-side-statut" data-statut>
         ${clientStatusOptionsHtml(c)}
@@ -3367,8 +3494,7 @@ const docStore={
   },
 };
 function pickFiles(c,ligneId){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf,.dwg,.dxf';
-  inp.onchange=()=>attachFiles(c,ligneId,inp.files);inp.click();
+  choisirFichiers({multiple:true,accept:'image/*,application/pdf,.dwg,.dxf'},files=>attachFiles(c,ligneId,files));
 }
 const CAD_EXT=/\.(dwg|dxf)$/i;
 const CAD_MAX_SIZE=20*1024*1024;
@@ -3541,22 +3667,59 @@ function closeCadViewer(){
   if(_cadDocManager){try{_cadDocManager.destroy();}catch(e){}_cadDocManager=null;}
   closeModal();
 }
+/* Le nom donné automatiquement à un client qu'on vient de créer. Tant qu'il est encore
+   celui-là, personne ne l'a choisi : on peut donc le remplacer sans rien écraser. */
+const CLIENT_SANS_NOM='Nouveau client';
+function clientSansNom(c){return !((c.name||'').trim())||(c.name||'').trim()===CLIENT_SANS_NOM;}
+/* Les fiches créées AVANT que le contact ne nomme le client restaient « Nouveau client »
+   pour toujours : leur contact était déjà saisi, aucun nouvel événement ne venait plus.
+   On les répare une fois, au chargement. Rien n'est écrasé — « Nouveau client » n'est pas
+   un nom, c'est l'absence de nom. Un client sans contact non plus n'est pas touché : on ne
+   lui invente pas un nom. */
+function reparerNomsClients(){
+  let n=0;
+  (clients||[]).forEach(c=>{
+    if(!clientSansNom(c))return;
+    const contact=(c.contact||'').trim();
+    if(!contact)return;
+    c.name=contact;n++;
+  });
+  if(n){saveClients();console.log('clients renommés depuis leur contact :',n);}
+  return n;
+}
 function addClient(){
   try{
     clientFilters.q='';clientFilters.statut='all';
     const q=$('cl-q'),st=$('cl-statut');if(q)q.value='';if(st)st.value='all';
-    const c=normalizeClient({name:'Nouveau client'});
+    const c=normalizeClient({name:CLIENT_SANS_NOM});
     clients.unshift(c);clientOpen[c.id]=true;saveClients();renderClients();
     const el=document.querySelector('.cl-group[data-cid="'+c.id+'"]');
     if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='2px solid var(--oxblood)';el.style.borderRadius='6px';setTimeout(()=>{if(el){el.style.outline='';el.style.borderRadius='';}},1600);}
-    toast('Client créé — modifiez son nom ci-dessous');
+    /* Le curseur est POSÉ dans le champ du nom, texte sélectionné : sans ça, ce champ ne
+       ressemble pas à un champ (gros texte serif sur fond sombre) et on remplit « Contact »
+       en croyant nommer le client — c'est exactement ce qui a été signalé. */
+    setTimeout(()=>{
+      const n=document.querySelector('.cl-group[data-cid="'+c.id+'"] input[data-name]');
+      if(n){n.focus();n.select();}
+    },700);
+    toast('Client créé — son nom vous attend, en haut de la fiche');
   }catch(e){toast('Erreur : '+e.message);}
+}
+/* Retenu d'une visite à l'autre : replier les archives est un choix, pas un réglage à
+   refaire à chaque ouverture. Un stockage local indisponible (navigation privée) ne doit
+   pas casser l'affichage — on retombe sur « ouvert ». */
+function chargerEtatArchives(){
+  try{clientFilters.archivesOuvert=localStorage.getItem('mn-cl-archives')!=='0';}
+  catch(e){clientFilters.archivesOuvert=true;}
 }
 function wireClientFilters(){
   const q=$('cl-q');
   if(q)q.addEventListener('input',()=>{clientFilters.q=q.value;renderClients();});
-  const cf=$('import-clients-csv');
-  if(cf)cf.addEventListener('change',()=>{if(cf.files&&cf.files[0])importClientsCSV(cf.files[0]);cf.value='';});
+}
+/* Passe par `choisirFichiers` comme tous les autres imports : une entrée `display:none`
+   posée dans la page est, elle aussi, ignorée par le sélecteur de fichiers d'iOS. */
+function pickImportClientsCSV(){
+  choisirFichiers({accept:'.csv,text/csv'},files=>{if(files[0])importClientsCSV(files[0]);});
 }
 /* Puces de filtre par statut + légende : régénérées à chaque rendu (statuts modulables via
    ⚙ Statuts) — pas de liste figée dans le HTML, sinon un statut renommé/ajouté/supprimé ne
@@ -3946,7 +4109,7 @@ function taskRowHtml(t){
     </div>
     <div class="task-body" onclick="event.stopPropagation()">
       <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
-      <label class="fld"><span class="lbl">Détail</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
+      <label class="fld"><span class="lbl">Notes</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
       <label class="fld"><span class="lbl">Client</span><select onchange="updateTaskFieldRerender('${t.id}','clientId',this.value)">${taskClientOptionsHtml(t)}</select></label>
       <div class="row2">
         <label class="fld"><span class="lbl">Échéance</span><input type="date" value="${t.dueDate||''}" onchange="updateTaskFieldRerender('${t.id}','dueDate',this.value)"></label>
@@ -4027,8 +4190,7 @@ function deleteTaskConfirm(id){
   });
 }
 function pickTaskFiles(id){
-  const inp=document.createElement('input');inp.type='file';inp.multiple=true;inp.accept='image/*,application/pdf,.dwg,.dxf';
-  inp.onchange=()=>attachTaskFiles(id,inp.files);inp.click();
+  choisirFichiers({multiple:true,accept:'image/*,application/pdf,.dwg,.dxf'},files=>attachTaskFiles(id,files));
 }
 async function attachTaskFiles(id,files){
   const t=tasks.find(x=>x.id===id);if(!t)return;
@@ -4065,6 +4227,9 @@ function openTaskModal(clientId){
       <label class="fld"><span class="lbl">Catégorie</span><select id="task-category">${taskCategoryOptionsHtml(null)}</select></label>
       <label class="fld"><span class="lbl">Priorité</span><select id="task-priority">${taskPriorityOptionsHtml({priority:'normal'})}</select></label>
     </div>
+    <!-- Les notes n'existaient qu'APRÈS création, dans la fiche dépliée : il fallait créer
+         la tâche, la rouvrir, puis écrire. On note quand on y pense, pas deux gestes plus tard. -->
+    <label class="fld"><span class="lbl">Notes (facultatif)</span><textarea id="task-detail" style="min-height:64px;" placeholder="Ce qu'il faut se rappeler : un lien, un contact, une précision."></textarea></label>
     <div style="display:flex;justify-content:flex-end;margin-top:10px;">
       <button class="btn btn-primary" onclick="saveTaskFromModal()">Ajouter</button>
     </div>`);
@@ -4079,7 +4244,8 @@ function saveTaskFromModal(){
   const category=$('task-category').value||'';
   const clientId=$('task-client').value||'';
   const id=uid();
-  tasks.push({id,title,detail:'',dueDate,reminderDate,priority,category,clientId,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
+  const detail=(($('task-detail')||{}).value||'').trim();
+  tasks.push({id,title,detail,dueDate,reminderDate,priority,category,clientId,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
   saveTasks();closeModal();
   _taskOpenIds.add(id);
   renderTaskList();toast('Tâche ajoutée');
@@ -4116,9 +4282,10 @@ function openClientStatusesPanel(){
   const rows=library.clientStatuses.map((s,i)=>`<div class="lib-item">
     <input type="color" value="${esc(s.color)}" oninput="clientStatusEdit(${i},'color',this.value)" style="flex:0 0 40px;padding:0;height:34px;">
     <input type="text" value="${esc(s.label)}" oninput="clientStatusEdit(${i},'label',this.value)" placeholder="Nom" style="flex:2">
+    <label class="lib-arch" title="Ranger ces clients sous le séparateur « Archivés »"><input type="checkbox" ${s.archive?'checked':''} onchange="clientStatusEdit(${i},'archive',this.checked)"> archivé</label>
     <button class="mini danger" onclick="clientStatusDel(${i})">×</button></div>`).join('');
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Statuts clients</h3>
-    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables).</p>
+    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables). Cochez <b>archivé</b> pour que ces clients passent sous le séparateur du tableau — ils y restent visibles, et leurs montants comptent toujours dans les totaux.</p>
     ${rows}
     <button class="add-btn" onclick="clientStatusAdd()">+ Ajouter un statut</button>
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
@@ -4197,8 +4364,7 @@ function openBackupPanel(){
     <p class="msub">Vos clients, devis, tâches, bibliothèque et documents sont enregistrés sur cet appareil. Exportez un fichier de secours — et réimportez-le sur un autre appareil (ou un nouveau téléphone) pour y retrouver toutes vos données.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
       <button class="btn btn-primary" onclick="exportData()">⬇ Exporter mes données</button>
-      <button class="btn btn-onlight" onclick="document.getElementById('import-file').click()">⬆ Importer une sauvegarde</button>
-      <input type="file" id="import-file" accept="application/json,.json" style="display:none">
+      <button class="btn btn-onlight" onclick="choisirFichiers({accept:'application/json,.json'},f=>importData(f[0]))">⬆ Importer une sauvegarde</button>
     </div>
     <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>
 
@@ -4209,11 +4375,10 @@ function openBackupPanel(){
     <div id="bk-prog" hidden><div class="rz-bar"><i style="width:0%"></i></div><p class="msub" id="bk-prog-txt"></p></div>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
       <button class="btn btn-primary" id="bk-go">⬇ Sauvegarde complète (.zip)</button>
-      <button class="btn btn-onlight" onclick="document.getElementById('bk-file').click()">⬆ Importer une sauvegarde complète (.zip)</button>
-      <input type="file" id="bk-file" accept=".zip,application/zip" style="display:none">
+      <button class="btn btn-onlight" onclick="choisirFichiers({accept:'.zip,application/zip'},f=>importComplet(f[0]))">⬆ Importer une sauvegarde complète (.zip)</button>
     </div>
     <p class="ias-msg" id="bk-msg"></p>`);
-  const f=$('import-file');if(f)f.addEventListener('change',()=>{if(f.files&&f.files[0])importData(f.files[0]);});
+
   const sel=$('bk-portee');
   if(sel){
     const total=realisations.reduce((a,r)=>a+(r.photos||[]).length,0);
@@ -4233,8 +4398,6 @@ function openBackupPanel(){
     if(!_storageStat)loadStorageStat().then(()=>{if($('bk-taille'))majTaille();});
     $('bk-go').addEventListener('click',()=>exportComplet(sel.value));
   }
-  const bf=$('bk-file');
-  if(bf)bf.addEventListener('change',()=>{if(bf.files&&bf.files[0])importComplet(bf.files[0]);});
 }
 
 /* ============ SAUVEGARDE COMPLÈTE (données + photos) ============
@@ -4745,13 +4908,14 @@ function realisationPublishPlan(r){
 /* Les champs du projet qui partent dans le manifeste. Le titre de la photo n'y est pas :
    il ne quitte jamais le CRM. */
 function realisationFicheSig(r){
-  return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||''].join('\u0001');
+  return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||'',
+    r.personnelle?'perso':''].join('\u0001');
 }
 const HIST_LABEL={horssite:'Écartée du site',sursite:'Remise sur le site',couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée',retour:'Retour à la publication précédente'};
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
      et un portfolio : ils partent sur le site avec les photos. */
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],published:false,personnelle:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
@@ -5215,10 +5379,7 @@ function buildImportPanel(){
   return null;
 }
 function rzPickPhotos(r){
-  const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;inp.accept='image/*';
-  inp.onchange=()=>addPhotosToRealisation(r,inp.files);
-  inp.click();
+  choisirFichiers({multiple:true,accept:'image/*'},files=>addPhotosToRealisation(r,files));
 }
 /* ---- Remplacer une photo sans perdre sa place ----
    Une photo refaite (mieux cadrée, mieux éclairée) doit garder son rang, son titre et sa
@@ -5273,10 +5434,8 @@ async function replaceOnePhoto(r,p,file){
   }
 }
 function rzReplacePhoto(r,p){
-  const inp=document.createElement('input');
-  inp.type='file';inp.accept='image/*';
-  inp.onchange=()=>{
-    const file=(inp.files||[])[0];if(!file)return;
+  choisirFichiers({accept:'image/*'},files=>{
+    const file=files[0];if(!file)return;
     const pertes=[];
     const nv=photoVersions(p).length;
     if(nv)pertes.push(nv>1?('ses '+nv+' retouches IA seront supprimées'):'sa retouche IA sera supprimée');
@@ -5289,8 +5448,7 @@ function rzReplacePhoto(r,p){
       if(_ed&&_ed.p===p){await reloadEditorImage();buildEditorControls();}
       renderRealisations();toast('Photo remplacée');
     });
-  };
-  inp.click();
+  });
 }
 
 /* ============ MOTEUR DE RENDU (WebGL) ============
@@ -5474,6 +5632,8 @@ function renderRealisations(){
   const host=$('rz-body');if(!host)return;
   ensureRealisations();
   if(_rzOpenId&&!findRealisation(_rzOpenId))_rzOpenId=null;
+  const vue=document.getElementById('realisations-view');
+  if(vue)vue.classList.toggle('rz-ouvert',!!_rzOpenId);
   if(!_rzOpenId&&_rzSelMode){_rzSelMode=false;_rzSel.clear();}
   if(!_rzOpenId)_rzOrderMode=false;
   /* Un filtre qui ne montre plus rien (la dernière réalisation concernée vient d'être
@@ -5644,7 +5804,10 @@ function renderRealisationDetail(host,r){
       <input type="text" data-f="mission" list="rz-missions" placeholder="ex. Rénovation complète" value="${esc(r.mission||'')}">
       <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>
     <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Catégorie — la section du site</span>
-      <select data-f="categorie"></select></label>`;
+      <select data-f="categorie"></select></label>
+    <label class="fld rz-perso" style="flex:1;min-width:230px"><span class="lbl">Où sur le site</span>
+      <span class="rz-perso-in"><input type="checkbox" data-perso${r.personnelle?' checked':''}>
+        <span>Réalisation <b>personnelle</b> — elle quitte la liste principale et le bandeau d’accueil, et rejoint sa propre section.</span></span></label>`;
   /* Un menu, pas un champ libre : deux orthographes du même mot fabriquaient deux sections
      sur le site. La dernière ligne ouvre les réglages pour ajouter ou renommer une
      catégorie — la liste se gère depuis le CRM, sans toucher au code. */
@@ -5655,6 +5818,14 @@ function renderRealisationDetail(host,r){
   selCat.addEventListener('change',()=>{
     if(selCat.value==='__gerer'){selCat.value=r.categorie||'';openSitePanel();return;}
     r.categorie=selCat.value;r.updatedAt=Date.now();saveRealisationsDebounced();
+  });
+  /* Changer de section change ce que le site montre : la réalisation quitte la liste
+     principale pour une autre. C'est donc une modification de la fiche publiée, et le
+     rappel « à republier » doit le voir. */
+  const perso=meta.querySelector('[data-perso]');
+  perso.addEventListener('change',()=>{
+    r.personnelle=perso.checked;r.updatedAt=Date.now();
+    saveRealisations();renderRealisations();
   });
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
@@ -6138,6 +6309,8 @@ function renderBoutique(){
   const host=$('bt-body');if(!host)return;
   ensureProduits();
   if(_btOpenId&&!findProduit(_btOpenId))_btOpenId=null;
+  const vueBt=document.getElementById('boutique-view');
+  if(vueBt)vueBt.classList.toggle('rz-ouvert',!!_btOpenId);
   host.innerHTML='';
   if(_btOpenId)renderProduitDetail(host,findProduit(_btOpenId));
   else renderProduitList(host);
@@ -6339,10 +6512,7 @@ function buildProduitPhotos(p){
   return wrap;
 }
 function btPickPhotos(p){
-  const inp=document.createElement('input');
-  inp.type='file';inp.multiple=true;inp.accept='image/*';
-  inp.onchange=()=>addPhotosToProduit(p,inp.files);
-  inp.click();
+  choisirFichiers({multiple:true,accept:'image/*'},files=>addPhotosToProduit(p,files));
 }
 /* Même moteur d'import que les réalisations : `importOnePhoto` ne connaît que « un objet
    qui a des photos ». Le seul écart est ce qu'on sauvegarde et ce qu'on redessine. */
@@ -8802,7 +8972,38 @@ const SITE_THEMES=[
 /* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',categories:null,ordre:null};
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,
+  menuRealisations:'',menuPersonnelles:'',menuBoutique:'',menuJournal:'',menuApropos:''};
+/* Les entrées du menu du site. Vides, ce sont les mots par défaut de la page (traduits) ;
+   remplies, ce sont les mots de Melissa — et ils se traduisent comme ses autres textes. */
+const SITE_MENU=[
+  {cle:'menuRealisations',id:'site-menu-real',defaut:'Réalisations',
+   aide:'La liste des projets, en haut du site.'},
+  {cle:'menuPersonnelles',id:'site-menu-perso',defaut:'Réalisations personnelles',
+   aide:'N’apparaît que si au moins un projet est marqué « personnelle » et publié.'},
+  {cle:'menuBoutique',id:'site-menu-bout',defaut:'À la vente',
+   aide:'N’apparaît que si des produits sont publiés.'},
+  {cle:'menuJournal',id:'site-menu-jour',defaut:'Journal',
+   aide:'N’apparaît que si le journal contient une entrée.'},
+  {cle:'menuApropos',id:'site-menu-apro',defaut:'À propos',
+   aide:'Descend directement au bas du site. N’apparaît que si le texte ou une coordonnée est rempli.'},
+];
+/* Le bandeau d'accueil montre deux photos qui se suivent, projet après projet, tirés au
+   hasard. Sa durée d'affichage est un réglage : trop court on n'a pas le temps de regarder,
+   trop long le site paraît figé. Les bornes évitent les valeurs absurdes (0,5 s clignote,
+   dix minutes n'est plus un diaporama). */
+const BANDEAU_SEC_MIN=3, BANDEAU_SEC_MAX=60, BANDEAU_SEC_DEFAUT=7;
+function bandeauSec(){
+  const n=parseFloat(siteSettings().diaporamaSec);
+  return (isFinite(n)&&n>=BANDEAU_SEC_MIN&&n<=BANDEAU_SEC_MAX)?n:BANDEAU_SEC_DEFAUT;
+}
+/* Une ou deux photos par vue. Rien d'autre : à trois, sur un bandeau large de 1200 px,
+   chaque photo tombe sous 400 px — ce n'est plus une image d'accueil, c'est une planche
+   contact. Sur téléphone, le site ramène de toute façon à une seule. */
+function bandeauPar(){
+  const n=parseInt(siteSettings().diaporamaPar,10);
+  return (n===1||n===2)?n:2;
+}
 /* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
    comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
    français plutôt que de laisser un blanc — et jamais dans une traduction automatique, qui
@@ -8810,7 +9011,7 @@ const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:''
 const SITE_LANGUES=[{code:'fr',nom:'Français',dir:'ltr'},{code:'en',nom:'English',dir:'ltr'},{code:'he',nom:'עברית',dir:'rtl'}];
 /* Les champs qui changent d'une langue à l'autre. Le reste (e-mail, téléphone, Instagram,
    dates) est commun : le traduire n'aurait aucun sens. */
-const SITE_TRADUISIBLES=['sousTitre','apropos'];
+const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos'];
 function siteLanguesActives(){
   const st=siteSettings();
   const l=Array.isArray(st.langues)?SITE_LANGUES.map(x=>x.code).filter(c=>st.langues.indexOf(c)>=0):['fr'];
@@ -8881,7 +9082,12 @@ function siteInfos(){
      sans que rien ne l'explique. */
   if(SITE_THEMES.some(t=>t.id===st.theme))o.theme=st.theme;
   if(st.mouvement==='aucun'||st.mouvement==='discret')o.mouvement=st.mouvement;
-  ['apropos','email','tel','instagram'].forEach(k=>{
+  /* Le bandeau d'accueil : son état et sa durée. Toujours envoyés — ce ne sont pas des
+     coordonnées qu'on pourrait vouloir laisser vides, ils ont toujours une valeur. */
+  o.diaporama=(st.diaporama==='aucun')?'aucun':'actif';
+  o.diaporamaSec=bandeauSec();
+  o.diaporamaPar=bandeauPar();
+  ['apropos','email','tel','instagram','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
   });
@@ -9031,6 +9237,24 @@ function openSitePanel(){
       <button type="button" class="mini" data-mvt="discret" aria-pressed="${st.mouvement!=='aucun'?'true':'false'}">Discret — les images apparaissent en douceur</button>
       <button type="button" class="mini" data-mvt="aucun" aria-pressed="${st.mouvement==='aucun'?'true':'false'}">Aucun — net et immédiat</button>
     </div>
+    <div class="ed-eyebrow" style="margin-top:14px">Bandeau d’accueil</div>
+    <p class="ias-note">Une grande image en haut du site, qui fait défiler vos projets : <b>des photos qui se suivent</b> dans un même chantier, puis les suivantes, projets tirés au hasard. Un appui dessus ouvre le projet montré. Des flèches ‹ › permettent de défiler à la main (et le doigt, en glissant). Sur téléphone, les photos passent toujours une par une.</p>
+    <div class="site-mvt" id="site-diapo">
+      <button type="button" class="mini" data-diapo="actif" aria-pressed="${st.diaporama!=='aucun'?'true':'false'}">Affiché — les projets défilent en fondu</button>
+      <button type="button" class="mini" data-diapo="aucun" aria-pressed="${st.diaporama==='aucun'?'true':'false'}">Masqué — le site commence par la liste</button>
+    </div>
+    <div class="site-mvt" id="site-diapo-par" style="margin-top:9px">
+      <button type="button" class="mini" data-par="2" aria-pressed="${bandeauPar()===2?'true':'false'}">Deux photos côte à côte</button>
+      <button type="button" class="mini" data-par="1" aria-pressed="${bandeauPar()===1?'true':'false'}">Une seule photo, en grand</button>
+    </div>
+    <label class="fld" style="margin-top:9px"><span class="lbl">Temps d’affichage de chaque vue (secondes)</span>
+      <input type="number" id="site-diapo-sec" min="${BANDEAU_SEC_MIN}" max="${BANDEAU_SEC_MAX}" step="1" value="${bandeauSec()}"></label>
+    <p class="ias-note" id="site-diapo-msg"></p>
+    <div class="ed-eyebrow" style="margin-top:14px">Menu du site</div>
+    <p class="ias-note">Les entrées de la barre en haut du site. Laissez vide pour garder le mot par défaut — celui-ci se traduit tout seul dans les autres langues, un mot que vous écrivez ici ne se traduit que si vous le traduisez.</p>
+    ${SITE_MENU.map(m=>`<label class="fld"><span class="lbl">${esc(m.defaut)}</span>
+      <input type="text" id="${m.id}" value="${esc(siteTexte(m.cle,LE))}" placeholder="${esc(m.defaut)}">
+      <span class="ias-note" style="margin-top:3px;display:block">${esc(m.aide)}</span></label>`).join('')}
     <div class="ed-eyebrow" style="margin-top:14px">Sections du site</div>
     <p class="ias-note">Les sections du site (« Commercial », « Habitation »…) ne sont pas un réglage à activer : ce sont les <b>catégories</b> des réalisations publiées. Chacune porte la sienne, dans sa fiche.</p>
     <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
@@ -9080,7 +9304,8 @@ function openSitePanel(){
       <button class="mini" onclick="closeModal()">Fermer</button>
       <button class="btn btn-primary" id="site-push">Mettre à jour le site</button>
     </div>`);
-  const champs={sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta'};
+  const champs=Object.assign({sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta'},
+    Object.fromEntries(SITE_MENU.map(m=>[m.cle,m.id])));
   Object.entries(champs).forEach(([k,id])=>{
     const el=document.getElementById(id);
     if(!el)return;
@@ -9258,6 +9483,35 @@ function openSitePanel(){
       rappel();
     });
   });
+  document.querySelectorAll('#site-diapo-par [data-par]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().diaporamaPar=parseInt(b.dataset.par,10);saveLibraryDebounced();
+      document.querySelectorAll('#site-diapo-par [data-par]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-diapo [data-diapo]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().diaporama=b.dataset.diapo;saveLibraryDebounced();
+      document.querySelectorAll('#site-diapo [data-diapo]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  const dsec=document.getElementById('site-diapo-sec');
+  dsec.addEventListener('change',()=>{
+    const n=parseFloat(dsec.value);
+    const msg=document.getElementById('site-diapo-msg');
+    /* Une valeur refusée doit dire POURQUOI et se remettre d'aplomb toute seule : sinon on
+       repart avec un champ rouge et un réglage qu'on croit changé. */
+    if(!isFinite(n)||n<BANDEAU_SEC_MIN||n>BANDEAU_SEC_MAX){
+      dsec.value=bandeauSec();
+      msg.textContent='Entre '+BANDEAU_SEC_MIN+' et '+BANDEAU_SEC_MAX+' secondes. Valeur remise à '+bandeauSec()+' s.';
+      return;
+    }
+    siteSettings().diaporamaSec=n;saveLibraryDebounced();
+    msg.textContent='';
+    rappel();
+  });
   const cop=document.getElementById('site-copier');
   cop.addEventListener('click',()=>{
     if(!(b.email||b.phone)){document.getElementById('site-msg').textContent='Aucune coordonnée dans les réglages du devis à reprendre.';return;}
@@ -9301,6 +9555,10 @@ async function askPublishRealisation(r){
       +(plan.ecartees?' — les '+plan.ecartees+' autres sont écartées (menu ⋯ d’une vignette pour les remettre).':'.')+'</p>'
     +(plan.couvEcartee?'<p class="pub-note">La photo choisie comme couverture est écartée du site : c’est la première photo publiée qui servira de couverture.</p>':'')
     +(ancienne?'<p class="pub-note">Cette réalisation a été mise en ligne avant que le CRM ne garde trace des versions : on ne peut pas montrer ici ce qui y est en ce moment. Les photos concernées seront réécrites une fois à la prochaine publication, puis le suivi sera exact.</p>':'')
+    +'<div class="pub-choix" id="pub-choix" hidden>'
+      +'<span>Vous pouvez ne mettre à jour que le texte et les informations du projet, en laissant les photos telles qu’elles sont en ligne.</span>'
+      +'<div><button type="button" class="mini" id="pub-aucune">Photos inchangées</button>'
+      +'<button type="button" class="mini" id="pub-toutes">Tout envoyer</button></div></div>'
     +'<div class="pub-liste" id="pub-liste"></div>'
     +'<p class="pub-note" id="pub-note"></p>'
     +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">'
@@ -9313,6 +9571,9 @@ async function askPublishRealisation(r){
   const liste=document.getElementById('pub-liste');
   const note=document.getElementById('pub-note');
   const bouges=plan.photos.filter(x=>x.etat!=='inchangee');
+  /* Seule une photo DÉJÀ en ligne, dont on sait quels fichiers y sont, peut être laissée
+     en l'état. Les autres n'ont rien à garder. */
+  const peutGarder=x=>x.etat!=='nouvelle'&&!!(x.p.pub&&x.p.pub.full&&x.p.pub.thumb);
   if(plan.rien){
     liste.innerHTML='<p class="pub-vide">Rien n’a changé depuis la dernière publication : le site montre déjà ces '
       +plan.photos.length+' photo(s), dans cet ordre.<br>Publier maintenant n’enverrait rien de nouveau.</p>';
@@ -9322,6 +9583,7 @@ async function askPublishRealisation(r){
     const p=x.p;
     const ligne=document.createElement('div');
     ligne.className='pub-ligne'+(x.etat==='inchangee'?' inch':'');
+    ligne.dataset.pid=p.id;
     ligne.innerHTML='<div class="pub-h"><b>'+esc(p.name||'Photo sans titre')+'</b>'
       +'<span class="pub-why">'+esc(x.etat==='nouvelle'?'pas encore en ligne'
         :(x.etat==='inchangee'?'déjà en ligne à l’identique':x.pourquoi))+'</span></div>'
@@ -9332,7 +9594,13 @@ async function askPublishRealisation(r){
       +'<span class="pub-ver" data-verlbl>'+esc(photoVersionLabel(p,photoActiveId(p)))+'</span>'
       +(photoVersions(p).length?'<button type="button" class="pub-chver" data-chver>Changer la version…</button>':'')
       +'</div>'
-      +'</div>';
+      +'</div>'
+      /* Une photo déjà en ligne peut RESTER telle quelle : on décoche, et seuls la fiche,
+         l'ordre et les légendes partent. Une photo jamais mise en ligne n'a pas ce choix —
+         la garder ferait pointer le site sur un fichier qui n'existe pas. */
+      +(peutGarder(x)
+        ? '<label class="pub-envoi"><input type="checkbox" data-envoi checked> Envoyer cette photo</label>'
+        : (x.etat==='nouvelle'?'<span class="pub-envoi off">Première mise en ligne : cette photo doit partir.</span>':''));
     liste.appendChild(ligne);
     /* Ce qui est en ligne : l'image PUBLIQUE, à son adresse réelle. C'est la seule preuve
        honnête — un rendu local montrerait ce que le CRM croit avoir publié. */
@@ -9393,7 +9661,30 @@ async function askPublishRealisation(r){
   else if(bouges.length&&plan.inchangees)note.textContent=plan.inchangees+' photo(s) déjà en ligne à l’identique ne seront pas réécrites.';
 
   const go=document.getElementById('pub-go');
-  go.addEventListener('click',()=>{closeModal();publishRealisation(r);});
+  /* CE QUI PART, EN DIRECT. Décocher une photo doit se lire tout de suite sur le bouton :
+     sinon on confirme sans savoir si on envoie une image ou seulement du texte. */
+  const cases=()=>[...liste.querySelectorAll('[data-envoi]')];
+  /* On lit l'identifiant PORTÉ PAR LA LIGNE, pas la position dans un tableau : les deux
+     listes ne coïncident pas toujours (lignes tronquées à 40, photos inchangées masquées),
+     et une correspondance par rang finirait par garder la mauvaise photo. */
+  const gardees=()=>cases().filter(c=>!c.checked)
+    .map(c=>c.closest('.pub-ligne').dataset.pid).filter(Boolean);
+  const rafraichir=()=>{
+    const gard=gardees().length;
+    const envoyees=bouges.length-gard;
+    if(!r.published)return;
+    go.textContent=envoyees>0
+      ? 'Republier ('+envoyees+' photo'+(envoyees>1?'s':'')+')'
+      : (gard?'Mettre à jour le texte seulement':'Mettre le site à jour');
+  };
+  const choix=document.getElementById('pub-choix');
+  if(choix&&cases().length){
+    choix.hidden=false;
+    document.getElementById('pub-aucune').addEventListener('click',()=>{cases().forEach(c=>{c.checked=false;});rafraichir();});
+    document.getElementById('pub-toutes').addEventListener('click',()=>{cases().forEach(c=>{c.checked=true;});rafraichir();});
+    cases().forEach(c=>c.addEventListener('change',rafraichir));
+  }
+  go.addEventListener('click',()=>{const g=gardees();closeModal();publishRealisation(r,g.length?{garder:g}:undefined);});
   const force=document.getElementById('pub-force');
   if(force)force.addEventListener('click',()=>{closeModal();publishRealisation(r,{tout:true});});
 }
@@ -9410,6 +9701,13 @@ async function publishRealisation(r,opts){
   if(!photosPubliees(r).length){toast('Toutes les photos sont écartées du site : il n’y a rien à publier');return;}
   if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
   const tout=!!(opts&&opts.tout);
+  /* PHOTOS GARDÉES TELLES QUELLES. Le reproche exact : « pour publier mon texte, je suis
+     contraint de publier la photo qui n'est pas à jour ». Une photo listée ici reste en
+     ligne dans la version que le visiteur voit déjà — son fichier n'est ni recalculé ni
+     renvoyé — pendant que la fiche du projet, l'ordre et les légendes, eux, partent.
+     Une photo JAMAIS mise en ligne ne peut pas être gardée : le manifeste pointerait sur
+     un fichier qui n'existe pas. La consigne est donc ignorée pour celles-là. */
+  const garder=new Set((opts&&opts.garder)||[]);
   const btn=document.querySelector('#rz-body [data-publish]');
   if(btn){btn.disabled=true;btn.textContent='Publication…';}
   try{
@@ -9424,8 +9722,16 @@ async function publishRealisation(r,opts){
       if(existing)presents=new Set(existing.map(f=>f.name));
     }catch(e){ /* listing indisponible : on réécrit tout, c'est le choix sûr */ }
 
-    const aEcrire=plan.photos.filter(x=>tout||x.etat!=='inchangee'
-      ||!(presents&&presents.has(x.full.split('/').pop())&&presents.has(x.thumb.split('/').pop())));
+    /* Gardable seulement si ce qui est en ligne existe VRAIMENT : sans cette vérification,
+       garder une photo dont le fichier a disparu du seau publierait un cadre vide. */
+    const estGardee=x=>{
+      const pub=x.p.pub;
+      if(!garder.has(x.p.id)||!pub||!pub.full||!pub.thumb)return false;
+      if(presents&&!(presents.has(pub.full.split('/').pop())&&presents.has(pub.thumb.split('/').pop())))return false;
+      return true;
+    };
+    const aEcrire=plan.photos.filter(x=>!estGardee(x)&&(tout||x.etat!=='inchangee'
+      ||!(presents&&presents.has(x.full.split('/').pop())&&presents.has(x.thumb.split('/').pop()))));
     const entries=[];
     /* Les identités publiées sont préparées ici mais POSÉES plus bas, après l'écriture du
        manifeste. Tant qu'il n'est pas écrit, le site ne sait rien de ces images : les
@@ -9436,7 +9742,8 @@ async function publishRealisation(r,opts){
     let sharePartage=null,ecrites=0;
     for(const x of plan.photos){
       const p=x.p;
-      const doit=aEcrire.indexOf(x)>=0;
+      const laisser=estGardee(x);
+      const doit=!laisser&&aEcrire.indexOf(x)>=0;
       let w=(p.pub&&p.pub.w)||p.w||0,h=(p.pub&&p.pub.h)||p.h||0;
       if(doit){
         ecrites++;
@@ -9470,17 +9777,43 @@ async function publishRealisation(r,opts){
       }
       /* `plan.coverId` et non `r.cover` : si la couverture choisie a été écartée du site,
          c'est la première photo publiée qui la remplace — décidé une fois, dans le plan. */
-      const entry={full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:plan.coverId===p.id};
+      /* Une photo gardée pointe sur les fichiers DÉJÀ en ligne, pas sur ceux qu'aurait
+         produits la version courante — ils n'ont pas été écrits. */
+      const entry=laisser
+        ? {full:ownerId+'/'+p.pub.full,thumb:ownerId+'/'+p.pub.thumb,w:p.pub.w||w,h:p.pub.h||h,cover:plan.coverId===p.id}
+        : {full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:plan.coverId===p.id};
       /* Seule la LÉGENDE part sur le site. Le titre reste interne : c'est souvent le nom du
-         fichier de l'appareil photo, qui n'a rien à faire sur une page publique. */
+         fichier de l'appareil photo, qui n'a rien à faire sur une page publique. La légende
+         part MÊME pour une photo gardée : c'est du texte dans le manifeste, ça ne coûte
+         aucun envoi d'image — et refuser une correction de légende sous prétexte qu'on ne
+         renvoie pas la photo n'aurait aucun sens. */
       if((p.caption||'').trim())entry.caption=p.caption.trim();
       entries.push(entry);
-      posees.push({p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
-        cap:(p.caption||'').trim(),cover:plan.coverId===p.id,
-        v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
+      /* Gardée : son identité publiée ne bouge pas — elle reste « à republier », et c'est
+         exact. Seuls la légende et le rôle de couverture, qui viennent de partir, sont
+         mis à jour, sans quoi le CRM la dirait modifiée pour une raison déjà réglée. */
+      posees.push(laisser
+        ? {p,pub:Object.assign({},p.pub,{cap:(p.caption||'').trim(),cover:plan.coverId===p.id}),garde:true}
+        : {p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
+            cap:(p.caption||'').trim(),cover:plan.coverId===p.id,
+            v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
     }
     _glTexKey='';
 
+    /* Aucune image réécrite — republication de la seule fiche, retour à une publication
+       précédente, photos toutes gardées — et l'aperçu de partage n'était alors pas touché :
+       un lien partagé pouvait continuer à montrer la couverture d'un AUTRE projet, celui
+       publié en dernier. On recopie donc la vignette déjà en ligne de la couverture. Une
+       copie, pas un rendu : rien n'est recalculé. */
+    if(!sharePartage&&plan.coverId){
+      const couv=(r.photos||[]).find(p=>p.id===plan.coverId);
+      if(couv&&couv.pub&&couv.pub.thumb){
+        try{
+          const {data}=await sb.storage.from(GALLERY_BUCKET).download(ownerId+'/'+couv.pub.thumb);
+          if(data)sharePartage=data;
+        }catch(e){console.error('image de partage (copie)',e);}
+      }
+    }
     /* L'aperçu de partage ne doit jamais faire échouer une publication : la galerie, elle,
        est déjà en ligne à ce stade. */
     if(sharePartage){
@@ -9495,18 +9828,30 @@ async function publishRealisation(r,opts){
     man.updatedAt=new Date().toISOString();
     const avant=man.realisations.find(x=>x.id===r.id)||null;
     man.realisations=man.realisations.filter(x=>x.id!==r.id);
-    const fiche={id:r.id,title:r.title,date:r.date||'',photos:entries,publishedAt:new Date().toISOString()};
+    /* Titre et date nettoyés comme les autres champs : une espace en trop se retrouvait
+       sinon dans le titre de l'onglet, dans l'adresse partagée et dans les données que
+       lisent les moteurs de recherche. */
+    const fiche={id:r.id,title:(r.title||'').trim(),date:(r.date||'').trim(),photos:entries,publishedAt:new Date().toISOString()};
     /* Champs vides omis : le site ne doit pas afficher d'étiquette sans valeur. */
     [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
       if((v||'').trim())fiche[k]=String(v).trim();
     });
+    /* Le drapeau ne part QUE s'il est levé : un `false` dans chaque fiche alourdirait le
+       manifeste pour ne rien dire de plus qu'une clé absente. */
+    if(r.personnelle)fiche.personnelle=true;
     man.realisations.unshift(fiche);
     await writeManifest(man);
 
     /* Le manifeste est écrit : à partir d'ici seulement, ces photos sont vraiment en ligne.
        C'est aussi le seul moment où l'on peut dire QUELLE version l'est. */
     const quand=Date.now();
-    posees.forEach(({p,pub})=>{p.pub=Object.assign({at:quand},pub);p.publishedAt=quand;photoLog(p,'publie',pub.vlabel);});
+    /* Une photo gardée n'a rien envoyé : sa date de mise en ligne ne bouge pas et rien ne
+       s'inscrit dans son historique, sinon elle passerait pour publiée à jour. */
+    posees.forEach(({p,pub,garde})=>{
+      p.pub=Object.assign({at:(garde&&p.pub&&p.pub.at)||quand},pub);
+      if(garde)return;
+      p.publishedAt=quand;photoLog(p,'publie',pub.vlabel);
+    });
 
     /* Le pas d'avant est gardé — un seul, celui auquel « revenir » veut dire quelque chose.
        Ses fichiers ne sont pas effacés (voir le ménage ci-dessous) : le retour est donc
@@ -9804,6 +10149,10 @@ async function loadAll(){
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
     store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);
     applyingRemote=false;cloudReady=true;
+    /* APRÈS la lecture du cloud : les fiches restées « Nouveau client » alors que leur
+       contact est rempli reprennent leur contact comme nom. Avant, on réparerait une copie
+       locale qui serait aussitôt écrasée par les données distantes. */
+    reparerNomsClients();
     try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();}catch(e){}
     setSyncStatus('ok');
     scheduleSyncPush();
@@ -10026,6 +10375,7 @@ async function init(){
      réglages de la bibliothèque, sinon un changement de thème "ne prend pas" au rechargement. */
   current.branding={...library.branding};
   fillFields();wireBindings();buildPrest();buildExclu();render();
+  chargerEtatArchives();
   wireClientFilters();
   showView(vueDepuisHash()||'dashboard');
   $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});

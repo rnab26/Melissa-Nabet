@@ -548,6 +548,336 @@ déjà été tapé continue de s'y ajouter.
 
 ---
 
+## 7 septembre 2026 — Réalisations personnelles, et le retour à la liste qu'on ne voyait pas
+
+**Branche** `claude/site-realisations-perso`. Troisième des cinq chantiers du site.
+
+### Les réalisations personnelles
+
+Une case **« Réalisation personnelle »** dans la fiche d'un chantier. Cochée, le projet :
+
+- **quitte la liste principale** et le **bandeau d'accueil** — celui-ci est la vitrine du
+  studio, c'est ce que « une section à part, en dehors du bandeau » veut dire ;
+- **quitte les filtres de catégories** : ils rangent la vitrine. Une catégorie née d'un
+  projet personnel ferait un filtre qui ne montre rien ;
+- **rejoint sa propre section**, plus bas, avec ses vraies cartes (photo, année, lieu) et sa
+  propre entrée de menu — dont le **libellé est modifiable** dans le CRM comme les autres ;
+- reste **ouvrable comme les autres** : c'est un rangement, pas une mise à l'écart. Et
+  « Projet suivant » reste dans sa famille : passer d'un chantier de client à un projet
+  personnel sans prévenir brouillerait la lecture.
+
+Sans aucun projet marqué, **ni section ni entrée de menu** : une section vide sur un
+portfolio est une promesse non tenue.
+
+### Le retour à la liste — signalé, capture à l'appui
+
+« ← Toutes les réalisations » était un **lien gris** coincé entre le paragraphe qui explique
+la liste et le nom du chantier. C'est le geste le plus fréquent depuis une fiche, et on ne
+le voyait pas.
+
+- C'est maintenant un **vrai bouton**, encadré, assez grand pour le pouce.
+- Il est le **premier élément de la fiche**, et le paragraphe d'explication — qui parle de
+  LA LISTE, pas de la fiche — **disparaît** tant qu'une réalisation est ouverte. Le retour
+  remonte ainsi d'une centaine de pixels.
+- Même traitement dans la **boutique** (« ← Tous les produits ») : même défaut, même famille.
+
+### Ce qu'il ne faut pas casser
+
+- `carteProjet()` construit **une seule** carte pour les deux listes. Les dupliquer, c'est
+  se retrouver un jour avec la section personnelle sans son lieu ou sans son fondu.
+- `projetsPro()` est le filtre de la vitrine : la liste, les catégories, leur décompte et le
+  bandeau s'en servent tous. En oublier un remettrait les projets personnels dans la vitrine.
+- Le drapeau ne part dans le manifeste **que s'il est levé** : un `false` par fiche
+  alourdirait le manifeste sans rien dire de plus qu'une clé absente.
+- `realisationFicheSig()` inclut le drapeau : changer de section change ce que le site
+  montre, le rappel « à republier » doit le voir.
+- Dans les tests, `.project` et `.projects` désignent **deux** grilles depuis ce chantier :
+  viser `#projects` quand on parle de la liste principale.
+
+### Vérification
+
+`realisations` **526** (9 nouveaux), `site` **172** (11 nouveaux), `bout-en-bout` **21** —
+**719 contrôles, 0 échec**. Captures : `/tmp/perso-site.png`, `/tmp/retour-crm.png`.
+
+### À faire côté Raphaël
+
+Cocher la case sur les chantiers concernés, puis republier ces réalisations.
+
+---
+
+## 7 septembre 2026 — Le nom des clients réparé pour de bon, et les archives sous un séparateur
+
+**Branche** `claude/clients-nom-et-archives`.
+
+### Le nom qui restait « Nouveau client » — le trou du correctif précédent
+
+Le correctif de la veille faisait qu'un contact **saisi** nommait le client. Mais les fiches
+**déjà créées** n'en profitaient pas : leur contact était rempli depuis longtemps, plus
+aucun événement ne venait, elles restaient « Nouveau client » pour toujours. C'est
+exactement ce que Raphaël a re-signalé, et il avait raison.
+
+- `reparerNomsClients()` tourne **après la lecture du cloud** : toute fiche encore nommée
+  « Nouveau client » dont le Contact est rempli reprend ce contact comme nom. Rien n'est
+  écrasé — « Nouveau client » n'est pas un nom, c'est l'absence de nom. Une fiche **sans
+  contact** n'est pas touchée : on ne lui invente pas un nom.
+- Elle tourne après le cloud, et pas avant : sinon on réparerait une copie locale aussitôt
+  remplacée par les données distantes.
+- Une fiche encore sans nom **le dit** (« à remplir », sous l'étiquette) au lieu de se faire
+  passer pour un client nommé.
+
+### Le séparateur des archives
+
+Le tableau des clients garde **une seule vue**, coupée en deux :
+
+- les clients **en cours** en haut, puis une **barre « Archivés · n clients »** avec leur
+  chiffre d'affaires, puis les archivés ;
+- la barre **se replie d'un appui**, et l'état est retenu d'une visite à l'autre : au bout
+  de deux ans de chantiers terminés, personne ne veut faire défiler cinquante lignes pour
+  atteindre le pied de tableau ;
+- **les totaux comptent toujours tout le monde** — c'est le chiffre d'affaires de l'année,
+  pas seulement celui des chantiers en cours. Le résumé l'écrit (« 5 clients dont 3
+  archivés ») pour qu'on ne croie pas à une erreur de calcul ;
+- le tri choisi s'applique **à l'intérieur de chaque bloc**.
+
+**Quels statuts archivent ?** C'est un réglage, pas une règle en dur : ⚙ Statuts porte une
+case **archivé** par statut. « Terminé » et « Annulé » le sont par défaut. Les statuts étant
+modulables, ce drapeau devait l'être aussi.
+
+### Ce qu'il ne faut pas casser
+
+- `clientArchive()` ne regarde **que** le statut. Y ajouter la date de fin ou le solde ferait
+  bouger le rangement tout seul, sans qu'on comprenne pourquoi.
+- Les archives sont **rangées, pas exclues** : `renderClientsFooter` reçoit toujours la
+  liste entière.
+- `reparerNomsClients()` ne touche qu'un nom **exactement** égal à « Nouveau client ».
+  Élargir la règle (tout nom court, tout nom générique) ferait écraser de vrais noms.
+- `clientSansNom()` est le seul juge de « ce client a-t-il été nommé ».
+
+### Vérification
+
+`realisations` **519** (11 nouveaux) — 0 échec. Parcours réel à 390 px : deux blocs, la
+barre d'archives, les totaux qui comptent tout (`/tmp/clients-390.png`), aucun débordement.
+
+### À faire côté Raphaël
+
+**Recharger la page** : les fiches se réparent au chargement suivant.
+
+---
+
+## 6 septembre 2026 — Un menu en haut du site, et deux défauts signalés du téléphone
+
+**Branche** `claude/site-menu-haut`. Deuxième des cinq chantiers du site, plus deux
+correctifs urgents arrivés en cours de route (ils sont dans le même fichier, d'où un seul
+commit — les deux sujets sont séparés ici).
+
+### Le menu du site
+
+- Une barre **collante** sous le nom du studio : *Réalisations · À la vente · Journal ·
+  À propos*. Sur un portfolio on descend loin dans les photos ; remonter pour changer de
+  section est le geste qu'on ne fait pas.
+- **Une entrée n'existe que si sa section existe.** Les sections savent déjà se masquer
+  quand elles sont vides ; le menu lit leur état au lieu de refaire le raisonnement. Une
+  entrée qui mène nulle part est pire qu'une entrée manquante.
+- **Chaque libellé est modifiable** dans le CRM → ⚙ Le site public → *Menu du site*. Vide,
+  c'est le mot par défaut — qui se traduit tout seul dans les trois langues ; rempli, c'est
+  le mot de Melissa, traduisible comme ses autres textes.
+- **L'entrée où l'on se trouve est marquée** au défilement. Un menu qui dit ce qu'on peut
+  faire mais jamais où l'on est, sur une page longue, on s'y perd.
+- Depuis un projet ouvert, le menu **referme d'abord le projet** : sans ça il ferait défiler
+  vers une section cachée sous le détail, et il ne se passerait rien.
+- Sur téléphone, les entrées **défilent latéralement** avec un dégradé qui annonce la suite,
+  plutôt que de se replier derrière un ☰ : quatre entrées se lisent d'un coup d'œil.
+- Le titre « Réalisations » au-dessus de la liste **disparaît** quand le menu est là : le
+  même mot deux fois à trois centimètres d'écart, c'est une redondance. Les autres sections
+  gardent le leur — on y arrive en défilant, il fait repère.
+
+Les **catégories** (Bureau, Appartement…) restent en second niveau, sous la liste : elles
+filtrent une section, elles ne sont pas des sections. Les mêler au menu ferait une barre de
+dix entrées où « Bureau » et « Journal » auraient l'air d'être de même nature.
+
+### Deux défauts signalés depuis le téléphone
+
+**1. « Le nom et le prénom remplis donnent quand même *Nouveau client* partout. »**
+Le champ du nom existait bien — c'est le gros texte dans l'entête sombre de la fiche — mais
+il ne **ressemblait pas à un champ** : pas d'étiquette, police à empattements, centré sur
+fond sombre. On remplit donc « Contact » en croyant nommer le client, et la fiche comme la
+liste restent « Nouveau client » sans que rien ne le signale. Trois corrections :
+- une étiquette **Nom du client** au-dessus du champ, et le champ s'éclaircit au focus ;
+- à la création, le **curseur est posé dedans, texte sélectionné** ;
+- saisir un **Contact** nomme le client **tant que personne ne l'a nommé** (le nom est
+  encore le nom automatique). Un nom déjà choisi n'est jamais écrasé — c'est vérifié.
+
+**2. « Il faut valider la tâche pour que le bloc notes s'affiche. »**
+Le dialogue « Nouvelle tâche » n'avait pas de champ de notes : il fallait créer la tâche,
+la rouvrir, puis écrire. Le champ **Notes** est maintenant dans le dialogue de création. Au
+passage, le champ s'appelait « Détail » dans la fiche et « notes » dans la tête de tout le
+monde : c'est **Notes** des deux côtés.
+
+### Vérification
+
+`realisations` **504** (6 nouveaux), `site` **161** (19 nouveaux), `bout-en-bout` **21** —
+**686 contrôles, 0 échec**. Captures : `/tmp/mn-menu-390.png`.
+
+### Ce qu'il ne faut pas casser
+
+- `renderMenu()` est appelée **après** les sections : elle lit leur état (masquée ou non)
+  pour savoir quelles entrées ont un sens. L'appeler avant construit un menu sur des
+  sections pas encore dessinées.
+- `allerA()` retient si un projet était ouvert **avant** de le refermer : `closeProject`
+  passe par l'historique du navigateur, qui est asynchrone.
+- « À propos » est la **dernière** section : le navigateur ne peut pas la faire monter sous
+  la barre, il n'y a rien après elle. La promesse est « on arrive en bas du site et elle est
+  entièrement visible », pas « elle arrive sous la barre ».
+- `clientSansNom()` est le seul endroit qui décide si un nom a été choisi. L'élargir (par
+  exemple à tout nom court) ferait écraser de vrais noms.
+
+### À faire côté Raphaël
+
+Les libellés du menu sont dans ⚙ Le site public ; ils ne partent en ligne qu'avec
+« Mettre à jour le site ».
+
+---
+
+## 6 septembre 2026 — Le bandeau se règle, et se pilote à la main
+
+**Branche** `claude/bandeau-reglable`. Premier des cinq chantiers demandés par Raphaël sur
+le site public.
+
+### Livré
+
+- **Une ou deux photos par vue**, au choix, dans le CRM → ⚙ Le site public → *Bandeau
+  d'accueil*. Deux, c'est le portfolio : les images se répondent. Une, c'est l'affiche.
+  **Sur téléphone, c'est toujours une** — le réglage ne peut pas forcer deux timbres-poste
+  sur 390 px. Tout autre nombre est ramené à deux : à trois, chaque photo tombe sous
+  400 px, ce n'est plus une image d'accueil mais une planche contact.
+- **Des flèches ‹ ›**, discrètes au survol sur ordinateur et **visibles en permanence au
+  doigt** — sans survol, une commande qui n'apparaît qu'au survol n'existe pas.
+- **Les touches ← →** quand le bandeau a le focus, et **le balayage au doigt** (45 px de
+  seuil : en dessous, c'est un appui tremblant, pas un geste).
+- **Reculer ramène exactement là d'où l'on vient**, et reboucle sur la fin depuis la
+  première vue. C'est tout l'intérêt : une photo est passée trop vite, on la revoit.
+- **Un geste manuel relance le compte à zéro**, il ne coupe pas le défilement.
+
+### Ce qu'il ne faut pas casser
+
+- `bdAller(pas)` est **le seul chemin** pour changer de vue — minuteur, flèche, clavier,
+  balayage. Deux chemins finiraient par diverger, et c'est ce qui fait qu'une flèche
+  « saute » une image.
+- Les flèches sont **voisines** du bouton d'ouverture, pas ses enfants : un bouton dans un
+  bouton n'existe pas en HTML, le clavier et les lecteurs d'écran s'y perdent.
+- Un balayage se termine par un `click` : sans le garde `bdGlisse`, glisser ouvrirait le
+  projet au lieu de montrer la photo suivante.
+- La reconstruction au redimensionnement ne se déclenche que si le **nombre de photos par
+  vue** change : passer de 1200 à 1100 px ne doit pas remettre le bandeau au début.
+
+### Vérification
+
+`realisations` **498** (5 nouveaux), `site` **142** (12 nouveaux, deux passages consécutifs
+identiques), `bout-en-bout` 20 — **660 contrôles, 0 échec**. Les flèches au doigt sont
+éprouvées sur un contexte **réellement tactile** (`hasTouch`), pas déduites de la feuille de
+style. Captures : `/tmp/mn-bandeau-tactile.png`.
+
+### À faire côté Raphaël
+
+**Rien.** Le réglage est dans ⚙ Le site public ; il ne part en ligne qu'avec « Mettre à jour
+le site ».
+
+---
+
+## 6 septembre 2026 — Un bandeau qui fait défiler les projets, et l'import qui ne s'ouvrait pas sur iPhone
+
+**Branche** `claude/site-bandeau-accueil`.
+
+### Demandé
+
+« Une grande image sur la page de présentation qui fait défiler au hasard les projets, par
+lot de deux photos qui se suivent, avec un changement dynamique mais léger, doux. »
+
+### Livré — le bandeau d'accueil
+
+- **Deux photos qui se suivent dans le MÊME projet**, côte à côte, sous le nom du studio.
+  Les projets passent dans un ordre **mélangé à chaque tour** ; à l'intérieur d'un projet on
+  avance par paires dans l'ordre de la galerie. Personne ne revoit donc deux fois la même
+  vue avant d'avoir tout vu.
+- **Fondu croisé de 1,3 s** et un lent rapprochement de l'image pendant qu'elle est à
+  l'écran. Deux couches superposées : la cachée est remplie et les opacités ne s'échangent
+  qu'une fois les images **réellement chargées** — sinon le fondu découvrirait une case vide.
+- **Un appui ouvre le projet montré**, dont le nom, l'année et le lieu s'affichent dessus.
+- **Sur téléphone, une photo à la fois** : mêmes photos, même ordre, mais deux vues côte à
+  côte à 390 px font deux timbres-poste. Le passage d'un format à l'autre reconstruit la
+  liste.
+- **Réglable** dans le CRM → ⚙ Le site public → *Bandeau d'accueil* : affiché ou masqué, et
+  le temps d'affichage (3 à 60 s, défaut 7). Une valeur hors bornes est refusée en disant
+  pourquoi et se remet d'aplomb.
+- **Il se suspend** au survol, au doigt posé, au clavier, quand l'onglet passe en arrière-plan
+  et quand un projet est ouvert. Rien n'est téléchargé pour un écran que personne ne regarde.
+- **États traités** : aucun projet publié → pas de bandeau du tout ; une image qui n'arrive
+  pas → on passe à la vue suivante (et si aucune n'arrive, le bandeau s'efface au lieu de
+  tourner à vide) ; réglage « aucun mouvement » ou visiteur qui demande moins d'animation →
+  le bandeau reste, figé sur une image.
+
+### Corrigé au passage — signalé depuis un iPhone
+
+**« J'essaie d'ajouter des photos à un projet, il ne se passe rien du tout. »** Cause trouvée
+dans le code : six endroits créaient un `input[type=file]` **en mémoire**, sans jamais
+l'attacher au document, puis le cliquaient. Sur iOS — Safari comme Chrome, c'est le même
+moteur — le sélecteur de fichiers **ne s'ouvre pas** dans ce cas. Rien ne se passe, et rien
+ne le dit.
+
+Tous les imports passent maintenant par **un seul chemin**, `choisirFichiers()` :
+l'entrée est posée dans la page avant d'être cliquée, rendue invisible **sans** `display:none`
+ni `visibility:hidden` (ainsi masquée, WebKit l'ignore aussi), et retirée après le choix ou
+au retour dans la page si le sélecteur a été annulé — iOS n'émet rien dans ce cas.
+
+Concernés : photos d'une réalisation, photos d'un produit, remplacement d'une photo, pièces
+jointes d'un client, pièces jointes d'une tâche, logo, import CSV clients, import de
+sauvegarde JSON et de sauvegarde complète .zip. Les trois derniers vivaient dans le HTML en
+`display:none` — même piège.
+
+**Non vérifié sur un vrai iPhone** : je n'en ai pas. Le contrôle automatique vérifie ce qui
+est vérifiable ici — l'entrée est bien dans la page au moment du clic, elle n'est pas masquée
+d'une façon qu'iOS ignore, et rien ne reste derrière. **C'est à Raphaël de confirmer que le
+sélecteur s'ouvre.**
+
+### Deux défauts trouvés par les tests, et corrigés
+
+- **Un appui du doigt figeait le bandeau définitivement.** `touchstart` suspendait sans
+  contrepartie : sur un écran tactile, aucun `mouseleave` ne vient jamais le réveiller.
+  Chaque geste a maintenant sa fin (`touchend`, `touchcancel`).
+- **Le banc d'essai du site était testé périmé.** `tests/site.test.mjs` porte sur une COPIE
+  de `site-vitrine/index.html` construite par `sitetest-build.mjs` ; oublier de la
+  reconstruire fait passer (ou échouer) un test sur du code qui n'est plus celui du dépôt.
+  Le test reconstruit désormais son banc lui-même.
+
+### Vérification
+
+`realisations` **493** (11 nouveaux), `site` **130** (21 nouveaux, deux passages consécutifs
+identiques), `bout-en-bout` 20, `pont-ia` 20 — **663 contrôles, 0 échec**. Parcours réel à
+390 px et 1280 px (`/tmp/mn-bandeau-390.png`, `/tmp/mn-bandeau-1280.png`) : aucun débordement.
+
+### Ce qu'il ne faut pas casser
+
+- `choisirFichiers()` doit être appelée **dans le geste de l'utilisateur**, jamais après un
+  `await` : le navigateur refuserait d'ouvrir le sélecteur. Et l'entrée ne doit jamais
+  redevenir `display:none` — c'est tout le correctif.
+- Le bandeau ne croise ses couches qu'après le **chargement** des images. Basculer avant
+  ferait apparaître une case vide, ce qui est pire que pas de mouvement.
+- `diaporama: 'aucun'` (le bandeau n'existe pas) et `animer` faux (le bandeau reste, figé)
+  sont **deux refus différents**. Les confondre ferait disparaître l'image de quelqu'un qui
+  ne voulait que moins de mouvement.
+- Le site public n'a **aucune dépendance** : pas de bibliothèque de carrousel. Le fondu
+  tient en une centaine de lignes ; un Swiper coûterait ~150 Ko à chaque visite et ne sait
+  pas apparier deux photos consécutives d'un même projet.
+
+### À faire côté Raphaël
+
+1. **Rouvrir le CRM sur l'iPhone et essayer d'ajouter une photo** — c'est le seul point que
+   je n'ai pas pu vérifier moi-même.
+2. Regarder le bandeau sur le site public et dire si le rythme (7 s) et la hauteur
+   conviennent : les deux se règlent, le premier depuis ⚙ Le site public.
+
+---
+
 ## 5 septembre 2026 — Quelle version part sur le site (et comment revenir en arrière)
 
 **Branche** `claude/photos-version-publiee-0509` → fusionnée sur `main`. **Chantier Jarvis** `ae41e91f-1660-4afb-ab23-b0406d0f3ffe`.
@@ -1891,3 +2221,84 @@ dans « Le site public » ; s'il le juge inutile, supprimer le bloc `#site-ordre
 **Ce qui demande une manipulation de sa part** : toujours rien de nouveau — les trois
 livraisons fonctionnent avec les données déjà en place. Reste la liste d'hier (remplir la
 fiche de « Bureau Sébastien », choisir un thème, écrire l'« À propos », puis republier).
+
+---
+
+## 6 septembre 2026 (soir) — Mises à jour précises, et une fiche projet 7 fois plus légère
+
+### Ce que Raphaël a demandé
+
+> « J'ai déjà écrit du texte sur Bureau Sébastien, sauf que pour le publier je suis contraint
+> de publier la photo qui n'est pas à jour. Étape illogique d'ailleurs qu'on ne puisse pas
+> faire des mises à jour précises par projet. »
+
+Livré. Dans l'écran de republication, chaque photo **déjà en ligne** porte une case
+« Envoyer cette photo », cochée par défaut. Décochée, elle reste en ligne telle que le
+visiteur la voit : son fichier n'est ni recalculé ni renvoyé, pendant que le texte, les
+informations, l'ordre et les légendes partent. Un bandeau propose « Photos inchangées » et
+« Tout envoyer » d'un geste, et le bouton dit ce qu'il fera : « Republier (2 photos) » ou
+« Mettre à jour le texte seulement ».
+
+Garde-fous : une photo jamais mise en ligne ne peut pas être gardée (le manifeste pointerait
+sur rien — l'écran le dit au lieu d'offrir une case morte) ; une photo dont les fichiers ont
+disparu du seau non plus ; une photo gardée **reste marquée « à republier »** et garde sa
+date — elle n'est pas à jour, et le CRM ne doit pas prétendre le contraire.
+
+Sur son second point — choisir la version de la photo depuis « Va partir » — **c'était déjà
+livré ce matin** (bouton « Changer la version… »). Sa capture montrait une page en cache. Un
+rechargement forcé suffit.
+
+### Deux défauts trouvés en écrivant les contrôles
+
+**1. Le faux stockage des tests renvoyait toujours un listing vide.** La publication s'en
+sert pour savoir ce qui est réellement en ligne : elle croyait donc que tout avait disparu et
+**réécrivait chaque photo à chaque publication**. Aucun test ne pouvait voir qu'on n'en
+réécrit qu'une. Le faux stockage liste maintenant ce qu'il contient, comme le vrai — c'est un
+progrès du banc d'essai, pas un contournement.
+
+**2. Rendu visible par le premier** : quand aucune image n'est réécrite (fiche seule, retour
+à une publication précédente, photos toutes gardées), l'aperçu de partage n'était pas mis à
+jour. Un lien envoyé sur WhatsApp pouvait continuer à montrer la couverture **d'un autre
+projet**, le dernier publié. La vignette déjà en ligne de la couverture est maintenant
+recopiée — une copie, pas un rendu.
+
+### Performance mobile : mesurée, puis corrigée
+
+Mesuré sur le vrai site, avec les douze photos réellement publiées d'Allenby 54, dans un
+navigateur en 390 px : **4,57 Mo pour ouvrir une fiche projet**. Cause : `sizes` annonçait
+100vw — 390 px — alors que la photo s'affiche sur 346 px (`main` a 22 px de marge de chaque
+côté). Sur un écran à deux pixels physiques par pixel CSS, 390 × 2 = 780 dépassait les 700 px
+de la vignette déjà publiée : le navigateur prenait la version 1600 px, quatre fois plus
+lourde, pour l'afficher sur 692 px réels. Avec la vraie largeur, 346 × 2 = 692 tient dans la
+vignette. **0,62 Mo après.** Rien n'est dégradé (c'est du 1:1), les écrans à trois pixels
+reçoivent toujours la grande image, aucune image nouvelle n'est produite, rien à republier.
+
+Au passage : `srcset` et `sizes` sont posés **avant** `src` — dans l'autre ordre, le
+navigateur a déjà lancé le téléchargement de la grande image quand il découvre qu'une plus
+petite suffisait, et les deux partent.
+
+Deux autres pistes ont été mesurées puis **écartées** : ré-encoder en JPEG q0,78 (−10 %) ou en
+WebP q0,82 (−16 %) ne changeait pas la classe du problème, et demandait de tout republier.
+
+### Deux finitions vues en parcourant le vrai site
+
+- La surface s'affichait « 110 » tout court sur la fiche d'Allenby 54, entre le lieu et la
+  mission. L'unité est ajoutée quand — et seulement quand — la valeur est un nombre nu, dans
+  la langue affichée. « 85 m² » déjà écrit n'est pas touché.
+- Le titre publié était recopié tel quel : le manifeste porte « Bureau Sébastien » avec une
+  espace finale, qui se retrouvait dans le titre de l'onglet et les données structurées.
+  Titre et date sont maintenant nettoyés comme les autres champs.
+
+### Ce qui demande une manipulation de Raphaël
+
+- **Les crédits Anthropic du compte sont épuisés** — sa capture montre l'erreur exacte :
+  « Your credit balance is too low ». C'est pour ça que « ✨ Rédiger un texte » a échoué et
+  qu'il a écrit le texte à la main. À recharger sur console.anthropic.com (Plans & Billing).
+  Rien à redéployer ensuite : la clé ne change pas.
+- **Recharger le CRM en vidant le cache** : sa capture montrait un écran de publication d'une
+  version antérieure.
+- Le lieu d'Allenby 54 est publié « Tel avi ». C'est ce qui a été saisi ; je ne corrige pas le
+  contenu à sa place.
+
+**Vérification** : 503 contrôles CRM (5 nouveaux), 138 site (8 nouveaux), 21 bout en bout,
+7 sections, 20 langues — 0 échec. CRM et site déployés et vérifiés en ligne.

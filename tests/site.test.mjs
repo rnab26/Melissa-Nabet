@@ -7,6 +7,11 @@ const DIR = process.env.SITE_DIR || '/tmp/mn-sitetest';
 const ok = [], ko = [];
 const check = (n, p, d = '') => { (p ? ok : ko).push(n); console.log((p ? '  OK   ' : '  ECHEC') + ' ' + n + (d ? ' — ' + d : '')); };
 
+/* Le banc d'essai est une COPIE de `site-vitrine/index.html` : le reconstruire ici évite
+   d'éprouver une page périmée après une modification du site — c'est une erreur qui ne se
+   voit pas, le test passe ou échoue sur du code qui n'est plus celui du dépôt. */
+await import('./sitetest-build.mjs');
+
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 const gen = await browser.newPage();
 await gen.goto('about:blank');
@@ -42,8 +47,10 @@ await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' }
 await page.waitForTimeout(500);
 
 check('Titre du site repris du manifeste', (await page.textContent('#site-name')).trim() === 'Melissa Nabet');
-const cards = await page.locator('.project').count();
-check('Une carte par réalisation publiée', cards === 3, cards + ' carte(s)');
+const cards = await page.locator('#projects .project').count();
+/* Quatre réalisations publiées, dont UNE personnelle : la liste principale n'en montre
+   que trois. La quatrième a sa propre section, plus bas. */
+check('Une carte par réalisation publiée, la personnelle mise à part', cards === 3, cards + ' carte(s)');
 const coverLoaded = await page.evaluate(() => [...document.querySelectorAll('.project-img img')].filter(i => i.naturalWidth > 0).length);
 check('Vignettes de couverture réellement chargées', coverLoaded >= 2, coverLoaded + ' chargée(s) sur ' + cards);
 
@@ -57,12 +64,14 @@ const filtres = await page.evaluate(() => ({
    « Bureau » avant « Appartement », et le site doit le respecter. */
 check('Filtre : une case par catégorie publiée, dans l’ordre défini dans le CRM',
   filtres.visible && filtres.boutons.join(' | ') === 'Tout (3) | Bureau (1) | Appartement (2)', filtres.boutons.join(' | '));
+/* La catégorie d'un projet personnel ne gonfle pas le filtre de la vitrine : « Appartement »
+   compte 2 projets professionnels, pas 3. */
 check('Filtre : « Tout » est actif au départ', /^Tout/.test(filtres.actif), filtres.actif);
 const filtre1 = await page.evaluate(async () => {
   [...document.querySelectorAll('#filtres button')].find(b => /Appartement/.test(b.textContent)).click();
   await new Promise(r => setTimeout(r, 200));
   return {
-    cartes: [...document.querySelectorAll('.project-name')].map(n => n.textContent),
+    cartes: [...document.querySelectorAll('#projects .project-name')].map(n => n.textContent),
     actif: (document.querySelector('#filtres button[aria-pressed="true"]') || {}).textContent || '',
   };
 });
@@ -71,7 +80,7 @@ check('Filtre : ne restent que les projets de la catégorie choisie',
 check('Filtre : la case choisie est marquée', /Appartement/.test(filtre1.actif), filtre1.actif);
 // Ouvrir depuis une liste filtrée doit ouvrir LE bon projet, pas celui du même rang
 // dans la liste complète.
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(500);
 const ouvertFiltre = await page.evaluate(() => ({ titre: (document.getElementById('d-title') || {}).textContent || '', hash: location.hash }));
 check('Filtre : ouvrir depuis une liste filtrée ouvre le bon projet',
@@ -92,7 +101,7 @@ const filtreUn = await page.evaluate(() => {
 });
 check('Filtre : une seule catégorie, aucun filtre affiché', filtreUn === true);
 
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(600);
 check('Ouverture du projet', await page.locator('.detail').isVisible());
 check('Titre du projet affiché', (await page.textContent('#d-title')).trim() === 'Bureau Sébastien');
@@ -142,7 +151,7 @@ check('Projet suivant : il ouvre bien le projet annoncé', suivant.apres === sui
 check('Projet suivant : la flèche du clavier fait la même chose',
   suivant.apresFleche !== suivant.apres, suivant.apres + ' → ' + suivant.apresFleche);
 await page.evaluate(async () => { closeProject(); await new Promise(r => setTimeout(r, 200)); });
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(500);
 
 // --- Textes de présentation écrits depuis le CRM
@@ -244,7 +253,7 @@ check('Projet : une invitation à écrire quand des coordonnées existent',
   && /wa\.me|mailto:/.test(contactProjet.avec.lien), contactProjet.avec.texte + ' → ' + contactProjet.avec.lien);
 check('Projet : rien du tout tant qu’aucune coordonnée n’est renseignée', contactProjet.sans === true);
 await page.click('#back'); await page.waitForTimeout(300);
-check('Retour à la liste', await page.locator('.projects').isVisible());
+check('Retour à la liste', await page.locator('#projects').isVisible());
 
 // --- Partage d'un lien et référencement
 // Page fraîche : ce sont les balises telles que les lit un robot qui n'exécute pas le
@@ -286,7 +295,7 @@ await page.waitForTimeout(400);
 
 // Le titre de l'onglet suit le projet ouvert : un lien copié depuis la barre d'adresse
 // n'arrive plus avec le titre du site entier.
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(500);
 const seoProjet = await page.evaluate(() => ({
   titre: document.title,
@@ -393,7 +402,7 @@ await page.waitForTimeout(400);
 const enIndex = await page.evaluate(async () => {
   appliquerTheme('index', 'discret');
   await new Promise(r => setTimeout(r, 250));
-  const c = [...document.querySelectorAll('.project')];
+  const c = [...document.querySelectorAll('#projects .project')];
   if (c.length < 2) return { assez: false };
   const a = c[0].getBoundingClientRect(), b = c[1].getBoundingClientRect();
   const vign = c[0].querySelector('.project-img').getBoundingClientRect();
@@ -419,7 +428,7 @@ const visibilite = async (mouvement, reduit) => {
   await p2.reload({ waitUntil: 'networkidle' });
   await p2.waitForTimeout(900);
   const r = await p2.evaluate(() => {
-    const c = [...document.querySelectorAll('.project')];
+    const c = [...document.querySelectorAll('#projects .project')];
     return { total: c.length,
       invisibles: c.filter(x => parseFloat(getComputedStyle(x).opacity) < 0.05).length };
   });
@@ -435,13 +444,71 @@ await sansObs.addInitScript(() => { delete window.IntersectionObserver; });
 await sansObs.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
 await sansObs.waitForTimeout(900);
 const rSansObs = await sansObs.evaluate(() => {
-  const c = [...document.querySelectorAll('.project')];
+  const c = [...document.querySelectorAll('#projects .project')];
   return { total: c.length, invisibles: c.filter(x => parseFloat(getComputedStyle(x).opacity) < 0.05).length,
            marquees: document.querySelectorAll('.fondu').length };
 });
 await sansObs.close();
 check('Navigateur sans observateur : rien n’est marqué, donc rien n’est invisible',
   rSansObs.total > 0 && rSansObs.invisibles === 0 && rSansObs.marquees === 0, JSON.stringify(rSansObs));
+
+/* LE POIDS D'UNE FICHE PROJET — `sizes` annonçait 100vw alors que la photo s'affiche sur
+   100vw moins les 44 px de marge. Sur un écran à deux pixels physiques par pixel CSS (le
+   plus courant), l'écart faisait basculer le navigateur sur l'image 1600 px pour l'afficher
+   sur 692 px : une fiche de douze photos pesait 4,5 Mo au lieu de 0,6. */
+{
+  const mesure = async (dpr) => {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: dpr });
+    const pg = await c.newPage();
+    let octets = 0;
+    pg.on('response', async r => { try { octets += (await r.body()).length; } catch {} });
+    /* On arrive DIRECTEMENT sur le projet : en passant par la liste, le bandeau d'accueil a
+       déjà mis la grande image en cache, et un navigateur a le droit de la réutiliser plutôt
+       que de télécharger la petite — le contrôle passerait alors pour de mauvaises raisons. */
+    await pg.goto('http://127.0.0.1:8902/index.html#p-r1', { waitUntil: 'networkidle' });
+    await pg.waitForTimeout(600);
+    await pg.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await pg.waitForTimeout(1200);
+    const r = await pg.evaluate(() => {
+      const im = document.querySelector('.shot img');
+      return { css: Math.round(im.getBoundingClientRect().width), src: (im.currentSrc || '').split('/').pop() };
+    });
+    await c.close();
+    return r;
+  };
+  const d2 = await mesure(2), d3 = await mesure(3);
+  check('Poids : à deux pixels par point, la vignette 700 px suffit et c’est elle qui est prise',
+    /^t\d/.test(d2.src), JSON.stringify(d2));
+  check('Poids : à trois pixels par point, la grande image est toujours servie',
+    /^p\d/.test(d3.src), JSON.stringify(d3));
+  check('Poids : la largeur annoncée correspond à la largeur réelle d’affichage',
+    d2.css === d3.css && d2.css > 300 && d2.css < 390, d2.css + 'px');
+}
+
+/* LA SURFACE — saisie librement dans le CRM. Tapée seule (« 110 »), elle s'affichait telle
+   quelle entre le lieu et la mission, sans dire de quoi il s'agit : c'est exactement l'état
+   du vrai site aujourd'hui. L'unité est ajoutée au nombre nu, et seulement à lui. */
+const surf = await page.evaluate(async () => {
+  const lire = () => (document.getElementById('d-meta').textContent || '').trim();
+  const vues = {};
+  for (const id of ['r1', 'r2']) {
+    for (let i = 0; i < projects.length; i++) if (projects[i].id === id) { openProject(i, 'remplacer'); break; }
+    await new Promise(r => setTimeout(r, 250));
+    vues[id] = lire();
+  }
+  const enHebreu = (() => { const avant = langue; langue = 'he'; const v = surfaceLisible('110'); langue = avant; return v; })();
+  closeProject();
+  await new Promise(r => setTimeout(r, 250));
+  return { vues, enHebreu, dejaEcrite: surfaceLisible('85 m²'), vide: surfaceLisible(''),
+           decimal: surfaceLisible('110,5'), espace: surfaceLisible('1 200') };
+});
+check('Surface : un nombre nu reçoit son unité', /110 m²/.test(surf.vues.r2), surf.vues.r2);
+check('Surface : une valeur qui porte déjà son unité n’est pas retouchée',
+  surf.dejaEcrite === '85 m²' && /85 m²/.test(surf.vues.r1) && !/85 m² m²/.test(surf.vues.r1), surf.vues.r1);
+check('Surface : vide reste vide, aucune unité orpheline', surf.vide === '');
+check('Surface : un décimal et un nombre espacé sont reconnus comme des nombres',
+  surf.decimal === '110,5 m²' && surf.espace === '1 200 m²', surf.decimal + ' | ' + surf.espace);
+check('Surface : l’unité suit la langue', surf.enHebreu === '110 מ″ר', surf.enHebreu);
 
 /* CHARGEMENT — ce que voit un visiteur avant que le manifeste arrive. Les cartes d'attente
    doivent être dans le HTML SERVI (donc peintes sans attendre le script), et avoir
@@ -575,7 +642,7 @@ await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' 
 await page.waitForTimeout(700);
 const ancien = await page.evaluate(() => ({
   sous: (document.getElementById('site-tagline').textContent || '').trim(),
-  projets: document.querySelectorAll('.project').length,
+  projets: document.querySelectorAll('#projects .project').length,
   langs: !document.getElementById('langs').hidden,
   journal: !document.getElementById('journal').hidden,
   rubrique: (document.getElementById('t-realisations').textContent || '').trim(),
@@ -706,6 +773,552 @@ const apresLienDirect = await page.evaluate(() => ({
 }));
 check('Lien direct vers un projet : « Toutes les réalisations » ramène à la liste, sans sortir du site',
   !apresLienDirect.vue && apresLienDirect.hash === '' && apresLienDirect.cartes > 0, JSON.stringify(apresLienDirect));
+
+// ============================================================================
+//  LES RÉALISATIONS PERSONNELLES : une section à part, pas une liste cachée
+// ============================================================================
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+const perso = await page.evaluate(() => {
+  const sec = document.getElementById('personnelles');
+  return {
+    visible: !sec.hidden,
+    titre: (document.getElementById('t-personnelles') || {}).textContent || '',
+    noms: [...document.querySelectorAll('#projects-perso .project-name')].map(e => e.textContent),
+    nomsListe: [...document.querySelectorAll('#projects .project-name')].map(e => e.textContent),
+    vignettes: [...document.querySelectorAll('#projects-perso img')].filter(i => i.naturalWidth > 0).length,
+    meta: (document.querySelector('#projects-perso .project-meta') || {}).textContent || '',
+  };
+});
+check('Personnelles : elles ont leur propre section, avec leur titre',
+  perso.visible && /personnelles/i.test(perso.titre), perso.titre);
+check('Personnelles : le projet marqué y est, et NULLE PART dans la liste principale',
+  perso.noms.join() === 'Mon appartement' && perso.nomsListe.indexOf('Mon appartement') < 0,
+  perso.noms.join() + ' | liste : ' + perso.nomsListe.join(', '));
+check('Personnelles : leurs cartes sont de vraies cartes — photo chargée, lieu, année',
+  perso.vignettes === 1 && /2024/.test(perso.meta) && /Jaffa/.test(perso.meta),
+  perso.vignettes + ' vignette(s) · ' + perso.meta);
+
+/* Le bandeau est la vitrine du studio : c'est ce que « une section à part, en dehors du
+   bandeau » veut dire. On regarde plusieurs vues d'affilée. */
+const bandeauSansPerso = await page.evaluate(async () => {
+  const vus = [];
+  for (var i = 0; i < 8; i++) { clearTimeout(bdMinuteur); bdAller(1); await new Promise(r => setTimeout(r, 350)); vus.push(bdProjet && bdProjet.title); }
+  return { vus, dansLesVues: bdVues.some(v => v.p.title === 'Mon appartement') };
+});
+check('Personnelles : elles ne passent jamais dans le bandeau d’accueil',
+  !bandeauSansPerso.dansLesVues && bandeauSansPerso.vus.indexOf('Mon appartement') < 0,
+  bandeauSansPerso.vus.filter(Boolean).join(' · '));
+
+/* Une réalisation personnelle s'ouvre comme les autres — c'est un rangement, pas une
+   mise à l'écart —, et « Projet suivant » reste dans sa famille. */
+const ouvrirPerso = await page.evaluate(async () => {
+  document.querySelectorAll('#projects-perso .project')[0].click();
+  await new Promise(r => setTimeout(r, 700));
+  const t = (document.getElementById('d-title') || {}).textContent || '';
+  const suiv = (document.getElementById('suivant') || {}).hidden;
+  const photos = [...document.querySelectorAll('.shot img')].filter(i => i.naturalWidth > 0).length;
+  const secVue = getComputedStyle(document.getElementById('personnelles')).display;
+  document.getElementById('back').click();
+  await new Promise(r => setTimeout(r, 500));
+  return { t, suiv, photos, secVue };
+});
+check('Personnelles : une réalisation personnelle s’ouvre comme les autres',
+  ouvrirPerso.t === 'Mon appartement' && ouvrirPerso.photos === 2,
+  ouvrirPerso.t + ' · ' + ouvrirPerso.photos + ' photo(s)');
+check('Personnelles : un projet ouvert masque aussi cette section',
+  ouvrirPerso.secVue === 'none', ouvrirPerso.secVue);
+/* Une seule personnelle : « Projet suivant » n'a nulle part où aller — il ne doit pas
+   renvoyer vers la vitrine professionnelle. */
+check('Personnelles : « Projet suivant » ne saute pas d’une famille à l’autre',
+  ouvrirPerso.suiv === true);
+
+// Aucune personnelle publiée : la section n'existe pas, et le menu n'en parle pas.
+const sansPerso = await page.evaluate(async () => {
+  const garde = projects.filter(p => p.personnelle);
+  projects = projects.filter(p => !p.personnelle);
+  renderIndex(); renderMenu();
+  await new Promise(r => setTimeout(r, 250));
+  const r = { sec: document.getElementById('personnelles').hidden,
+              menu: [...document.querySelectorAll('#menu-in button')].map(b => b.dataset.menu) };
+  projects = projects.concat(garde);
+  renderIndex(); renderMenu();
+  return r;
+});
+check('Personnelles : sans projet marqué, ni section ni entrée de menu',
+  sansPerso.sec === true && sansPerso.menu.indexOf('personnelles') < 0, sansPerso.menu.join(','));
+
+// ============================================================================
+//  LE MENU DU SITE : où l'on peut aller, et où l'on est
+// ============================================================================
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+
+const lireMenu = () => page.evaluate(() => {
+  const m = document.getElementById('menu');
+  return {
+    visible: !m.hidden,
+    colle: getComputedStyle(m).position,
+    entrees: [...document.querySelectorAll('#menu-in button')].map(b => b.textContent.trim()),
+    actif: (document.querySelector('#menu-in [aria-current="true"]') || {}).textContent || '',
+    titreListeVu: (() => { const t = document.getElementById('t-realisations');
+      return t ? getComputedStyle(t).display !== 'none' : false; })(),
+  };
+});
+const menu1 = await lireMenu();
+check('Menu : une barre en haut, avec une entrée par section publiée',
+  menu1.visible && menu1.entrees.join(' | ') === 'Réalisations | Réalisations personnelles | À la vente | Journal | À propos',
+  menu1.entrees.join(' | '));
+/* Sur un portfolio on descend loin dans les photos : remonter pour changer de section est
+   le geste qu'on ne fait pas. */
+check('Menu : il reste accessible en défilant', menu1.colle === 'sticky', menu1.colle);
+check('Menu : l’entrée où l’on se trouve est marquée', menu1.actif === 'Réalisations', menu1.actif);
+/* Le menu annonce déjà « Réalisations » trois centimètres plus haut : répéter le mot en
+   titre de liste, c'est deux fois la même chose. */
+check('Menu : le titre de la liste ne répète pas l’entrée du menu', menu1.titreListeVu === false);
+
+const versBoutique = await page.evaluate(async () => {
+  document.querySelector('#menu-in [data-menu="boutique"]').click();
+  await new Promise(r => setTimeout(r, 1200));
+  const sec = document.getElementById('boutique').getBoundingClientRect();
+  const barre = document.getElementById('menu').getBoundingClientRect();
+  return { hautSection: Math.round(sec.top), basMenu: Math.round(barre.bottom),
+           actif: (document.querySelector('#menu-in [aria-current="true"]') || {}).textContent || '' };
+});
+/* La section doit arriver SOUS la barre collante, pas dessous elle : un titre caché
+   derrière le menu donne l'impression que le clic n'a rien fait. */
+check('Menu : « À la vente » amène à la boutique, sous la barre et non derrière',
+  versBoutique.hautSection >= versBoutique.basMenu - 2 && versBoutique.hautSection < 200,
+  'section à ' + versBoutique.hautSection + 'px, barre finit à ' + versBoutique.basMenu + 'px');
+check('Menu : l’entrée atteinte devient l’entrée marquée',
+  /vente/i.test(versBoutique.actif), versBoutique.actif);
+
+/* « À propos » est la DERNIÈRE section : le navigateur ne peut pas la faire monter plus
+   haut, il n'y a rien après elle pour défiler. La promesse n'est donc pas « elle arrive
+   sous la barre » mais « on arrive en bas du site, et elle est entièrement à l'écran ». */
+const versApropos = await page.evaluate(async () => {
+  document.querySelector('#menu-in [data-menu="apropos"]').click();
+  await new Promise(r => setTimeout(r, 1200));
+  const sec = document.getElementById('apropos').getBoundingClientRect();
+  const bas = (window.scrollY || window.pageYOffset) + window.innerHeight;
+  return { haut: Math.round(sec.top), basSec: Math.round(sec.bottom),
+           ecran: window.innerHeight, enBasDuSite: bas >= document.body.scrollHeight - 4,
+           texte: (document.getElementById('apropos-txt') || {}).textContent || '' };
+});
+check('Menu : « À propos » descend au bas du site, et la section y est entièrement visible',
+  versApropos.enBasDuSite && versApropos.haut >= 0 && versApropos.basSec <= versApropos.ecran + 2
+  && /banc d’essai/.test(versApropos.texte),
+  JSON.stringify(versApropos).slice(0, 130));
+
+/* Depuis un projet ouvert : le menu doit d'abord refermer le projet, sinon il ferait
+   défiler vers une section cachée sous le détail — et il ne se passerait rien. */
+const depuisProjet = await page.evaluate(async () => {
+  openProject(0);
+  await new Promise(r => setTimeout(r, 600));
+  const ouvert = document.body.classList.contains('viewing');
+  document.querySelector('#menu-in [data-menu="journal"]').click();
+  await new Promise(r => setTimeout(r, 1400));
+  return { ouvert, encoreOuvert: document.body.classList.contains('viewing'),
+           haut: Math.round(document.getElementById('journal').getBoundingClientRect().top) };
+});
+check('Menu : depuis un projet ouvert, il referme le projet puis va à la section',
+  depuisProjet.ouvert && !depuisProjet.encoreOuvert && depuisProjet.haut < 220,
+  JSON.stringify(depuisProjet));
+
+// Les libellés viennent du CRM quand Melissa en écrit un ; sinon, le mot de la page.
+const libelles = await page.evaluate(() => {
+  infosSite.menuBoutique = 'La boutique';
+  infosSite.menuApropos = '';
+  renderMenu();
+  const lu = [...document.querySelectorAll('#menu-in button')].map(b => b.textContent.trim());
+  delete infosSite.menuBoutique;
+  renderMenu();
+  return { lu, remis: [...document.querySelectorAll('#menu-in button')].map(b => b.textContent.trim()) };
+});
+check('Menu : un libellé écrit dans le CRM remplace le mot par défaut',
+  libelles.lu.indexOf('La boutique') >= 0 && libelles.lu.indexOf('À propos') >= 0, libelles.lu.join(' | '));
+check('Menu : effacé, le mot par défaut revient',
+  libelles.remis.indexOf('À la vente') >= 0, libelles.remis.join(' | '));
+
+/* Une entrée qui mène nulle part est pire qu'une entrée manquante. */
+const menuVide = await page.evaluate(() => {
+  const j = document.getElementById('journal'), b = document.getElementById('boutique');
+  const ej = j.hidden, eb = b.hidden;
+  j.hidden = true; b.hidden = true;
+  renderMenu();
+  const restant = [...document.querySelectorAll('#menu-in button')].map(b2 => b2.dataset.menu);
+  const barreVisible = !document.getElementById('menu').hidden;
+  j.hidden = ej; b.hidden = eb; renderMenu();
+  return { restant, barreVisible };
+});
+check('Menu : une section vide n’a pas d’entrée',
+  menuVide.restant.join(',') === 'liste,personnelles,apropos', menuVide.restant.join(','));
+check('Menu : deux entrées suffisent pour qu’il ait un sens', menuVide.barreVisible === true);
+
+// --- Sur téléphone : ça défile latéralement, et rien ne déborde de la page
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+const menuTel = await page.evaluate(() => {
+  const in_ = document.getElementById('menu-in');
+  return { entrees: in_.querySelectorAll('button').length,
+           defileLateral: in_.scrollWidth > in_.clientWidth + 2,
+           debordPage: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+           indice: getComputedStyle(document.getElementById('menu'), '::after').display };
+});
+await page.screenshot({ path: '/tmp/mn-menu-390.png' });
+check('Menu sur téléphone : toutes les entrées sont là, on les fait défiler du doigt',
+  menuTel.entrees === 5 && menuTel.defileLateral && menuTel.debordPage <= 1, JSON.stringify(menuTel));
+check('Menu sur téléphone : un dégradé dit qu’il y a une suite', menuTel.indice !== 'none', menuTel.indice);
+await page.setViewportSize({ width: 1280, height: 900 });
+
+// ============================================================================
+//  LE BANDEAU D'ACCUEIL : deux photos qui se suivent, projets au hasard, fondu doux
+// ============================================================================
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+/* Le bandeau se met en pause quand le pointeur est dessus (c'est voulu, et vérifié plus
+   bas). On écarte donc la souris avant de mesurer le défilement automatique — sinon le
+   contrôle dépendrait de l'endroit où un clic précédent l'a laissée. */
+await page.mouse.move(4, 4);
+await page.waitForTimeout(1200);
+
+/* Le manifeste, relu ici : les contrôles doivent porter sur ce qui est PUBLIÉ, pas sur des
+   chemins recopiés à la main dans le test. */
+const manif = await page.evaluate(() => fetch('galerie/u/manifest.json').then(r => r.json()));
+const fichier = (u) => String(u || '').split('/').slice(-1)[0];
+
+const lireBandeau = () => page.evaluate(() => {
+  const b = document.getElementById('bandeau');
+  const on = document.querySelector('.bd-couche.on');
+  return {
+    visible: !b.hidden,
+    couche: on ? on.id : '',
+    srcs: on ? [...on.querySelectorAll('img')].map(i => i.currentSrc || i.src) : [],
+    chargees: on ? [...on.querySelectorAll('img')].filter(i => i.naturalWidth > 0).length : 0,
+    nom: (document.getElementById('bd-nom') || {}).textContent || '',
+    meta: (document.getElementById('bd-meta') || {}).textContent || '',
+    duo: !!(on && on.classList.contains('duo')),
+    opaciteAutre: (() => {
+      const autre = [...document.querySelectorAll('.bd-couche')].filter(c => c !== on)[0];
+      return autre ? getComputedStyle(autre).opacity : '';
+    })(),
+    transition: on ? getComputedStyle(on).transitionDuration : '',
+  };
+});
+
+const bd1 = await lireBandeau();
+check('Bandeau : une grande image s’affiche en haut de l’accueil',
+  bd1.visible && bd1.chargees === bd1.srcs.length && bd1.srcs.length > 0,
+  bd1.srcs.length + ' photo(s), ' + bd1.chargees + ' chargée(s)');
+check('Bandeau : le nom du projet montré est affiché', !!bd1.nom.trim(), bd1.nom + ' — ' + bd1.meta);
+
+/* Le fondu : deux couches superposées, l'une visible, l'autre à zéro, avec une transition
+   d'opacité. Un changement sec passerait tous les autres contrôles. */
+check('Bandeau : le changement se fait en fondu, pas en saut',
+  parseFloat(bd1.transition) >= 0.6 && bd1.opaciteAutre === '0',
+  'transition ' + bd1.transition + ', autre couche à ' + bd1.opaciteAutre);
+
+/* LE point demandé : deux photos DU MÊME projet et QUI SE SUIVENT. On le vérifie contre le
+   manifeste — un couple pris dans deux chantiers différents passerait ici.
+   L'ordre des projets étant tiré au hasard, on ne peut rien conclure d'UNE vue : un projet
+   d'une seule photo donne légitimement une vue solitaire. On en observe donc plusieurs. */
+const verifierPaire = (vu) => {
+  const p = (manif.realisations || []).filter(x => x.title === vu.nom)[0];
+  if (!p) return { ok: false, why: 'projet « ' + vu.nom + ' » introuvable dans le manifeste' };
+  /* Deux tailles existent pour chaque photo (1600 px et 700 px) et le navigateur prend la
+     plus petite quand elle suffit : les deux nomment la même photo. */
+  const rangDe = (f) => {
+    for (let i = 0; i < p.photos.length; i++) {
+      if (fichier(p.photos[i].full) === f || fichier(p.photos[i].thumb) === f) return i;
+    }
+    return -1;
+  };
+  const vus = vu.srcs.map(fichier);
+  const rangs = vus.map(rangDe);
+  if (rangs.some(r => r < 0)) return { ok: false, why: 'photo étrangère au projet : ' + vus.join(', ') };
+  if (rangs.length === 2 && rangs[1] !== rangs[0] + 1) return { ok: false, why: 'photos non consécutives : rangs ' + rangs.join(' et ') };
+  return { ok: true, why: vu.nom + ' · rangs ' + rangs.join('+'), n: rangs.length, projet: p };
+};
+const paire1 = verifierPaire(bd1);
+check('Bandeau : la première vue vient bien d’un projet publié, dans l’ordre',
+  paire1.ok, paire1.why);
+
+/* On attend le changement au lieu de photographier un instant précis, et on le repère à la
+   COUCHE qui s'échange — pas au rang, qui avance dès que l'envoi commence, ni aux adresses
+   d'images, que le banc d'essai fait volontairement partager entre projets. */
+const attendreVue = async (coucheAvant) => {
+  try {
+    await page.waitForFunction((c) => {
+      const on = document.querySelector('.bd-couche.on');
+      return !!on && on.id !== c;
+    }, coucheAvant, { timeout: 12000 });
+    return await lireBandeau();
+  } catch (e) { return null; }
+};
+const bd2 = await attendreVue(bd1.couche);
+check('Bandeau : la vue change toute seule après le temps réglé, et les couches s’échangent',
+  !!bd2 && bd2.couche !== bd1.couche && bd2.chargees === bd2.srcs.length,
+  bd2 ? (bd1.couche + ' → ' + bd2.couche + ' · ' + bd2.nom) : 'aucun changement en 12 s');
+
+/* Plusieurs vues d'affilée : c'est là que la règle se voit. Chacune doit appartenir à un
+   seul projet, ses photos se suivre, et un projet qui a de quoi faire une paire doit en
+   montrer une sur un écran large. */
+const vues = [bd1, bd2].filter(Boolean);
+let derniere = vues[vues.length - 1];
+for (let i = 0; i < 4 && derniere; i++) {
+  derniere = await attendreVue(derniere.couche);
+  if (derniere) vues.push(derniere);
+}
+const analyses = vues.map(verifierPaire);
+check('Bandeau : chaque vue vient d’un seul projet, photos qui se suivent',
+  analyses.length >= 4 && analyses.every(a => a.ok),
+  analyses.map(a => a.why).join(' | '));
+check('Bandeau : sur un écran large, un projet à plusieurs photos en montre DEUX côte à côte',
+  vues.some((v, k) => v.duo && analyses[k].ok && analyses[k].n === 2),
+  vues.map(v => v.srcs.length + (v.duo ? ' (duo)' : '')).join(' | '));
+/* Un projet d'une seule photo ne peut pas faire de paire : sa vue s'affiche seule et prend
+   toute la largeur, elle ne doit pas laisser une case vide à côté. */
+const solos = vues.filter(v => v.srcs.length === 1);
+check('Bandeau : une vue solitaire occupe toute la largeur, sans case vide',
+  solos.every(v => !v.duo), solos.length + ' vue(s) solitaire(s)');
+
+// --- DÉFILER À LA MAIN : les flèches, le clavier, le doigt
+const parGeste = async (faire) => {
+  const avant = await page.evaluate(() => ({
+    couche: (document.querySelector('.bd-couche.on') || {}).id || '',
+    rang: bdRang, nom: (document.getElementById('bd-nom') || {}).textContent || '',
+  }));
+  await faire();
+  try {
+    await page.waitForFunction((c) => {
+      const on = document.querySelector('.bd-couche.on');
+      return !!on && on.id !== c;
+    }, avant.couche, { timeout: 9000 });
+  } catch (e) { return { avant, apres: null }; }
+  const apres = await lireBandeau();
+  const rang = await page.evaluate(() => bdRang);
+  return { avant, apres: Object.assign({ rang }, apres) };
+};
+
+const bdFleches = await page.evaluate(() => {
+  const p = document.getElementById('bd-prec'), s = document.getElementById('bd-suiv');
+  return { existent: !!p && !!s, visibles: !p.hidden && !s.hidden,
+           dansLeBouton: !!document.querySelector('.bd-ouvrir button'),
+           labels: [p.getAttribute('aria-label'), s.getAttribute('aria-label')] };
+});
+check('Bandeau : deux flèches ‹ › pour défiler à la main',
+  bdFleches.existent && bdFleches.visibles && bdFleches.labels.every(Boolean), JSON.stringify(bdFleches));
+/* Un bouton dans un bouton n'existe pas en HTML : le clavier et les lecteurs d'écran s'y
+   perdent. Les flèches sont donc voisines du bouton d'ouverture, pas ses enfants. */
+check('Bandeau : les flèches ne sont pas imbriquées dans le bouton d’ouverture',
+  bdFleches.dansLeBouton === false);
+
+const suiv = await parGeste(() => page.locator('#bd-suiv').click());
+check('Bandeau : la flèche › passe à la vue suivante',
+  !!suiv.apres && suiv.apres.rang === suiv.avant.rang + 1 && suiv.apres.chargees === suiv.apres.srcs.length,
+  suiv.apres ? ('rang ' + suiv.avant.rang + ' → ' + suiv.apres.rang) : 'rien ne s’est passé');
+/* Reculer doit ramener EXACTEMENT là d'où l'on vient — c'est tout l'intérêt : on a vu une
+   photo passer trop vite et on veut la revoir. */
+const prec = await parGeste(() => page.locator('#bd-prec').click());
+check('Bandeau : la flèche ‹ ramène à la vue précédente, celle qu’on vient de quitter',
+  !!prec.apres && prec.apres.rang === suiv.avant.rang && prec.apres.nom === suiv.avant.nom,
+  prec.apres ? ('rang ' + prec.avant.rang + ' → ' + prec.apres.rang + ' · ' + prec.apres.nom) : 'rien ne s’est passé');
+
+const clavier = await parGeste(async () => {
+  await page.locator('#bd-ouvrir').focus();
+  await page.keyboard.press('ArrowRight');
+});
+check('Bandeau : les touches ← → font défiler au clavier',
+  !!clavier.apres && clavier.apres.rang === clavier.avant.rang + 1,
+  clavier.apres ? ('rang ' + clavier.avant.rang + ' → ' + clavier.apres.rang) : 'rien ne s’est passé');
+
+/* Le balayage au doigt : un glissement franc change de vue, et n'ouvre PAS le projet —
+   un balayage se termine par un `click`, c'est le piège classique. */
+const glisse = await parGeste(() => page.evaluate(() => {
+  const b = document.getElementById('bandeau');
+  const t = (x) => ({ clientX: x, clientY: 300 });
+  b.dispatchEvent(Object.assign(new Event('touchstart'), { touches: [t(600)] }));
+  b.dispatchEvent(Object.assign(new Event('touchend'), { changedTouches: [t(500)] }));
+}));
+check('Bandeau : glisser le doigt change de vue',
+  !!glisse.apres && glisse.apres.rang === glisse.avant.rang + 1,
+  glisse.apres ? ('rang ' + glisse.avant.rang + ' → ' + glisse.apres.rang) : 'rien ne s’est passé');
+const ouvertApresGlisse = await page.evaluate(() => {
+  document.getElementById('bd-ouvrir').click();
+  return document.body.classList.contains('viewing');
+});
+check('Bandeau : un balayage n’ouvre pas le projet par accident', ouvertApresGlisse === false);
+
+/* Un geste manuel RELANCE le compte à zéro : il ne débranche pas le bandeau. On regarde une
+   image de plus, on ne coupe pas le défilement. */
+const apresGeste = await parGeste(() => Promise.resolve());
+check('Bandeau : après un geste manuel, le défilement automatique reprend',
+  !!apresGeste.apres, apresGeste.apres ? 'reprend' : 'ne reprend plus');
+
+/* Une seule photo par vue : le réglage de Melissa, même sur un écran large. */
+const solo = await page.evaluate(async () => {
+  infosSite.diaporamaPar = 1;
+  bdConstruire();
+  clearTimeout(bdMinuteur);
+  bdAller(1);
+  await new Promise(r => setTimeout(r, 1500));
+  const on = document.querySelector('.bd-couche.on');
+  const r = { par: bdRegle().par, parVue: bdParVue(),
+    cases: on ? on.querySelectorAll('img').length : 0,
+    solo: !!(on && on.classList.contains('solo')), duo: !!(on && on.classList.contains('duo')),
+    largeur: on ? Math.round(on.getBoundingClientRect().width) : 0,
+    /* On mesure la CASE, pas l'image : l'image est volontairement agrandie par le
+       rapprochement lent, et rognée par la case (`overflow:hidden`). */
+    caseLargeur: on && on.querySelector('.bd-case') ? Math.round(on.querySelector('.bd-case').getBoundingClientRect().width) : 0,
+    imageDeborde: (() => { const c = on && on.querySelector('.bd-case');
+      return c ? getComputedStyle(c).overflow !== 'hidden' : true; })() };
+  /* Le tirage étant au hasard, la vue affichée après le retour peut légitimement être
+     solitaire (un projet d'une seule photo, ou la dernière d'un nombre impair). Ce qui se
+     vérifie sans dépendre du hasard, c'est la LISTE DES VUES construite : à une photo par
+     vue, aucune ne doit en porter deux ; à deux, il doit y en avoir. */
+  r.vuesA1 = bdVues.map(v => v.photos.length);
+  infosSite.diaporamaPar = 2; bdConstruire();
+  r.vuesA2 = bdVues.map(v => v.photos.length);
+  r.parApres = bdRegle().par;
+  clearTimeout(bdMinuteur); bdAller(1);
+  await new Promise(r2 => setTimeout(r2, 1500));
+  return r;
+});
+check('Bandeau : réglé sur UNE photo, il n’en montre qu’une, sur toute la largeur',
+  solo.par === 1 && solo.cases === 1 && solo.solo && !solo.duo
+  && Math.abs(solo.caseLargeur - solo.largeur) < 4 && !solo.imageDeborde,
+  JSON.stringify(solo));
+check('Bandeau : à UNE photo par vue, aucune vue n’en porte deux',
+  solo.vuesA1.length > 0 && solo.vuesA1.every(n => n === 1), solo.vuesA1.join(','));
+check('Bandeau : remis sur deux, les vues repassent par paires',
+  solo.parApres === 2 && solo.vuesA2.some(n => n === 2), solo.vuesA2.join(','));
+
+/* Le survol suspend le défilement : on ne change pas une image sous les yeux de quelqu'un
+   qui la regarde — et surtout pas sous son doigt au moment où il appuie. C'est aussi ce qui
+   rend le clic fiable : sans cette pause, on ouvrirait le projet suivant. */
+/* On sort d'abord le pointeur du bandeau : les contrôles précédents ont cliqué sur les
+   flèches, qui sont dedans. Sans ce retour à zéro, il n'y a pas de « survol » à mesurer —
+   on y était déjà. */
+await page.mouse.move(4, 4);
+await page.waitForTimeout(300);
+await page.hover('#bandeau');
+const avantPause = Object.assign({ pause: await page.evaluate(() => bdPause) }, await lireBandeau());
+await page.waitForTimeout(4500);            // au-delà des 3 s réglées
+const apresPause = await lireBandeau();
+check('Bandeau : le survol suspend le défilement',
+  avantPause.pause === true && apresPause.couche === avantPause.couche && apresPause.nom === avantPause.nom,
+  'pause=' + avantPause.pause + ' · ' + avantPause.couche + ' → ' + apresPause.couche);
+
+// Un appui ouvre le projet montré — c'est ce qui en fait autre chose qu'une décoration.
+const nomAvantClic = apresPause.nom;
+await page.locator('#bandeau').click();
+await page.waitForTimeout(700);
+const apresClic = await page.evaluate(() => ({
+  vue: document.body.classList.contains('viewing'),
+  titre: (document.getElementById('d-title') || {}).textContent || '',
+  bandeauVu: getComputedStyle(document.getElementById('bandeau')).display,
+}));
+check('Bandeau : un appui ouvre le projet montré',
+  apresClic.vue && apresClic.titre === nomAvantClic, apresClic.titre + ' / attendu ' + nomAvantClic);
+check('Bandeau : il disparaît dès qu’un projet est ouvert', apresClic.bandeauVu === 'none', apresClic.bandeauVu);
+
+await page.locator('#back').click();
+await page.waitForTimeout(600);
+check('Bandeau : il revient quand on retourne à la liste',
+  (await page.evaluate(() => getComputedStyle(document.getElementById('bandeau')).display)) !== 'none');
+
+// --- Le réglage, lu du manifeste, avec repli sur une valeur absurde
+const reglage = await page.evaluate(() => {
+  const lu = bdRegle();
+  const sauve = infosSite.diaporamaSec;
+  infosSite.diaporamaSec = 0.2;   // valeur absurde : clignoterait
+  const absurde = bdRegle();
+  infosSite.diaporamaSec = sauve;
+  return { lu, absurde, defaut: BD_SEC_DEFAUT };
+});
+check('Bandeau : la durée d’affichage vient du CRM', reglage.lu.delai === 3000, reglage.lu.delai + ' ms');
+check('Bandeau : une durée absurde retombe sur le défaut, elle ne fait pas clignoter le site',
+  reglage.absurde.delai === reglage.defaut * 1000, reglage.absurde.delai + ' ms');
+
+// --- Sur téléphone : une photo à la fois, et rien qui déborde
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1400);
+const tel = await lireBandeau();
+const debordTel = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+await page.screenshot({ path: '/tmp/mn-bandeau-390.png' });
+check('Bandeau sur téléphone : une seule photo à la fois, pas deux timbres-poste',
+  tel.visible && tel.srcs.length === 1 && !tel.duo, tel.srcs.length + ' photo(s)');
+check('Bandeau sur téléphone : la page ne déborde pas', debordTel <= 1, debordTel + 'px');
+const paireTel = verifierPaire(tel);
+check('Bandeau sur téléphone : la photo appartient bien au projet nommé', paireTel.ok, paireTel.why);
+await page.setViewportSize({ width: 1280, height: 900 });
+
+/* Au doigt : un appui suspend, mais le doigt finit toujours par se lever. Sans reprise, un
+   simple effleurement figeait le bandeau pour le reste de la visite — et sur un écran
+   tactile, aucun `mouseleave` ne vient jamais le réveiller. */
+await page.mouse.move(4, 4);
+const tactile = await page.evaluate(async () => {
+  const b = document.getElementById('bandeau');
+  /* Le survol suspend aussi, et le pointeur peut être resté sur le bandeau après les
+     contrôles précédents : on repart d'un état franc, sinon ce contrôle mesurerait la
+     position de la souris au lieu du geste du doigt. */
+  b.dispatchEvent(new Event('mouseleave'));
+  const avant = bdPause;
+  b.dispatchEvent(new Event('touchstart'));
+  const pendant = bdPause;
+  b.dispatchEvent(new Event('touchend'));
+  await new Promise(r => setTimeout(r, 60));
+  return { avant, pendant, apres: bdPause, minuteur: !!bdMinuteur };
+});
+check('Bandeau au doigt : l’appui suspend, et le doigt levé relance',
+  tactile.avant === false && tactile.pendant === true && tactile.apres === false && tactile.minuteur,
+  JSON.stringify(tactile));
+
+/* Sans survol possible (téléphone, tablette), une commande qui n'apparaît qu'au survol
+   n'existe pas. Les flèches doivent donc être visibles en permanence — vérifié sur un
+   contexte réellement tactile, pas déduit de la feuille de style. */
+const ctxTactile = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+const pageTactile = await ctxTactile.newPage();
+await pageTactile.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await pageTactile.waitForTimeout(1600);
+const tact = await pageTactile.evaluate(() => {
+  const p = document.getElementById('bd-prec');
+  return { hoverNone: matchMedia('(hover:none)').matches, cachee: p.hidden,
+           opacite: parseFloat(getComputedStyle(p).opacity),
+           taille: Math.round(p.getBoundingClientRect().width) };
+});
+await pageTactile.screenshot({ path: '/tmp/mn-bandeau-tactile.png' });
+await ctxTactile.close();
+check('Bandeau au doigt : les flèches sont visibles en permanence, et assez grandes pour le pouce',
+  tact.hoverNone && !tact.cachee && tact.opacite > 0.5 && tact.taille >= 40, JSON.stringify(tact));
+
+// --- « Masqué » : le site commence par la liste, sans bandeau du tout
+await page.goto('http://127.0.0.1:8902/index-theme.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
+check('Bandeau : réglé sur « masqué », il n’existe pas',
+  await page.evaluate(() => document.getElementById('bandeau').hidden),
+  await page.evaluate(() => document.getElementById('bandeau').hidden ? 'absent' : 'encore là'));
+
+// --- Aucun projet publié : pas de bandeau vide au-dessus du message
+await page.goto('http://127.0.0.1:8902/vide.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(700);
+check('Bandeau : rien de publié, pas de cadre vide au-dessus du message',
+  await page.evaluate(() => document.getElementById('bandeau').hidden));
+
+// --- Un manifeste ancien, sans le réglage : le bandeau marche quand même, sur son défaut
+await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+const ancienBd = await page.evaluate(() => ({
+  visible: !document.getElementById('bandeau').hidden,
+  delai: bdRegle().delai,
+  photos: [...document.querySelectorAll('.bd-couche.on img')].filter(i => i.naturalWidth > 0).length,
+}));
+check('Bandeau : un manifeste publié avant ce réglage l’affiche quand même, sur son défaut',
+  ancienBd.visible && ancienBd.delai === 7000 && ancienBd.photos === 1, JSON.stringify(ancienBd));
+
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(900);
 
 const realErrs = errs.filter(e => !envNoise(e));
 check('Aucune erreur JavaScript du site', realErrs.length === 0, realErrs.slice(0, 3).join(' | '));

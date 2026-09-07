@@ -77,6 +77,11 @@ python3 -m http.server 8902 -d /tmp/mn-sitetest  # dans un autre terminal
 node tests/site.test.mjs
 ```
 
+`site.test.mjs` **reconstruit le banc d'essai lui-même** au démarrage : la première commande
+n'est utile que pour créer le dossier avant de le servir. Sans cette reconstruction, une
+modification de `site-vitrine/index.html` était éprouvée sur la copie précédente — un test
+qui passe (ou échoue) sur du code qui n'est plus celui du dépôt.
+
 `sitetest-build.mjs` recopie le VRAI `site-vitrine/index.html` en ne changeant que
 l'adresse du stockage : le test porte donc bien sur la page publiée, pas sur une copie
 qui aurait dérivé. Le manifeste de test contient une photo légendée et deux sans légende.

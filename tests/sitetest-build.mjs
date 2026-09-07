@@ -70,6 +70,9 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
           email: 'essai@example.com', tel: '052 000 00 00', instagram: '@essai',
           /* L'ordre des sections vient du CRM. Ici il est VOLONTAIREMENT contraire à
              l'alphabet : c'est ce qui prouve que le site suit la liste et non un tri. */
+          /* Le bandeau d'accueil, réglé au minimum permis (3 s) : le test doit pouvoir
+             observer un vrai changement automatique sans attendre sept secondes. */
+          diaporama: 'actif', diaporamaSec: 3,
           categories: ['Bureau', 'Appartement'],
           categoriesProduits: ['Revêtement mural', 'Panneau décoratif'],
           langues: ['fr', 'en', 'he'],
@@ -109,7 +112,9 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
     photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '', true)],
   }, {
     id: 'r2', title: 'Duplex Ben Yehuda', date: '2025',
-    lieu: 'Tel Aviv', categorie: 'Appartement',
+    /* Surface tapée comme un nombre nu — c'est ce que Mélissa fait en pratique. Le site
+       doit y remettre l'unité, alors que « 85 m² » de r1 ne doit pas être touché. */
+    lieu: 'Tel Aviv', surface: '110', categorie: 'Appartement',
     publishedAt: new Date().toISOString(),
     photos: [photo(0, ''), photo(1, '')],
   }, {
@@ -117,6 +122,13 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
     categorie: 'Appartement',
     publishedAt: new Date().toISOString(),
     photos: [photo(2, '')],
+  }, {
+    /* Une réalisation PERSONNELLE : elle doit quitter la liste principale, les filtres et
+       le bandeau, et n'exister que dans sa propre section. */
+    id: 'r4', title: 'Mon appartement', date: '2024', lieu: 'Jaffa',
+    categorie: 'Appartement', personnelle: true,
+    publishedAt: new Date().toISOString(),
+    photos: [photo(0, ''), photo(1, '')],
   }],
 }, null, 1));
 
@@ -125,8 +137,10 @@ writeFileSync(join(DIR, 'index-theme.html'), enIndex);
 /* Mêmes photos que le banc principal : c'est l'habillage qu'on éprouve, pas les images. */
 writeFileSync(join(DIR, 'galerie/i/manifest.json'), JSON.stringify({
   version: 1, updatedAt: new Date().toISOString(),
+  /* Bandeau refusé : la page doit commencer par la liste, sans bandeau du tout. C'est
+     l'autre moitié du réglage, et elle ne se déduit pas de la première. */
   site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur',
-          theme: 'index', mouvement: 'discret',
+          theme: 'index', mouvement: 'discret', diaporama: 'aucun',
           apropos: 'Texte de présentation du banc d’essai.', email: 'essai@example.com' },
   realisations: [
     { id: 'r1', title: 'Bureau Sébastien', date: '2026', lieu: 'Tel Aviv',
