@@ -2521,3 +2521,44 @@ WebP q0,82 (−16 %) ne changeait pas la classe du problème, et demandait de to
 
 **Vérification** : 503 contrôles CRM (5 nouveaux), 138 site (8 nouveaux), 21 bout en bout,
 7 sections, 20 langues — 0 échec. CRM et site déployés et vérifiés en ligne.
+
+---
+
+## 7 septembre 2026 — Le solde Anthropic n'existe pas ; ce qu'on affiche à la place
+
+Raphaël : « ajoute une vue sur le solde de crédits Anthropic disponible ».
+
+**Vérifié avant d'écrire une ligne : ce solde n'est exposé par aucune API.** L'API
+d'administration d'Anthropic donne la consommation en jetons
+(`/v1/organizations/usage_report/messages`) et le coût dépensé (`/v1/organizations/cost_report`),
+**jamais le reste à dépenser** — et les deux exigent une clé d'administration
+(`sk-ant-admin01-…`) que la documentation réserve aux comptes d'organisation, pas aux comptes
+individuels. Afficher un « solde » aurait donc été un chiffre inventé. **Ne pas rouvrir ce
+chantier en croyant qu'un endpoint a été manqué.**
+
+Ce qui est livré à la place, et qui répond au besoin réel : **ce que cette application a fait
+facturer**. La fonction serveur `embellish` renvoie maintenant, avec le texte, les jetons
+réellement facturés et leur coût — pas un forfait moyen. Le modèle et son tarif sont nommés
+**à un seul endroit**, dans la fonction serveur : un tarif recopié dans l'application
+dériverait en silence au premier changement de modèle.
+
+Réglages → **« Rédaction IA — consommation »** : le compte du mois, le détail par mois sur
+douze mois, et un plafond en dollars qui bloque **avant** l'appel — rien n'est envoyé, donc
+rien n'est facturé. Le panneau dit franchement qu'Anthropic ne publie pas de solde, et
+renvoie à Plans & Billing pour aller le voir à la source.
+
+**Et surtout ce qui l'avait bloqué la veille** : le crédit épuisé s'affichait en JSON brut
+(« Erreur API Anthropic : {"type":"error"… } »). La fonction reconnaît maintenant ce cas et
+le limiteur de débit ; le CRM les dit en français avec quoi faire. Un appel refusé n'est pas
+compté — il n'est pas facturé.
+
+**Vérification** : 544 contrôles CRM (9 nouveaux), dont le cumul sur deux appels, le crédit
+épuisé qui ne compte rien, et le plafond qui n'envoie aucune requête. Fonction `embellish`
+déployée en version 14, puis vérifiée en ligne : 401 sans jeton, 401 avec la clé publiable —
+le contrôle d'accès n'a pas bougé.
+
+**Reste ouvert, et conditionné à son compte** : si le compte Anthropic est un compte
+d'organisation, une clé d'administration permettrait d'afficher la dépense réelle **côté
+Anthropic** (`cost_report`), tous usages confondus et pas seulement ceux du CRM. À ne
+construire que s'il confirme avoir accès à une clé `sk-ant-admin01-…` ; sinon le pont serait
+mort-né, comme l'aurait été celui du solde fal.ai sans clé ADMIN.
