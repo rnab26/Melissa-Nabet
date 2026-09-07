@@ -3295,7 +3295,7 @@ check('Site public : tout est vide au départ',
 // réalisations et celle de la boutique : ce sont elles qui donnent au site l'ORDRE de ses
 // sections et de ses rayons, et elles ne sont jamais vides.
 check('Site public : aucune coordonnée vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,diaporamaPar,categories,categoriesProduits', siteVide.infos.join(','));
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,diaporamaPar,whatsapp,categories,categoriesProduits', siteVide.infos.join(','));
 
 const siteAllure = await page.evaluate(() => {
   library.site = null;
@@ -4599,6 +4599,52 @@ check('Clients : replier les archives les masque SANS changer les totaux',
   && archives.replie.pied[0] === archives.pied[0],
   archives.replie.lignes.join(',') + ' · total ' + archives.replie.pied[0]);
 check('Clients : on les rouvre du même geste', archives.rouvert === 4, archives.rouvert + ' ligne(s)');
+
+// --- LE GESTE POUR ARCHIVER. Signalé : « je n'arrive pas à voir comment j'archive un
+//     client ». Il n'y en avait pas : c'était une conséquence du statut, jamais une action.
+const gesteArchive = await page.evaluate(async () => {
+  clientOpen['x1'] = true;
+  renderClients();
+  await new Promise(r => setTimeout(r, 350));
+  const fiche = () => document.querySelector('.cl-group[data-cid="x1"]');
+  const bouton = fiche().querySelector('[data-archiver]');
+  const libelle = bouton ? bouton.textContent.trim() : '';
+  const options = [...fiche().querySelectorAll('select[data-statut] option')].map(o => o.textContent);
+  bouton.click();
+  await new Promise(r => setTimeout(r, 350));
+  const apres = {
+    statut: clients.find(c => c.id === 'x1').statut,
+    archive: clientArchive(clients.find(c => c.id === 'x1')),
+    // il est passé sous le séparateur
+    place: [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
+      .map(e => e.classList.contains('cl-sep') ? 'SEP' : e.dataset.cid).join(','),
+    total: (document.querySelector('#cl-table .cl-foot .ft-val') || {}).textContent || '',
+  };
+  clientOpen['x1'] = true; renderClients();
+  await new Promise(r => setTimeout(r, 350));
+  const retour = fiche().querySelector('[data-desarchiver]');
+  const libelleRetour = retour ? retour.textContent.trim() : '';
+  retour.click();
+  await new Promise(r => setTimeout(r, 350));
+  return { libelle, options, apres, libelleRetour,
+           sorti: !clientArchive(clients.find(c => c.id === 'x1')) };
+});
+check('Client : un bouton archive directement, sans passer par le mécanisme des statuts',
+  /Archiver/i.test(gesteArchive.libelle) && gesteArchive.apres.archive === true
+  && gesteArchive.apres.statut === 'termine', gesteArchive.libelle + ' → ' + gesteArchive.apres.statut);
+/* Ce qui compte : il est APRÈS la coupure. Sa position exacte dans le bloc suit le tri
+   choisi (ici le nom), pas l'ordre d'arrivée. */
+check('Client : archivé, il descend sous le séparateur et le total ne bouge pas',
+  gesteArchive.apres.place.split(',').indexOf('x1') > gesteArchive.apres.place.split(',').indexOf('SEP')
+  && gesteArchive.apres.total.replace(/\D/g, '') === '5000',
+  gesteArchive.apres.place + ' · total ' + gesteArchive.apres.total);
+check('Client : et on l’en sort du même geste',
+  /Sortir des archives/i.test(gesteArchive.libelleRetour) && gesteArchive.sorti === true,
+  gesteArchive.libelleRetour);
+/* Le lien « ce statut range le client » ne se devine pas : le sélecteur doit le dire. */
+check('Client : le sélecteur de statut annonce lesquels archivent',
+  gesteArchive.options.filter(o => /· archivé/.test(o)).length === 2,
+  gesteArchive.options.join(' | '));
 
 // Les statuts étant modulables, le drapeau « archivé » l'est aussi.
 const drapeau = await page.evaluate(async () => {
