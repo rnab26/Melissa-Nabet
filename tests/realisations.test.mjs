@@ -4660,6 +4660,30 @@ const drapeau = await page.evaluate(async () => {
 check('Clients : déclarer un autre statut « archivé » le range aussitôt sous le séparateur',
   drapeau.join(',') === 'x1,SEP,x4,x3,x2', drapeau.join(','));
 
+// --- Migration : Raphaël avait déjà des statuts enregistrés AVANT ce chantier (plus un
+//     statut personnalisé, « En Attente ») — aucun n'avait le champ `archive`. Le bouton
+//     restait alors invisible pour lui, alors qu'il n'avait rien décoché : le champ
+//     n'existait simplement pas encore dans ses données. Sans cette migration, le geste
+//     ci-dessus ne fonctionne que sur des données fraîches, jamais sur un vrai compte.
+const migrationArchive = await page.evaluate(async () => {
+  library.clientStatuses = [
+    { id: 'en_cours', label: 'En cours', color: '#d59a4a' },
+    { id: 'devis', label: 'Devis envoyé', color: '#6aa6cf' },
+    { id: 'termine', label: 'Terminé', color: '#6a9a5a' },
+    { id: 'annule', label: 'Annulé', color: '#b6543f' },
+    { id: 'attente', label: 'En Attente', color: '#e0c34a' },
+  ];
+  const archiveDeTermine = clientArchive({ statut: 'termine' });
+  return {
+    archiveDeTermine,
+    flags: library.clientStatuses.map(s => s.id + ':' + !!s.archive).join(','),
+  };
+});
+check('Migration : un statut « Terminé »/« Annulé » enregistré sans le champ `archive` est reconnu comme archivant',
+  migrationArchive.archiveDeTermine === true
+  && migrationArchive.flags === 'en_cours:false,devis:false,termine:true,annule:true,attente:false',
+  JSON.stringify(migrationArchive));
+
 // 2) « Il faut valider la tâche pour que le bloc notes s'affiche. »
 const notesTache = await page.evaluate(async () => {
   tasks = [];

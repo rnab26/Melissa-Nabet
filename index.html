@@ -3054,7 +3054,25 @@ async function cgvSave(){
 function libApplyToCurrent(){askConfirm('Recharger la bibliothèque effacera les lignes du devis en cours. Continuer ?',async()=>{await store.set(K_LIB,library);seedComposerFromLibrary();buildPrest();buildExclu();render();toast('Bibliothèque rechargée');});}
 
 /* ============ CLIENTS / COMPTES ============ */
-function ensureClientStatuses(){if(!Array.isArray(library.clientStatuses)||!library.clientStatuses.length)library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));}
+function ensureClientStatuses(){
+  if(!Array.isArray(library.clientStatuses)||!library.clientStatuses.length){
+    library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));
+    return;
+  }
+  /* Migration : une liste de statuts enregistrée avant l'ajout du geste « Archiver ce
+     client » n'a pas le champ `archive` sur « Terminé »/« Annulé » — sans lui, ni le
+     bouton ni le séparateur n'apparaissent, alors que rien n'a jamais été décoché à la
+     main. On le complète une seule fois, par id, sans toucher un statut personnalisé
+     (id inconnu du défaut) ni un choix explicite déjà enregistré. */
+  let manque=false;
+  library.clientStatuses.forEach(s=>{
+    if(s.archive===undefined){
+      const def=DEFAULT_CLIENT_STATUSES.find(d=>d.id===s.id);
+      if(def&&def.archive){s.archive=true;manque=true;}
+    }
+  });
+  if(manque)saveLibraryDebounced();
+}
 function clientStatus(c){ensureClientStatuses();return library.clientStatuses.find(s=>s.id===c.statut)||library.clientStatuses[0];}
 /* Un client est aux archives si SON statut est déclaré archivant. Rien d'autre : ni sa date
    de fin, ni son solde. Sinon le rangement se mettrait à bouger tout seul. */
