@@ -514,6 +514,65 @@ déjà été tapé continue de s'y ajouter.
 
 ---
 
+## 7 septembre 2026 — Le nom des clients réparé pour de bon, et les archives sous un séparateur
+
+**Branche** `claude/clients-nom-et-archives`.
+
+### Le nom qui restait « Nouveau client » — le trou du correctif précédent
+
+Le correctif de la veille faisait qu'un contact **saisi** nommait le client. Mais les fiches
+**déjà créées** n'en profitaient pas : leur contact était rempli depuis longtemps, plus
+aucun événement ne venait, elles restaient « Nouveau client » pour toujours. C'est
+exactement ce que Raphaël a re-signalé, et il avait raison.
+
+- `reparerNomsClients()` tourne **après la lecture du cloud** : toute fiche encore nommée
+  « Nouveau client » dont le Contact est rempli reprend ce contact comme nom. Rien n'est
+  écrasé — « Nouveau client » n'est pas un nom, c'est l'absence de nom. Une fiche **sans
+  contact** n'est pas touchée : on ne lui invente pas un nom.
+- Elle tourne après le cloud, et pas avant : sinon on réparerait une copie locale aussitôt
+  remplacée par les données distantes.
+- Une fiche encore sans nom **le dit** (« à remplir », sous l'étiquette) au lieu de se faire
+  passer pour un client nommé.
+
+### Le séparateur des archives
+
+Le tableau des clients garde **une seule vue**, coupée en deux :
+
+- les clients **en cours** en haut, puis une **barre « Archivés · n clients »** avec leur
+  chiffre d'affaires, puis les archivés ;
+- la barre **se replie d'un appui**, et l'état est retenu d'une visite à l'autre : au bout
+  de deux ans de chantiers terminés, personne ne veut faire défiler cinquante lignes pour
+  atteindre le pied de tableau ;
+- **les totaux comptent toujours tout le monde** — c'est le chiffre d'affaires de l'année,
+  pas seulement celui des chantiers en cours. Le résumé l'écrit (« 5 clients dont 3
+  archivés ») pour qu'on ne croie pas à une erreur de calcul ;
+- le tri choisi s'applique **à l'intérieur de chaque bloc**.
+
+**Quels statuts archivent ?** C'est un réglage, pas une règle en dur : ⚙ Statuts porte une
+case **archivé** par statut. « Terminé » et « Annulé » le sont par défaut. Les statuts étant
+modulables, ce drapeau devait l'être aussi.
+
+### Ce qu'il ne faut pas casser
+
+- `clientArchive()` ne regarde **que** le statut. Y ajouter la date de fin ou le solde ferait
+  bouger le rangement tout seul, sans qu'on comprenne pourquoi.
+- Les archives sont **rangées, pas exclues** : `renderClientsFooter` reçoit toujours la
+  liste entière.
+- `reparerNomsClients()` ne touche qu'un nom **exactement** égal à « Nouveau client ».
+  Élargir la règle (tout nom court, tout nom générique) ferait écraser de vrais noms.
+- `clientSansNom()` est le seul juge de « ce client a-t-il été nommé ».
+
+### Vérification
+
+`realisations` **519** (11 nouveaux) — 0 échec. Parcours réel à 390 px : deux blocs, la
+barre d'archives, les totaux qui comptent tout (`/tmp/clients-390.png`), aucun débordement.
+
+### À faire côté Raphaël
+
+**Recharger la page** : les fiches se réparent au chargement suivant.
+
+---
+
 ## 6 septembre 2026 — Un menu en haut du site, et deux défauts signalés du téléphone
 
 **Branche** `claude/site-menu-haut`. Deuxième des cinq chantiers du site, plus deux

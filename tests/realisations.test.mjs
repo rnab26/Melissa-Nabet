@@ -4457,6 +4457,92 @@ check('Client : saisir le contact nomme le client tant que personne ne l’a nom
 check('Client : un nom déjà choisi n’est jamais écrasé par un changement de contact',
   nomClient.nomProtege === 'Cabinet Lévy', nomClient.nomProtege);
 
+// 1 bis) Les fiches créées AVANT ce correctif : leur contact est déjà saisi, aucun nouvel
+//        événement ne vient plus — elles resteraient « Nouveau client » pour toujours.
+const nomsRepares = await page.evaluate(async () => {
+  clients = [
+    normalizeClient({ id: 'a', name: 'Nouveau client', contact: 'Gérard Zouari' }),
+    normalizeClient({ id: 'b', name: 'Nouveau client', contact: '' }),
+    normalizeClient({ id: 'c', name: 'Cabinet Lévy', contact: 'Sarah Lévy' }),
+  ];
+  const n = reparerNomsClients();
+  renderClients();
+  await new Promise(r => setTimeout(r, 300));
+  const fiche = document.querySelector('.cl-group[data-cid="b"] .cl-side-alerte');
+  return { n, noms: clients.map(c => c.name), alerte: fiche ? fiche.textContent : '' };
+});
+check('Client : les fiches restées « Nouveau client » reprennent leur contact au chargement',
+  nomsRepares.n === 1 && nomsRepares.noms[0] === 'Gérard Zouari', nomsRepares.noms.join(' | '));
+check('Client : sans contact, on n’invente pas un nom — et un vrai nom n’est pas touché',
+  nomsRepares.noms[1] === 'Nouveau client' && nomsRepares.noms[2] === 'Cabinet Lévy',
+  nomsRepares.noms.join(' | '));
+check('Client : une fiche sans nom le dit, au lieu de se faire passer pour nommée',
+  /remplir/i.test(nomsRepares.alerte), nomsRepares.alerte);
+
+// --- LE SÉPARATEUR DES ARCHIVES. Les clients terminés passent dessous, restent visibles,
+//     et leurs montants comptent toujours dans les totaux.
+const archives = await page.evaluate(async () => {
+  ensureClientStatuses();
+  clients = [
+    normalizeClient({ id: 'x1', name: 'Chantier en cours', statut: 'en_cours', montantFinal: 1000 }),
+    normalizeClient({ id: 'x2', name: 'Devis parti', statut: 'devis' }),
+    normalizeClient({ id: 'x3', name: 'Chantier fini', statut: 'termine', montantFinal: 4000 }),
+    normalizeClient({ id: 'x4', name: 'Affaire annulée', statut: 'annule' }),
+  ];
+  clientFilters.q = ''; clientFilters.statuts = []; clientFilters.archivesOuvert = true;
+  showView('clients'); renderClients();
+  await new Promise(r => setTimeout(r, 300));
+  const ordre = [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
+    .map(e => e.classList.contains('cl-sep') ? '— SÉPARATEUR —' : e.dataset.cid);
+  const sep = document.querySelector('#cl-table .cl-sep');
+  const pied = [...document.querySelectorAll('#cl-table .cl-foot .ft-val')].map(e => e.textContent.trim());
+  const resume = (document.querySelector('#cl-table .cl-foot .ft-label') || {}).textContent || '';
+  // replier : les archives disparaissent, les totaux ne bougent pas
+  sep.click();
+  await new Promise(r => setTimeout(r, 300));
+  const replie = {
+    lignes: [...document.querySelectorAll('#cl-table .cl-group')].map(e => e.dataset.cid),
+    pied: [...document.querySelectorAll('#cl-table .cl-foot .ft-val')].map(e => e.textContent.trim()),
+    sepEncoreLa: !!document.querySelector('#cl-table .cl-sep'),
+  };
+  document.querySelector('#cl-table .cl-sep').click();
+  await new Promise(r => setTimeout(r, 300));
+  return { ordre, sepTxt: sep.textContent.replace(/\s+/g, ' ').trim(), pied, resume, replie,
+           rouvert: [...document.querySelectorAll('#cl-table .cl-group')].length };
+});
+/* Le tri choisi (ici le nom) s'applique À L'INTÉRIEUR de chaque bloc : « Affaire annulée »
+   passe donc avant « Chantier fini » dans les archives. Ce qui est vérifié, c'est la
+   COUPURE — pas un ordre de déclaration. */
+check('Clients : les terminés et annulés passent sous un séparateur, les autres au-dessus',
+  archives.ordre.join(' > ') === 'x1 > x2 > — SÉPARATEUR — > x4 > x3', archives.ordre.join(' > '));
+check('Clients : le séparateur dit combien et pour combien',
+  /Archivés · 2 clients/.test(archives.sepTxt) && /4[  ]?000/.test(archives.sepTxt), archives.sepTxt);
+/* Le point qu'il ne faut surtout pas rater : ranger n'est pas exclure. Le chiffre
+   d'affaires de l'année comprend les chantiers terminés. */
+check('Clients : les archivés comptent toujours dans les totaux',
+  archives.pied[0].replace(/\D/g, '') === '5000', archives.pied[0]);
+check('Clients : le résumé dit combien sont archivés, pour qu’on ne croie pas à une erreur',
+  /4 clients \(dont 2 archivés\)/.test(archives.resume), archives.resume);
+check('Clients : replier les archives les masque SANS changer les totaux',
+  archives.replie.lignes.join(',') === 'x1,x2' && archives.replie.sepEncoreLa
+  && archives.replie.pied[0] === archives.pied[0],
+  archives.replie.lignes.join(',') + ' · total ' + archives.replie.pied[0]);
+check('Clients : on les rouvre du même geste', archives.rouvert === 4, archives.rouvert + ' ligne(s)');
+
+// Les statuts étant modulables, le drapeau « archivé » l'est aussi.
+const drapeau = await page.evaluate(async () => {
+  const st = library.clientStatuses.find(s => s.id === 'devis');
+  st.archive = true;
+  renderClients();
+  await new Promise(r => setTimeout(r, 250));
+  const ordre = [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
+    .map(e => e.classList.contains('cl-sep') ? 'SEP' : e.dataset.cid);
+  st.archive = false;
+  return ordre;
+});
+check('Clients : déclarer un autre statut « archivé » le range aussitôt sous le séparateur',
+  drapeau.join(',') === 'x1,SEP,x4,x3,x2', drapeau.join(','));
+
 // 2) « Il faut valider la tâche pour que le bloc notes s'affiche. »
 const notesTache = await page.evaluate(async () => {
   tasks = [];
