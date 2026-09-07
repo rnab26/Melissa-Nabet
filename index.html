@@ -456,6 +456,11 @@
     text-transform:uppercase;color:#e0a86a;margin:-1px 0 3px;}
   .cl-side-head select.cl-side-statut{background:transparent;border:1px solid rgba(255,255,255,.3);color:#d8d2c8;text-align:center;text-align-last:center;font-size:11px;border-radius:3px;padding:4px 6px;}
   .cl-side-head select.cl-side-statut option{color:#3d3934;}
+  /* Un geste direct pour ranger un client, sans avoir à comprendre d'abord que c'est le
+     statut qui archive. Le sélecteur reste là pour le détail (terminé ? annulé ?). */
+  .cl-side-arch{margin-top:8px;width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);
+    color:#d8d2c8;font-family:'Inter';font-size:11.5px;border-radius:4px;padding:7px 8px;cursor:pointer;transition:.15s;}
+  .cl-side-arch:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.55);color:#fff;}
   .cl-side-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
   .cl-side-body .fld .lbl{font-size:10px;color:var(--stone);letter-spacing:.03em;display:block;margin-bottom:3px;}
   .cl-side-body .fld input{padding:7px 8px;font-size:12.5px;}
@@ -3054,7 +3059,14 @@ function clientStatus(c){ensureClientStatuses();return library.clientStatuses.fi
 /* Un client est aux archives si SON statut est déclaré archivant. Rien d'autre : ni sa date
    de fin, ni son solde. Sinon le rangement se mettrait à bouger tout seul. */
 function clientArchive(c){return !!clientStatus(c).archive;}
-function clientStatusOptionsHtml(c){ensureClientStatuses();return library.clientStatuses.map(s=>`<option value="${esc(s.id)}" ${c.statut===s.id?'selected':''}>${esc(s.label)}</option>`).join('');}
+/* Le statut est ce qui range un client aux archives : le sélecteur doit le DIRE, sinon le
+   lien entre « Terminé » et « le client a disparu sous le séparateur » ne se devine pas. */
+function clientStatusOptionsHtml(c){ensureClientStatuses();return library.clientStatuses.map(s=>`<option value="${esc(s.id)}" ${c.statut===s.id?'selected':''}>${esc(s.label)}${s.archive?' · archivé':''}</option>`).join('');}
+/* Le premier statut qui archive, et le premier qui n'archive pas. Ce sont eux que les
+   boutons « Archiver » / « Sortir des archives » posent : un geste direct, pour ne pas
+   obliger à comprendre d'abord le mécanisme des statuts. */
+function premierStatutArchive(){ensureClientStatuses();return library.clientStatuses.find(s=>s.archive)||null;}
+function premierStatutActif(){ensureClientStatuses();return library.clientStatuses.find(s=>!s.archive)||library.clientStatuses[0];}
 function normalizeClient(c){
   let montantFinal,paiements,commissions;
   if(c.montantFinal!=null||Array.isArray(c.paiements)||Array.isArray(c.commissions)){
@@ -3265,6 +3277,13 @@ function buildClientDetail(c){
       <select class="cl-side-statut" data-statut>
         ${clientStatusOptionsHtml(c)}
       </select>
+      ${(function(){
+        const arch=premierStatutArchive();
+        if(!arch)return '';
+        return clientArchive(c)
+          ? '<button type="button" class="cl-side-arch" data-desarchiver>↩ Sortir des archives</button>'
+          : '<button type="button" class="cl-side-arch" data-archiver>📦 Archiver ce client</button>';
+      })()}
     </div>
     <div class="cl-side-body">
       <label class="fld"><span class="lbl">Contact</span><input type="text" data-cf="contact" value="${esc(c.contact||'')}"></label>
@@ -3275,7 +3294,25 @@ function buildClientDetail(c){
   const nameInp=side.querySelector('input[data-name]');
   nameInp.addEventListener('input',()=>{c.name=nameInp.value;saveClientsDebounced();});
   nameInp.addEventListener('change',()=>{saveClients();updateClientRow(c);});
-  side.querySelector('select[data-statut]').addEventListener('change',e=>{c.statut=e.target.value;saveClients();updateClientRow(c);});
+  /* Changer de statut peut faire passer le client d'un bloc à l'autre du tableau : on
+     redessine, sinon il resterait affiché là où il n'est plus. */
+  side.querySelector('select[data-statut]').addEventListener('change',e=>{
+    const avant=clientArchive(c);
+    c.statut=e.target.value;saveClients();
+    if(clientArchive(c)!==avant)renderClients();else updateClientRow(c);
+  });
+  const bArch=side.querySelector('[data-archiver]');
+  if(bArch)bArch.addEventListener('click',()=>{
+    const st=premierStatutArchive();if(!st)return;
+    c.statut=st.id;saveClients();renderClients();
+    toast('Client archivé (« '+st.label+' ») — il reste compté dans les totaux');
+  });
+  const bDes=side.querySelector('[data-desarchiver]');
+  if(bDes)bDes.addEventListener('click',()=>{
+    const st=premierStatutActif();if(!st)return;
+    c.statut=st.id;saveClients();renderClients();
+    toast('Client sorti des archives (« '+st.label+' »)');
+  });
   twoCol.appendChild(side);
 
   /* ---- Suite de la colonne identité : informations de base complémentaires ---- */
@@ -4285,7 +4322,7 @@ function openClientStatusesPanel(){
     <label class="lib-arch" title="Ranger ces clients sous le séparateur « Archivés »"><input type="checkbox" ${s.archive?'checked':''} onchange="clientStatusEdit(${i},'archive',this.checked)"> archivé</label>
     <button class="mini danger" onclick="clientStatusDel(${i})">×</button></div>`).join('');
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Statuts clients</h3>
-    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables). Cochez <b>archivé</b> pour que ces clients passent sous le séparateur du tableau — ils y restent visibles, et leurs montants comptent toujours dans les totaux.</p>
+    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables). Cochez <b>archivé</b> pour que ces clients passent sous le séparateur du tableau — ils y restent visibles, et leurs montants comptent toujours dans les totaux. Le bouton « 📦 Archiver ce client », dans sa fiche, pose le <b>premier</b> statut archivé de cette liste.</p>
     ${rows}
     <button class="add-btn" onclick="clientStatusAdd()">+ Ajouter un statut</button>
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
@@ -8973,7 +9010,8 @@ const SITE_THEMES=[
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
 const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,
-  menuRealisations:'',menuPersonnelles:'',menuBoutique:'',menuJournal:'',menuApropos:''};
+  menuRealisations:'',menuPersonnelles:'',menuBoutique:'',menuJournal:'',menuApropos:'',
+  whatsapp:'actif',waTexte:''};
 /* Les entrées du menu du site. Vides, ce sont les mots par défaut de la page (traduits) ;
    remplies, ce sont les mots de Melissa — et ils se traduisent comme ses autres textes. */
 const SITE_MENU=[
@@ -9011,7 +9049,7 @@ function bandeauPar(){
 const SITE_LANGUES=[{code:'fr',nom:'Français',dir:'ltr'},{code:'en',nom:'English',dir:'ltr'},{code:'he',nom:'עברית',dir:'rtl'}];
 /* Les champs qui changent d'une langue à l'autre. Le reste (e-mail, téléphone, Instagram,
    dates) est commun : le traduire n'aurait aucun sens. */
-const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos'];
+const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'];
 function siteLanguesActives(){
   const st=siteSettings();
   const l=Array.isArray(st.langues)?SITE_LANGUES.map(x=>x.code).filter(c=>st.langues.indexOf(c)>=0):['fr'];
@@ -9108,7 +9146,10 @@ function siteInfos(){
   o.diaporama=(st.diaporama==='aucun')?'aucun':'actif';
   o.diaporamaSec=bandeauSec();
   o.diaporamaPar=bandeauPar();
-  ['apropos','email','tel','instagram','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos'].forEach(k=>{
+  /* Le bouton WhatsApp : il a toujours un état, ce n'est pas une coordonnée qu'on pourrait
+     laisser vide. Le NUMÉRO, lui, vient de `tel` — sans numéro, le site n'affiche rien. */
+  o.whatsapp=(st.whatsapp==='aucun')?'aucun':'actif';
+  ['apropos','email','tel','instagram','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
   });
@@ -9299,6 +9340,15 @@ function openSitePanel(){
     <label class="fld" style="margin-top:9px"><span class="lbl">Temps d’affichage de chaque vue (secondes)</span>
       <input type="number" id="site-diapo-sec" min="${BANDEAU_SEC_MIN}" max="${BANDEAU_SEC_MAX}" step="1" value="${bandeauSec()}"></label>
     <p class="ias-note" id="site-diapo-msg"></p>
+    <div class="ed-eyebrow" style="margin-top:14px">Bouton WhatsApp</div>
+    <p class="ias-note">Un bouton présent partout sur le site, qui ouvre WhatsApp sur votre numéro. Il <b>n’apparaît que si le téléphone ci-dessus est rempli</b> — un bouton de contact sans destinataire est pire que pas de bouton.</p>
+    <div class="site-mvt" id="site-wa">
+      <button type="button" class="mini" data-wa="actif" aria-pressed="${st.whatsapp!=='aucun'?'true':'false'}">Affiché</button>
+      <button type="button" class="mini" data-wa="aucun" aria-pressed="${st.whatsapp==='aucun'?'true':'false'}">Masqué</button>
+    </div>
+    <label class="fld" style="margin-top:9px"><span class="lbl">Message déjà écrit quand on clique (facultatif)${esc(suff)}</span>
+      <input type="text" id="site-wa-txt"${rtl} value="${esc(siteTexte('waTexte',LE))}" placeholder="Bonjour, j’ai vu votre site et j’aimerais…">
+      ${repli(siteTexte('waTexte',LE),siteTexte('waTexte','fr'))}</label>
     <div class="ed-eyebrow" style="margin-top:14px">Menu du site</div>
     <p class="ias-note">Les entrées de la barre en haut du site. Laissez vide pour garder le mot par défaut — celui-ci se traduit tout seul dans les autres langues, un mot que vous écrivez ici ne se traduit que si vous le traduisez.</p>
     ${SITE_MENU.map(m=>`<label class="fld"><span class="lbl">${esc(m.defaut)}</span>
@@ -9357,7 +9407,7 @@ function openSitePanel(){
       <button class="mini" onclick="closeModal()">Fermer</button>
       <button class="btn btn-primary" id="site-push">Mettre à jour le site</button>
     </div>`);
-  const champs=Object.assign({sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta'},
+  const champs=Object.assign({sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta',waTexte:'site-wa-txt'},
     Object.fromEntries(SITE_MENU.map(m=>[m.cle,m.id])));
   Object.entries(champs).forEach(([k,id])=>{
     const el=document.getElementById(id);
@@ -9558,6 +9608,13 @@ function openSitePanel(){
     b.addEventListener('click',()=>{
       siteSettings().mouvement=b.dataset.mvt;saveLibraryDebounced();
       document.querySelectorAll('#site-mvt [data-mvt]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-wa [data-wa]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().whatsapp=b.dataset.wa;saveLibraryDebounced();
+      document.querySelectorAll('#site-wa [data-wa]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
       rappel();
     });
   });

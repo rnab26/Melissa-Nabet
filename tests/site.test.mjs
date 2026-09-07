@@ -866,6 +866,70 @@ check('Personnelles : sans projet marqué, ni section ni entrée de menu',
   sansPerso.sec === true && sansPerso.menu.indexOf('personnelles') < 0, sansPerso.menu.join(','));
 
 // ============================================================================
+//  ÉCRIRE EN UN GESTE : le bouton WhatsApp
+// ============================================================================
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1000);
+const wa = await page.evaluate(() => {
+  const a = document.getElementById('wa');
+  const st = getComputedStyle(a);
+  const pied = document.getElementById('footer').getBoundingClientRect();
+  const b = a.getBoundingClientRect();
+  return {
+    visible: !a.hidden, href: a.getAttribute('href'),
+    fixe: st.position, glyphe: !!a.querySelector('svg path'),
+    aria: a.getAttribute('aria-label') || '',
+    cible: a.getAttribute('target'), rel: a.getAttribute('rel'),
+    taille: Math.round(b.height),
+    reservePied: getComputedStyle(document.getElementById('footer')).paddingBottom,
+    piedSous: pied.bottom,
+  };
+});
+check('WhatsApp : un bouton présent sur toute la page',
+  wa.visible && wa.fixe === 'fixed' && wa.glyphe, JSON.stringify({ v: wa.visible, p: wa.fixe, g: wa.glyphe }));
+/* Le numéro israélien (0xx…) doit partir au format attendu par WhatsApp, et le message
+   déjà écrit doit arriver encodé — sinon un accent casse le lien. */
+check('WhatsApp : le lien porte le numéro au bon format et le message déjà écrit',
+  /^https:\/\/wa\.me\/972520000000\?text=/.test(wa.href) && /vu%20votre%20site/.test(wa.href),
+  wa.href);
+check('WhatsApp : il s’ouvre dans un autre onglet, sans donner la main à la page ouverte',
+  wa.cible === '_blank' && /noopener/.test(wa.rel), wa.cible + ' · ' + wa.rel);
+check('WhatsApp : il est nommé pour les lecteurs d’écran', /whatsapp/i.test(wa.aria), wa.aria);
+/* Il flotte au-dessus du bas de page : sans réserve, il couvrirait la ligne de contact,
+   c'est-à-dire exactement l'endroit où l'on va pour écrire. */
+check('WhatsApp : il ne couvre pas le bas de page', parseInt(wa.reservePied, 10) >= 60, wa.reservePied);
+
+await page.setViewportSize({ width: 390, height: 844 });
+await page.waitForTimeout(400);
+const waTel = await page.evaluate(() => {
+  const a = document.getElementById('wa'), b = a.getBoundingClientRect();
+  return { l: Math.round(b.width), h: Math.round(b.height),
+           motVu: getComputedStyle(document.getElementById('wa-txt')).display !== 'none',
+           debord: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+});
+await page.screenshot({ path: '/tmp/mn-wa-390.png' });
+check('WhatsApp sur téléphone : un rond assez grand pour le pouce, sans le mot',
+  waTel.l >= 48 && waTel.h >= 48 && !waTel.motVu && waTel.debord <= 1, JSON.stringify(waTel));
+await page.setViewportSize({ width: 1280, height: 900 });
+
+/* Sans numéro publié, le bouton n'existe pas : un contact sans destinataire est pire que
+   pas de bouton. Refusé depuis le CRM, il disparaît aussi. */
+const waAbsent = await page.evaluate(async () => {
+  const tel = infosSite.tel;
+  infosSite.tel = ''; renderWhatsApp();
+  const sansNum = document.getElementById('wa').hidden;
+  infosSite.tel = tel; infosSite.whatsapp = 'aucun'; renderWhatsApp();
+  const refuse = document.getElementById('wa').hidden;
+  const reserve = document.body.classList.contains('avec-wa');
+  delete infosSite.whatsapp; renderWhatsApp();
+  return { sansNum, refuse, reserve, revenu: !document.getElementById('wa').hidden };
+});
+check('WhatsApp : sans numéro publié, pas de bouton', waAbsent.sansNum === true);
+check('WhatsApp : refusé depuis le CRM, il disparaît — et la réserve du pied aussi',
+  waAbsent.refuse === true && waAbsent.reserve === false, JSON.stringify(waAbsent));
+check('WhatsApp : réautorisé, il revient', waAbsent.revenu === true);
+
+// ============================================================================
 //  LE MENU DU SITE : où l'on peut aller, et où l'on est
 // ============================================================================
 await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });

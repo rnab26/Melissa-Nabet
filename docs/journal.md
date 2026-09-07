@@ -596,6 +596,72 @@ déjà été tapé continue de s'y ajouter.
 
 ---
 
+## 7 septembre 2026 — Le geste pour archiver, et le bouton pour écrire
+
+**Branche** `claude/clients-archiver-geste`. Chantiers ④ et ⑤ du site, plus un défaut d'usage
+que le chantier des archives avait laissé.
+
+### « Je n'arrive pas à voir comment j'archive un client »
+
+Signalé par Raphaël, et il avait raison : la veille, j'avais créé une **notion** (« archivé »)
+sans donner le **geste** pour l'atteindre. Un client descendait sous le séparateur quand son
+statut passait à « Terminé » — une conséquence, jamais une action. Rien ne le disait.
+
+- Un bouton **« 📦 Archiver ce client »** dans sa fiche, sous le sélecteur de statut. Il pose
+  le **premier statut archivé** de la liste. Et **« ↩ Sortir des archives »** quand il l'est.
+- Le sélecteur de statut **annonce lesquels archivent** (« Terminé · archivé ») : le lien
+  entre le statut et la disparition sous le séparateur ne se devinait pas.
+- Changer de statut redessine le tableau quand le client change de bloc — sinon il restait
+  affiché là où il n'était plus.
+
+Le bouton ne fait que **poser un statut** : il n'y a toujours qu'une source de vérité.
+
+### Le bouton WhatsApp (chantier ④)
+
+- Rond, en bas à droite, **présent sur toute la page**, il ouvre WhatsApp sur le numéro
+  publié avec **un message déjà commencé** (modifiable, et traduisible comme les autres
+  textes de Melissa).
+- **Sobre plutôt que vert fluo** : sur un portfolio d'architecture d'intérieur, le vert de
+  WhatsApp jure avec tout. Le glyphe suffit à le rendre reconnaissable, et le bouton ne
+  dépend que des jetons du thème — il reste lisible dans les quatre habillages.
+- Sur téléphone, **le glyphe seul** : le mot prendrait la place d'une photo.
+- **Il n'existe que si un numéro est publié** — un bouton de contact sans destinataire est
+  pire que pas de bouton — et il peut être **refusé depuis le CRM**.
+- Le bas de page **réserve sa place** : sans ça il couvrirait la ligne de contact,
+  c'est-à-dire exactement l'endroit où l'on va pour écrire.
+
+### « À propos » (chantier ⑤) — déjà livré
+
+L'entrée de menu qui **descend au bas du site** est arrivée avec le menu (chantier ②), et le
+texte est modifiable depuis ⚙ Le site public depuis plus longtemps encore. Vérifié plutôt
+que refait : le contrôle « À propos descend au bas du site, et la section y est entièrement
+visible » couvre le geste. Rien à ajouter.
+
+### Ce qu'il ne faut pas casser
+
+- `premierStatutArchive()` / `premierStatutActif()` sont les seuls choix faits par les
+  boutons. Le sélecteur reste là pour le détail (terminé ? annulé ?).
+- Le bouton WhatsApp lit `site.tel` : il n'a **pas** de numéro à lui. Deux numéros finiraient
+  par diverger.
+- `versWhatsApp()` transforme le 0xx… israélien en 972… : c'est la même fonction que le lien
+  de la section contact, une seule règle.
+
+### Vérification
+
+`realisations` **530** (4 nouveaux), `site` **181** (9 nouveaux), `bout-en-bout` **21** —
+**732 contrôles, 0 échec**. Captures : `/tmp/wa-390b.png`, `/tmp/wa-1280.png`.
+
+*(Note d'atelier : une capture prise après un défilement programmatique en mode mobile
+émulé ne montre pas les éléments `position:fixed` — artefact du compositeur, pas un défaut.
+Mesurer la position dans le navigateur plutôt que de croire l'image.)*
+
+### À faire côté Raphaël
+
+Le message d'ouverture de WhatsApp et l'état du bouton sont dans ⚙ Le site public ; ils ne
+partent en ligne qu'avec « Mettre à jour le site ».
+
+---
+
 ## 7 septembre 2026 — Réalisations personnelles, et le retour à la liste qu'on ne voyait pas
 
 **Branche** `claude/site-realisations-perso`. Troisième des cinq chantiers du site.

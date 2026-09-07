@@ -73,6 +73,8 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
           /* Le bandeau d'accueil, réglé au minimum permis (3 s) : le test doit pouvoir
              observer un vrai changement automatique sans attendre sept secondes. */
           diaporama: 'actif', diaporamaSec: 3,
+          /* Le bouton d'écriture : son état part toujours, le numéro vient de `tel`. */
+          whatsapp: 'actif', waTexte: 'Bonjour, j’ai vu votre site.',
           categories: ['Bureau', 'Appartement'],
           categoriesProduits: ['Revêtement mural', 'Panneau décoratif'],
           langues: ['fr', 'en', 'he'],
