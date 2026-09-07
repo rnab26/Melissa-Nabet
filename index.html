@@ -3205,6 +3205,10 @@ function renderClients(){
     return grp;
   };
   actifs.forEach(c=>tbl.appendChild(ligneClient(c)));
+  /* Le total des actifs juste sous les actifs, avant même de parler des archivés : c'est
+     là qu'on le cherche des yeux en arrivant sur l'écran, pas tout en bas après onze
+     chantiers terminés. Signalé par Raphaël, capture à l'appui. */
+  renderClientsFooterActifs(tbl,actifs,archives);
   if(archives.length){
     /* Le séparateur porte le compte et le total de la section, et se replie : au bout de
        deux ans de chantiers terminés, personne ne veut faire défiler cinquante lignes pour
@@ -3224,8 +3228,8 @@ function renderClients(){
     });
     tbl.appendChild(sep);
     if(clientFilters.archivesOuvert)archives.forEach(c=>tbl.appendChild(ligneClient(c)));
+    renderClientsFooterArchives(tbl,actifs,archives);
   }
-  renderClientsFooter(tbl,actifs,archives);
   const tot=$('cl-totals');if(tot)tot.innerHTML='';
 }
 /* Pied de tableau : sommes des 4 colonnes, sur les clients FILTRÉS, alignées sous chaque
@@ -3235,14 +3239,16 @@ function renderClients(){
    une ligne « Total » unique (actifs+archivés mélangés sans le dire) suivie d'une ligne
    « Total général » qui faisait cette addition incohérente. Depuis que les clients
    archivés ont leur propre bloc à l'écran, le pied les distingue pareillement : un total
-   par bloc, et le vrai total général — toutes colonnes gardées à part — en plus, pas à la
-   place. */
-function renderClientsFooter(tbl,actifsList,archivesList){
+   par bloc — celui des actifs collé à leurs lignes, celui des archivés collé aux leurs —
+   et le vrai total général, toutes colonnes gardées à part, en plus, pas à la place. */
+function sommeClients(cs){return cs.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.reste+=t.reste;a.comm+=t.commissions;a.commReste+=t.commissionsReste;return a;},{montant:0,reste:0,comm:0,commReste:0});}
+function clientsFootLigne(tbl,dv,cle,libelle,t,grand){
+  const row=document.createElement('div');row.className='cl-row cl-foot'+(grand?' grand':'');row.dataset.foot=cle;
+  row.innerHTML=`<div></div><div></div><div class="ft-label">${esc(libelle)}</div><div class="num ft-val">${fmt(t.montant)} ${dv}</div><div class="num ft-val col-sep ${t.reste>0?'due-txt':'ok-txt'}">${fmt(t.reste)} ${dv}</div><div class="num ft-val col-after-sep">${fmt(t.comm)} ${dv}</div><div class="num ft-val ${t.commReste>0?'due-txt':'ok-txt'}">${fmt(t.commReste)} ${dv}</div><div></div><div></div><div></div>`;
+  tbl.appendChild(row);
+}
+function renderClientsFooterActifs(tbl,actifsList,archivesList){
   const dv='₪';
-  const somme=cs=>cs.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.reste+=t.reste;a.comm+=t.commissions;a.commReste+=t.commissionsReste;return a;},{montant:0,reste:0,comm:0,commReste:0});
-  const ftActifs=somme(actifsList), ftArchives=somme(archivesList);
-  const ftTotal={montant:ftActifs.montant+ftArchives.montant,reste:ftActifs.reste+ftArchives.reste,
-    comm:ftActifs.comm+ftArchives.comm,commReste:ftActifs.commReste+ftArchives.commReste};
   const nActifs=actifsList.length,nArchives=archivesList.length,nTotal=nActifs+nArchives;
   // Ligne d'intitulés du résumé
   const lab=document.createElement('div');lab.className='cl-row cl-foot sep-top';
@@ -3253,19 +3259,18 @@ function renderClientsFooter(tbl,actifsList,archivesList){
     : '';
   lab.innerHTML=`<div></div><div></div><div class="ft-label">Résumé${detail}</div><div class="num ft-sub">CA total plans</div><div class="num ft-sub col-sep">Reste dû</div><div class="num ft-sub col-after-sep">CA commissions</div><div class="num ft-sub">Comm. restante</div><div></div><div></div><div></div>`;
   tbl.appendChild(lab);
-  const ligne=(cle,libelle,t,grand)=>{
-    const row=document.createElement('div');row.className='cl-row cl-foot'+(grand?' grand':'');row.dataset.foot=cle;
-    row.innerHTML=`<div></div><div></div><div class="ft-label">${esc(libelle)}</div><div class="num ft-val">${fmt(t.montant)} ${dv}</div><div class="num ft-val col-sep ${t.reste>0?'due-txt':'ok-txt'}">${fmt(t.reste)} ${dv}</div><div class="num ft-val col-after-sep">${fmt(t.comm)} ${dv}</div><div class="num ft-val ${t.commReste>0?'due-txt':'ok-txt'}">${fmt(t.commReste)} ${dv}</div><div></div><div></div><div></div>`;
-    tbl.appendChild(row);
-  };
-  if(nActifs&&nArchives){
-    ligne('actifs',`Actifs (${nActifs})`,ftActifs);
-    ligne('archives',`Archivés (${nArchives})`,ftArchives);
-    ligne('total','Total général',ftTotal,true);
-  } else {
-    // Un seul bloc présent (ou aucun) : le distinguer d'un total général n'aurait aucun sens.
-    ligne('total','Total',ftTotal,true);
-  }
+  const ftActifs=sommeClients(actifsList);
+  // Sans archivé, ce bloc est le seul : « Total » plutôt que « Actifs », pas de « Total
+  // général » séparé plus bas (le distinguer d'un total général n'aurait aucun sens).
+  clientsFootLigne(tbl,dv,nArchives?'actifs':'total',nArchives?`Actifs (${nActifs})`:'Total',ftActifs,!nArchives);
+}
+function renderClientsFooterArchives(tbl,actifsList,archivesList){
+  const dv='₪';
+  const ftActifs=sommeClients(actifsList),ftArchives=sommeClients(archivesList);
+  const ftTotal={montant:ftActifs.montant+ftArchives.montant,reste:ftActifs.reste+ftArchives.reste,
+    comm:ftActifs.comm+ftArchives.comm,commReste:ftActifs.commReste+ftArchives.commReste};
+  clientsFootLigne(tbl,dv,'archives',`Archivés (${archivesList.length})`,ftArchives);
+  clientsFootLigne(tbl,dv,'total','Total général',ftTotal,true);
 }
 function wireMetaInputs(container,c){
   container.querySelectorAll('input[data-cf]').forEach(inp=>{

@@ -4565,6 +4565,13 @@ const archives = await page.evaluate(async () => {
   await new Promise(r => setTimeout(r, 300));
   const ordre = [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
     .map(e => e.classList.contains('cl-sep') ? '— SÉPARATEUR —' : e.dataset.cid);
+  /* Placement demandé par Raphaël, capture à l'appui : le total des actifs juste sous les
+     actifs, pas relégué tout en bas après les archivés. */
+  const ordreComplet = [...document.querySelectorAll('#cl-table > *')].map(e =>
+    e.classList.contains('cl-sep') ? 'SEP'
+    : e.classList.contains('cl-group') ? e.dataset.cid
+    : e.classList.contains('cl-foot') ? 'FOOT:' + (e.dataset.foot || '?')
+    : e.classList.contains('head') ? 'HEAD' : '?');
   const sep = document.querySelector('#cl-table .cl-sep');
   const lireFoot = cle => [...document.querySelectorAll(`#cl-table .cl-foot[data-foot="${cle}"] .ft-val`)]
     .map(e => e.textContent.trim());
@@ -4580,7 +4587,7 @@ const archives = await page.evaluate(async () => {
   };
   document.querySelector('#cl-table .cl-sep').click();
   await new Promise(r => setTimeout(r, 300));
-  return { ordre, sepTxt: sep.textContent.replace(/\s+/g, ' ').trim(), pied, resume, replie,
+  return { ordre, ordreComplet, sepTxt: sep.textContent.replace(/\s+/g, ' ').trim(), pied, resume, replie,
            rouvert: [...document.querySelectorAll('#cl-table .cl-group')].length };
 });
 /* Le tri choisi (ici le nom) s'applique À L'INTÉRIEUR de chaque bloc : « Affaire annulée »
@@ -4588,6 +4595,12 @@ const archives = await page.evaluate(async () => {
    COUPURE — pas un ordre de déclaration. */
 check('Clients : les terminés et annulés passent sous un séparateur, les autres au-dessus',
   archives.ordre.join(' > ') === 'x1 > x2 > — SÉPARATEUR — > x4 > x3', archives.ordre.join(' > '));
+/* Le total des actifs juste après leurs lignes, avant le séparateur des archives — pas
+   relégué tout en bas après onze chantiers terminés. Demandé par Raphaël, capture à
+   l'appui : « c'est bcp plus logique ». */
+check('Clients : le total des actifs est collé sous les lignes actives, avant le séparateur des archives',
+  archives.ordreComplet.join(' > ') === 'HEAD > x1 > x2 > FOOT:? > FOOT:actifs > SEP > x4 > x3 > FOOT:archives > FOOT:total',
+  archives.ordreComplet.join(' > '));
 check('Clients : le séparateur dit combien et pour combien',
   /Archivés · 2 clients/.test(archives.sepTxt) && /4[  ]?000/.test(archives.sepTxt), archives.sepTxt);
 /* Le point qu'il ne faut surtout pas rater : ranger n'est pas exclure. Le chiffre
