@@ -657,10 +657,22 @@
   .rz-site a{color:var(--oxblood);}
 
   .rz-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
-  .rz-back{background:transparent;border:none;color:var(--stone);font-family:'Inter';font-size:12.5px;cursor:pointer;padding:0 0 8px;}
-  .rz-back:hover{color:var(--oxblood);}
+  /* Revenir à la liste est le geste le plus fréquent depuis une fiche : c'était un lien
+     gris coincé entre le paragraphe d'explication et le nom de la réalisation, on ne le
+     voyait pas. C'est un bouton, il est en tête, et il est assez grand pour le pouce. */
+  .rz-back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;
+    background:var(--travertine);border:1px solid var(--panel-edge);border-radius:8px;
+    color:var(--stone-deep);font-family:'Inter';font-size:13px;font-weight:600;
+    cursor:pointer;padding:10px 14px;transition:.15s;}
+  .rz-back:hover{background:#e2dbcd;border-color:var(--stone-light);color:var(--ink);}
+  .rz-back:focus-visible{outline:2px solid var(--oxblood);outline-offset:2px;}
+  /* Une fiche ouverte : le paragraphe qui explique LA LISTE n'a plus rien à y faire, et il
+     repoussait le retour de quatre lignes vers le bas. */
+  #realisations-view.rz-ouvert .rz-intro,#boutique-view.rz-ouvert .rz-intro{display:none;}
   .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
   .rz-liens{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
+  .rz-perso-in{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--stone-deep);line-height:1.45;}
+  .rz-perso-in input{width:auto;flex:0 0 auto;margin-top:2px;}
   .rz-pres{margin-bottom:16px;}
   .rz-pres textarea{min-height:74px;}
   .rz-pres-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-4px;}
@@ -4896,13 +4908,14 @@ function realisationPublishPlan(r){
 /* Les champs du projet qui partent dans le manifeste. Le titre de la photo n'y est pas :
    il ne quitte jamais le CRM. */
 function realisationFicheSig(r){
-  return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||''].join('\u0001');
+  return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||'',
+    r.personnelle?'perso':''].join('\u0001');
 }
 const HIST_LABEL={horssite:'Écartée du site',sursite:'Remise sur le site',couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée',retour:'Retour à la publication précédente'};
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
      et un portfolio : ils partent sur le site avec les photos. */
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],published:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],published:false,personnelle:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
@@ -5619,6 +5632,8 @@ function renderRealisations(){
   const host=$('rz-body');if(!host)return;
   ensureRealisations();
   if(_rzOpenId&&!findRealisation(_rzOpenId))_rzOpenId=null;
+  const vue=document.getElementById('realisations-view');
+  if(vue)vue.classList.toggle('rz-ouvert',!!_rzOpenId);
   if(!_rzOpenId&&_rzSelMode){_rzSelMode=false;_rzSel.clear();}
   if(!_rzOpenId)_rzOrderMode=false;
   /* Un filtre qui ne montre plus rien (la dernière réalisation concernée vient d'être
@@ -5789,7 +5804,10 @@ function renderRealisationDetail(host,r){
       <input type="text" data-f="mission" list="rz-missions" placeholder="ex. Rénovation complète" value="${esc(r.mission||'')}">
       <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>
     <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Catégorie — la section du site</span>
-      <select data-f="categorie"></select></label>`;
+      <select data-f="categorie"></select></label>
+    <label class="fld rz-perso" style="flex:1;min-width:230px"><span class="lbl">Où sur le site</span>
+      <span class="rz-perso-in"><input type="checkbox" data-perso${r.personnelle?' checked':''}>
+        <span>Réalisation <b>personnelle</b> — elle quitte la liste principale et le bandeau d’accueil, et rejoint sa propre section.</span></span></label>`;
   /* Un menu, pas un champ libre : deux orthographes du même mot fabriquaient deux sections
      sur le site. La dernière ligne ouvre les réglages pour ajouter ou renommer une
      catégorie — la liste se gère depuis le CRM, sans toucher au code. */
@@ -5800,6 +5818,14 @@ function renderRealisationDetail(host,r){
   selCat.addEventListener('change',()=>{
     if(selCat.value==='__gerer'){selCat.value=r.categorie||'';openSitePanel();return;}
     r.categorie=selCat.value;r.updatedAt=Date.now();saveRealisationsDebounced();
+  });
+  /* Changer de section change ce que le site montre : la réalisation quitte la liste
+     principale pour une autre. C'est donc une modification de la fiche publiée, et le
+     rappel « à republier » doit le voir. */
+  const perso=meta.querySelector('[data-perso]');
+  perso.addEventListener('change',()=>{
+    r.personnelle=perso.checked;r.updatedAt=Date.now();
+    saveRealisations();renderRealisations();
   });
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
@@ -6283,6 +6309,8 @@ function renderBoutique(){
   const host=$('bt-body');if(!host)return;
   ensureProduits();
   if(_btOpenId&&!findProduit(_btOpenId))_btOpenId=null;
+  const vueBt=document.getElementById('boutique-view');
+  if(vueBt)vueBt.classList.toggle('rz-ouvert',!!_btOpenId);
   host.innerHTML='';
   if(_btOpenId)renderProduitDetail(host,findProduit(_btOpenId));
   else renderProduitList(host);
@@ -8945,12 +8973,14 @@ const SITE_THEMES=[
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
 const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,
-  menuRealisations:'',menuBoutique:'',menuJournal:'',menuApropos:''};
+  menuRealisations:'',menuPersonnelles:'',menuBoutique:'',menuJournal:'',menuApropos:''};
 /* Les entrées du menu du site. Vides, ce sont les mots par défaut de la page (traduits) ;
    remplies, ce sont les mots de Melissa — et ils se traduisent comme ses autres textes. */
 const SITE_MENU=[
   {cle:'menuRealisations',id:'site-menu-real',defaut:'Réalisations',
    aide:'La liste des projets, en haut du site.'},
+  {cle:'menuPersonnelles',id:'site-menu-perso',defaut:'Réalisations personnelles',
+   aide:'N’apparaît que si au moins un projet est marqué « personnelle » et publié.'},
   {cle:'menuBoutique',id:'site-menu-bout',defaut:'À la vente',
    aide:'N’apparaît que si des produits sont publiés.'},
   {cle:'menuJournal',id:'site-menu-jour',defaut:'Journal',
@@ -8981,7 +9011,7 @@ function bandeauPar(){
 const SITE_LANGUES=[{code:'fr',nom:'Français',dir:'ltr'},{code:'en',nom:'English',dir:'ltr'},{code:'he',nom:'עברית',dir:'rtl'}];
 /* Les champs qui changent d'une langue à l'autre. Le reste (e-mail, téléphone, Instagram,
    dates) est commun : le traduire n'aurait aucun sens. */
-const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuBoutique','menuJournal','menuApropos'];
+const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos'];
 function siteLanguesActives(){
   const st=siteSettings();
   const l=Array.isArray(st.langues)?SITE_LANGUES.map(x=>x.code).filter(c=>st.langues.indexOf(c)>=0):['fr'];
@@ -9057,7 +9087,7 @@ function siteInfos(){
   o.diaporama=(st.diaporama==='aucun')?'aucun':'actif';
   o.diaporamaSec=bandeauSec();
   o.diaporamaPar=bandeauPar();
-  ['apropos','email','tel','instagram','menuRealisations','menuBoutique','menuJournal','menuApropos'].forEach(k=>{
+  ['apropos','email','tel','instagram','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
   });
@@ -9806,6 +9836,9 @@ async function publishRealisation(r,opts){
     [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
       if((v||'').trim())fiche[k]=String(v).trim();
     });
+    /* Le drapeau ne part QUE s'il est levé : un `false` dans chaque fiche alourdirait le
+       manifeste pour ne rien dire de plus qu'une clé absente. */
+    if(r.personnelle)fiche.personnelle=true;
     man.realisations.unshift(fiche);
     await writeManifest(man);
 

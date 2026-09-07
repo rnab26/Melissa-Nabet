@@ -4457,6 +4457,77 @@ check('Client : saisir le contact nomme le client tant que personne ne l’a nom
 check('Client : un nom déjà choisi n’est jamais écrasé par un changement de contact',
   nomClient.nomProtege === 'Cabinet Lévy', nomClient.nomProtege);
 
+// --- RÉALISATION PERSONNELLE : la case qui la sort de la vitrine professionnelle.
+const persoCase = await page.evaluate(async () => {
+  showView('realisations');
+  const r = realisations[0];
+  r.personnelle = false;
+  const sigAvant = realisationFicheSig(r);
+  _rzOpenId = r.id; renderRealisations();
+  await new Promise(x => setTimeout(x, 400));
+  const c = document.querySelector('#rz-body [data-perso]');
+  const present = !!c;
+  const libelle = present ? c.closest('.fld').textContent.replace(/\s+/g, ' ').trim() : '';
+  if (c) { c.checked = true; c.dispatchEvent(new Event('change')); }
+  await new Promise(x => setTimeout(x, 300));
+  const sigApres = realisationFicheSig(r);
+  return { present, libelle, coche: r.personnelle === true, sigChange: sigAvant !== sigApres };
+});
+check('Réalisation : une case la déclare « personnelle », et dit ce que ça change',
+  persoCase.present && persoCase.coche && /personnelle/i.test(persoCase.libelle)
+  && /liste principale/i.test(persoCase.libelle), persoCase.libelle.slice(0, 110));
+/* Changer de section change ce que le site montre : le rappel « à republier » doit le voir,
+   sinon on coche la case et le site garde le projet dans la vitrine sans rien dire. */
+check('Réalisation : la déclarer personnelle marque la fiche « à republier »',
+  persoCase.sigChange === true);
+
+const persoManifeste = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub) || realisations[0];
+  r.personnelle = true; r.title = r.title || 'Essai';
+  await publishRealisation(r);
+  const m1 = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const f1 = m1.realisations.find(x => x.id === r.id);
+  r.personnelle = false;
+  await publishRealisation(r);
+  const m2 = JSON.parse(await window.__files.get('test-user/manifest.json').text());
+  const f2 = m2.realisations.find(x => x.id === r.id);
+  return { avec: f1 && f1.personnelle, sans: f2 && ('personnelle' in f2) };
+});
+check('Réalisation : le drapeau part dans le manifeste, et seulement quand il est levé',
+  persoManifeste.avec === true && persoManifeste.sans === false, JSON.stringify(persoManifeste));
+
+// --- REVENIR À LA LISTE : le geste le plus fréquent depuis une fiche. C'était un lien gris
+//     coincé entre le paragraphe d'explication et le nom du chantier — on ne le voyait pas.
+const retourListe = await page.evaluate(async () => {
+  showView('realisations');
+  const r = realisations[0];
+  _rzOpenId = r.id; renderRealisations();
+  await new Promise(x => setTimeout(x, 400));
+  const b = document.querySelector('#rz-body .rz-back');
+  const st = getComputedStyle(b);
+  const intro = document.querySelector('#realisations-view .rz-intro');
+  const ouvert = {
+    haut: Math.round(b.getBoundingClientRect().top),
+    hauteur: Math.round(b.getBoundingClientRect().height),
+    borde: st.borderStyle !== 'none' && st.borderTopWidth !== '0px',
+    fond: st.backgroundColor,
+    introVue: getComputedStyle(intro).display !== 'none',
+    premier: document.querySelector('#rz-body button') === b,
+  };
+  b.click();
+  await new Promise(x => setTimeout(x, 300));
+  return { ouvert, referme: _rzOpenId === null,
+    introRevenue: getComputedStyle(document.querySelector('#realisations-view .rz-intro')).display !== 'none' };
+});
+check('Réalisations : le retour est un vrai bouton, assez grand pour le pouce',
+  retourListe.ouvert.borde && retourListe.ouvert.hauteur >= 36, JSON.stringify(retourListe.ouvert));
+check('Réalisations : il est le premier élément de la fiche, plus rien ne le repousse',
+  retourListe.ouvert.premier === true);
+check('Réalisations : le paragraphe qui explique la LISTE disparaît quand une fiche est ouverte',
+  retourListe.ouvert.introVue === false && retourListe.introRevenue === true,
+  'ouvert : ' + retourListe.ouvert.introVue + ' · refermé : ' + retourListe.introRevenue);
+check('Réalisations : il ramène bien à la liste', retourListe.referme === true);
+
 // 1 bis) Les fiches créées AVANT ce correctif : leur contact est déjà saisi, aucun nouvel
 //        événement ne vient plus — elles resteraient « Nouveau client » pour toujours.
 const nomsRepares = await page.evaluate(async () => {

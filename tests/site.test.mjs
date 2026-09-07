@@ -47,8 +47,10 @@ await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' }
 await page.waitForTimeout(500);
 
 check('Titre du site repris du manifeste', (await page.textContent('#site-name')).trim() === 'Melissa Nabet');
-const cards = await page.locator('.project').count();
-check('Une carte par réalisation publiée', cards === 3, cards + ' carte(s)');
+const cards = await page.locator('#projects .project').count();
+/* Quatre réalisations publiées, dont UNE personnelle : la liste principale n'en montre
+   que trois. La quatrième a sa propre section, plus bas. */
+check('Une carte par réalisation publiée, la personnelle mise à part', cards === 3, cards + ' carte(s)');
 const coverLoaded = await page.evaluate(() => [...document.querySelectorAll('.project-img img')].filter(i => i.naturalWidth > 0).length);
 check('Vignettes de couverture réellement chargées', coverLoaded >= 2, coverLoaded + ' chargée(s) sur ' + cards);
 
@@ -62,12 +64,14 @@ const filtres = await page.evaluate(() => ({
    « Bureau » avant « Appartement », et le site doit le respecter. */
 check('Filtre : une case par catégorie publiée, dans l’ordre défini dans le CRM',
   filtres.visible && filtres.boutons.join(' | ') === 'Tout (3) | Bureau (1) | Appartement (2)', filtres.boutons.join(' | '));
+/* La catégorie d'un projet personnel ne gonfle pas le filtre de la vitrine : « Appartement »
+   compte 2 projets professionnels, pas 3. */
 check('Filtre : « Tout » est actif au départ', /^Tout/.test(filtres.actif), filtres.actif);
 const filtre1 = await page.evaluate(async () => {
   [...document.querySelectorAll('#filtres button')].find(b => /Appartement/.test(b.textContent)).click();
   await new Promise(r => setTimeout(r, 200));
   return {
-    cartes: [...document.querySelectorAll('.project-name')].map(n => n.textContent),
+    cartes: [...document.querySelectorAll('#projects .project-name')].map(n => n.textContent),
     actif: (document.querySelector('#filtres button[aria-pressed="true"]') || {}).textContent || '',
   };
 });
@@ -76,7 +80,7 @@ check('Filtre : ne restent que les projets de la catégorie choisie',
 check('Filtre : la case choisie est marquée', /Appartement/.test(filtre1.actif), filtre1.actif);
 // Ouvrir depuis une liste filtrée doit ouvrir LE bon projet, pas celui du même rang
 // dans la liste complète.
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(500);
 const ouvertFiltre = await page.evaluate(() => ({ titre: (document.getElementById('d-title') || {}).textContent || '', hash: location.hash }));
 check('Filtre : ouvrir depuis une liste filtrée ouvre le bon projet',
@@ -97,7 +101,7 @@ const filtreUn = await page.evaluate(() => {
 });
 check('Filtre : une seule catégorie, aucun filtre affiché', filtreUn === true);
 
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(600);
 check('Ouverture du projet', await page.locator('.detail').isVisible());
 check('Titre du projet affiché', (await page.textContent('#d-title')).trim() === 'Bureau Sébastien');
@@ -147,7 +151,7 @@ check('Projet suivant : il ouvre bien le projet annoncé', suivant.apres === sui
 check('Projet suivant : la flèche du clavier fait la même chose',
   suivant.apresFleche !== suivant.apres, suivant.apres + ' → ' + suivant.apresFleche);
 await page.evaluate(async () => { closeProject(); await new Promise(r => setTimeout(r, 200)); });
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(500);
 
 // --- Textes de présentation écrits depuis le CRM
@@ -249,7 +253,7 @@ check('Projet : une invitation à écrire quand des coordonnées existent',
   && /wa\.me|mailto:/.test(contactProjet.avec.lien), contactProjet.avec.texte + ' → ' + contactProjet.avec.lien);
 check('Projet : rien du tout tant qu’aucune coordonnée n’est renseignée', contactProjet.sans === true);
 await page.click('#back'); await page.waitForTimeout(300);
-check('Retour à la liste', await page.locator('.projects').isVisible());
+check('Retour à la liste', await page.locator('#projects').isVisible());
 
 // --- Partage d'un lien et référencement
 // Page fraîche : ce sont les balises telles que les lit un robot qui n'exécute pas le
@@ -291,7 +295,7 @@ await page.waitForTimeout(400);
 
 // Le titre de l'onglet suit le projet ouvert : un lien copié depuis la barre d'adresse
 // n'arrive plus avec le titre du site entier.
-await page.locator('.project').first().click();
+await page.locator('#projects .project').first().click();
 await page.waitForTimeout(500);
 const seoProjet = await page.evaluate(() => ({
   titre: document.title,
@@ -398,7 +402,7 @@ await page.waitForTimeout(400);
 const enIndex = await page.evaluate(async () => {
   appliquerTheme('index', 'discret');
   await new Promise(r => setTimeout(r, 250));
-  const c = [...document.querySelectorAll('.project')];
+  const c = [...document.querySelectorAll('#projects .project')];
   if (c.length < 2) return { assez: false };
   const a = c[0].getBoundingClientRect(), b = c[1].getBoundingClientRect();
   const vign = c[0].querySelector('.project-img').getBoundingClientRect();
@@ -424,7 +428,7 @@ const visibilite = async (mouvement, reduit) => {
   await p2.reload({ waitUntil: 'networkidle' });
   await p2.waitForTimeout(900);
   const r = await p2.evaluate(() => {
-    const c = [...document.querySelectorAll('.project')];
+    const c = [...document.querySelectorAll('#projects .project')];
     return { total: c.length,
       invisibles: c.filter(x => parseFloat(getComputedStyle(x).opacity) < 0.05).length };
   });
@@ -440,7 +444,7 @@ await sansObs.addInitScript(() => { delete window.IntersectionObserver; });
 await sansObs.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
 await sansObs.waitForTimeout(900);
 const rSansObs = await sansObs.evaluate(() => {
-  const c = [...document.querySelectorAll('.project')];
+  const c = [...document.querySelectorAll('#projects .project')];
   return { total: c.length, invisibles: c.filter(x => parseFloat(getComputedStyle(x).opacity) < 0.05).length,
            marquees: document.querySelectorAll('.fondu').length };
 });
@@ -638,7 +642,7 @@ await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' 
 await page.waitForTimeout(700);
 const ancien = await page.evaluate(() => ({
   sous: (document.getElementById('site-tagline').textContent || '').trim(),
-  projets: document.querySelectorAll('.project').length,
+  projets: document.querySelectorAll('#projects .project').length,
   langs: !document.getElementById('langs').hidden,
   journal: !document.getElementById('journal').hidden,
   rubrique: (document.getElementById('t-realisations').textContent || '').trim(),
@@ -771,6 +775,80 @@ check('Lien direct vers un projet : « Toutes les réalisations » ramène à la
   !apresLienDirect.vue && apresLienDirect.hash === '' && apresLienDirect.cartes > 0, JSON.stringify(apresLienDirect));
 
 // ============================================================================
+//  LES RÉALISATIONS PERSONNELLES : une section à part, pas une liste cachée
+// ============================================================================
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+const perso = await page.evaluate(() => {
+  const sec = document.getElementById('personnelles');
+  return {
+    visible: !sec.hidden,
+    titre: (document.getElementById('t-personnelles') || {}).textContent || '',
+    noms: [...document.querySelectorAll('#projects-perso .project-name')].map(e => e.textContent),
+    nomsListe: [...document.querySelectorAll('#projects .project-name')].map(e => e.textContent),
+    vignettes: [...document.querySelectorAll('#projects-perso img')].filter(i => i.naturalWidth > 0).length,
+    meta: (document.querySelector('#projects-perso .project-meta') || {}).textContent || '',
+  };
+});
+check('Personnelles : elles ont leur propre section, avec leur titre',
+  perso.visible && /personnelles/i.test(perso.titre), perso.titre);
+check('Personnelles : le projet marqué y est, et NULLE PART dans la liste principale',
+  perso.noms.join() === 'Mon appartement' && perso.nomsListe.indexOf('Mon appartement') < 0,
+  perso.noms.join() + ' | liste : ' + perso.nomsListe.join(', '));
+check('Personnelles : leurs cartes sont de vraies cartes — photo chargée, lieu, année',
+  perso.vignettes === 1 && /2024/.test(perso.meta) && /Jaffa/.test(perso.meta),
+  perso.vignettes + ' vignette(s) · ' + perso.meta);
+
+/* Le bandeau est la vitrine du studio : c'est ce que « une section à part, en dehors du
+   bandeau » veut dire. On regarde plusieurs vues d'affilée. */
+const bandeauSansPerso = await page.evaluate(async () => {
+  const vus = [];
+  for (var i = 0; i < 8; i++) { clearTimeout(bdMinuteur); bdAller(1); await new Promise(r => setTimeout(r, 350)); vus.push(bdProjet && bdProjet.title); }
+  return { vus, dansLesVues: bdVues.some(v => v.p.title === 'Mon appartement') };
+});
+check('Personnelles : elles ne passent jamais dans le bandeau d’accueil',
+  !bandeauSansPerso.dansLesVues && bandeauSansPerso.vus.indexOf('Mon appartement') < 0,
+  bandeauSansPerso.vus.filter(Boolean).join(' · '));
+
+/* Une réalisation personnelle s'ouvre comme les autres — c'est un rangement, pas une
+   mise à l'écart —, et « Projet suivant » reste dans sa famille. */
+const ouvrirPerso = await page.evaluate(async () => {
+  document.querySelectorAll('#projects-perso .project')[0].click();
+  await new Promise(r => setTimeout(r, 700));
+  const t = (document.getElementById('d-title') || {}).textContent || '';
+  const suiv = (document.getElementById('suivant') || {}).hidden;
+  const photos = [...document.querySelectorAll('.shot img')].filter(i => i.naturalWidth > 0).length;
+  const secVue = getComputedStyle(document.getElementById('personnelles')).display;
+  document.getElementById('back').click();
+  await new Promise(r => setTimeout(r, 500));
+  return { t, suiv, photos, secVue };
+});
+check('Personnelles : une réalisation personnelle s’ouvre comme les autres',
+  ouvrirPerso.t === 'Mon appartement' && ouvrirPerso.photos === 2,
+  ouvrirPerso.t + ' · ' + ouvrirPerso.photos + ' photo(s)');
+check('Personnelles : un projet ouvert masque aussi cette section',
+  ouvrirPerso.secVue === 'none', ouvrirPerso.secVue);
+/* Une seule personnelle : « Projet suivant » n'a nulle part où aller — il ne doit pas
+   renvoyer vers la vitrine professionnelle. */
+check('Personnelles : « Projet suivant » ne saute pas d’une famille à l’autre',
+  ouvrirPerso.suiv === true);
+
+// Aucune personnelle publiée : la section n'existe pas, et le menu n'en parle pas.
+const sansPerso = await page.evaluate(async () => {
+  const garde = projects.filter(p => p.personnelle);
+  projects = projects.filter(p => !p.personnelle);
+  renderIndex(); renderMenu();
+  await new Promise(r => setTimeout(r, 250));
+  const r = { sec: document.getElementById('personnelles').hidden,
+              menu: [...document.querySelectorAll('#menu-in button')].map(b => b.dataset.menu) };
+  projects = projects.concat(garde);
+  renderIndex(); renderMenu();
+  return r;
+});
+check('Personnelles : sans projet marqué, ni section ni entrée de menu',
+  sansPerso.sec === true && sansPerso.menu.indexOf('personnelles') < 0, sansPerso.menu.join(','));
+
+// ============================================================================
 //  LE MENU DU SITE : où l'on peut aller, et où l'on est
 // ============================================================================
 await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
@@ -789,7 +867,7 @@ const lireMenu = () => page.evaluate(() => {
 });
 const menu1 = await lireMenu();
 check('Menu : une barre en haut, avec une entrée par section publiée',
-  menu1.visible && menu1.entrees.join(' | ') === 'Réalisations | À la vente | Journal | À propos',
+  menu1.visible && menu1.entrees.join(' | ') === 'Réalisations | Réalisations personnelles | À la vente | Journal | À propos',
   menu1.entrees.join(' | '));
 /* Sur un portfolio on descend loin dans les photos : remonter pour changer de section est
    le geste qu'on ne fait pas. */
@@ -874,7 +952,7 @@ const menuVide = await page.evaluate(() => {
   return { restant, barreVisible };
 });
 check('Menu : une section vide n’a pas d’entrée',
-  menuVide.restant.join(',') === 'liste,apropos', menuVide.restant.join(','));
+  menuVide.restant.join(',') === 'liste,personnelles,apropos', menuVide.restant.join(','));
 check('Menu : deux entrées suffisent pour qu’il ait un sens', menuVide.barreVisible === true);
 
 // --- Sur téléphone : ça défile latéralement, et rien ne déborde de la page
@@ -890,7 +968,7 @@ const menuTel = await page.evaluate(() => {
 });
 await page.screenshot({ path: '/tmp/mn-menu-390.png' });
 check('Menu sur téléphone : toutes les entrées sont là, on les fait défiler du doigt',
-  menuTel.entrees === 4 && menuTel.defileLateral && menuTel.debordPage <= 1, JSON.stringify(menuTel));
+  menuTel.entrees === 5 && menuTel.defileLateral && menuTel.debordPage <= 1, JSON.stringify(menuTel));
 check('Menu sur téléphone : un dégradé dit qu’il y a une suite', menuTel.indice !== 'none', menuTel.indice);
 await page.setViewportSize({ width: 1280, height: 900 });
 

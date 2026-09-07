@@ -514,6 +514,63 @@ déjà été tapé continue de s'y ajouter.
 
 ---
 
+## 7 septembre 2026 — Réalisations personnelles, et le retour à la liste qu'on ne voyait pas
+
+**Branche** `claude/site-realisations-perso`. Troisième des cinq chantiers du site.
+
+### Les réalisations personnelles
+
+Une case **« Réalisation personnelle »** dans la fiche d'un chantier. Cochée, le projet :
+
+- **quitte la liste principale** et le **bandeau d'accueil** — celui-ci est la vitrine du
+  studio, c'est ce que « une section à part, en dehors du bandeau » veut dire ;
+- **quitte les filtres de catégories** : ils rangent la vitrine. Une catégorie née d'un
+  projet personnel ferait un filtre qui ne montre rien ;
+- **rejoint sa propre section**, plus bas, avec ses vraies cartes (photo, année, lieu) et sa
+  propre entrée de menu — dont le **libellé est modifiable** dans le CRM comme les autres ;
+- reste **ouvrable comme les autres** : c'est un rangement, pas une mise à l'écart. Et
+  « Projet suivant » reste dans sa famille : passer d'un chantier de client à un projet
+  personnel sans prévenir brouillerait la lecture.
+
+Sans aucun projet marqué, **ni section ni entrée de menu** : une section vide sur un
+portfolio est une promesse non tenue.
+
+### Le retour à la liste — signalé, capture à l'appui
+
+« ← Toutes les réalisations » était un **lien gris** coincé entre le paragraphe qui explique
+la liste et le nom du chantier. C'est le geste le plus fréquent depuis une fiche, et on ne
+le voyait pas.
+
+- C'est maintenant un **vrai bouton**, encadré, assez grand pour le pouce.
+- Il est le **premier élément de la fiche**, et le paragraphe d'explication — qui parle de
+  LA LISTE, pas de la fiche — **disparaît** tant qu'une réalisation est ouverte. Le retour
+  remonte ainsi d'une centaine de pixels.
+- Même traitement dans la **boutique** (« ← Tous les produits ») : même défaut, même famille.
+
+### Ce qu'il ne faut pas casser
+
+- `carteProjet()` construit **une seule** carte pour les deux listes. Les dupliquer, c'est
+  se retrouver un jour avec la section personnelle sans son lieu ou sans son fondu.
+- `projetsPro()` est le filtre de la vitrine : la liste, les catégories, leur décompte et le
+  bandeau s'en servent tous. En oublier un remettrait les projets personnels dans la vitrine.
+- Le drapeau ne part dans le manifeste **que s'il est levé** : un `false` par fiche
+  alourdirait le manifeste sans rien dire de plus qu'une clé absente.
+- `realisationFicheSig()` inclut le drapeau : changer de section change ce que le site
+  montre, le rappel « à republier » doit le voir.
+- Dans les tests, `.project` et `.projects` désignent **deux** grilles depuis ce chantier :
+  viser `#projects` quand on parle de la liste principale.
+
+### Vérification
+
+`realisations` **526** (9 nouveaux), `site` **172** (11 nouveaux), `bout-en-bout` **21** —
+**719 contrôles, 0 échec**. Captures : `/tmp/perso-site.png`, `/tmp/retour-crm.png`.
+
+### À faire côté Raphaël
+
+Cocher la case sur les chantiers concernés, puis republier ces réalisations.
+
+---
+
 ## 7 septembre 2026 — Le nom des clients réparé pour de bon, et les archives sous un séparateur
 
 **Branche** `claude/clients-nom-et-archives`.
