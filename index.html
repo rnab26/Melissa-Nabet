@@ -329,6 +329,19 @@
   /* Séparateur visuel entre le bloc « plans » et le bloc « commissions / prestations » */
   .cl-row .col-sep{border-right:1px solid var(--hair);padding-right:9px;margin-right:1px;}
   .cl-row .col-after-sep{padding-left:2px;}
+  /* Le séparateur des archives : une vraie coupure dans le tableau, pas une ligne de plus.
+     Il se replie d'un appui — l'important est ce qui est en cours. */
+  .cl-sep{display:flex;align-items:center;gap:10px;width:100%;
+    padding:9px 10px;margin:10px 0 0;border:0;border-top:2px solid var(--hair);
+    background:var(--travertine);cursor:pointer;font-family:inherit;text-align:left;}
+  .cl-sep:hover{background:#e2dbcd;}
+  .cl-sep-chev{color:var(--stone);font-size:9px;transition:transform .18s ease;flex:0 0 auto;}
+  .cl-sep.ouvert .cl-sep-chev{transform:rotate(90deg);}
+  .cl-sep-txt{flex:1;font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+    font-weight:700;color:var(--stone-deep);}
+  .cl-sep-ca{font-size:12px;color:var(--stone);font-variant-numeric:tabular-nums;}
+  .lib-arch{display:flex;align-items:center;gap:5px;flex:0 0 auto;font-size:11px;color:var(--stone);white-space:nowrap;}
+  .lib-arch input{width:auto;margin:0;}
   .cl-row.head .sortable{cursor:pointer;user-select:none;display:flex;align-items:center;gap:3px;justify-content:inherit;}
   .cl-row.head .num.sortable{justify-content:flex-end;}
   .cl-row.head .sortable:hover{color:var(--oxblood);}
@@ -438,6 +451,9 @@
      « Contact » en croyant nommer le client, et la fiche restait « Nouveau client ». */
   .cl-side-lbl{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
     color:rgba(255,255,255,.5);margin-bottom:3px;text-align:center;}
+  /* Un client sans nom ne doit pas ressembler à un client nommé « Nouveau client ». */
+  .cl-side-alerte{display:block;text-align:center;font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:#e0a86a;margin:-1px 0 3px;}
   .cl-side-head select.cl-side-statut{background:transparent;border:1px solid rgba(255,255,255,.3);color:#d8d2c8;text-align:center;text-align-last:center;font-size:11px;border-radius:3px;padding:4px 6px;}
   .cl-side-head select.cl-side-statut option{color:#3d3934;}
   .cl-side-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
@@ -1600,11 +1616,15 @@ const DEFAULT_TASK_CATEGORIES=[
 /* id fixes volontairement (pas uid()) : 'annule' est référencé ailleurs dans le code
    (ex. exclusion des relances de paiement) — un statut par défaut doit garder son id
    stable même après un ↺ Réinitialiser, sinon ces liens silencieux se cassent. */
+/* `archive` : ce statut range le client sous le séparateur du tableau. Ce n'est pas la même
+   chose que « supprimé » — le client reste là, ses montants comptent toujours dans les
+   totaux. C'est un rangement, pas une mise à l'écart. Les statuts étant modulables, ce
+   drapeau l'est aussi : un statut ajouté peut être déclaré archivant. */
 const DEFAULT_CLIENT_STATUSES=[
   {id:'en_cours',label:'En cours',color:'#d59a4a'},
   {id:'devis',label:'Devis envoyé',color:'#6aa6cf'},
-  {id:'termine',label:'Terminé',color:'#6a9a5a'},
-  {id:'annule',label:'Annulé',color:'#b6543f'},
+  {id:'termine',label:'Terminé',color:'#6a9a5a',archive:true},
+  {id:'annule',label:'Annulé',color:'#b6543f',archive:true},
 ];
 
 /* ============ STOCKAGE PERSISTANT (avec repli mémoire) ============ */
@@ -3019,6 +3039,9 @@ function libApplyToCurrent(){askConfirm('Recharger la bibliothèque effacera les
 /* ============ CLIENTS / COMPTES ============ */
 function ensureClientStatuses(){if(!Array.isArray(library.clientStatuses)||!library.clientStatuses.length)library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));}
 function clientStatus(c){ensureClientStatuses();return library.clientStatuses.find(s=>s.id===c.statut)||library.clientStatuses[0];}
+/* Un client est aux archives si SON statut est déclaré archivant. Rien d'autre : ni sa date
+   de fin, ni son solde. Sinon le rangement se mettrait à bouger tout seul. */
+function clientArchive(c){return !!clientStatus(c).archive;}
 function clientStatusOptionsHtml(c){ensureClientStatuses();return library.clientStatuses.map(s=>`<option value="${esc(s.id)}" ${c.statut===s.id?'selected':''}>${esc(s.label)}</option>`).join('');}
 function normalizeClient(c){
   let montantFinal,paiements,commissions;
@@ -3076,7 +3099,7 @@ function sendRelanceWhatsApp(id){
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`,'_blank');
 }
 
-const clientFilters={q:'',statuts:[],sortKey:'name',sortDir:'asc'};
+const clientFilters={q:'',statuts:[],sortKey:'name',sortDir:'asc',archivesOuvert:true};
 const clientOpen={};
 let _saveT;
 function saveClients(){store.set(K_CLIENTS,clients);}
@@ -3122,7 +3145,12 @@ function renderClients(){
     return (val(sk)-valb(sk))*dir;
   });
   if(!list.length){const e=document.createElement('div');e.className='empty';e.textContent='Aucun client.';tbl.appendChild(e);}
-  list.forEach(c=>{
+  /* Deux blocs dans le MÊME tableau, pas deux tableaux : le pied continue de compter tout
+     le monde, et on garde sous les yeux ce qu'on a fait dans l'année. Le tri choisi
+     s'applique à l'intérieur de chaque bloc. */
+  const actifs=list.filter(c=>!clientArchive(c));
+  const archives=list.filter(c=>clientArchive(c));
+  const ligneClient=c=>{
     const t=clientTotals(c);
     const grp=document.createElement('div');grp.className='cl-group'+(clientOpen[c.id]?' open':'');grp.dataset.cid=c.id;
     const row=document.createElement('div');row.className='cl-row';
@@ -3132,18 +3160,44 @@ function renderClients(){
     row.querySelector('.cl-del').addEventListener('click',e=>{e.stopPropagation();askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');});});
     grp.appendChild(row);
     const det=document.createElement('div');det.className='cl-detail';det.appendChild(buildClientDetail(c));grp.appendChild(det);
-    tbl.appendChild(grp);
-  });
-  renderClientsFooter(tbl,list);
+    return grp;
+  };
+  actifs.forEach(c=>tbl.appendChild(ligneClient(c)));
+  if(archives.length){
+    /* Le séparateur porte le compte et le total de la section, et se replie : au bout de
+       deux ans de chantiers terminés, personne ne veut faire défiler cinquante lignes pour
+       atteindre le pied de tableau. L'état est retenu d'une visite à l'autre. */
+    const ta=archives.reduce((a,c)=>a+clientTotals(c).montant,0);
+    const sep=document.createElement('button');
+    sep.type='button';
+    sep.className='cl-sep'+(clientFilters.archivesOuvert?' ouvert':'');
+    sep.innerHTML=`<span class="cl-sep-chev">▶</span>
+      <span class="cl-sep-txt">Archivés · ${archives.length} client${archives.length>1?'s':''}</span>
+      <span class="cl-sep-ca">${fmt(ta)} ₪</span>`;
+    sep.setAttribute('aria-expanded',clientFilters.archivesOuvert?'true':'false');
+    sep.addEventListener('click',()=>{
+      clientFilters.archivesOuvert=!clientFilters.archivesOuvert;
+      try{localStorage.setItem('mn-cl-archives',clientFilters.archivesOuvert?'1':'0');}catch(e){}
+      renderClients();
+    });
+    tbl.appendChild(sep);
+    if(clientFilters.archivesOuvert)archives.forEach(c=>tbl.appendChild(ligneClient(c)));
+  }
+  renderClientsFooter(tbl,list,actifs.length,archives.length);
   const tot=$('cl-totals');if(tot)tot.innerHTML='';
 }
 /* Pied de tableau : sommes des 4 colonnes, calculées sur les clients FILTRÉS, alignées sous chaque colonne. */
-function renderClientsFooter(tbl,list){
+function renderClientsFooter(tbl,list,nActifs,nArchives){
   const ft=list.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.reste+=t.reste;a.comm+=t.commissions;a.commReste+=t.commissionsReste;return a;},{montant:0,reste:0,comm:0,commReste:0});
   const dv='₪';
   // Ligne d'intitulés du résumé
   const lab=document.createElement('div');lab.className='cl-row cl-foot sep-top';
-  lab.innerHTML=`<div></div><div></div><div class="ft-label">Résumé${list.length?` · ${list.length} client${list.length>1?'s':''}`:''}</div><div class="num ft-sub">CA total plans</div><div class="num ft-sub col-sep">Reste dû</div><div class="num ft-sub col-after-sep">CA commissions</div><div class="num ft-sub">Comm. restante</div><div></div><div></div><div></div>`;
+  /* Les archives comptent dans le total : c'est le chiffre d'affaires de l'année, pas
+     seulement celui des chantiers en cours. On le DIT, sinon on croirait à une erreur. */
+  const detail=list.length
+    ? ` · ${list.length} client${list.length>1?'s':''}`+((nArchives|0)?` (dont ${nArchives} archivé${nArchives>1?'s':''})`:'')
+    : '';
+  lab.innerHTML=`<div></div><div></div><div class="ft-label">Résumé${detail}</div><div class="num ft-sub">CA total plans</div><div class="num ft-sub col-sep">Reste dû</div><div class="num ft-sub col-after-sep">CA commissions</div><div class="num ft-sub">Comm. restante</div><div></div><div></div><div></div>`;
   tbl.appendChild(lab);
   // Ligne des sommes alignées
   const row=document.createElement('div');row.className='cl-row cl-foot';
@@ -3194,6 +3248,7 @@ function buildClientDetail(c){
   side.innerHTML=`<div class="cl-side-head">
       <div class="cl-side-avatar">${esc(initials)}</div>
       <span class="cl-side-lbl">Nom du client</span>
+      ${clientSansNom(c)?'<span class="cl-side-alerte">à remplir</span>':''}
       <input type="text" class="cl-side-name" data-name value="${esc(c.name)}" placeholder="Nom du client">
       <select class="cl-side-statut" data-statut>
         ${clientStatusOptionsHtml(c)}
@@ -3604,6 +3659,22 @@ function closeCadViewer(){
    celui-là, personne ne l'a choisi : on peut donc le remplacer sans rien écraser. */
 const CLIENT_SANS_NOM='Nouveau client';
 function clientSansNom(c){return !((c.name||'').trim())||(c.name||'').trim()===CLIENT_SANS_NOM;}
+/* Les fiches créées AVANT que le contact ne nomme le client restaient « Nouveau client »
+   pour toujours : leur contact était déjà saisi, aucun nouvel événement ne venait plus.
+   On les répare une fois, au chargement. Rien n'est écrasé — « Nouveau client » n'est pas
+   un nom, c'est l'absence de nom. Un client sans contact non plus n'est pas touché : on ne
+   lui invente pas un nom. */
+function reparerNomsClients(){
+  let n=0;
+  (clients||[]).forEach(c=>{
+    if(!clientSansNom(c))return;
+    const contact=(c.contact||'').trim();
+    if(!contact)return;
+    c.name=contact;n++;
+  });
+  if(n){saveClients();console.log('clients renommés depuis leur contact :',n);}
+  return n;
+}
 function addClient(){
   try{
     clientFilters.q='';clientFilters.statut='all';
@@ -3621,6 +3692,13 @@ function addClient(){
     },700);
     toast('Client créé — son nom vous attend, en haut de la fiche');
   }catch(e){toast('Erreur : '+e.message);}
+}
+/* Retenu d'une visite à l'autre : replier les archives est un choix, pas un réglage à
+   refaire à chaque ouverture. Un stockage local indisponible (navigation privée) ne doit
+   pas casser l'affichage — on retombe sur « ouvert ». */
+function chargerEtatArchives(){
+  try{clientFilters.archivesOuvert=localStorage.getItem('mn-cl-archives')!=='0';}
+  catch(e){clientFilters.archivesOuvert=true;}
 }
 function wireClientFilters(){
   const q=$('cl-q');
@@ -4192,9 +4270,10 @@ function openClientStatusesPanel(){
   const rows=library.clientStatuses.map((s,i)=>`<div class="lib-item">
     <input type="color" value="${esc(s.color)}" oninput="clientStatusEdit(${i},'color',this.value)" style="flex:0 0 40px;padding:0;height:34px;">
     <input type="text" value="${esc(s.label)}" oninput="clientStatusEdit(${i},'label',this.value)" placeholder="Nom" style="flex:2">
+    <label class="lib-arch" title="Ranger ces clients sous le séparateur « Archivés »"><input type="checkbox" ${s.archive?'checked':''} onchange="clientStatusEdit(${i},'archive',this.checked)"> archivé</label>
     <button class="mini danger" onclick="clientStatusDel(${i})">×</button></div>`).join('');
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Statuts clients</h3>
-    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables).</p>
+    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables). Cochez <b>archivé</b> pour que ces clients passent sous le séparateur du tableau — ils y restent visibles, et leurs montants comptent toujours dans les totaux.</p>
     ${rows}
     <button class="add-btn" onclick="clientStatusAdd()">+ Ajouter un statut</button>
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
@@ -10037,6 +10116,10 @@ async function loadAll(){
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
     store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);
     applyingRemote=false;cloudReady=true;
+    /* APRÈS la lecture du cloud : les fiches restées « Nouveau client » alors que leur
+       contact est rempli reprennent leur contact comme nom. Avant, on réparerait une copie
+       locale qui serait aussitôt écrasée par les données distantes. */
+    reparerNomsClients();
     try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();}catch(e){}
     setSyncStatus('ok');
     scheduleSyncPush();
@@ -10259,6 +10342,7 @@ async function init(){
      réglages de la bibliothèque, sinon un changement de thème "ne prend pas" au rechargement. */
   current.branding={...library.branding};
   fillFields();wireBindings();buildPrest();buildExclu();render();
+  chargerEtatArchives();
   wireClientFilters();
   showView(vueDepuisHash()||'dashboard');
   $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
