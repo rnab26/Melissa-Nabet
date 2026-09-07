@@ -9,6 +9,22 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 7 septembre 2026 — Solde fal.ai : livré, avec la preuve
+
+**Chantier `348ca1d3`, suite et fin.** Raphaël a recréé une clé fal.ai en portée ADMIN
+(fal.ai ne permet pas de changer la portée d'une clé existante) et l'a déposée dans
+Supabase sous `Key-Sold-Fal-Admin`. Code mis à jour pour lire aussi ce nom
+(`falAdminKey()`), déployé (version 12).
+
+**La preuve demandée** : un vrai appel à la fonction en ligne (utilisateur temporaire créé
+puis supprimé, aucune donnée réelle touchée) renvoie `{"username":"rnab26","balance":7.45,
+"currency":"USD"}` — identique aux 7,45 $ affichés sur le tableau de bord fal.ai au même
+moment. Le solde s'affiche maintenant réellement dans le CRM.
+
+Chantier marqué `done` et archivé dans `dev_items`, avec ce résultat en note.
+
+---
+
 ## 7 septembre 2026 — Solde fal.ai : la moitié du bug corrigée en silence, l'autre moitié lui appartient
 
 **Chantier `348ca1d3`** (dispatch Jarvis). Établi par les vrais appels, pas supposé :

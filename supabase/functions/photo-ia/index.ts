@@ -86,15 +86,17 @@ function falKey(): string {
  *  retouche pour une commodité d'affichage. FAL_ADMIN_KEY est facultative ; sans elle on
  *  tente avec FAL_KEY, ce qui échouera proprement en 403.
  *
- *  `Key-Sold-Fal` : nom sous lequel Raphaël avait réellement déposé sa clé ADMIN (secrets
- *  du projet vérifiés le 7 sept. 2026) — pas `FAL_ADMIN_KEY`, celui documenté ici et dans
- *  `iaExpliquerSolde`. Il avait suivi une consigne, juste pas celle-ci. On ne peut pas lire
- *  la valeur d'un secret Supabase pour la recopier sous le bon nom (l'API ne le permet pas,
- *  à raison) ni lui redemander de la redéposer sans savoir ce qu'il a réellement fait — donc
- *  le code accepte aussi l'ancien nom, silencieusement. Ne pas retirer ce repli sans avoir
- *  confirmé qu'il a bien un secret nommé `FAL_ADMIN_KEY`. */
+ *  Historique des faux départs (chantier 348ca1d3, 6-7 sept. 2026) : `Key-Sold-Fal`, déposée
+ *  le 6 sept., était en portée API (fal.ai ne permet pas de changer la portée d'une clé
+ *  existante — vérifié dans leur doc) et se faisait refuser en 403 sur la facturation.
+ *  `Key-Sold-Fal-Admin`, déposée le 7 sept., est la clé recréée en portée ADMIN. On ne peut
+ *  pas lire la valeur d'un secret Supabase pour la recopier sous le bon nom (l'API ne le
+ *  permet pas, à raison) ni lui redemander de redéposer sans savoir ce qu'il a réellement
+ *  fait — donc le code accepte les trois noms, silencieusement, dans l'ordre où ils ont des
+ *  chances d'être la bonne clé. Ne pas retirer ces replis sans avoir confirmé qu'il a un
+ *  secret nommé `FAL_ADMIN_KEY`. */
 function falAdminKey(): { key: string; dediee: boolean } {
-  const admin = Deno.env.get("FAL_ADMIN_KEY") || Deno.env.get("Key-Sold-Fal");
+  const admin = Deno.env.get("FAL_ADMIN_KEY") || Deno.env.get("Key-Sold-Fal-Admin") || Deno.env.get("Key-Sold-Fal");
   if (admin) return { key: admin, dediee: true };
   return { key: falKey(), dediee: false };
 }
