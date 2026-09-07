@@ -9,6 +9,38 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 7 septembre 2026 — Cartes de présentation dans « À propos »
+
+**Demande de Raphaël, en direct** (pas un chantier `dev_items` : voir plus bas pour
+`fff11fb1`, toujours introuvable). Il voulait, pour la section « À propos », montrer ses
+services en cartes — l'idée venait d'un échange avec Perplexity, qui proposait du code à
+coller. Refusé (voir l'échange) : ça casserait le thème du site et serait un risque de
+sécurité. Il a validé l'alternative — des cartes **structurées**, réordonnables, gérées
+depuis le CRM.
+
+**Livré** : dans « ⚙ Le site public », une nouvelle sous-section « Cartes de présentation »
+sous le texte « À propos » — un titre et une courte description par carte, boutons « ← »
+« → » pour la déplacer (leur ordre décide leur place sur le site, gauche à droite puis
+ligne suivante — pas de coordonnées libres), suppression avec confirmation. Même mécanique
+que le Journal existant (`siteJournal`/`journalTexte`) recopiée pour les cartes
+(`siteCartes`/`carteTexte`) : une seule façon d'écrire « liste réordonnable, traduisible »
+dans ce dépôt. Sur le site, les cartes s'affichent dans le thème actif (typographie et
+palette suivent automatiquement), sans code à écrire ni coller.
+
+**Constaté au passage** : le site a déjà un menu de navigation et un bandeau d'accueil en
+fondu — tous deux fonctionnels, juste masqués tant qu'il n'y a pas assez de contenu (menu :
+moins de deux sections publiées ; c'est voulu, pas un bug). Une bonne partie de ce que
+demandait le chantier `fff11fb1` (menu, carrousel) semble donc déjà livrée par d'autres
+sessions entre-temps — à vérifier précisément si ce chantier est un jour restauré, avant
+de le refaire.
+
+**Vérifié** : `tests/site-langues.test.mjs` **24/24** (ajout, réordonnancement, suppression
+avec confirmation, ordre publié dans le manifeste), `tests/site.test.mjs` **175/175**
+(rendu sur le site, ordre respecté, traduction d'une carte, repli sur le français pour
+l'autre). `tests/realisations.test.mjs` 526/526 — aucune régression.
+
+---
+
 ## 7 septembre 2026 — Solde fal.ai : livré, avec la preuve
 
 **Chantier `348ca1d3`, suite et fin.** Raphaël a recréé une clé fal.ai en portée ADMIN

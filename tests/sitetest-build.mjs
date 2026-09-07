@@ -82,6 +82,13 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
               texte: 'Trois mois de chantier, une bibliothèque sur mesure.',
               i18n: { en: { titre: 'Sébastien’s office delivered' } } },
             { id: 'j2', date: 'Juin 2026', titre: 'Atelier photographie', texte: '' },
+          ],
+          /* Les cartes de présentation : une traduite (celle qui prouve le repli), une
+             seulement en français — même logique que le journal ci-dessus. */
+          cartes: [
+            { id: 'c1', titre: 'Rénovation complète', texte: 'De la conception aux finitions.',
+              i18n: { en: { titre: 'Full renovation' } } },
+            { id: 'c2', titre: 'Conseil et plans', texte: 'Un accompagnement sur mesure.' },
           ] },
   /* La boutique : trois produits, deux rayons, un prix rempli et deux vides (« sur
      demande »), un épuisé (pas de bouton d'achat), et une traduction hébreu partielle —

@@ -389,6 +389,13 @@
      titre orphelin ni de bloc vide en bas de page. */
   .apropos{border-top:1px solid var(--hair);margin-top:clamp(40px,7vw,80px);padding-top:clamp(26px,4vw,40px);}
   .apropos-txt{max-width:62ch;margin:12px 0 0;font-size:15px;line-height:1.75;}
+  /* Les cartes de présentation (services, prestations…) : leur ORDRE dans le CRM décide
+     leur place ici — la même liste que sur une file, pas des coordonnées libres. `flex-wrap`
+     les réaligne tout seul quand on en ajoute, en retire, ou change l'ordre. */
+  .apropos-cartes{display:flex;flex-wrap:wrap;gap:clamp(18px,2.6vw,30px);margin-top:clamp(24px,3.6vw,36px);max-width:74ch;}
+  .apropos-carte{flex:1 1 210px;max-width:320px;padding-top:clamp(14px,1.8vw,20px);border-top:1px solid var(--hair);}
+  .apropos-carte-titre{font-family:var(--titre);font-weight:500;font-size:16px;margin:0 0 7px;line-height:1.35;color:var(--ink);}
+  .apropos-carte-texte{font-family:var(--texte);font-size:14px;line-height:1.65;color:var(--stone);margin:0;white-space:pre-line;}
   /* Un portfolio se parcourt de projet en projet : sans ce lien, il faut remonter tout en
      haut et revenir à la liste. */
   /* Un projet qui plaît doit pouvoir se transformer en prise de contact, sans quitter la
@@ -545,6 +552,7 @@
   <section class="apropos" id="apropos" hidden>
     <p class="eyebrow" id="t-apropos">À propos</p>
     <p class="apropos-txt" id="apropos-txt" hidden dir="auto"></p>
+    <div class="apropos-cartes" id="apropos-cartes"></div>
     <div class="liens" id="contact"></div>
   </section>
 </main>
@@ -1685,6 +1693,24 @@ function renderApropos(site) {
   var txt = texteSite('apropos', s);
   el('apropos-txt').textContent = txt;
   el('apropos-txt').hidden = !txt;
+  /* Cartes de présentation (services, prestations…) : structurées, pas du code collé — un
+     titre et un texte par carte, dans l'ordre choisi dans le CRM. Une carte sans texte dans
+     AUCUNE langue active ne s'affiche pas : un titre seul ne veut rien dire. */
+  var hostCartes = el('apropos-cartes');
+  hostCartes.innerHTML = '';
+  var cartes = (s.cartes || []).filter(function (c) {
+    return texteEntree(c, 'titre') || texteEntree(c, 'texte');
+  });
+  cartes.forEach(function (c) {
+    var art = document.createElement('article');
+    art.className = 'apropos-carte';
+    art.dir = 'auto';
+    var ti = texteEntree(c, 'titre');
+    if (ti) { var h = document.createElement('h3'); h.className = 'apropos-carte-titre'; h.textContent = ti; art.appendChild(h); }
+    var tx = texteEntree(c, 'texte');
+    if (tx) { var pp = document.createElement('p'); pp.className = 'apropos-carte-texte'; pp.textContent = tx; art.appendChild(pp); }
+    hostCartes.appendChild(art);
+  });
   var liens = [];
   if (s.email) liens.push({ href: 'mailto:' + s.email, texte: s.email });
   if (s.tel) {
@@ -1704,7 +1730,7 @@ function renderApropos(site) {
     if (l.ext) { a.target = '_blank'; a.rel = 'noopener'; }
     host.appendChild(a);
   });
-  el('apropos').hidden = !txt && !liens.length;
+  el('apropos').hidden = !txt && !cartes.length && !liens.length;
 }
 
 /* La langue du visiteur est posée AVANT la lecture du manifeste : la page ne doit pas

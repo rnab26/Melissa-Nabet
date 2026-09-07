@@ -575,6 +575,7 @@ const en = await page.evaluate(() => ({
   filtre: (document.querySelector('#filtres button') || {}).textContent || '',
   journalTitre: (document.querySelector('.entree-titre') || {}).textContent || '',
   journalTexte: (document.querySelector('.entree-texte') || {}).textContent || '',
+  carteTitres: [...document.querySelectorAll('.apropos-carte-titre')].map(c => c.textContent || ''),
 }));
 check('Interface traduite en anglais', en.rubrique === 'Works' && en.apropos === 'About' && /^All /.test(en.filtre),
   [en.rubrique, en.apropos, en.filtre].join(' | '));
@@ -584,6 +585,9 @@ check('Un texte traduit dans le CRM s’affiche bien traduit',
 check('Un texte NON traduit retombe sur le français, rien n’est inventé',
   /banc d’essai/.test(en.texteApropos) && /bibliothèque sur mesure/.test(en.journalTexte),
   en.texteApropos.slice(0, 30) + ' | ' + en.journalTexte.slice(0, 30));
+check('Une carte traduite s’affiche traduite, l’autre retombe sur le français',
+  en.carteTitres[0] === 'Full renovation' && en.carteTitres[1] === 'Conseil et plans',
+  en.carteTitres.join(' | '));
 
 await page.locator('#langs button', { hasText: 'עב' }).click();
 await page.waitForTimeout(400);
@@ -636,6 +640,19 @@ const jrn = await page.evaluate(() => ({
 check('Journal affiché, dans l’ordre du CRM',
   jrn.visible && jrn.entrees.length === 2 && /Sébastien/.test(jrn.entrees[0].titre), JSON.stringify(jrn.entrees));
 check('Une entrée sans texte n’affiche pas de paragraphe vide', jrn.entrees[1].texte === '', '« ' + jrn.entrees[1].texte + ' »');
+
+// --- Cartes de présentation (« À propos ») ----------------------------------------------
+const crt = await page.evaluate(() => ({
+  cartes: [...document.querySelectorAll('.apropos-carte')].map(c => ({
+    titre: (c.querySelector('.apropos-carte-titre') || {}).textContent || '',
+    texte: (c.querySelector('.apropos-carte-texte') || {}).textContent || '',
+  })),
+}));
+check('Les cartes de présentation s’affichent, dans l’ordre du CRM',
+  crt.cartes.length === 2 && crt.cartes[0].titre === 'Rénovation complète' && crt.cartes[1].titre === 'Conseil et plans',
+  JSON.stringify(crt.cartes));
+check('Le texte de chaque carte suit son titre', /conception aux finitions/.test(crt.cartes[0].texte),
+  crt.cartes[0].texte);
 
 // --- Manifeste à l'ANCIEN format : c'est celui qui est en ligne aujourd'hui
 await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' });

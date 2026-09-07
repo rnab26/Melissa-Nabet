@@ -9048,6 +9048,27 @@ function journalSetTexte(j,cle,lang,val){
   if(!j.i18n[lang]||typeof j.i18n[lang]!=='object')j.i18n[lang]={};
   j.i18n[lang][cle]=val;
 }
+/* Les cartes de présentation de la section « À propos » (services, prestations…) — un
+   titre et un texte par carte, réordonnables. Structurées plutôt qu'en code collé : le
+   site les habille avec son thème, pas avec ce qu'on aurait collé dedans. Même mécanique
+   que le journal, à dessein — une seule façon d'écrire « une liste de blocs texte
+   réordonnable, traduisible » dans ce dépôt. */
+function siteCartes(){
+  const st=siteSettings();
+  if(!Array.isArray(st.cartes))st.cartes=[];
+  st.cartes.forEach(c=>{
+    if(!c.id)c.id=uid();
+    ['titre','texte'].forEach(k=>{if(typeof c[k]!=='string')c[k]='';});
+    if(!c.i18n||typeof c.i18n!=='object')c.i18n={};
+  });
+  return st.cartes;
+}
+function carteTexte(c,cle,lang){return lang==='fr'?(c[cle]||''):(((c.i18n||{})[lang]||{})[cle]||'');}
+function carteSetTexte(c,cle,lang,val){
+  if(lang==='fr'){c[cle]=val;return;}
+  if(!c.i18n[lang]||typeof c.i18n[lang]!=='object')c.i18n[lang]={};
+  c.i18n[lang][cle]=val;
+}
 /* Complète EN PLACE, sans remplacer l'objet. La version précédente réaffectait
    `library.site` à chaque appel : deux appels imbriqués — garder le résultat du premier
    puis appeler une fonction qui rappelle celle-ci — laissaient écrire dans un objet
@@ -9129,6 +9150,20 @@ function siteInfos(){
       return e;
     });
   if(journal.length)o.journal=journal;
+  const cartes=siteCartes()
+    .filter(c=>langues.some(l=>carteTexte(c,'titre',l).trim()||carteTexte(c,'texte',l).trim()))
+    .map(c=>{
+      const e={id:c.id,titre:(c.titre||'').trim(),texte:(c.texte||'').trim()};
+      const tr={};
+      langues.filter(l=>l!=='fr').forEach(l=>{
+        const bloc={};
+        ['titre','texte'].forEach(k=>{const v=carteTexte(c,k,l).trim();if(v)bloc[k]=v;});
+        if(Object.keys(bloc).length)tr[l]=bloc;
+      });
+      if(Object.keys(tr).length)e.i18n=tr;
+      return e;
+    });
+  if(cartes.length)o.cartes=cartes;
   return o;
 }
 function emptyManifest(){
@@ -9221,6 +9256,20 @@ function openSitePanel(){
       <textarea rows="3" data-j="texte"${rtl} placeholder="Texte">${esc(journalTexte(j,'texte',LE))}</textarea>
       ${repli(journalTexte(j,'titre',LE),j.titre)||repli(journalTexte(j,'texte',LE),j.texte)}
     </div>`).join('')||'<p class="ias-note" style="margin:0">Aucune entrée pour l’instant.</p>';
+  /* Les cartes de la section « À propos » : ordre = position à l'écran (gauche à droite,
+     puis ligne suivante) — monter/descendre EST le geste « déplacer à gauche/à droite ». */
+  const crt=siteCartes();
+  const cartesHtml=crt.map((c,i)=>`<div class="site-entree" data-ci="${i}">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <span class="site-rang">${i+1}</span>
+        <button class="mini" data-cmove="-1" ${i===0?'disabled':''} title="Déplacer à gauche">←</button>
+        <button class="mini" data-cmove="1" ${i===crt.length-1?'disabled':''} title="Déplacer à droite">→</button>
+        <button class="mini danger" data-cdel title="Supprimer">×</button>
+      </div>
+      <input type="text" data-c="titre" value="${esc(carteTexte(c,'titre',LE))}"${rtl} placeholder="Titre — ex. Rénovation complète" style="margin-bottom:6px">
+      <textarea rows="3" data-c="texte"${rtl} placeholder="Description courte">${esc(carteTexte(c,'texte',LE))}</textarea>
+      ${repli(carteTexte(c,'titre',LE),c.titre)||repli(carteTexte(c,'texte',LE),c.texte)}
+    </div>`).join('')||'<p class="ias-note" style="margin:0">Aucune carte pour l’instant.</p>';
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
     <h3>Le site public</h3>
     <p class="msub">Ce que le site dit de lui-même, en dehors des projets. <b>Tout ce qui est rempli ici devient public</b> — laissez vide ce que vous ne voulez pas montrer. Les projets, eux, ne partent en ligne que par « Publier sur le site », réalisation par réalisation (${nb} en ligne).</p>
@@ -9283,6 +9332,10 @@ function openSitePanel(){
     <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page${suff}</span>
       <textarea id="site-apropos" rows="4" maxlength="700"${rtl} placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(siteTexte('apropos',LE))}</textarea></label>
     ${repli(siteTexte('apropos',LE),st.apropos)}
+    <div class="ed-eyebrow" style="margin-top:14px">Cartes de présentation${suff}</div>
+    <p class="ias-note">Vos services ou prestations, en cartes — un titre et une courte description chacune. « ← » et « → » changent leur ordre, donc leur place sur le site. Sans carte, rien de plus ne s’affiche sous le texte « À propos ».</p>
+    <div id="site-cartes">${cartesHtml}</div>
+    <button class="add-btn" id="site-cartes-add">+ Ajouter une carte</button>
     <div class="ed-eyebrow" style="margin-top:14px">Journal${suff}</div>
     <p class="ias-note">Des notes datées, affichées après les projets. Sans entrée, la section n’apparaît pas du tout sur le site.</p>
     ${journalHtml}
@@ -9464,6 +9517,31 @@ function openSitePanel(){
     const del=bloc.querySelector('[data-jdel]');
     if(del)del.addEventListener('click',()=>askConfirm('Supprimer cette entrée du journal ? Elle disparaîtra du site à la prochaine mise à jour.',()=>{
       siteJournal().splice(i,1);store.set(K_LIB,library);openSitePanel();
+    }));
+  });
+  const cartesAdd=document.getElementById('site-cartes-add');
+  if(cartesAdd)cartesAdd.addEventListener('click',()=>{
+    siteCartes().push({id:uid(),titre:'',texte:'',i18n:{}});
+    saveLibraryDebounced();openSitePanel();
+  });
+  document.querySelectorAll('.site-entree[data-ci]').forEach(bloc=>{
+    const i=+bloc.dataset.ci, c=siteCartes()[i];
+    if(!c)return;
+    bloc.querySelectorAll('[data-c]').forEach(ch=>{
+      ch.addEventListener('input',()=>{
+        carteSetTexte(c,ch.dataset.c,LE,ch.value);
+        saveLibraryDebounced();
+      });
+    });
+    bloc.querySelectorAll('[data-cmove]').forEach(bt=>bt.addEventListener('click',()=>{
+      const a=siteCartes(), d=+bt.dataset.cmove, k=i+d;
+      if(k<0||k>=a.length)return;
+      const t=a[i];a[i]=a[k];a[k]=t;
+      saveLibraryDebounced();openSitePanel();
+    }));
+    const cdel=bloc.querySelector('[data-cdel]');
+    if(cdel)cdel.addEventListener('click',()=>askConfirm('Supprimer cette carte ? Elle disparaîtra du site à la prochaine mise à jour.',()=>{
+      siteCartes().splice(i,1);store.set(K_LIB,library);openSitePanel();
     }));
   });
   /* Un choix ne vaut rien tant qu'il n'est pas EN LIGNE : le dire ici évite de croire que

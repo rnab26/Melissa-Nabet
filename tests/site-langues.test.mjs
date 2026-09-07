@@ -123,6 +123,23 @@ check('La date reste commune aux langues, elle ne se traduit pas',
 await page.locator('#site-onglets .site-onglet', { hasText: 'Français' }).click();
 await page.waitForTimeout(400);
 
+// --- Cartes de présentation (services, prestations…) : structurées, réordonnables.
+await page.locator('#site-cartes-add').click();
+await page.waitForTimeout(400);
+await page.locator('.site-entree[data-ci] [data-c="titre"]').fill('Rénovation complète');
+await page.locator('.site-entree[data-ci] [data-c="texte"]').fill('De la conception aux finitions.');
+await page.waitForTimeout(400);
+await page.locator('#site-cartes-add').click();
+await page.waitForTimeout(400);
+await page.locator('.site-entree[data-ci]').nth(1).locator('[data-c="titre"]').fill('Conseil et plans');
+await page.waitForTimeout(300);
+check('Deux cartes enregistrées', (await page.evaluate(() => siteCartes().length)) === 2);
+await page.locator('.site-entree[data-ci]').nth(1).locator('[data-cmove="-1"]').click();
+await page.waitForTimeout(400);
+check('Une carte peut se déplacer à gauche (avant l’autre)',
+  (await page.evaluate(() => siteCartes()[0].titre)) === 'Conseil et plans',
+  await page.evaluate(() => siteCartes().map(c => c.titre).join(' | ')));
+
 // --- Ce qui part réellement en ligne
 const man = await page.evaluate(async () => {
   await pushSiteInfos(null);
@@ -142,6 +159,10 @@ check('Un champ non traduit ne part PAS vide en ligne',
 check('Le journal part dans l’ordre du panneau',
   (man.site.journal || []).length === 2 && man.site.journal[0].titre === 'Deuxième entrée',
   (man.site.journal || []).map(j => j.titre).join(' | '));
+check('Les cartes partent dans l’ordre du panneau, après le déplacement',
+  (man.site.cartes || []).length === 2 && man.site.cartes[0].titre === 'Conseil et plans'
+    && man.site.cartes[1].titre === 'Rénovation complète',
+  (man.site.cartes || []).map(c => c.titre).join(' | '));
 check('Le panneau confirme la mise à jour à l’écran',
   /Mis à jour/.test(await page.textContent('#site-msg')), await page.textContent('#site-msg'));
 
@@ -168,10 +189,19 @@ check('Une entrée supprimée après confirmation',
   (await page.evaluate(() => siteJournal().length)) === 1,
   await page.evaluate(() => siteJournal().map(j => j.titre).join(' | ')));
 
+// --- Supprimer une carte, avec confirmation
+await page.locator('.site-entree[data-ci] [data-cdel]').first().click();
+await page.waitForTimeout(300);
+await page.locator('#modal button, .modal button').filter({ hasText: /Supprimer|Confirmer|Oui/ }).last().click().catch(() => {});
+await page.waitForTimeout(500);
+check('Une carte supprimée après confirmation',
+  (await page.evaluate(() => siteCartes().length)) === 1,
+  await page.evaluate(() => siteCartes().map(c => c.titre).join(' | ')));
+
 const vrais = errors.filter(e => !/fonts\.googleapis|fonts\.gstatic|ERR_CONNECTION|404|favicon/i.test(e));
 check('Aucune erreur JavaScript', vrais.length === 0, vrais.slice(0, 3).join(' | '));
 
-console.log('\n===== LANGUES ET JOURNAL : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
+console.log('\n===== LANGUES, JOURNAL ET CARTES : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
 if (ko.length) ko.forEach(k => console.log('  - ' + k));
 await browser.close();
 process.exit(ko.length ? 1 : 0);
