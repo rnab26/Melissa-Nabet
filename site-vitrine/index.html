@@ -392,10 +392,13 @@
   /* Les cartes de présentation (services, prestations…) : leur ORDRE dans le CRM décide
      leur place ici — la même liste que sur une file, pas des coordonnées libres. `flex-wrap`
      les réaligne tout seul quand on en ajoute, en retire, ou change l'ordre. */
-  .apropos-cartes{display:flex;flex-wrap:wrap;gap:clamp(18px,2.6vw,30px);margin-top:clamp(24px,3.6vw,36px);max-width:74ch;}
-  .apropos-carte{flex:1 1 210px;max-width:320px;padding-top:clamp(14px,1.8vw,20px);border-top:1px solid var(--hair);}
+  .apropos-cartes{display:grid;grid-template-columns:repeat(var(--cartes-par,2),1fr);gap:clamp(18px,2.6vw,30px) clamp(24px,3vw,40px);margin-top:clamp(24px,3.6vw,36px);}
+  .apropos-carte{padding-top:clamp(14px,1.8vw,20px);border-top:1px solid var(--hair);}
+  .apropos-cartes[data-align="centre"] .apropos-carte{text-align:center;}
   .apropos-carte-titre{font-family:var(--titre);font-weight:500;font-size:16px;margin:0 0 7px;line-height:1.35;color:var(--ink);}
+  .apropos-cartes[data-gras="1"] .apropos-carte-titre{font-weight:700;}
   .apropos-carte-texte{font-family:var(--texte);font-size:14px;line-height:1.65;color:var(--stone);margin:0;white-space:pre-line;}
+  @media (max-width:640px){.apropos-cartes{grid-template-columns:1fr;}}
   /* Un portfolio se parcourt de projet en projet : sans ce lien, il faut remonter tout en
      haut et revenir à la liste. */
   /* Un projet qui plaît doit pouvoir se transformer en prise de contact, sans quitter la
@@ -1758,6 +1761,9 @@ function renderApropos(site) {
      AUCUNE langue active ne s'affiche pas : un titre seul ne veut rien dire. */
   var hostCartes = el('apropos-cartes');
   hostCartes.innerHTML = '';
+  hostCartes.style.setProperty('--cartes-par', (s.cartesPar >= 1 && s.cartesPar <= 4) ? s.cartesPar : 2);
+  hostCartes.dataset.align = s.cartesAlign === 'centre' ? 'centre' : 'gauche';
+  hostCartes.dataset.gras = s.cartesGras ? '1' : '0';
   var cartes = (s.cartes || []).filter(function (c) {
     return texteEntree(c, 'titre') || texteEntree(c, 'texte');
   });

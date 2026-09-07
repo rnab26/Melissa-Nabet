@@ -3295,7 +3295,7 @@ check('Site public : tout est vide au départ',
 // réalisations et celle de la boutique : ce sont elles qui donnent au site l'ORDRE de ses
 // sections et de ses rayons, et elles ne sont jamais vides.
 check('Site public : aucune coordonnée vide ne part dans le manifeste',
-  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,diaporamaPar,whatsapp,categories,categoriesProduits', siteVide.infos.join(','));
+  siteVide.infos.join(',') === 'title,subtitle,theme,mouvement,diaporama,diaporamaSec,diaporamaPar,whatsapp,categories,categoriesProduits,cartesPar,cartesAlign,cartesGras', siteVide.infos.join(','));
 
 const siteAllure = await page.evaluate(() => {
   library.site = null;

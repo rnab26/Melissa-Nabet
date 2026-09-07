@@ -134,11 +134,30 @@ await page.waitForTimeout(400);
 await page.locator('.site-entree[data-ci]').nth(1).locator('[data-c="titre"]').fill('Conseil et plans');
 await page.waitForTimeout(300);
 check('Deux cartes enregistrées', (await page.evaluate(() => siteCartes().length)) === 2);
-await page.locator('.site-entree[data-ci]').nth(1).locator('[data-cmove="-1"]').click();
+// Glisser la deuxième carte au-dessus de la première, comme au doigt/à la souris.
+const carteBox1 = await page.locator('.carte-drag-handle').nth(1).boundingBox();
+const carteBox0 = await page.locator('.site-entree[data-ci]').nth(0).boundingBox();
+await page.mouse.move(carteBox1.x + carteBox1.width / 2, carteBox1.y + carteBox1.height / 2);
+await page.mouse.down();
+await page.mouse.move(carteBox0.x + carteBox0.width / 2, carteBox0.y + 2, { steps: 6 });
+await page.mouse.up();
 await page.waitForTimeout(400);
-check('Une carte peut se déplacer à gauche (avant l’autre)',
+check('Une carte peut se déplacer par glisser-déposer (avant l’autre)',
   (await page.evaluate(() => siteCartes()[0].titre)) === 'Conseil et plans',
   await page.evaluate(() => siteCartes().map(c => c.titre).join(' | ')));
+
+// --- Réglages des cartes : par ligne, alignement, gras
+await page.locator('#site-cartes-par [data-cartespar="3"]').click();
+await page.waitForTimeout(300);
+await page.locator('#site-cartes-align [data-cartesalign="centre"]').click();
+await page.waitForTimeout(300);
+await page.locator('#site-cartes-gras').check();
+await page.waitForTimeout(300);
+const reglagesCartes = await page.evaluate(() =>
+  ({ p: siteSettings().cartesPar, a: siteSettings().cartesAlign, g: siteSettings().cartesGras }));
+check('Les réglages des cartes (par ligne, alignement, gras) sont enregistrés',
+  reglagesCartes.p === 3 && reglagesCartes.a === 'centre' && reglagesCartes.g === true,
+  JSON.stringify(reglagesCartes));
 
 // --- Ce qui part réellement en ligne
 const man = await page.evaluate(async () => {
@@ -163,6 +182,9 @@ check('Les cartes partent dans l’ordre du panneau, après le déplacement',
   (man.site.cartes || []).length === 2 && man.site.cartes[0].titre === 'Conseil et plans'
     && man.site.cartes[1].titre === 'Rénovation complète',
   (man.site.cartes || []).map(c => c.titre).join(' | '));
+check('Les réglages des cartes partent aussi en ligne',
+  man.site.cartesPar === 3 && man.site.cartesAlign === 'centre' && man.site.cartesGras === true,
+  JSON.stringify({ p: man.site.cartesPar, a: man.site.cartesAlign, g: man.site.cartesGras }));
 check('Le panneau confirme la mise à jour à l’écran',
   /Mis à jour/.test(await page.textContent('#site-msg')), await page.textContent('#site-msg'));
 

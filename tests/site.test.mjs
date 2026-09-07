@@ -653,6 +653,25 @@ check('Les cartes de présentation s’affichent, dans l’ordre du CRM',
   JSON.stringify(crt.cartes));
 check('Le texte de chaque carte suit son titre', /conception aux finitions/.test(crt.cartes[0].texte),
   crt.cartes[0].texte);
+const crtReglages = await page.evaluate(() => {
+  const host = document.getElementById('apropos-cartes');
+  const cols = getComputedStyle(host).gridTemplateColumns.split(' ').filter(Boolean).length;
+  return { cols, align: host.dataset.align, gras: host.dataset.gras };
+});
+check('Le nombre de cartes par ligne suit le réglage du CRM (2 ici)', crtReglages.cols === 2,
+  JSON.stringify(crtReglages));
+check('L’alignement et le gras suivent aussi le réglage (par défaut : gauche, sans gras)',
+  crtReglages.align === 'gauche' && crtReglages.gras === '0', JSON.stringify(crtReglages));
+const crtMobile = await (async () => {
+  const p = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await p.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+  await p.waitForTimeout(700);
+  const cols = await p.evaluate(() =>
+    getComputedStyle(document.getElementById('apropos-cartes')).gridTemplateColumns.split(' ').filter(Boolean).length);
+  await p.close();
+  return cols;
+})();
+check('Sur téléphone, toujours une seule colonne quel que soit le réglage', crtMobile === 1, 'colonnes: ' + crtMobile);
 
 // --- Manifeste à l'ANCIEN format : c'est celui qui est en ligne aujourd'hui
 await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' });

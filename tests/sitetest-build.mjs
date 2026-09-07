@@ -91,7 +91,8 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
             { id: 'c1', titre: 'Rénovation complète', texte: 'De la conception aux finitions.',
               i18n: { en: { titre: 'Full renovation' } } },
             { id: 'c2', titre: 'Conseil et plans', texte: 'Un accompagnement sur mesure.' },
-          ] },
+          ],
+          cartesPar: 2, cartesAlign: 'gauche', cartesGras: false },
   /* La boutique : trois produits, deux rayons, un prix rempli et deux vides (« sur
      demande »), un épuisé (pas de bouton d'achat), et une traduction hébreu partielle —
      c'est la langue des clients du magasin de revêtement mural. */

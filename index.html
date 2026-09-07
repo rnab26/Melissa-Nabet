@@ -9011,7 +9011,7 @@ const SITE_THEMES=[
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
 const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,
   menuRealisations:'',menuPersonnelles:'',menuBoutique:'',menuJournal:'',menuApropos:'',
-  whatsapp:'actif',waTexte:''};
+  whatsapp:'actif',waTexte:'',cartesPar:2,cartesAlign:'gauche',cartesGras:false};
 /* Les entrées du menu du site. Vides, ce sont les mots par défaut de la page (traduits) ;
    remplies, ce sont les mots de Melissa — et ils se traduisent comme ses autres textes. */
 const SITE_MENU=[
@@ -9041,6 +9041,20 @@ function bandeauSec(){
 function bandeauPar(){
   const n=parseInt(siteSettings().diaporamaPar,10);
   return (n===1||n===2)?n:2;
+}
+/* Combien de cartes de présentation par ligne. Raphaël veut décider lui-même — « bandeau
+   ou deux, c'est moi qui gère » — donc pas de plafond caché comme le bandeau d'accueil :
+   1 à 4. Au-delà, une carte de texte devient illisible sur la largeur qui lui reste, et le
+   site retombe de toute façon à une seule colonne sur téléphone, quel que soit ce réglage. */
+function cartesPar(){
+  const n=parseInt(siteSettings().cartesPar,10);
+  return (n>=1&&n<=4)?n:2;
+}
+function cartesAlign(){
+  return siteSettings().cartesAlign==='centre'?'centre':'gauche';
+}
+function cartesGras(){
+  return !!siteSettings().cartesGras;
 }
 /* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
    comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
@@ -9205,6 +9219,11 @@ function siteInfos(){
       return e;
     });
   if(cartes.length)o.cartes=cartes;
+  /* Toujours envoyés, comme le bandeau d'accueil : ce ne sont pas des coordonnées qu'on
+     voudrait laisser vides, ils ont toujours une valeur (leur défaut y compris). */
+  o.cartesPar=cartesPar();
+  o.cartesAlign=cartesAlign();
+  o.cartesGras=cartesGras();
   return o;
 }
 function emptyManifest(){
@@ -9300,11 +9319,10 @@ function openSitePanel(){
   /* Les cartes de la section « À propos » : ordre = position à l'écran (gauche à droite,
      puis ligne suivante) — monter/descendre EST le geste « déplacer à gauche/à droite ». */
   const crt=siteCartes();
-  const cartesHtml=crt.map((c,i)=>`<div class="site-entree" data-ci="${i}">
+  const cartesHtml=crt.map((c,i)=>`<div class="site-entree" data-ci="${i}" data-idx="${i}">
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <span class="drag-handle carte-drag-handle" title="Glisser pour réordonner">⠿</span>
         <span class="site-rang">${i+1}</span>
-        <button class="mini" data-cmove="-1" ${i===0?'disabled':''} title="Déplacer à gauche">←</button>
-        <button class="mini" data-cmove="1" ${i===crt.length-1?'disabled':''} title="Déplacer à droite">→</button>
         <button class="mini danger" data-cdel title="Supprimer">×</button>
       </div>
       <input type="text" data-c="titre" value="${esc(carteTexte(c,'titre',LE))}"${rtl} placeholder="Titre — ex. Rénovation complète" style="margin-bottom:6px">
@@ -9363,7 +9381,6 @@ function openSitePanel(){
     <p class="ias-note">L’ordre d’affichage en ligne, du premier au dernier. Le changer ne renvoie aucune photo : c’est instantané et gratuit. Sans réglage, le dernier projet publié passe en tête.</p>
     <div id="site-ordre">${ordreHtml}</div>
     ${ordreListe.length>1?'<button class="mini" id="site-ordre-reset">Remettre par date de publication</button>':''}
-  });
     <div class="ed-eyebrow" style="margin-top:14px">Catégories de la boutique</div>
     <p class="ias-note">Les rayons de la section « À la vente ». Même logique que les sections des réalisations : un produit choisit la sienne dans un menu.</p>
     <div id="site-cats-prod">${listeCatsProdHtml}</div>
@@ -9383,7 +9400,16 @@ function openSitePanel(){
       <textarea id="site-apropos" rows="4" maxlength="700"${rtl} placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(siteTexte('apropos',LE))}</textarea></label>
     ${repli(siteTexte('apropos',LE),st.apropos)}
     <div class="ed-eyebrow" style="margin-top:14px">Cartes de présentation${suff}</div>
-    <p class="ias-note">Vos services ou prestations, en cartes — un titre et une courte description chacune. « ← » et « → » changent leur ordre, donc leur place sur le site. Sans carte, rien de plus ne s’affiche sous le texte « À propos ».</p>
+    <p class="ias-note">Vos services ou prestations, en cartes — un titre et une courte description chacune. Glissez la poignée « ⠿ » pour changer leur ordre, donc leur place sur le site. Sans carte, rien de plus ne s’affiche sous le texte « À propos ».</p>
+    <div class="site-mvt" id="site-cartes-par">
+      ${[1,2,3,4].map(n=>`<button type="button" class="mini" data-cartespar="${n}" aria-pressed="${cartesPar()===n?'true':'false'}">${n} par ligne</button>`).join('')}
+    </div>
+    <p class="ias-note" style="margin-top:6px">Sur téléphone, toujours une seule colonne — quel que soit ce réglage.</p>
+    <div class="site-mvt" id="site-cartes-align" style="margin-top:9px">
+      <button type="button" class="mini" data-cartesalign="gauche" aria-pressed="${cartesAlign()==='gauche'?'true':'false'}">Aligné à gauche</button>
+      <button type="button" class="mini" data-cartesalign="centre" aria-pressed="${cartesAlign()==='centre'?'true':'false'}">Centré</button>
+    </div>
+    <label class="site-chk" style="margin-top:9px;display:flex"><input type="checkbox" id="site-cartes-gras" ${cartesGras()?'checked':''}> Titres en gras</label>
     <div id="site-cartes">${cartesHtml}</div>
     <button class="add-btn" id="site-cartes-add">+ Ajouter une carte</button>
     <div class="ed-eyebrow" style="margin-top:14px">Journal${suff}</div>
@@ -9583,16 +9609,34 @@ function openSitePanel(){
         saveLibraryDebounced();
       });
     });
-    bloc.querySelectorAll('[data-cmove]').forEach(bt=>bt.addEventListener('click',()=>{
-      const a=siteCartes(), d=+bt.dataset.cmove, k=i+d;
-      if(k<0||k>=a.length)return;
-      const t=a[i];a[i]=a[k];a[k]=t;
-      saveLibraryDebounced();openSitePanel();
-    }));
     const cdel=bloc.querySelector('[data-cdel]');
     if(cdel)cdel.addEventListener('click',()=>askConfirm('Supprimer cette carte ? Elle disparaîtra du site à la prochaine mise à jour.',()=>{
       siteCartes().splice(i,1);store.set(K_LIB,library);openSitePanel();
     }));
+  });
+  attachDragReorder(document.getElementById('site-cartes'),'.site-entree','.carte-drag-handle',newOrder=>{
+    const a=siteCartes();
+    const reordonnees=newOrder.map(i=>a[i]);
+    a.length=0;a.push(...reordonnees);
+    saveLibraryDebounced();openSitePanel();
+  });
+  document.querySelectorAll('#site-cartes-par [data-cartespar]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().cartesPar=parseInt(b.dataset.cartespar,10);saveLibraryDebounced();
+      document.querySelectorAll('#site-cartes-par [data-cartespar]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-cartes-align [data-cartesalign]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().cartesAlign=b.dataset.cartesalign;saveLibraryDebounced();
+      document.querySelectorAll('#site-cartes-align [data-cartesalign]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  const cgras=document.getElementById('site-cartes-gras');
+  if(cgras)cgras.addEventListener('change',()=>{
+    siteSettings().cartesGras=cgras.checked;saveLibraryDebounced();rappel();
   });
   /* Un choix ne vaut rien tant qu'il n'est pas EN LIGNE : le dire ici évite de croire que
      cliquer sur une direction a changé le site. */
