@@ -23,6 +23,13 @@ const LENGTH_CONFIG: Record<string, { instruction: string; maxTokens: number }> 
   long: { instruction: "DEUX à TROIS phrases", maxTokens: 260 },
 };
 
+/* Le modèle est nommé ici et nulle part ailleurs, et son tarif l'accompagne : c'est ce qui
+   permet à l'application de chiffrer un appel sans le deviner. Tarifs Claude Haiku 4.5,
+   en dollars par million de jetons. À corriger ICI si le modèle change — un tarif recopié
+   dans l'application dériverait en silence le jour où on change de modèle. */
+const MODELE = "claude-haiku-4-5-20251001";
+const TARIF = { entree: 1.0, sortie: 5.0 };
+
 /** Un seul chemin vers Anthropic : les deux textes partagent modèle, erreurs et réponse. */
 async function appelAnthropic(apiKey: string, prompt: string, maxTokens: number): Promise<Response> {
   const anthRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -33,7 +40,7 @@ async function appelAnthropic(apiKey: string, prompt: string, maxTokens: number)
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: MODELE,
       max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -41,7 +48,17 @@ async function appelAnthropic(apiKey: string, prompt: string, maxTokens: number)
 
   if (!anthRes.ok) {
     const errText = await anthRes.text();
-    return new Response(JSON.stringify({ error: `Erreur API Anthropic : ${errText}` }), {
+    /* Le crédit épuisé n'est pas une panne comme une autre : c'est la seule erreur que
+       l'utilisateur peut lever lui-même, et elle mérite d'être nommée plutôt que noyée dans
+       le JSON du fournisseur. L'application s'en sert pour afficher quoi faire. */
+    let code = "";
+    try {
+      const j = JSON.parse(errText);
+      const m = String(j?.error?.message || "");
+      if (/credit balance is too low/i.test(m)) code = "credits_epuises";
+      else if (j?.error?.type === "rate_limit_error") code = "trop_de_demandes";
+    } catch (_e) { /* réponse non JSON : on garde le texte brut */ }
+    return new Response(JSON.stringify({ error: `Erreur API Anthropic : ${errText}`, code }), {
       status: 502,
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
     });
@@ -50,7 +67,20 @@ async function appelAnthropic(apiKey: string, prompt: string, maxTokens: number)
   const data = await anthRes.json();
   const text = (data.content || []).map((b: { type: string; text?: string }) => (b.type === "text" ? b.text ?? "" : "")).join("").trim();
 
-  return new Response(JSON.stringify({ text }), {
+  /* Les jetons RÉELLEMENT facturés, et le coût qui en découle, renvoyés avec le texte :
+     l'application peut ainsi tenir un cumul exact au lieu d'un forfait moyen inventé.
+     Anthropic n'expose aucun solde de crédits restant — ni ici, ni dans son API
+     d'administration, qui ne donne que la consommation passée. Ce cumul est donc la seule
+     mesure disponible côté application. */
+  const u = data.usage || {};
+  const entree = Number(u.input_tokens || 0) + Number(u.cache_read_input_tokens || 0) + Number(u.cache_creation_input_tokens || 0);
+  const sortie = Number(u.output_tokens || 0);
+  const cout = (entree / 1e6) * TARIF.entree + (sortie / 1e6) * TARIF.sortie;
+
+  return new Response(JSON.stringify({
+    text,
+    usage: { modele: MODELE, entree, sortie, cout: Math.round(cout * 1e6) / 1e6 },
+  }), {
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
 }

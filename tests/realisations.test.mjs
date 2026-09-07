@@ -4313,6 +4313,82 @@ for (const v of ['dashboard', 'clients', 'chantier', 'devis']) {
 await page.evaluate(() => showView('realisations'));
 check('Navigation entre toutes les vues sans erreur', true);
 
+/* --- CONSOMMATION DE LA RÉDACTION IA --------------------------------------------------
+   Demande de Raphaël : « une vue sur le solde de crédits Anthropic disponible ». Anthropic
+   n'expose AUCUN solde — ni la fonction serveur, ni son API d'administration, qui ne donne
+   que la consommation passée et exige une clé d'organisation. Ce qu'on peut mesurer, et
+   qui est vérifié ici : ce que CETTE application a fait facturer, d'après les jetons que le
+   serveur renvoie appel par appel. */
+const conso = await page.evaluate(async () => {
+  library.txtUsage = {}; library.txtSettings = { plafondMois: 0 };
+  const appels = [];
+  const vraiFetch = window.fetch;
+  let reponse = { text: 'Un plateau ramené à un seul volume.',
+                  usage: { modele: 'claude-haiku-4-5-20251001', entree: 1200, sortie: 300, cout: 0.0027 } };
+  let statut = 200;
+  window.fetch = async (url, opts) => {
+    if (String(url).indexOf('/embellish') < 0) return vraiFetch(url, opts);
+    appels.push(JSON.parse(opts.body));
+    return { ok: statut === 200, status: statut, json: async () => reponse };
+  };
+  const r = (realisations || [])[0];
+  const faux = { textContent: '', disabled: false };
+  const ta = { value: '' };
+
+  await redigerTexteRealisation(r, faux, ta, null);
+  const apres1 = { n: txtUsage().n, cout: txtUsage().cout, resume: txtMoisResume().texte };
+
+  // deuxième appel : le cumul s'additionne
+  await redigerTexteRealisation(r, faux, ta, null);
+  const apres2 = { n: txtUsage().n, cout: Math.round(txtUsage().cout * 1e6) / 1e6 };
+
+  // crédits épuisés : message nommé, et RIEN n'est compté
+  statut = 502;
+  reponse = { error: 'Erreur API Anthropic : {"type":"error"}', code: 'credits_epuises' };
+  await redigerTexteRealisation(r, faux, ta, null);
+  const echec = { n: txtUsage().n, message: _pubLastError };
+
+  // plafond : bloque AVANT l'appel, donc aucune requête de plus
+  statut = 200;
+  reponse = { text: 'x', usage: { entree: 10, sortie: 10, cout: 0.001 } };
+  library.txtSettings.plafondMois = 0.001;
+  const avantPlafond = appels.length;
+  await redigerTexteRealisation(r, faux, ta, null);
+  const plafond = { appelsEnPlus: appels.length - avantPlafond, message: _pubLastError, atteint: txtPlafondAtteint() };
+
+  // la vue s'ouvre et montre le compte
+  library.txtSettings.plafondMois = 0;
+  openTxtUsagePanel();
+  const vue = { titre: (document.querySelector('#modal h3') || {}).textContent || '',
+                total: (document.querySelector('.txt-total') || {}).textContent || '',
+                lignes: document.querySelectorAll('#txt-hist .lib-item').length,
+                ditPasDeSolde: /ne publie pas de solde/.test((document.querySelector('#modal .msub') || {}).textContent || '') };
+  closeModal();
+  window.fetch = vraiFetch;
+  return { apres1, apres2, echec, plafond, vue, corpsEnvoye: appels[0] };
+});
+check('Rédaction IA : un appel réussi est compté avec son coût RÉEL, pas un forfait',
+  conso.apres1.n === 1 && Math.abs(conso.apres1.cout - 0.0027) < 1e-9, JSON.stringify(conso.apres1));
+check('Rédaction IA : le résumé du mois dit ce qui a été facturé',
+  /1 rédaction\(s\)/.test(conso.apres1.resume) && /réellement facturés/.test(conso.apres1.resume), conso.apres1.resume);
+check('Rédaction IA : deux appels s’additionnent',
+  conso.apres2.n === 2 && Math.abs(conso.apres2.cout - 0.0054) < 1e-6, JSON.stringify(conso.apres2));
+check('Crédits épuisés : le message dit quoi faire, en français, pas le JSON du fournisseur',
+  /crédits Anthropic du compte sont épuisés/.test(conso.echec.message)
+  && /Plans & Billing/.test(conso.echec.message) && !/\{"type"/.test(conso.echec.message),
+  conso.echec.message);
+check('Crédits épuisés : rien n’est compté, puisque rien n’a été facturé',
+  conso.echec.n === 2, 'compteur à ' + conso.echec.n);
+check('Plafond : il bloque AVANT l’appel — aucune requête n’est partie',
+  conso.plafond.appelsEnPlus === 0 && conso.plafond.atteint === true, JSON.stringify(conso.plafond));
+check('Plafond : et l’écran dit que rien n’a été envoyé ni facturé',
+  /rien n’a été facturé/i.test(conso.plafond.message), conso.plafond.message);
+check('La vue s’ouvre et montre le compte du mois',
+  /Rédaction IA/.test(conso.vue.titre) && /réellement facturés/.test(conso.vue.total) && conso.vue.lignes >= 1,
+  JSON.stringify(conso.vue));
+check('La vue dit franchement qu’Anthropic ne publie pas de solde, au lieu d’en inventer un',
+  conso.vue.ditPasDeSolde === true);
+
 /* --- PUBLIER LE TEXTE SANS RENVOYER UNE PHOTO -----------------------------------------
    Le reproche exact de Raphaël : « j'ai déjà écrit du texte sur Bureau Sébastien, sauf que
    pour le publier je suis contraint de publier la photo qui n'est pas à jour ». On reproduit
@@ -4775,7 +4851,7 @@ check('Tâche : ce qui est écrit est enregistré et affiché aussitôt, sans ro
   notesTache.detail === 'Rappeler avant vendredi.' && notesTache.champVu === 1
   && /vendredi/.test(notesTache.apercu), JSON.stringify(notesTache));
 
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible|suppression réalisation \{message: réseau indisponible\}/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible|suppression réalisation \{message: réseau indisponible\}|texte réalisation Error: Erreur API Anthropic/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');

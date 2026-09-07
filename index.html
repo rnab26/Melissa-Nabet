@@ -982,6 +982,11 @@
     font-size:12.5px;color:var(--ink);overflow:hidden;}
   .site-ordre-nom i{font-style:normal;font-size:11px;color:var(--stone);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .txt-total{padding:11px 13px;border-radius:8px;font-size:13px;font-weight:600;
+    background:#eef3ec;color:#3f5a3a;border:1px solid #cfe0ca;}
+  .txt-total.ko{background:#f8eeec;color:#7d3a30;border-color:#e6cdc8;}
+  .txt-mois{flex:1;min-width:0;font-size:12.5px;color:var(--ink);text-transform:capitalize;}
+  .txt-cout{flex:0 0 auto;font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;}
   .pub-envoi{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--ink);cursor:pointer;}
   .pub-envoi.off{color:var(--stone);font-style:italic;cursor:default;}
   .pub-envoi input{margin:0;}
@@ -2538,6 +2543,7 @@ function openSettingsPanel(){
       <button class="mini" onclick="closeModal();openCgvPanel();">Conditions générales</button>
       <button class="mini" onclick="closeModal();openChantierCatsPanel();">Catégories de chantier</button>
       <button class="mini" onclick="closeModal();openIaSettingsPanel();">Photos & retouche IA</button>
+      <button class="mini" onclick="closeModal();openTxtUsagePanel();">Rédaction IA — consommation</button>
     </div>
 
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
@@ -2657,6 +2663,8 @@ function getEmbellishLength(){try{return localStorage.getItem('mn_embellish_leng
 function setEmbellishLength(v){try{localStorage.setItem('mn_embellish_length',v);}catch(e){}}
 async function embellish(sv,btn,textarea){
   if(!sv.title||!sv.title.trim()){toast('Ajoutez un intitulé avant d\'embellir');return;}
+  /* Le plafond bloque AVANT l'appel : rien n'est envoyé, donc rien n'est facturé. */
+  if(txtPlafondAtteint()){toast('Plafond de rédaction du mois atteint. Rien n’a été envoyé. Relevez-le dans ⚙ Réglages.');return;}
   btn.disabled=true;const old=btn.textContent;btn.textContent='…';
   try{
     const token=await sessionToken();
@@ -2667,10 +2675,12 @@ async function embellish(sv,btn,textarea){
       body:JSON.stringify({title:sv.title,desc:sv.desc,proj:current.proj,surf:current.surf,length:getEmbellishLength()})
     });
     const data=await res.json();
-    if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+    if(!res.ok||data.error){const err=new Error(data.error||('HTTP '+res.status));err.data=data;throw err;}
+    /* Compté seulement après une réponse réussie : un appel refusé n'est pas facturé. */
+    txtCompter(data.usage);
     const txt=(data.text||'').trim();
     if(txt){sv.desc=txt;textarea.value=txt;render();toast('Texte généré');}else{toast('Réponse vide');}
-  }catch(e){console.error(e);toast('IA indisponible : '+(e&&e.message?e.message:e));}
+  }catch(e){console.error(e);toast('IA indisponible : '+txtErreurLisible(e&&e.data,e));}
   btn.disabled=false;btn.textContent=old;
 }
 
@@ -6295,6 +6305,10 @@ const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoratio
    de facture — pas une panne, mais un texte à retoucher. */
 async function redigerTexteRealisation(r,btn,ta,apres){
   if(!(r.title||'').trim()){toast('Donnez d’abord un nom à la réalisation');return;}
+  if(txtPlafondAtteint()){
+    _pubLastError='Plafond de rédaction du mois atteint ('+txtMoisResume().texte+'). Rien n’a été envoyé, rien n’a été facturé. Relevez-le dans ⚙ Réglages.';
+    renderRealisations();return;
+  }
   const vieux=btn.textContent;btn.disabled=true;btn.textContent='Rédaction…';
   try{
     const token=await sessionToken();
@@ -6308,7 +6322,8 @@ async function redigerTexteRealisation(r,btn,ta,apres){
         legendes,length:'long'})
     });
     const data=await res.json().catch(()=>({}));
-    if(!res.ok||data.error)throw new Error(data.error||('HTTP '+res.status));
+    if(!res.ok||data.error){const err=new Error(data.error||('HTTP '+res.status));err.data=data;throw err;}
+    txtCompter(data.usage);
     const txt=(data.text||'').trim();
     if(!txt)throw new Error('réponse vide');
     r.texte=txt;ta.value=txt;r.updatedAt=Date.now();saveRealisations();
@@ -6316,7 +6331,7 @@ async function redigerTexteRealisation(r,btn,ta,apres){
     toast('Texte rédigé — relisez-le avant de publier');
   }catch(e){
     console.error('texte réalisation',e);
-    _pubLastError='Rédaction impossible : '+((e&&e.message)||'erreur')+'. Rien n’a été modifié — vous pouvez écrire le texte à la main.';
+    _pubLastError='Rédaction impossible : '+txtErreurLisible(e&&e.data,e)+' Rien n’a été modifié — vous pouvez écrire le texte à la main.';
     renderRealisations();
   }finally{btn.disabled=false;btn.textContent=vieux;}
 }
@@ -8754,9 +8769,114 @@ function iaMoisResume(){
     texte:'Ce mois-ci : '+n+(st.plafondMois?' / '+st.plafondMois:'')+' retouche(s)'
       +(cout?' · environ '+cout.toFixed(2).replace('.',',')+' $':'')};
 }
+/* ---- CONSOMMATION DE LA RÉDACTION DE TEXTE (Anthropic) ----
+   Anthropic n'expose AUCUN solde de crédits restant : ni la fonction serveur, ni son API
+   d'administration, qui ne donne que la consommation passée — et qui exige de surcroît une
+   clé d'administration réservée aux comptes d'organisation. Le seul chiffre honnête qu'on
+   puisse afficher est donc ce que CETTE application a réellement dépensé.
+   Ce n'est pas une estimation : la fonction serveur renvoie les jetons facturés par appel
+   et leur coût, calculé au tarif du modèle qu'elle utilise. Un forfait moyen inventé ici
+   dériverait au premier changement de modèle. */
+const TXT_DEFAULTS={plafondMois:0};   /* en dollars ; 0 = pas de plafond */
+function txtSettings(){
+  library.txtSettings=Object.assign({},TXT_DEFAULTS,library.txtSettings||{});
+  return library.txtSettings;
+}
+function txtMoisKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function txtUsage(){
+  library.txtUsage=library.txtUsage||{};
+  const k=txtMoisKey();
+  if(!library.txtUsage[k])library.txtUsage[k]={n:0,cout:0,entree:0,sortie:0};
+  return library.txtUsage[k];
+}
+/* Appelé APRÈS une réponse réussie, avec ce que le serveur a facturé. Un appel qui échoue
+   n'est pas facturé et ne doit donc rien ajouter — sauf le crédit épuisé, qui n'appelle
+   même pas le modèle. */
+function txtCompter(usage){
+  const u=txtUsage();
+  u.n++;
+  u.cout+=Number((usage&&usage.cout)||0);
+  u.entree+=Number((usage&&usage.entree)||0);
+  u.sortie+=Number((usage&&usage.sortie)||0);
+  saveLibraryDebounced();
+}
+function txtMoisResume(){
+  const u=txtUsage(), st=txtSettings();
+  const sous=(x)=>x.toFixed(x<1?4:2).replace('.',',');
+  return {n:u.n,cout:u.cout,plafond:+st.plafondMois||0,
+    texte:u.n?('Ce mois-ci : '+u.n+' rédaction(s) · '+sous(u.cout)+' $ réellement facturés'
+      +(st.plafondMois>0?' sur un plafond de '+sous(+st.plafondMois)+' $':''))
+      :'Aucune rédaction ce mois-ci.'};
+}
+function txtPlafondAtteint(){
+  const st=txtSettings();
+  return st.plafondMois>0&&txtUsage().cout>=+st.plafondMois;
+}
+/* Douze mois glissants, du plus récent au plus ancien : de quoi voir si la dépense monte. */
+function txtHistorique(){
+  library.txtUsage=library.txtUsage||{};
+  return Object.keys(library.txtUsage).sort().reverse().slice(0,12)
+    .map(k=>Object.assign({mois:k},library.txtUsage[k]));
+}
+/* Le message d'une erreur de rédaction, en français, avec quoi faire. Le crédit épuisé est
+   le seul cas que Raphaël peut lever lui-même : il est nommé, avec le chemin exact. */
+function txtErreurLisible(data,e){
+  const code=(data&&data.code)||'';
+  if(code==='credits_epuises')
+    return 'Les crédits Anthropic du compte sont épuisés — rien n’a été facturé. '
+      +'Rechargez sur console.anthropic.com → Plans & Billing, puis réessayez. '
+      +'Aucune clé à changer, rien à redéployer.';
+  if(code==='trop_de_demandes')
+    return 'Trop de demandes d’affilée : attendez une minute, puis réessayez. Rien n’a été facturé.';
+  return (e&&e.message)||'erreur';
+}
+
 function iaPlafondAtteint(){
   const st=iaSettings();
   return st.plafondMois>0&&iaSpend()>=st.plafondMois;
+}
+
+/* La vue de consommation de la rédaction IA. Elle ne montre PAS un solde de crédits :
+   Anthropic n'en publie aucun, et prétendre en afficher un serait un chiffre inventé. Elle
+   montre ce que cette application a réellement dépensé, appel par appel, cumulé par mois —
+   plus le plafond, qui est le seul vrai levier. Le lien vers la page de facturation est là
+   pour aller voir le solde à la source. */
+function openTxtUsagePanel(){
+  const st=txtSettings(), r=txtMoisResume(), hist=txtHistorique();
+  const sous=x=>Number(x||0).toFixed(Number(x||0)<1?4:2).replace('.',',');
+  const lignes=hist.filter(m=>m.n).map(m=>{
+    const [a,mo]=m.mois.split('-');
+    const nom=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'][(+mo)-1]||m.mois;
+    return `<div class="lib-item"><span class="txt-mois">${esc(nom)} ${esc(a)}</span>
+      <span class="site-cat-n">${m.n}</span>
+      <span class="txt-cout">${sous(m.cout)} $</span></div>`;
+  }).join('')||'<p class="ias-note" style="margin:0">Aucune rédaction enregistrée pour l’instant.</p>';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Rédaction IA — ce qu’elle a coûté</h3>
+    <p class="msub">Le bouton « ✨ Rédiger un texte » et le « Embellir » des devis passent par Claude. <b>Anthropic ne publie pas de solde de crédits</b> — ni ici, ni dans son API. Ce tableau montre donc ce que <b>cette application</b> a réellement fait facturer, d’après les jetons que le serveur renvoie à chaque appel. Ce n’est pas une moyenne : c’est le compte exact.</p>
+    <div class="txt-total ${r.plafond&&r.cout>=r.plafond?'ko':'ok'}">${esc(r.texte)}</div>
+    <div class="ed-eyebrow" style="margin-top:14px">Plafond mensuel</div>
+    <p class="ias-note">Au-delà, plus aucune rédaction n’est envoyée — donc plus rien n’est facturé. <b>0 = pas de plafond.</b></p>
+    <label class="fld"><span class="lbl">Plafond, en dollars par mois</span>
+      <input type="number" id="txt-plafond" min="0" step="0.5" value="${esc(String(st.plafondMois||0))}"></label>
+    <div class="ed-eyebrow" style="margin-top:14px">Par mois</div>
+    <div id="txt-hist">${lignes}</div>
+    <p class="ias-note" style="margin-top:12px">Pour voir le solde réel et le recharger, il faut passer par le compte Anthropic : <b>console.anthropic.com → Plans &amp; Billing</b>. Aucune clé n’est à changer ensuite, et rien n’est à redéployer.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+      <button class="mini danger" id="txt-vider">Remettre le compteur à zéro</button>
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+  const champ=document.getElementById('txt-plafond');
+  champ.addEventListener('change',()=>{
+    const v=parseFloat(champ.value);
+    /* Une valeur absurde ne s'enregistre pas en silence : on dit pourquoi et on remet. */
+    if(!(v>=0)||v>10000){toast('Entrez un montant entre 0 et 10 000 $ (0 = pas de plafond)');champ.value=String(st.plafondMois||0);return;}
+    txtSettings().plafondMois=v;saveLibraryDebounced();
+    toast(v?('Plafond réglé à '+sous(v)+' $ par mois'):'Plafond retiré');
+    openTxtUsagePanel();
+  });
+  document.getElementById('txt-vider').addEventListener('click',()=>askConfirm(
+    'Remettre à zéro le compteur de rédactions ? Cela n’annule aucune dépense chez Anthropic — cela efface seulement ce que l’application a compté.',
+    ()=>{library.txtUsage={};saveLibrary();openTxtUsagePanel();toast('Compteur remis à zéro');}));
 }
 
 function openIaSettingsPanel(){
