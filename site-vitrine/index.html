@@ -309,6 +309,10 @@
      ils appartiennent à l'index. `hidden` seul ne suffit pas pour les filtres, qui sont
      affichés en `flex` dès qu'il y a plusieurs catégories. */
   body.viewing .projects,body.viewing .index-head,body.viewing .filtres{display:none;}
+  /* Un projet ouvert masque TOUTES les listes, la personnelle comprise : on est dans un
+     projet, pas dans un sommaire. */
+  body.viewing .perso{display:none!important;}
+  .perso{margin-top:clamp(46px,8vw,86px);}
   /* Deux fois le même mot à trois centimètres d'écart : le menu l'annonce, la liste le
      répète. On garde celui qui sert à naviguer. Les autres sections gardent leur titre —
      on y arrive en défilant, il fait repère. */
@@ -525,6 +529,10 @@
       <span class="suivant-nom" id="suivant-nom" dir="auto"></span>
     </button>
   </section>
+  <section class="perso" id="personnelles" hidden>
+    <p class="eyebrow" id="t-personnelles">Réalisations personnelles</p>
+    <div class="projects" id="projects-perso"></div>
+  </section>
   <section class="boutique" id="boutique" hidden>
     <p class="eyebrow" id="t-boutique">À la vente</p>
     <nav class="filtres" id="filtres-prod" hidden aria-label="Filtrer les produits"></nav>
@@ -576,7 +584,7 @@ var LANGUES = [
   { code: 'he', label: 'עב', dir: 'rtl' }
 ];
 var MOTS = {
-  fr: { realisations:'Réalisations', apropos:'À propos', journal:'Journal',
+  fr: { realisations:'Réalisations', personnelles:'Réalisations personnelles', apropos:'À propos', journal:'Journal',
         retour:'← Toutes les réalisations', suivant:'Projet suivant', tout:'Tout',
         photos:'photos', agrandir:'Agrandir la photo', photo:'photo',
         boutique:'À la vente', surDemande:'Prix sur demande', ecrireWa:'Écrire sur WhatsApp',
@@ -588,7 +596,7 @@ var MOTS = {
         m2:'m²',
         reessayer:'Réessayer', genre:'Un projet de ce genre ? ',
         ecrire:'écrivez-moi', whatsapp:'écrivez-moi sur WhatsApp' },
-  en: { realisations:'Works', apropos:'About', journal:'Journal',
+  en: { realisations:'Works', personnelles:'Personal work', apropos:'About', journal:'Journal',
         retour:'← All works', suivant:'Next project', tout:'All',
         photos:'photographs', agrandir:'Enlarge photograph', photo:'photograph',
         boutique:'For sale', surDemande:'Price on request', ecrireWa:'Message on WhatsApp',
@@ -600,7 +608,7 @@ var MOTS = {
         m2:'m²',
         reessayer:'Try again', genre:'A project like this one? ',
         ecrire:'write to me', whatsapp:'message me on WhatsApp' },
-  he: { realisations:'עבודות', apropos:'אודות', journal:'יומן',
+  he: { realisations:'עבודות', personnelles:'עבודות אישיות', apropos:'אודות', journal:'יומן',
         retour:'→ כל העבודות', suivant:'הפרויקט הבא', tout:'הכול',
         photos:'תמונות', agrandir:'הגדלת התמונה', photo:'תמונה',
         boutique:'למכירה', surDemande:'מחיר לפי בקשה', ecrireWa:'שלחו הודעה בוואטסאפ',
@@ -687,6 +695,7 @@ function toutRedessiner() {
   if (s.title) { el('site-name').textContent = s.title; el('footer').textContent = s.title + (sous ? ' — ' + sous : ''); }
   if (sous) el('site-tagline').textContent = sous;
   el('t-realisations').textContent = mot('realisations');
+  el('t-personnelles').textContent = texteSite('menuPersonnelles') || mot('personnelles');
   el('t-apropos').textContent = mot('apropos');
   el('t-journal').textContent = mot('journal');
   el('t-suivant').textContent = mot('suivant');
@@ -869,7 +878,10 @@ function showState(title, text, action) {
 function renderFiltres() {
   var host = el('filtres');
   var cats = [];
-  projects.forEach(function (p) {
+  /* Les catégories rangent la VITRINE : une section n'existe que si un projet
+     professionnel la porte. Une catégorie née d'un projet personnel ferait un filtre qui
+     ne montre rien. */
+  projetsPro().forEach(function (p) {
     var c = (p.categorie || '').trim();
     if (c && cats.indexOf(c) < 0) cats.push(c);
   });
@@ -890,7 +902,7 @@ function renderFiltres() {
   [''].concat(cats).forEach(function (c) {
     var b = document.createElement('button');
     b.type = 'button';
-    var n = c ? projects.filter(function (p) { return (p.categorie || '').trim() === c; }).length : projects.length;
+    var n = c ? projetsPro().filter(function (p) { return (p.categorie || '').trim() === c; }).length : projetsPro().length;
     b.dir = 'auto';
     b.textContent = (c || mot('tout')) + ' (' + n + ')';
     b.setAttribute('aria-pressed', filtre === c ? 'true' : 'false');
@@ -899,8 +911,47 @@ function renderFiltres() {
   });
 }
 function projetsVisibles() {
-  if (!filtre) return projects;
-  return projects.filter(function (p) { return (p.categorie || '').trim() === filtre; });
+  var pro = projetsPro();
+  if (!filtre) return pro;
+  return pro.filter(function (p) { return (p.categorie || '').trim() === filtre; });
+}
+/* ---- LES DEUX FAMILLES DE PROJETS ----
+   Une réalisation marquée « personnelle » dans le CRM quitte la liste principale ET le
+   bandeau d'accueil : celui-ci est la vitrine du studio. Elle rejoint sa propre section,
+   plus bas, avec sa propre entrée de menu. Rien n'est caché — c'est un rangement. */
+function estPerso(p) { return !!p.personnelle; }
+function projetsPro() { return projects.filter(function (p) { return !estPerso(p); }); }
+function projetsPerso() { return projects.filter(estPerso); }
+
+/* Une carte de projet. Elle était écrite une fois pour la liste principale ; il en faut
+   maintenant deux listes. Une seule construction, sinon les deux finiraient par diverger
+   (la personnelle sans son lieu, ou sans son fondu au défilement). */
+function carteProjet(p, i) {
+  var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
+  if (!cover) return null;
+  var b = document.createElement('button');
+  b.className = 'project';
+  b.type = 'button';
+  b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
+    + '<p class="project-name"></p><p class="project-meta"></p>';
+  var vign = b.querySelector('img');
+  vign.src = url(cover.thumb);
+  vign.decoding = 'async';
+  // Les deux premières cartes sont vues tout de suite ; les suivantes attendent d'être
+  // approchées. Le format de la case est déjà fixé en CSS (4/3), donc rien ne saute
+  // quand une image arrive.
+  vign.loading = i > 1 ? 'lazy' : 'eager';
+  guetter(b);
+  b.querySelector('.project-name').textContent = p.title;
+  b.querySelector('.project-name').dir = 'auto';
+  b.querySelector('.project-meta').dir = 'auto';
+  // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
+  // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
+  var infos = [p.date, p.lieu, p.mission].filter(Boolean);
+  if (infos.length < 2) infos.push(nbPhotos(p.photos.length));
+  b.querySelector('.project-meta').textContent = infos.join(' · ');
+  b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
+  return b;
 }
 function renderIndex() {
   var host = el('projects');
@@ -908,33 +959,27 @@ function renderIndex() {
   host.removeAttribute('aria-busy');
   el('state').hidden = true;
   projetsVisibles().forEach(function (p, i) {
-    var cover = p.photos.filter(function (x) { return x.cover; })[0] || p.photos[0];
-    if (!cover) return;
-    var b = document.createElement('button');
-    b.className = 'project';
-    b.type = 'button';
-    b.innerHTML = '<div class="project-img"><img alt="" loading="lazy"></div>'
-      + '<p class="project-name"></p><p class="project-meta"></p>';
-    var vign = b.querySelector('img');
-    vign.src = url(cover.thumb);
-    vign.decoding = 'async';
-    // Les deux premières cartes sont vues tout de suite ; les suivantes attendent d'être
-    // approchées. Le format de la case est déjà fixé en CSS (4/3), donc rien ne saute
-    // quand une image arrive.
-    vign.loading = i > 1 ? 'lazy' : 'eager';
-    guetter(b);
-    b.querySelector('.project-name').textContent = p.title;
-    b.querySelector('.project-name').dir = 'auto';
-    b.querySelector('.project-meta').dir = 'auto';
-    // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
-    // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
-    var infos = [p.date, p.lieu, p.mission].filter(Boolean);
-    if (infos.length < 2) infos.push(nbPhotos(p.photos.length));
-    b.querySelector('.project-meta').textContent = infos.join(' · ');
-    b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
-    host.appendChild(b);
+    var c = carteProjet(p, i);
+    if (c) host.appendChild(c);
+  });
+  renderPerso();
+}
+/* La section des réalisations personnelles. Elle n'existe que si au moins un projet est
+   marqué : une section vide sur un portfolio, c'est une promesse non tenue. Les catégories
+   ne la filtrent pas — elles rangent la vitrine professionnelle, pas celle-ci. */
+function renderPerso() {
+  var sec = el('personnelles'), host = el('projects-perso');
+  var liste = projetsPerso();
+  host.innerHTML = '';
+  sec.hidden = !liste.length;
+  if (!liste.length) return;
+  el('t-personnelles').textContent = texteSite('menuPersonnelles') || mot('personnelles');
+  liste.forEach(function (p, i) {
+    var c = carteProjet(p, i);
+    if (c) host.appendChild(c);
   });
 }
+
 
 /* ---- LE MENU DU SITE ------------------------------------------------------------------
    Une barre collante sous le nom du studio. Deux principes :
@@ -950,6 +995,7 @@ function renderIndex() {
    barre de dix entrées où « Bureau » et « Journal » auraient l'air d'être de même nature. */
 var MENU = [
   { cle: 'realisations', mot: 'realisations', champ: 'menuRealisations', cible: 'liste' },
+  { cle: 'personnelles', mot: 'personnelles', champ: 'menuPersonnelles', cible: 'personnelles' },
   { cle: 'boutique',     mot: 'boutique',     champ: 'menuBoutique',     cible: 'boutique' },
   { cle: 'journal',      mot: 'journal',      champ: 'menuJournal',      cible: 'journal' },
   { cle: 'apropos',      mot: 'apropos',      champ: 'menuApropos',      cible: 'apropos' },
@@ -959,7 +1005,7 @@ function titreMenu(e) { return texteSite(e.champ) || mot(e.mot); }
    vides, on lit leur état plutôt que de refaire le raisonnement une seconde fois. */
 function menuEntrees() {
   return MENU.filter(function (e) {
-    if (e.cible === 'liste') return projects.length > 0;
+    if (e.cible === 'liste') return projetsPro().length > 0;
     var sec = el(e.cible);
     return !!sec && !sec.hidden;
   });
@@ -1083,7 +1129,9 @@ function melanger(liste) {
 function bdConstruire() {
   var pas = bdParVue();
   var vues = [];
-  melanger(projects.filter(function (p) { return (p.photos || []).length; })).forEach(function (p) {
+  /* Le bandeau est la vitrine du studio : les projets personnels n'y passent pas. C'est
+     ce que « une section à part, en dehors du bandeau » veut dire. */
+  melanger(projetsPro().filter(function (p) { return (p.photos || []).length; })).forEach(function (p) {
     for (var i = 0; i < p.photos.length; i += pas) vues.push({ p: p, photos: p.photos.slice(i, i + pas) });
   });
   bdVues = vues;
@@ -1179,7 +1227,7 @@ function bdArreter() {
 }
 function bdDemarrer() {
   var hote = el('bandeau');
-  if (!projects.length || !bdRegle().actif) { bdArreter(); return; }
+  if (!projetsPro().length || !bdRegle().actif) { bdArreter(); return; }
   hote.hidden = false;
   /* La durée du rapprochement suit le délai réglé : le mouvement doit finir quand la photo
      s'en va, pas rester figé la moitié du temps. */
@@ -1380,8 +1428,10 @@ function peindreContactProjet() {
   p.appendChild(a);
   p.appendChild(document.createTextNode('.'));
 }
+/* « Projet suivant » reste DANS SA FAMILLE : passer d'un chantier de client à un projet
+   personnel sans prévenir brouillerait la lecture du portfolio. */
 function projetSuivant(d) {
-  var liste = projetsVisibles();
+  var liste = current && estPerso(current) ? projetsPerso() : projetsVisibles();
   if (liste.length < 2 || !current) return null;
   var i = liste.indexOf(current);
   if (i < 0) return null;

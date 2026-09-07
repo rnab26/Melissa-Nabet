@@ -122,6 +122,13 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
     categorie: 'Appartement',
     publishedAt: new Date().toISOString(),
     photos: [photo(2, '')],
+  }, {
+    /* Une réalisation PERSONNELLE : elle doit quitter la liste principale, les filtres et
+       le bandeau, et n'exister que dans sa propre section. */
+    id: 'r4', title: 'Mon appartement', date: '2024', lieu: 'Jaffa',
+    categorie: 'Appartement', personnelle: true,
+    publishedAt: new Date().toISOString(),
+    photos: [photo(0, ''), photo(1, '')],
   }],
 }, null, 1));
 
