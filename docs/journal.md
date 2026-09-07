@@ -9,6 +9,40 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 7 septembre 2026 — Solde fal.ai : la moitié du bug corrigée en silence, l'autre moitié lui appartient
+
+**Chantier `348ca1d3`** (dispatch Jarvis). Établi par les vrais appels, pas supposé :
+
+1. **`FAL_KEY` est bien en place** (la retouche marche, ping le confirme) ; **`FAL_ADMIN_KEY`
+   (le nom attendu par le code) n'existe pas**. En revanche, un secret nommé **`Key-Sold-Fal`**
+   existe, déposé le 6 sept. à 11h59 — au bon moment, sous un autre nom. Cas classique
+   annoncé dans le chantier, confirmé : corrigé **silencieusement**, le code lit maintenant
+   les deux noms (`supabase/functions/photo-ia/index.ts`, `falAdminKey()`). Redéployé
+   (version 10), ping et balance réellement rappelés après coup.
+2. **Mais la vraie cause n'est qu'à moitié la nôtre.** Avec ce secret lu, l'appel réel à
+   `GET https://api.fal.ai/v1/account/billing?expand=credits` (vérifié à l'instant contre
+   la doc fal.ai réelle — URL, méthode, en-tête, paramètre, tout correspond) répond
+   **HTTP 403 : la clé est refusée**. fal.ai distingue deux portées de clé (API / ADMIN) ;
+   la doc confirme que la facturation exige la portée ADMIN. La valeur déposée sous
+   `Key-Sold-Fal` n'a très probablement pas cette portée — un choix qui se fait sur
+   fal.ai au moment de créer la clé, pas après coup.
+3. **Ce qui ne peut PAS se corriger en silence** : impossible de lire la valeur d'un secret
+   Supabase pour vérifier ou la recopier ailleurs (l'API ne le permet pas, à raison). La
+   seule action qui reste est sur fal.ai, un compte que je n'ai pas.
+
+**Reste de sa main, deux étapes, aucune ambiguïté** :
+1. <https://fal.ai/dashboard/keys> → créer une clé en choisissant explicitement la portée
+   **ADMIN** (pas la portée par défaut). La copier.
+2. <https://supabase.com/dashboard/project/njaamykxnvohoesrtpvv/settings/functions> →
+   secret **`Key-Sold-Fal`** → remplacer sa valeur par cette clé (pas besoin d'en créer un
+   nouveau, ni de toucher `FAL_KEY`). Revenir dans le CRM, toucher ↻ à côté du solde.
+
+Consigné dans `dev_log` (kind=`blocage`) avec ces mêmes deux étapes, pour que Jarvis ou
+Raphaël les retrouvent sans repasser par cette session. Chantier laissé `in_progress`,
+pas `done` : le solde ne s'affiche toujours pas, la preuve demandée n'existe pas encore.
+
+---
+
 ## 6 septembre 2026 — Estimation du Projet devient une sous-catégorie de Devis
 
 **Chantier `9d4f7282`** (dispatch Jarvis). Ses mots : « le bouton Estimation ainsi que la

@@ -84,9 +84,17 @@ function falKey(): string {
  *  remplacer FAL_KEY par une clé ADMIN pour voir le solde ferait dépendre TOUTE la retouche
  *  d'une clé plus puissante que nécessaire, et une erreur sur cette clé casserait la
  *  retouche pour une commodité d'affichage. FAL_ADMIN_KEY est facultative ; sans elle on
- *  tente avec FAL_KEY, ce qui échouera proprement en 403. */
+ *  tente avec FAL_KEY, ce qui échouera proprement en 403.
+ *
+ *  `Key-Sold-Fal` : nom sous lequel Raphaël avait réellement déposé sa clé ADMIN (secrets
+ *  du projet vérifiés le 7 sept. 2026) — pas `FAL_ADMIN_KEY`, celui documenté ici et dans
+ *  `iaExpliquerSolde`. Il avait suivi une consigne, juste pas celle-ci. On ne peut pas lire
+ *  la valeur d'un secret Supabase pour la recopier sous le bon nom (l'API ne le permet pas,
+ *  à raison) ni lui redemander de la redéposer sans savoir ce qu'il a réellement fait — donc
+ *  le code accepte aussi l'ancien nom, silencieusement. Ne pas retirer ce repli sans avoir
+ *  confirmé qu'il a bien un secret nommé `FAL_ADMIN_KEY`. */
 function falAdminKey(): { key: string; dediee: boolean } {
-  const admin = Deno.env.get("FAL_ADMIN_KEY");
+  const admin = Deno.env.get("FAL_ADMIN_KEY") || Deno.env.get("Key-Sold-Fal");
   if (admin) return { key: admin, dediee: true };
   return { key: falKey(), dediee: false };
 }
