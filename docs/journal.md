@@ -9,6 +9,23 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 7 septembre 2026 — Le total des actifs remonte juste sous leurs lignes
+
+Raphaël, capture à l'appui, juste après la correction ci-dessous : « refait passer la
+colonne du résumé des actifs en dessous des clients actifs c'est bcp plus logique ». Les
+trois totaux (Actifs / Archivés / Total général) étaient tous groupés en bas du tableau,
+après les onze chantiers archivés — loin des lignes actives auxquelles « Actifs » se
+rapporte.
+
+**Fait** : le total des actifs (et l'en-tête « Résumé ») suit maintenant directement les
+lignes actives, avant le séparateur des archives. « Archivés » et « Total général » restent
+après le bloc archivé, à sa suite naturelle. La fonction du pied a été scindée en deux pour
+pouvoir l'insérer à deux endroits du tableau — le calcul des sommes, corrigé juste avant,
+ne change pas.
+
+**Vérifié** : `tests/realisations.test.mjs` **535/535** (nouveau test sur l'ordre exact des
+blocs dans le tableau). Déployé (`9697024`), CRM vérifié identique en ligne (md5sum).
+
 ## 7 septembre 2026 — Le pied du tableau clients mélangeait des colonnes sans rapport
 
 Raphaël, juste après la correction ci-dessous (capture à l'appui, archives maintenant
