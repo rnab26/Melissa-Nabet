@@ -9,6 +9,31 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 7 septembre 2026 — « Je ne vois toujours pas où j'archive un client »
+
+Raphaël signale, capture à l'appui, qu'il ne trouve pas le geste pour archiver un client —
+alors que ce geste a été livré le 6 septembre (voir plus bas : « Le geste pour archiver, et
+le bouton pour écrire ») et que les tests passaient dessus.
+
+**Cause racine** : le bouton n'apparaît que si un statut est déclaré « archivant »
+(`archive:true`) — `premierStatutArchive()` cherche ce drapeau. Mais `ensureClientStatuses()`
+ne posait les statuts par défaut (avec leurs drapeaux) que si `library.clientStatuses`
+était **vide**. Sur un compte réel comme celui de Raphaël — des statuts enregistrés avant
+ce chantier, plus un statut qu'il a lui-même ajouté (« En Attente ») — la liste n'était pas
+vide, donc jamais migrée : aucun statut n'avait le champ, le bouton et le séparateur des
+archives restaient invisibles. Les tests ne l'ont pas vu parce qu'ils repartent toujours de
+données fraîches (`library.clientStatuses` vidé avant le test), jamais du cas réel d'un
+compte qui existait déjà avant le chantier.
+
+**Corrigé** : `ensureClientStatuses()` complète maintenant, une seule fois, le champ
+`archive` des statuts déjà enregistrés dont l'id correspond à un défaut archivant
+(« termine », « annule ») — sans toucher un statut personnalisé (id inconnu du défaut) ni
+écraser un choix déjà explicite.
+
+**Vérifié** : `tests/realisations.test.mjs` **531/531** (nouveau test de migration ajouté,
+reproduisant exactement les données de Raphaël — 4 statuts + « En Attente », aucun avec le
+champ). Déployé (`b97a37d`), CRM vérifié identique en ligne (md5sum) au code du dépôt.
+
 ## 7 septembre 2026 — Cartes de présentation dans « À propos »
 
 **Demande de Raphaël, en direct** (pas un chantier `dev_items` : voir plus bas pour
