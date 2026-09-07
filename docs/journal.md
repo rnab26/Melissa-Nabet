@@ -39,6 +39,42 @@ avec confirmation, ordre publié dans le manifeste), `tests/site.test.mjs` **175
 (rendu sur le site, ordre respecté, traduction d'une carte, repli sur le français pour
 l'autre). `tests/realisations.test.mjs` 526/526 — aucune régression.
 
+## 7 septembre 2026 (suite) — Disposition, alignement, gras, glisser-déposer
+
+Retour de Raphaël après avoir vu la livraison précédente en ligne : les cartes
+s'affichaient « les unes après les autres » (hauteurs inégales, pas de grille), aucun
+réglage de police/alignement, et les boutons ← → devaient devenir du glisser-déposer. Il a
+tranché la portée exacte par une question posée : **alignement des cartes seulement**
+(pas de choix de police — resterait dans le thème du site), **plus** la possibilité de
+mettre les titres en gras (« impossible actuellement »).
+
+**Livré**, dans « ⚙ Le site public » :
+- **Cartes par ligne** (1 à 4, même mécanique que « photos par vue » du bandeau d'accueil)
+  — toujours une seule colonne sur téléphone, quel que soit ce réglage.
+- **Alignement** (gauche/centré) et **titres en gras**, deux réglages indépendants.
+- Le site passe de `flex-wrap` à une **grille CSS** pilotée par ces réglages
+  (`--cartes-par` en variable CSS) : c'est ce qui corrige aussi le problème des hauteurs
+  inégales signalé sur la capture.
+- Les boutons ← → sont remplacés par le **glisser-déposer** déjà utilisé pour réordonner
+  les sections de la bibliothèque (`attachDragReorder`, Pointer Events — tactile et
+  souris) : pas de nouveau mécanisme, celui qui existait déjà a été repris tel quel.
+
+**Corrigé au passage** : une fusion du 6 septembre (`cecfca95`, deux chantiers parallèles
+— « ordre des projets » et « boutique ») avait laissé un `});` littéral dans le HTML du
+panneau, entre l'ordre des projets et les catégories de la boutique. Le message de cette
+fusion affirmait le piège évité, mais le texte est resté pris dans le template et
+s'affichait à l'écran. Supprimé.
+
+**En attente de Raphaël** : le dessin qu'il doit fournir pour la disposition exacte des
+cartes selon leur nombre (bandeau plein/deux colonnes, adapté au mobile) — volontairement
+pas anticipé, pour ne pas deviner à sa place.
+
+**Vérifié** : `tests/site-langues.test.mjs` **26/26**, `tests/site.test.mjs` **187/187**
+(dont le nombre de colonnes, l'alignement, le gras, et le repli à une colonne sur
+téléphone), `tests/realisations.test.mjs` **530/530** — aucune régression. Déployé
+(`fc3de9e`), les deux workflows GitHub Actions verts, CRM et site vitrine vérifiés
+identiques en ligne (md5sum) au code du dépôt.
+
 ---
 
 ## 7 septembre 2026 — Solde fal.ai : livré, avec la preuve
