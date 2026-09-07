@@ -4566,14 +4566,16 @@ const archives = await page.evaluate(async () => {
   const ordre = [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
     .map(e => e.classList.contains('cl-sep') ? '— SÉPARATEUR —' : e.dataset.cid);
   const sep = document.querySelector('#cl-table .cl-sep');
-  const pied = [...document.querySelectorAll('#cl-table .cl-foot .ft-val')].map(e => e.textContent.trim());
+  const lireFoot = cle => [...document.querySelectorAll(`#cl-table .cl-foot[data-foot="${cle}"] .ft-val`)]
+    .map(e => e.textContent.trim());
+  const pied = { actifs: lireFoot('actifs'), archives: lireFoot('archives'), total: lireFoot('total') };
   const resume = (document.querySelector('#cl-table .cl-foot .ft-label') || {}).textContent || '';
   // replier : les archives disparaissent, les totaux ne bougent pas
   sep.click();
   await new Promise(r => setTimeout(r, 300));
   const replie = {
     lignes: [...document.querySelectorAll('#cl-table .cl-group')].map(e => e.dataset.cid),
-    pied: [...document.querySelectorAll('#cl-table .cl-foot .ft-val')].map(e => e.textContent.trim()),
+    pied: { actifs: lireFoot('actifs'), archives: lireFoot('archives'), total: lireFoot('total') },
     sepEncoreLa: !!document.querySelector('#cl-table .cl-sep'),
   };
   document.querySelector('#cl-table .cl-sep').click();
@@ -4589,15 +4591,34 @@ check('Clients : les terminés et annulés passent sous un séparateur, les autr
 check('Clients : le séparateur dit combien et pour combien',
   /Archivés · 2 clients/.test(archives.sepTxt) && /4[  ]?000/.test(archives.sepTxt), archives.sepTxt);
 /* Le point qu'il ne faut surtout pas rater : ranger n'est pas exclure. Le chiffre
-   d'affaires de l'année comprend les chantiers terminés. */
-check('Clients : les archivés comptent toujours dans les totaux',
-  archives.pied[0].replace(/\D/g, '') === '5000', archives.pied[0]);
+   d'affaires de l'année comprend les chantiers terminés — dans le total général,
+   pas seulement dans le bloc « Actifs ». */
+check('Clients : les archivés comptent toujours dans le total général',
+  archives.pied.total[0].replace(/\D/g, '') === '5000', archives.pied.total[0]);
+/* La régression exacte signalée par Raphaël : « Total général » additionnait autrefois le
+   CA des plans avec les commissions dues à un prestataire — deux sommes sans rapport, dont
+   l'une ne va même pas dans la même poche. Chaque bloc (actifs / archivés / total) doit
+   garder ses 4 colonnes SÉPARÉES, jamais fondues entre elles. */
+/* Aucun de ces clients de test n'a de paiement ni de commission enregistrés : le montant
+   des plans reste donc entièrement dû (reste = montant), et les deux colonnes commissions
+   sont à 0. C'est cette absence de rapport entre les 4 colonnes — chacune sa propre
+   grandeur — qui doit ressortir : jamais montant+commissions fondus en un seul chiffre. */
+check('Clients : le bloc « Actifs » et le bloc « Archivés » ont chacun leur propre total, sans mélange entre colonnes',
+  archives.pied.actifs[0].replace(/\D/g, '') === '1000' && archives.pied.actifs[1].replace(/\D/g, '') === '1000'
+  && archives.pied.actifs[2].replace(/\D/g, '') === '0' && archives.pied.actifs[3].replace(/\D/g, '') === '0'
+  && archives.pied.archives[0].replace(/\D/g, '') === '4000' && archives.pied.archives[1].replace(/\D/g, '') === '4000'
+  && archives.pied.archives[2].replace(/\D/g, '') === '0' && archives.pied.archives[3].replace(/\D/g, '') === '0',
+  JSON.stringify(archives.pied));
+check('Clients : le total général est la somme des deux blocs, colonne par colonne (pas plans+commissions)',
+  archives.pied.total[0].replace(/\D/g, '') === '5000' && archives.pied.total[1].replace(/\D/g, '') === '5000'
+  && archives.pied.total[2].replace(/\D/g, '') === '0' && archives.pied.total[3].replace(/\D/g, '') === '0',
+  JSON.stringify(archives.pied.total));
 check('Clients : le résumé dit combien sont archivés, pour qu’on ne croie pas à une erreur',
   /4 clients \(dont 2 archivés\)/.test(archives.resume), archives.resume);
-check('Clients : replier les archives les masque SANS changer les totaux',
+check('Clients : replier les archives les masque SANS changer le total général',
   archives.replie.lignes.join(',') === 'x1,x2' && archives.replie.sepEncoreLa
-  && archives.replie.pied[0] === archives.pied[0],
-  archives.replie.lignes.join(',') + ' · total ' + archives.replie.pied[0]);
+  && archives.replie.pied.total[0] === archives.pied.total[0],
+  archives.replie.lignes.join(',') + ' · total ' + archives.replie.pied.total[0]);
 check('Clients : on les rouvre du même geste', archives.rouvert === 4, archives.rouvert + ' ligne(s)');
 
 // --- LE GESTE POUR ARCHIVER. Signalé : « je n'arrive pas à voir comment j'archive un
@@ -4618,7 +4639,7 @@ const gesteArchive = await page.evaluate(async () => {
     // il est passé sous le séparateur
     place: [...document.querySelectorAll('#cl-table .cl-group, #cl-table .cl-sep')]
       .map(e => e.classList.contains('cl-sep') ? 'SEP' : e.dataset.cid).join(','),
-    total: (document.querySelector('#cl-table .cl-foot .ft-val') || {}).textContent || '',
+    total: (document.querySelector('#cl-table .cl-foot[data-foot="total"] .ft-val') || {}).textContent || '',
   };
   clientOpen['x1'] = true; renderClients();
   await new Promise(r => setTimeout(r, 350));
@@ -4683,6 +4704,27 @@ check('Migration : un statut « Terminé »/« Annulé » enregistré sans le ch
   migrationArchive.archiveDeTermine === true
   && migrationArchive.flags === 'en_cours:false,devis:false,termine:true,annule:true,attente:false',
   JSON.stringify(migrationArchive));
+
+// --- LA RÉGRESSION EXACTE SIGNALÉE PAR RAPHAËL, capture à l'appui : le pied additionnait
+//     autrefois le CA des plans (dû PAR le client) avec les commissions (dues PAR Mélissa à
+//     un prestataire) — deux sommes sans rapport, dans des sens opposés. Un client avec les
+//     deux à la fois est le seul cas qui peut vraiment démasquer ce mélange. Dernier test
+//     de la section Clients : il remplace `clients`, rien après ne doit plus en dépendre.
+const melangeColonnes = await page.evaluate(async () => {
+  clients = [
+    normalizeClient({ id: 'y1', name: 'Client avec commission', statut: 'en_cours', montantFinal: 10000,
+      commissions: [{ id: 'k1', label: 'Apporteur', montantDu: 2000, paye: 0 }] }),
+  ];
+  clientFilters.q = ''; clientFilters.statuts = []; clientFilters.archivesOuvert = true;
+  showView('clients'); renderClients();
+  await new Promise(r => setTimeout(r, 300));
+  const foot = [...document.querySelectorAll('#cl-table .cl-foot[data-foot="total"] .ft-val')]
+    .map(e => e.textContent.trim());
+  return { foot };
+});
+check('Clients : le CA des plans (10 000) et les commissions (2 000) ne sont JAMAIS additionnés entre eux',
+  melangeColonnes.foot[0].replace(/\D/g, '') === '10000' && melangeColonnes.foot[2].replace(/\D/g, '') === '2000',
+  JSON.stringify(melangeColonnes.foot));
 
 // 2) « Il faut valider la tâche pour que le bloc notes s'affiche. »
 const notesTache = await page.evaluate(async () => {

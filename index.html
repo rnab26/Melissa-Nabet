@@ -3225,31 +3225,47 @@ function renderClients(){
     tbl.appendChild(sep);
     if(clientFilters.archivesOuvert)archives.forEach(c=>tbl.appendChild(ligneClient(c)));
   }
-  renderClientsFooter(tbl,list,actifs.length,archives.length);
+  renderClientsFooter(tbl,actifs,archives);
   const tot=$('cl-totals');if(tot)tot.innerHTML='';
 }
-/* Pied de tableau : sommes des 4 colonnes, calculées sur les clients FILTRÉS, alignées sous chaque colonne. */
-function renderClientsFooter(tbl,list,nActifs,nArchives){
-  const ft=list.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.reste+=t.reste;a.comm+=t.commissions;a.commReste+=t.commissionsReste;return a;},{montant:0,reste:0,comm:0,commReste:0});
+/* Pied de tableau : sommes des 4 colonnes, sur les clients FILTRÉS, alignées sous chaque
+   colonne. Un total ne mélange JAMAIS deux colonnes entre elles (le CA des plans et les
+   commissions dues à un prestataire ne s'additionnent pas : ce n'est pas le même argent,
+   ni le même sens — l'un est dû PAR le client, l'autre dû PAR Mélissa). Ancienne version :
+   une ligne « Total » unique (actifs+archivés mélangés sans le dire) suivie d'une ligne
+   « Total général » qui faisait cette addition incohérente. Depuis que les clients
+   archivés ont leur propre bloc à l'écran, le pied les distingue pareillement : un total
+   par bloc, et le vrai total général — toutes colonnes gardées à part — en plus, pas à la
+   place. */
+function renderClientsFooter(tbl,actifsList,archivesList){
   const dv='₪';
+  const somme=cs=>cs.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.reste+=t.reste;a.comm+=t.commissions;a.commReste+=t.commissionsReste;return a;},{montant:0,reste:0,comm:0,commReste:0});
+  const ftActifs=somme(actifsList), ftArchives=somme(archivesList);
+  const ftTotal={montant:ftActifs.montant+ftArchives.montant,reste:ftActifs.reste+ftArchives.reste,
+    comm:ftActifs.comm+ftArchives.comm,commReste:ftActifs.commReste+ftArchives.commReste};
+  const nActifs=actifsList.length,nArchives=archivesList.length,nTotal=nActifs+nArchives;
   // Ligne d'intitulés du résumé
   const lab=document.createElement('div');lab.className='cl-row cl-foot sep-top';
   /* Les archives comptent dans le total : c'est le chiffre d'affaires de l'année, pas
      seulement celui des chantiers en cours. On le DIT, sinon on croirait à une erreur. */
-  const detail=list.length
-    ? ` · ${list.length} client${list.length>1?'s':''}`+((nArchives|0)?` (dont ${nArchives} archivé${nArchives>1?'s':''})`:'')
+  const detail=nTotal
+    ? ` · ${nTotal} client${nTotal>1?'s':''}`+(nArchives?` (dont ${nArchives} archivé${nArchives>1?'s':''})`:'')
     : '';
   lab.innerHTML=`<div></div><div></div><div class="ft-label">Résumé${detail}</div><div class="num ft-sub">CA total plans</div><div class="num ft-sub col-sep">Reste dû</div><div class="num ft-sub col-after-sep">CA commissions</div><div class="num ft-sub">Comm. restante</div><div></div><div></div><div></div>`;
   tbl.appendChild(lab);
-  // Ligne des sommes alignées
-  const row=document.createElement('div');row.className='cl-row cl-foot';
-  row.innerHTML=`<div></div><div></div><div class="ft-label">Total</div><div class="num ft-val">${fmt(ft.montant)} ${dv}</div><div class="num ft-val col-sep ${ft.reste>0?'due-txt':'ok-txt'}">${fmt(ft.reste)} ${dv}</div><div class="num ft-val col-after-sep">${fmt(ft.comm)} ${dv}</div><div class="num ft-val ${ft.commReste>0?'due-txt':'ok-txt'}">${fmt(ft.commReste)} ${dv}</div><div></div><div></div><div></div>`;
-  tbl.appendChild(row);
-  // Ligne total général (plans + commissions) sur les mêmes colonnes
-  const grand=document.createElement('div');grand.className='cl-row cl-foot grand';
-  const caGlobal=ft.montant+ft.comm, resteGlobal=ft.reste+ft.commReste;
-  grand.innerHTML=`<div></div><div></div><div class="ft-label">Total général</div><div class="num ft-val">${fmt(caGlobal)} ${dv}</div><div class="num ft-sub col-sep" style="align-self:center">reste →</div><div class="num ft-val col-after-sep ${resteGlobal>0?'due-txt':'ok-txt'}" style="grid-column:span 2">${fmt(resteGlobal)} ${dv}</div><div></div><div></div><div></div>`;
-  tbl.appendChild(grand);
+  const ligne=(cle,libelle,t,grand)=>{
+    const row=document.createElement('div');row.className='cl-row cl-foot'+(grand?' grand':'');row.dataset.foot=cle;
+    row.innerHTML=`<div></div><div></div><div class="ft-label">${esc(libelle)}</div><div class="num ft-val">${fmt(t.montant)} ${dv}</div><div class="num ft-val col-sep ${t.reste>0?'due-txt':'ok-txt'}">${fmt(t.reste)} ${dv}</div><div class="num ft-val col-after-sep">${fmt(t.comm)} ${dv}</div><div class="num ft-val ${t.commReste>0?'due-txt':'ok-txt'}">${fmt(t.commReste)} ${dv}</div><div></div><div></div><div></div>`;
+    tbl.appendChild(row);
+  };
+  if(nActifs&&nArchives){
+    ligne('actifs',`Actifs (${nActifs})`,ftActifs);
+    ligne('archives',`Archivés (${nArchives})`,ftArchives);
+    ligne('total','Total général',ftTotal,true);
+  } else {
+    // Un seul bloc présent (ou aucun) : le distinguer d'un total général n'aurait aucun sens.
+    ligne('total','Total',ftTotal,true);
+  }
 }
 function wireMetaInputs(container,c){
   container.querySelectorAll('input[data-cf]').forEach(inp=>{
