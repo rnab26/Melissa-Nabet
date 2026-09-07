@@ -9,6 +9,33 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 7 septembre 2026 — Le pied du tableau clients mélangeait des colonnes sans rapport
+
+Raphaël, juste après la correction ci-dessous (capture à l'appui, archives maintenant
+visibles) : « ya une incohérence d'affichage au niveau des montants... ça calcule tout...
+il faut scinder ça et en plus avoir un total vraiment général à part. »
+
+**Cause racine** : la ligne « Total général » additionnait le **CA des plans** (dû PAR le
+client) avec les **commissions** (dues PAR Mélissa à un prestataire) — deux sommes sans
+rapport, dans des sens opposés, jamais le même argent. Elle faisait la même chose pour
+« Reste dû » + « Commission restante ». Un artifice CSS (`grid-column:span 2`, un texte
+« reste → » à la place d'un chiffre) plaçait en plus le résultat hors de sa colonne
+d'origine — d'où « les montants ne sont pas aux bons endroits ». Cette règle datait d'avant
+le séparateur des archives : un seul bloc de clients, une seule addition simplifiée ; elle
+n'a pas été repensée quand les archivés ont eu leur propre bloc à l'écran.
+
+**Corrigé** : le pied distingue maintenant trois lignes dès qu'il y a des clients
+archivés dans la liste — **Actifs**, **Archivés**, **Total général** — chacune sur ses 4
+colonnes gardées séparées, jamais fondues entre elles. Sans client archivé, une seule ligne
+« Total » comme avant (rien ne change pour la majorité des comptes qui n'archivent
+personne).
+
+**Vérifié** : `tests/realisations.test.mjs` **534/534** — nouveaux tests : les totaux
+« Actifs » et « Archivés » ne se mélangent jamais entre colonnes, et un client-piège avec à
+la fois un montant de plans ET une commission (le seul cas capable de démasquer l'ancien
+bug) confirme que les deux ne s'additionnent plus. Déployé (`e1ce189`), CRM vérifié
+identique en ligne (md5sum) au code du dépôt.
+
 ## 7 septembre 2026 — « Je ne vois toujours pas où j'archive un client »
 
 Raphaël signale, capture à l'appui, qu'il ne trouve pas le geste pour archiver un client —
