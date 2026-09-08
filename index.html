@@ -985,6 +985,9 @@
   .txt-total{padding:11px 13px;border-radius:8px;font-size:13px;font-weight:600;
     background:#eef3ec;color:#3f5a3a;border:1px solid #cfe0ca;}
   .txt-total.ko{background:#f8eeec;color:#7d3a30;border-color:#e6cdc8;}
+  .anth-pas{margin:10px 0 12px;padding-left:20px;font-size:12.5px;color:var(--ink);line-height:1.65;}
+  .anth-pas li{margin-bottom:6px;}
+  .anth-pas code{font-size:11.5px;background:var(--travertine);padding:1px 5px;border-radius:4px;}
   .txt-mois{flex:1;min-width:0;font-size:12.5px;color:var(--ink);text-transform:capitalize;}
   .txt-cout{flex:0 0 auto;font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;}
   .pub-envoi{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--ink);cursor:pointer;}
@@ -8859,12 +8862,16 @@ function openTxtUsagePanel(){
     <p class="ias-note">Au-delà, plus aucune rédaction n’est envoyée — donc plus rien n’est facturé. <b>0 = pas de plafond.</b></p>
     <label class="fld"><span class="lbl">Plafond, en dollars par mois</span>
       <input type="number" id="txt-plafond" min="0" step="0.5" value="${esc(String(st.plafondMois||0))}"></label>
-    <div class="ed-eyebrow" style="margin-top:14px">Par mois</div>
+    <div class="ed-eyebrow" style="margin-top:14px">Par mois — ce que le CRM a demandé</div>
     <div id="txt-hist">${lignes}</div>
+    <div class="ed-eyebrow" style="margin-top:14px">Dépense réelle du compte Anthropic</div>
+    <p class="ias-note">Le compteur ci-dessus ne voit que les appels du CRM. Celui-ci lit la dépense de <b>tout le compte</b>, quelle qu’en soit l’origine. Il demande une clé d’administration, déposée une fois dans les secrets du serveur.</p>
+    <div id="anth-cout"></div>
     <p class="ias-note" style="margin-top:12px">Pour voir le solde réel et le recharger, il faut passer par le compte Anthropic : <b>console.anthropic.com → Plans &amp; Billing</b>. Aucune clé n’est à changer ensuite, et rien n’est à redéployer.</p>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
       <button class="mini danger" id="txt-vider">Remettre le compteur à zéro</button>
       <button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+  peindreCoutAnthropic();
   const champ=document.getElementById('txt-plafond');
   champ.addEventListener('change',()=>{
     const v=parseFloat(champ.value);
@@ -8877,6 +8884,85 @@ function openTxtUsagePanel(){
   document.getElementById('txt-vider').addEventListener('click',()=>askConfirm(
     'Remettre à zéro le compteur de rédactions ? Cela n’annule aucune dépense chez Anthropic — cela efface seulement ce que l’application a compté.',
     ()=>{library.txtUsage={};saveLibrary();openTxtUsagePanel();toast('Compteur remis à zéro');}));
+}
+
+/* ---- DÉPENSE RÉELLE CÔTÉ ANTHROPIC ----
+   Le compteur du CRM ne voit que ce que le CRM a demandé. Cette lecture-ci donne la
+   dépense de TOUT le compte Anthropic, quelle qu'en soit l'origine. Elle passe par une
+   fonction serveur : la clé d'administration donne accès à toute l'organisation et ne doit
+   jamais atteindre le navigateur.
+   Elle ne donne toujours PAS de solde restant — Anthropic n'en publie aucun. */
+let _coutAnth=null, _coutAnthEnCours=false;
+async function chargerCoutAnthropic(mois){
+  if(_coutAnthEnCours)return;
+  _coutAnthEnCours=true;peindreCoutAnthropic();
+  try{
+    const token=await sessionToken();
+    if(!token)throw new Error('session expirée, reconnectez-vous');
+    const res=await fetch(SB_URL+'/functions/v1/cout-anthropic',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+      body:JSON.stringify({mois:mois||3})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok&&!data.code)throw new Error(data.error||('HTTP '+res.status));
+    _coutAnth=data;
+  }catch(e){
+    console.error('coût Anthropic',e);
+    _coutAnth={disponible:false,code:'erreur',detail:(e&&e.message)||'erreur'};
+  }finally{_coutAnthEnCours=false;peindreCoutAnthropic();}
+}
+function moisLisible(cle){
+  const [a,m]=String(cle||'').split('-');
+  const noms=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return (noms[(+m)-1]||cle)+' '+a;
+}
+/* Les quatre états, écrits une fois : on cherche, la clé manque, la clé est refusée, ou on
+   a les chiffres. Un cinquième état — « rien dépensé » — se lit dans le dernier. */
+function peindreCoutAnthropic(){
+  const box=document.getElementById('anth-cout');
+  if(!box)return;
+  const sous=x=>Number(x||0).toFixed(Number(x||0)<1?4:2).replace('.',',');
+  if(_coutAnthEnCours){box.innerHTML='<p class="ias-note" style="margin:0">Lecture en cours…</p>';return;}
+  if(!_coutAnth){
+    box.innerHTML='<button class="mini" id="anth-lire">Lire la dépense du compte</button>';
+    document.getElementById('anth-lire').addEventListener('click',()=>chargerCoutAnthropic(3));
+    return;
+  }
+  const d=_coutAnth;
+  if(d.disponible){
+    const lignes=d.mois.filter(m=>m.total>0).map(m=>
+      `<div class="lib-item"><span class="txt-mois">${esc(moisLisible(m.mois))}</span>
+        <span class="txt-cout">${sous(m.total)} $</span></div>`).join('');
+    box.innerHTML=`<div class="txt-total ok">Compte Anthropic — ${sous(d.total)} $ dépensés depuis le ${esc(d.depuis)}</div>`
+      +(lignes||'<p class="ias-note">Aucune dépense sur la période.</p>')
+      +'<p class="ias-note">Tous usages confondus, pas seulement ceux du CRM. <b>Ce n’est pas un solde restant</b> : Anthropic n’en publie aucun.</p>'
+      +'<button class="mini" id="anth-relire">Relire</button>';
+    document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
+    return;
+  }
+  if(d.code==='cle_absente'){
+    box.innerHTML='<div class="txt-total ko">Clé d’administration absente — la dépense du compte ne peut pas être lue.</div>'
+      +'<ol class="anth-pas">'
+      +'<li>Ouvrez <b>console.anthropic.com</b> → Settings → <b>Admin keys</b>, et créez une clé (elle commence par <code>sk-ant-admin01-</code>).</li>'
+      +'<li>Ouvrez les secrets du projet Supabase : <b>Edge Functions → Secrets</b>.</li>'
+      +'<li>Ajoutez un secret nommé exactement <b>ANTHROPIC_ADMIN_KEY</b>, collez la clé, enregistrez.</li>'
+      +'<li>Revenez ici et appuyez sur « Réessayer ». Rien n’est à redéployer, et <b>ANTHROPIC_API_KEY n’est pas touchée</b>.</li>'
+      +'</ol>'
+      +'<button class="mini" id="anth-relire">Réessayer</button>';
+    document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
+    return;
+  }
+  if(d.code==='cle_refusee'){
+    box.innerHTML='<div class="txt-total ko">La clé déposée est refusée par Anthropic (HTTP '+esc(String(d.statut||''))+').</div>'
+      +'<p class="ias-note">Deux causes possibles, et une seule se répare : soit la clé n’est pas une clé <b>d’administration</b> (une clé d’API ordinaire ne suffit pas — il faut <code>sk-ant-admin01-</code>), soit le compte est un compte <b>individuel</b>, auquel cas Anthropic ne donne accès à ces chiffres par aucune clé. Dans ce second cas, la dépense se consulte uniquement sur console.anthropic.com.</p>'
+      +'<button class="mini" id="anth-relire">Réessayer</button>';
+    document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
+    return;
+  }
+  box.innerHTML='<div class="txt-total ko">Lecture impossible : '+esc(String(d.detail||'erreur'))+'</div>'
+    +'<button class="mini" id="anth-relire">Réessayer</button>';
+  document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
 }
 
 function openIaSettingsPanel(){

@@ -4389,6 +4389,75 @@ check('La vue s’ouvre et montre le compte du mois',
 check('La vue dit franchement qu’Anthropic ne publie pas de solde, au lieu d’en inventer un',
   conso.vue.ditPasDeSolde === true);
 
+/* --- DÉPENSE RÉELLE DU COMPTE ANTHROPIC -----------------------------------------------
+   Demandée par Raphaël en plus du compteur du CRM. Elle passe par une fonction serveur, la
+   clé d'administration ne devant jamais atteindre le navigateur. Quatre états à tenir : on
+   cherche, la clé manque, la clé est refusée, on a les chiffres. */
+const anth = await page.evaluate(async () => {
+  const vraiFetch = window.fetch;
+  let reponse = null, appels = 0;
+  window.fetch = async (url, opts) => {
+    if (String(url).indexOf('/cout-anthropic') < 0) return vraiFetch(url, opts);
+    appels++;
+    return { ok: true, status: 200, json: async () => reponse };
+  };
+  const lire = () => (document.getElementById('anth-cout') || {}).innerHTML || '';
+  const out = {};
+
+  // état 0 : le panneau s'ouvre sans rien avoir lu — aucun appel automatique
+  _coutAnth = null;
+  openTxtUsagePanel();
+  out.auRepos = { html: lire(), appels };
+
+  // état « clé absente » : la marche à suivre, pas un message d'erreur
+  reponse = { disponible: false, code: 'cle_absente' };
+  await chargerCoutAnthropic(3);
+  out.cleAbsente = { html: lire(), etapes: document.querySelectorAll('#anth-cout .anth-pas li').length };
+
+  // état « clé refusée »
+  _coutAnth = null;
+  reponse = { disponible: false, code: 'cle_refusee', statut: 403 };
+  await chargerCoutAnthropic(3);
+  out.cleRefusee = lire();
+
+  // état nominal
+  _coutAnth = null;
+  reponse = { disponible: true, devise: 'USD', depuis: '2026-07-01', total: 12.3456,
+              mois: [{ mois: '2026-09', total: 4.2 }, { mois: '2026-08', total: 8.1456 }, { mois: '2026-07', total: 0 }],
+              soldeDisponible: false };
+  await chargerCoutAnthropic(3);
+  out.chiffres = { html: lire(), lignes: document.querySelectorAll('#anth-cout .lib-item').length };
+
+  // état « panne réseau »
+  _coutAnth = null;
+  window.fetch = async (url, opts) => {
+    if (String(url).indexOf('/cout-anthropic') < 0) return vraiFetch(url, opts);
+    throw new Error('réseau indisponible');
+  };
+  await chargerCoutAnthropic(3);
+  out.panne = lire();
+
+  closeModal();
+  window.fetch = vraiFetch;
+  return out;
+});
+check('Dépense du compte : rien n’est lu tant qu’on ne le demande pas',
+  anth.auRepos.appels === 0 && /Lire la dépense/.test(anth.auRepos.html), JSON.stringify(anth.auRepos.appels));
+check('Clé absente : la marche à suivre est donnée, numérotée, avec le nom exact du secret',
+  anth.cleAbsente.etapes === 4 && /ANTHROPIC_ADMIN_KEY/.test(anth.cleAbsente.html)
+  && /sk-ant-admin01-/.test(anth.cleAbsente.html), anth.cleAbsente.etapes + ' étape(s)');
+check('Clé absente : il est dit que la clé de rédaction n’est pas touchée',
+  /ANTHROPIC_API_KEY n’est pas touchée/.test(anth.cleAbsente.html));
+check('Clé refusée : les deux causes sont nommées, dont le compte individuel sans recours',
+  /refusée par Anthropic \(HTTP 403\)/.test(anth.cleRefusee) && /compte <b>individuel<\/b>/.test(anth.cleRefusee),
+  anth.cleRefusee.slice(0, 80));
+check('Chiffres : le total et les mois non nuls sont affichés',
+  /12,35 \$ dépensés/.test(anth.chiffres.html) && anth.chiffres.lignes === 2, JSON.stringify(anth.chiffres.lignes));
+check('Chiffres : il est dit que ce n’est PAS un solde restant',
+  /n’est pas un solde restant/i.test(anth.chiffres.html));
+check('Panne : la lecture qui échoue le dit et propose de réessayer',
+  /Lecture impossible/.test(anth.panne) && /Réessayer/.test(anth.panne), anth.panne.slice(0, 70));
+
 /* --- PUBLIER LE TEXTE SANS RENVOYER UNE PHOTO -----------------------------------------
    Le reproche exact de Raphaël : « j'ai déjà écrit du texte sur Bureau Sébastien, sauf que
    pour le publier je suis contraint de publier la photo qui n'est pas à jour ». On reproduit
@@ -4851,7 +4920,7 @@ check('Tâche : ce qui est écrit est enregistré et affiché aussitôt, sans ro
   notesTache.detail === 'Rappeler avant vendredi.' && notesTache.champVu === 1
   && /vendredi/.test(notesTache.apercu), JSON.stringify(notesTache));
 
-const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible|suppression réalisation \{message: réseau indisponible\}|texte réalisation Error: Erreur API Anthropic/i.test(e));
+const realErrors = errors.filter(e => !/favicon|net::ERR|Failed to load resource|supabase|Access-Control|CORS|manifeste illisible : network error|retouche IA Error: fal\.ai a refusé la demande \(HTTP 422\)|publication Error: réseau indisponible|import photo Error: image illisible|publication Error: image illisible pour « photo-cassee\.jpg »|retouche IA série Error: fal\.ai a refusé la demande \(HTTP 422\)|reprise retouche IA Error: Demande introuvable chez fal\.ai|texte réalisation Error: IA indisponible \(HTTP 502\)|infos du site \{message: réseau indisponible\}|publication \{message: réseau indisponible\}|remplacement photo Error: réseau indisponible|import photo Error: réseau indisponible|suppression réalisation \{message: réseau indisponible\}|texte réalisation Error: Erreur API Anthropic|coût Anthropic Error: réseau indisponible/i.test(e));
 check('Aucune erreur JavaScript', realErrors.length === 0, realErrors.slice(0, 4).join(' | '));
 
 console.log('\n===== RESULTAT : ' + ok.length + ' OK, ' + ko.length + ' ECHEC =====');
