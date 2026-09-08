@@ -2562,3 +2562,41 @@ d'organisation, une clé d'administration permettrait d'afficher la dépense ré
 Anthropic** (`cost_report`), tous usages confondus et pas seulement ceux du CRM. À ne
 construire que s'il confirme avoir accès à une clé `sk-ant-admin01-…` ; sinon le pont serait
 mort-né, comme l'aurait été celui du solde fal.ai sans clé ADMIN.
+
+---
+
+## 7 septembre 2026 — La dépense réelle du compte Anthropic
+
+Suite directe de l'entrée précédente : Raphaël a confirmé vouloir, en plus du compteur du
+CRM, **la dépense de tout le compte Anthropic**.
+
+Nouvelle fonction serveur **`cout-anthropic`** (version 1) : elle appelle
+`/v1/organizations/cost_report` et renvoie un total par mois. La clé d'administration donne
+accès à toute l'organisation — elle reste donc dans les secrets Supabase, et la fonction ne
+renvoie que des montants agrégés. Même contrôle d'accès que `embellish` (`requireUser`),
+vérifié en ligne après déploiement : 401 sans jeton, 401 avec la clé publiable.
+
+**Un piège de l'API, écrit dans sa documentation et pas devinable** : `amount` est une
+chaîne décimale exprimée dans l'unité **la plus basse** de la devise — des cents. « 123.45 »
+vaut 1,2345 $. Sans la division par cent, la dépense affichée aurait été **multipliée par
+cent**. Ne pas retirer cette division.
+
+Réglages → « Rédaction IA — consommation » porte maintenant deux blocs : ce que le CRM a
+demandé, et la dépense du compte. Le second ne lit rien tant qu'on ne le demande pas, et
+tient ses quatre états : clé absente (marche à suivre en quatre étapes, nom exact du secret,
+rappel qu'`ANTHROPIC_API_KEY` n'est pas touchée), clé refusée (les deux causes nommées, dont
+celle sans recours : un compte individuel), panne (dite, avec « Réessayer »), chiffres
+(total et mois non nuls).
+
+**Le point qui ne bouge pas** : ce total est une dépense, pas un solde restant. Anthropic
+n'expose aucun solde, et aucun des deux blocs ne prétend le contraire.
+
+**Vérification** : 551 contrôles CRM (7 nouveaux, un par état plus « rien n'est lu sans
+demande ») ; panneau parcouru à 390 px dans les deux états ; fonction déployée et son
+contrôle d'accès vérifié en ligne.
+
+**Ce qui demande une manipulation de Raphaël** : créer la clé d'administration sur
+console.anthropic.com → Settings → Admin keys, et la déposer dans les secrets Supabase
+(Edge Functions → Secrets) sous le nom exact **ANTHROPIC_ADMIN_KEY**. Rien à redéployer
+ensuite. La marche à suivre est affichée dans le CRM, à l'endroit même où le chiffre manque —
+il n'a pas à revenir la chercher ici.
