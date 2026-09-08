@@ -9,6 +9,60 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 8 septembre 2026 — Le vrai cadre de rognage (la correction du matin n'était pas ça)
+
+Raphaël, après la livraison précédente : « Je ne suis pas d'accord. J'ai simplement demandé
+un cadre de rognage sur la photo. Lorsque je clique sur un bouton qui s'appelle rogner, je
+veux pouvoir rogner manuellement la photo. Tu m'as mis des fonctionnalités de resserrage
+adaptative. Ce n'est pas ce que j'ai demandé. »
+
+**Il a raison.** L'entrée précédente avait bien identifié que « Libre » ne rognait pas, mais
+la réponse — un curseur « Resserrer » et deux curseurs de position — répondait à côté : un
+outil de rognage, c'est un **rectangle qu'on trace et qu'on tire sur la photo**, pas trois
+curseurs qui décrivent un rectangle à l'aveugle.
+
+**Fait — l'onglet Cadrage est un vrai outil de rognage** :
+
+- La photo s'affiche **entière** dans cet onglet. C'est ce qui permet d'**élargir** le
+  cadre : sur une image déjà rognée, on ne pourrait jamais récupérer ce qu'on a coupé.
+- Un **cadre blanc** avec **8 poignées** (4 coins, 4 bords). Ce qui est en dehors est
+  **assombri** : on voit d'un coup d'œil ce qui est jeté. Grille des **tiers** à l'intérieur.
+- **Tirer une poignée** rogne ; **glisser dans le cadre** le déplace ; **partir d'une zone
+  sombre** trace un cadre neuf. Souris et doigt par le même chemin (pointer events), poignées
+  de 14 px visibles mais **40 px touchables**.
+- **Le format impose sa proportion au cadre** et la tient pendant qu'on tire. Le choisir
+  reforme le cadre **tout de suite** — un format sans effet visible passerait pour cassé.
+- Une **étiquette** dans le cadre dit ce qui est gardé : `450 × 300 px · 50 % × 50 %`.
+- **↺ Annuler le rognage** rend la photo entière **sans toucher à la lumière ni aux
+  verticales**. **Appliquer à toute la série** porte le rectangle lui-même.
+- Les curseurs « Resserrer » et « Position » livrés le matin **ont été retirés**.
+
+**Ce qu'il ne faut pas casser** :
+
+- Le rognage est un rectangle `edit.crop = {x,y,w,h}` en **fractions de la photo** (0 → 1),
+  jamais en pixels d'écran : l'aperçu change de taille avec la fenêtre, le rognage non.
+- `cropWindow` lit `crop` **en priorité**, et retombe sur les anciens réglages
+  (`ratio`+`zoom`/`pan`) quand il est absent : **les photos déjà cadrées gardent leur
+  cadrage**, et le cadre s'ouvre exactement dessus — le premier geste le reprend au lieu de
+  le perdre. Écrire un rectangle efface ces anciens champs : deux sources de vérité pour la
+  même chose, c'est une dérive silencieuse garantie.
+- `photoPubSig` inclut le rectangle : sans lui, rogner ne republierait pas, le nom du
+  fichier publié étant porté par le contenu.
+- « Toute la photo » (`w` et `h` ≥ 99,9 %) est ramené à `null` : ce n'est pas un rognage, et
+  le laisser passer marquerait la photo « à republier » pour rien.
+- Un **appui sans mouvement n'écrit rien** : un doigt posé ne doit pas effacer un cadrage.
+
+**Vérifié** : `tests/realisations.test.mjs` **569/569**, dont 24 contrôles sur le cadre —
+poignées, coin opposé qui ne bouge pas, bord seul qui ne change qu'une dimension,
+déplacement, bornes, minimum de 5 %, cadre tracé depuis le noir, proportion tenue pendant le
+geste, **image réellement produite deux fois plus petite** et contenu mesuré différent quand
+on déplace, marquage « à republier », compatibilité des anciens cadrages, un geste = un cran
+d'annulation, et une passe à **390 px** (cadre collé à la photo, poignées à 40 px). Huit
+autres suites sans régression.
+
+**À faire côté Raphaël** : rien. Onglet **Cadrage** → tirer les coins. Republier les
+réalisations dont on change le cadrage.
+
 ## 8 septembre 2026 — Placer les cartes où on veut, et un « À propos » qui remplit la page
 
 Raphaël, capture à l'appui : « dans les réglages, pouvoir les cartes, les placer comme on
