@@ -673,6 +673,96 @@ const crtMobile = await (async () => {
 })();
 check('Sur téléphone, toujours une seule colonne quel que soit le réglage', crtMobile === 1, 'colonnes: ' + crtMobile);
 
+// --- Placement des cartes : espaces vides, largeur sur deux colonnes, jusqu'à 5 par ligne.
+//     On mesure la POSITION RÉELLE dans la grille, pas le nombre d'éléments : c'est la seule
+//     preuve qu'un trou ouvre bien une place au lieu d'être ignoré.
+const place = await page.evaluate(() => {
+  renderApropos({
+    apropos: 'Texte de présentation.',
+    cartesPar: 3, cartesAlign: 'centre', cartesGras: false,
+    cartes: [
+      { id: 'a', titre: 'Gauche', texte: 'A' },
+      { id: 'trou', vide: 1 },
+      { id: 'b', titre: 'Droite', texte: 'B' },
+      { id: 'c', titre: 'Large', texte: 'C', large: 2 },
+    ],
+  });
+  const host = document.getElementById('apropos-cartes');
+  const gauches = [...host.children].map(x => Math.round(x.getBoundingClientRect().left));
+  const cols = [...new Set(gauches)].sort((u, v) => u - v);
+  const rang = (x) => cols.indexOf(Math.round(x.getBoundingClientRect().left));
+  const enfants = [...host.children];
+  return {
+    n: enfants.length,
+    classes: enfants.map(x => x.className),
+    colonnes: enfants.map(rang),
+    hauts: enfants.map(x => Math.round(x.getBoundingClientRect().top)),
+    largeurs: enfants.map(x => Math.round(x.getBoundingClientRect().width)),
+    nbCols: getComputedStyle(host).gridTemplateColumns.split(' ').filter(Boolean).length,
+    alignSection: document.getElementById('apropos').dataset.align,
+    txtCentre: getComputedStyle(document.getElementById('apropos-txt')).textAlign,
+  };
+});
+check('Cartes : un espace vide occupe une vraie case — une carte à gauche, un trou, une carte à droite',
+  place.n === 4 && /apropos-vide/.test(place.classes[1])
+  && place.colonnes[0] === 0 && place.colonnes[2] === 2
+  && place.hauts[0] === place.hauts[2],
+  JSON.stringify({ colonnes: place.colonnes, classes: place.classes }));
+check('Cartes : une carte « 2 colonnes » est bien deux fois plus large',
+  place.largeurs[3] > place.largeurs[0] * 1.8, place.largeurs.join(' | '));
+check('Cartes : le réglage à 3 par ligne est appliqué', place.nbCols === 3, 'colonnes: ' + place.nbCols);
+check('À propos : l’alignement descend sur la section entière, texte compris',
+  place.alignSection === 'centre' && place.txtCentre === 'center',
+  place.alignSection + ' / ' + place.txtCentre);
+
+// Centré, le paragraphe doit être CENTRÉ DANS LA PAGE, pas juste ses lignes centrées à
+// gauche — c'est exactement ce qui donnait l'impression qu'il ne prenait pas la place.
+const largeurTxt = await page.evaluate(() => {
+  const sec = document.getElementById('apropos'), t = document.getElementById('apropos-txt');
+  t.hidden = false;
+  const mesure = () => { const a = sec.getBoundingClientRect(), b = t.getBoundingClientRect();
+                         return { gauche: Math.round(b.left - a.left), droite: Math.round(a.right - b.right) }; };
+  sec.dataset.align = 'centre'; const centre = mesure();
+  sec.dataset.align = 'droite'; const droite = mesure();
+  sec.dataset.align = 'gauche'; const gauche = mesure();
+  return { centre, droite, gauche, alignDroite: (sec.dataset.align = 'droite', getComputedStyle(t).textAlign) };
+});
+check('À propos centré : le paragraphe est centré dans la page, pas collé à gauche',
+  Math.abs(largeurTxt.centre.gauche - largeurTxt.centre.droite) <= 2
+  && largeurTxt.centre.gauche > 0,
+  JSON.stringify(largeurTxt.centre));
+check('À propos aligné à droite : le bloc et son texte partent bien à droite',
+  largeurTxt.droite.droite <= 2 && largeurTxt.droite.gauche > 2 && largeurTxt.alignDroite === 'right',
+  JSON.stringify(largeurTxt.droite) + ' / ' + largeurTxt.alignDroite);
+check('À propos à gauche : rien ne change pour qui n’a jamais touché au réglage',
+  largeurTxt.gauche.gauche === 0, JSON.stringify(largeurTxt.gauche));
+
+// Sur téléphone : une colonne, les trous disparaissent, « 2 colonnes » prend toute la largeur.
+const placePhone = await (async () => {
+  const p = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await p.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+  await p.waitForTimeout(700);
+  const r = await p.evaluate(() => {
+    renderApropos({ apropos: 'Texte.', cartesPar: 3, cartes: [
+      { id: 'a', titre: 'Gauche', texte: 'A' }, { id: 'trou', vide: 1 },
+      { id: 'c', titre: 'Large', texte: 'C', large: 2 } ] });
+    const host = document.getElementById('apropos-cartes');
+    const vus = [...host.children].filter(x => x.getBoundingClientRect().height > 0);
+    return { vus: vus.length, largeurs: vus.map(x => Math.round(x.getBoundingClientRect().width)),
+             debord: document.body.scrollWidth - document.body.clientWidth };
+  });
+  await p.close();
+  return r;
+})();
+check('Sur téléphone : pas de trou à faire défiler, et « 2 colonnes » tient la largeur',
+  placePhone.vus === 2 && placePhone.largeurs[0] === placePhone.largeurs[1] && placePhone.debord <= 1,
+  JSON.stringify(placePhone));
+
+// On remet la page dans l'état du manifeste : les contrôles suivants lisent le vrai site.
+await page.evaluate(() => location.reload());
+await page.waitForLoadState('networkidle');
+await page.waitForTimeout(700);
+
 // --- Manifeste à l'ANCIEN format : c'est celui qui est en ligne aujourd'hui
 await page.goto('http://127.0.0.1:8902/ancien.html', { waitUntil: 'networkidle' });
 await page.waitForTimeout(700);

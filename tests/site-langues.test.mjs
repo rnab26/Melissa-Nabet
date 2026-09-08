@@ -146,9 +146,51 @@ check('Une carte peut se déplacer par glisser-déposer (avant l’autre)',
   (await page.evaluate(() => siteCartes()[0].titre)) === 'Conseil et plans',
   await page.evaluate(() => siteCartes().map(c => c.titre).join(' | ')));
 
+// --- Les flèches déplacent aussi : au doigt, la poignée se rate.
+await page.locator('.site-entree[data-ci]').nth(1).locator('[data-cmove="-1"]').click();
+await page.waitForTimeout(400);
+check('Une carte se déplace aussi aux flèches ↑ ↓',
+  (await page.evaluate(() => siteCartes()[0].titre)) === 'Rénovation complète',
+  await page.evaluate(() => siteCartes().map(c => c.titre).join(' | ')));
+await page.locator('.site-entree[data-ci]').nth(0).locator('[data-cmove="1"]').click();
+await page.waitForTimeout(400);
+check('…et elles ramènent à l’ordre précédent',
+  (await page.evaluate(() => siteCartes()[0].titre)) === 'Conseil et plans',
+  await page.evaluate(() => siteCartes().map(c => c.titre).join(' | ')));
+
+// --- Un espace vide tient une PLACE : c'est ce qui permet une carte à gauche, un trou, une
+//     carte à droite. On le pose, on le remonte entre les deux cartes.
+await page.locator('#site-cartes-vide').click();
+await page.waitForTimeout(400);
+check('Un espace vide s’ajoute et se décrit sans champ à remplir',
+  (await page.evaluate(() => siteCartes().length)) === 3
+  && (await page.evaluate(() => !!siteCartes()[2].vide))
+  && /Espace vide/.test(await page.textContent('.site-entree-vide')),
+  await page.evaluate(() => siteCartes().map(c => (c.vide ? '[vide]' : c.titre)).join(' | ')));
+await page.locator('.site-entree[data-ci]').nth(2).locator('[data-cmove="-1"]').click();
+await page.waitForTimeout(400);
+check('L’espace vide se glisse ENTRE deux cartes',
+  (await page.evaluate(() => siteCartes().map(c => (c.vide ? 'vide' : c.titre)).join('|')))
+    === 'Conseil et plans|vide|Rénovation complète',
+  await page.evaluate(() => siteCartes().map(c => (c.vide ? 'vide' : c.titre)).join('|')));
+
+// --- Une carte peut occuper deux colonnes : c'est là qu'on écrit un vrai paragraphe.
+await page.locator('.site-entree[data-ci]').nth(0).locator('[data-clarge]').click();
+await page.waitForTimeout(400);
+check('Une carte peut passer sur deux colonnes, et le bouton le dit',
+  (await page.evaluate(() => siteCartes()[0].large)) === 2
+  && /2 colonnes/.test(await page.locator('.site-entree[data-ci]').nth(0).locator('[data-clarge]').textContent()),
+  await page.locator('.site-entree[data-ci]').nth(0).locator('[data-clarge]').textContent());
+
 // --- Réglages des cartes : par ligne, alignement, gras
+check('Le réglage monte jusqu’à 5 cartes par ligne',
+  (await page.locator('#site-cartes-par [data-cartespar]').count()) === 5
+  && await page.locator('#site-cartes-par [data-cartespar="5"]').isVisible());
 await page.locator('#site-cartes-par [data-cartespar="3"]').click();
 await page.waitForTimeout(300);
+check('L’alignement propose aussi « À droite »',
+  (await page.locator('#site-cartes-align [data-cartesalign]').count()) === 3
+  && await page.locator('#site-cartes-align [data-cartesalign="droite"]').isVisible());
 await page.locator('#site-cartes-align [data-cartesalign="centre"]').click();
 await page.waitForTimeout(300);
 await page.locator('#site-cartes-gras').check();
@@ -179,9 +221,15 @@ check('Le journal part dans l’ordre du panneau',
   (man.site.journal || []).length === 2 && man.site.journal[0].titre === 'Deuxième entrée',
   (man.site.journal || []).map(j => j.titre).join(' | '));
 check('Les cartes partent dans l’ordre du panneau, après le déplacement',
-  (man.site.cartes || []).length === 2 && man.site.cartes[0].titre === 'Conseil et plans'
-    && man.site.cartes[1].titre === 'Rénovation complète',
-  (man.site.cartes || []).map(c => c.titre).join(' | '));
+  (man.site.cartes || []).length === 3 && man.site.cartes[0].titre === 'Conseil et plans'
+    && man.site.cartes[2].titre === 'Rénovation complète',
+  (man.site.cartes || []).map(c => (c.vide ? '[vide]' : c.titre)).join(' | '));
+check('L’espace vide part EN LIGNE — sans lui, la mise en page s’effondrerait en silence',
+  man.site.cartes[1] && man.site.cartes[1].vide === 1 && !man.site.cartes[1].titre,
+  JSON.stringify(man.site.cartes[1]));
+check('La largeur sur deux colonnes part avec la carte',
+  man.site.cartes[0].large === 2 && man.site.cartes[2].large === undefined,
+  JSON.stringify(man.site.cartes.map(c => c.large)));
 check('Les réglages des cartes partent aussi en ligne',
   man.site.cartesPar === 3 && man.site.cartesAlign === 'centre' && man.site.cartesGras === true,
   JSON.stringify({ p: man.site.cartesPar, a: man.site.cartesAlign, g: man.site.cartesGras }));
@@ -217,8 +265,22 @@ await page.waitForTimeout(300);
 await page.locator('#modal button, .modal button').filter({ hasText: /Supprimer|Confirmer|Oui/ }).last().click().catch(() => {});
 await page.waitForTimeout(500);
 check('Une carte supprimée après confirmation',
-  (await page.evaluate(() => siteCartes().length)) === 1,
-  await page.evaluate(() => siteCartes().map(c => c.titre).join(' | ')));
+  (await page.evaluate(() => siteCartes().length)) === 2,
+  await page.evaluate(() => siteCartes().map(c => (c.vide ? '[vide]' : c.titre)).join(' | ')));
+
+// --- Retirer l'espace vide : lui aussi demande confirmation, on ne perd pas une mise en
+//     page d'un doigt posé de travers.
+await page.locator('.site-entree-vide [data-cdel]').first().click();
+await page.waitForTimeout(300);
+check('Retirer un espace vide demande confirmation, et dit ce que ça déplace',
+  /espace vide/i.test(await page.textContent('#modal, .modal')),
+  (await page.textContent('#modal, .modal') || '').slice(0, 90));
+await page.locator('#modal button, .modal button').filter({ hasText: /Supprimer|Confirmer|Oui/ }).last().click().catch(() => {});
+await page.waitForTimeout(500);
+check('L’espace vide retiré, les cartes qui suivaient remontent',
+  (await page.evaluate(() => siteCartes().length)) === 1
+  && (await page.evaluate(() => siteCartes()[0].titre)) === 'Rénovation complète',
+  await page.evaluate(() => siteCartes().map(c => (c.vide ? '[vide]' : c.titre)).join(' | ')));
 
 const vrais = errors.filter(e => !/fonts\.googleapis|fonts\.gstatic|ERR_CONNECTION|404|favicon/i.test(e));
 check('Aucune erreur JavaScript', vrais.length === 0, vrais.slice(0, 3).join(' | '));
