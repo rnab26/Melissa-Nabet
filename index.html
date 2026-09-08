@@ -7007,17 +7007,23 @@ function edCropPose(r){
 }
 /* Place le cadre sur le canevas et le remplit. Appelé à chaque rendu et à chaque
    redimensionnement : la photo affichée change de taille avec la fenêtre, le cadre suit. */
+/* Le cadre est visible, ou il ne l'est pas — et les flèches de défilement suivent, parce
+   qu'elles visent exactement le même pixel que ses poignées de gauche et de droite. Un
+   seul endroit décide des deux : quand `edPaint` masquait le cadre de son côté, les
+   flèches restaient cachées pour toujours (trouvé par le test). */
+function edCropMontre(v){
+  const host=$('ed-crop');if(host)host.hidden=!v;
+  const cv=$('ed-canvas'), stage=cv&&cv.closest('.ed-stage');
+  if(stage)stage.classList.toggle('rogne',!!v);
+}
 function edCropPaint(){
   const host=$('ed-crop');if(!host)return;
   const cv=$('ed-canvas');
   const stage=cv&&cv.closest('.ed-stage');
-  /* Les flèches de défilement et les poignées gauche/droite du cadre visent le même pixel.
-     Tant que le cadre est là, les flèches s'effacent : on rogne, on ne feuillette pas. */
-  const cacher=v=>{if(stage)stage.classList.toggle('rogne',v);};
-  if(!cv||!stage||!edCropActif()){host.hidden=true;cacher(false);return;}
+  if(!cv||!stage||!edCropActif()){edCropMontre(false);return;}
   const rs=stage.getBoundingClientRect(), rc=cv.getBoundingClientRect();
-  if(!rc.width||!rc.height){host.hidden=true;cacher(false);return;}
-  host.hidden=false;cacher(true);
+  if(!rc.width||!rc.height){edCropMontre(false);return;}
+  edCropMontre(true);
   host.style.left=(rc.left-rs.left)+'px';
   host.style.top=(rc.top-rs.top)+'px';
   host.style.width=rc.width+'px';
@@ -7333,7 +7339,7 @@ function edPaint(){
     const ctx=cv.getContext('2d');
     if(enCadrage){ctx.drawImage(out,0,0);edCropPaint();return;}
     /* Hors de l'onglet Cadrage, le cadre n'a rien à dire : il masquerait la photo. */
-    const horsCadre=$('ed-crop');if(horsCadre)horsCadre.hidden=true;
+    edCropMontre(false);
 
     /* Sans version IA, le « avant » est la même image sans réglages : un seul rendu suffit,
        l'appui long continue de servir. */

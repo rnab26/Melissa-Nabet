@@ -2254,20 +2254,6 @@ check('Éditeur : la flèche ne change pas de photo quand on écrit dans un cham
   /TEXTAREA|INPUT/.test(dansChamp.focus) && dansChamp.avant === dansChamp.apres,
   JSON.stringify(dansChamp));
 
-// Une seule photo : rien à faire défiler, donc aucune flèche.
-const seule = await page.evaluate(async () => {
-  const r = findRealisation(_rzOpenId);
-  const gardees = r.photos.slice();
-  closePhotoEditor();
-  r.photos = [gardees[0]];
-  await openPhotoEditor(r.id, gardees[0].id);
-  await new Promise(x => setTimeout(x, 700));
-  const res = { fleches: document.querySelectorAll('.ed-nav').length,
-                compteur: document.querySelectorAll('.ed-pos').length };
-  closePhotoEditor();
-  r.photos = gardees;
-  return res;
-});
 /* Le cadre de rognage, livré en parallèle, pose ses poignées aux mêmes endroits que les
    flèches : celles du milieu gauche et du milieu droit tomberaient exactement dessous. */
 const rognage = await page.evaluate(async () => {
@@ -2284,6 +2270,20 @@ check('Éditeur : le cadre de rognage affiché, les flèches s’effacent — el
   rognage.avant && rognage.pendant.cadre && rognage.pendant.fleche === false, JSON.stringify(rognage));
 check('Éditeur : en quittant le rognage, les flèches reviennent', rognage.apres === true, JSON.stringify(rognage));
 
+// Une seule photo : rien à faire défiler, donc aucune flèche.
+const seule = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const gardees = r.photos.slice();
+  closePhotoEditor();
+  r.photos = [gardees[0]];
+  await openPhotoEditor(r.id, gardees[0].id);
+  await new Promise(x => setTimeout(x, 700));
+  const res = { fleches: document.querySelectorAll('.ed-nav').length,
+                compteur: document.querySelectorAll('.ed-pos').length };
+  closePhotoEditor();
+  r.photos = gardees;
+  return res;
+});
 check('Éditeur : une seule photo, aucune flèche ni compteur affichés',
   seule.fleches === 0 && seule.compteur === 0, JSON.stringify(seule));
 await page.evaluate(async () => {
