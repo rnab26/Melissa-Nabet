@@ -1022,6 +1022,21 @@
   .pub-envoi{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--ink);cursor:pointer;}
   .pub-envoi.off{color:var(--stone);font-style:italic;cursor:default;}
   .pub-envoi input{margin:0;}
+  /* « Retirer du site » : le geste manquant. Il doit être là, sur la ligne de la photo, au
+     moment où l'on décide ce qui part — pas au fond du menu ⋯ d'une vignette. */
+  .pub-actes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:9px;}
+  .pub-hors{background:transparent;border:1px solid var(--panel-edge);border-radius:4px;
+    padding:6px 10px;font-size:12px;color:var(--stone-deep);cursor:pointer;min-height:34px;}
+  .pub-hors:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .pub-bloc{border-top:1px solid var(--panel-edge);}
+  .pub-bloc>summary{padding:10px 11px;font-size:12.5px;color:var(--stone-deep);cursor:pointer;
+    list-style:none;min-height:38px;display:flex;align-items:center;}
+  .pub-bloc>summary::-webkit-details-marker{display:none}
+  .pub-bloc>summary::before{content:'▸ ';margin-right:4px;}
+  .pub-bloc[open]>summary::before{content:'▾ ';}
+  .pub-mini{display:flex;align-items:center;gap:10px;padding:8px 11px;border-top:1px solid var(--panel-edge);
+    font-size:12.5px;color:var(--ink);}
+  .pub-mini b{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .pub-choix{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
     margin:10px 0 4px;padding:10px 12px;border:1px solid var(--panel-edge);border-radius:8px;
     background:var(--travertine);font-size:12px;color:var(--stone);}
@@ -7630,17 +7645,67 @@ function rzDeleteSelected(r){
   });
 }
 
+/* CE QUI PART SUR LE SITE, décidé sur une SÉLECTION. Avant, le drapeau « ne pas publier »
+   ne se posait qu'une photo à la fois, au fond du menu ⋯ d'une vignette : sélectionner
+   dix photos puis publier n'avait donc aucun effet — tout partait quand même. C'est
+   exactement ce qui était reproché. */
+function rzAskSelectionSite(r){
+  const photos=rzSelectedPhotos(r);
+  const n=photos.length;
+  if(!n)return;
+  const autres=(r.photos||[]).length-n;
+  const dejaHors=photos.filter(p=>p.horsSite).length;
+  const appliquer=(fn,msg)=>{
+    fn();
+    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+    toast(msg+(r.published?' — republiez pour mettre le site à jour':''));
+  };
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Le site et ces ${n} photo${n>1?'s':''}</h3>
+    <p class="msub">Ce réglage dit ce qui part sur le site public. Rien n’est envoyé maintenant : la page en ligne ne change qu’à la publication.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" data-only ${autres?'':'disabled'}>🌐 Ne publier que ces ${n} photo${n>1?'s':''}</button>
+      <button class="btn btn-onlight" data-add ${dejaHors?'':'disabled'}>➕ Remettre ces ${n} sur le site</button>
+      <button class="btn btn-onlight" data-off ${dejaHors===n?'disabled':''}>🚫 Retirer ces ${n} du site</button>
+    </div>
+    <p class="msub" style="margin-top:12px">« Ne publier que celles-ci » écarte les ${autres} autre${autres>1?'s':''} photo${autres>1?'s':''} de cette réalisation. Aucune n’est supprimée : elles restent dans le CRM et dans vos sauvegardes, et se remettent en ligne du même geste.</p>`);
+  const m=$('modal');
+  const marquer=(liste,hors)=>liste.forEach(p=>{
+    if(!!p.horsSite===hors)return;
+    p.horsSite=hors;photoTouch(p,hors?'horssite':'sursite','');
+  });
+  m.querySelector('[data-only]').addEventListener('click',()=>{
+    closeModal();
+    const gardes=new Set(photos.map(p=>p.id));
+    appliquer(()=>{
+      marquer(photos,false);
+      marquer((r.photos||[]).filter(p=>!gardes.has(p.id)),true);
+      _rzSel.clear();_rzSelMode=false;
+    },'Seules ces '+n+' photo(s) partiront sur le site');
+  });
+  m.querySelector('[data-add]').addEventListener('click',()=>{
+    closeModal();
+    appliquer(()=>{marquer(photos,false);_rzSel.clear();_rzSelMode=false;},n+' photo(s) remise(s) sur le site');
+  });
+  m.querySelector('[data-off]').addEventListener('click',()=>{
+    closeModal();
+    appliquer(()=>{marquer(photos,true);_rzSel.clear();_rzSelMode=false;},n+' photo(s) retirée(s) du site');
+  });
+}
+
 function buildSelectionBar(r){
   const bar=document.createElement('div');
   bar.className='rz-selbar';
   const n=_rzSel.size, total=(r.photos||[]).length;
   bar.innerHTML=`<span class="rz-selcount">${n} sur ${total}</span>
     <button class="mini" data-all>${n===total&&total?'Tout désélectionner':'Tout sélectionner'}</button>
+    <button class="btn btn-primary" data-site ${n?'':'disabled'}>🌐 Site${n?' ('+n+')':''}</button>
     <button class="btn" data-ia ${n?'':'disabled'}>✨ Retoucher${n?' ('+n+')':''}</button>
-    <button class="btn btn-primary" data-dl ${n?'':'disabled'}>⬇ Télécharger${n?' ('+n+')':''}</button>
+    <button class="btn" data-dl ${n?'':'disabled'}>⬇ Télécharger${n?' ('+n+')':''}</button>
     <button class="btn btn-onlight" data-del ${n?'':'disabled'}>🗑 Supprimer${n?' ('+n+')':''}</button>
     <button class="mini" data-cancel>Annuler</button>`;
   bar.querySelector('[data-all]').addEventListener('click',()=>rzSelectAll(r));
+  bar.querySelector('[data-site]').addEventListener('click',()=>rzAskSelectionSite(r));
   bar.querySelector('[data-ia]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
   bar.querySelector('[data-dl]').addEventListener('click',()=>rzAskDownload(r,rzSelectedPhotos(r)));
   bar.querySelector('[data-del]').addEventListener('click',()=>rzDeleteSelected(r));
@@ -10279,6 +10344,22 @@ function openSitePanel(){
    Le reproche exact : « je ne sais pas quand je fais republier, ça republie les anciennes
    photos ». Republier était un saut dans le noir. Cet écran montre, photo par photo, ce que
    le visiteur voit AUJOURD'HUI et ce qu'il verra après — et rien ne part sans un appui. */
+/* Écarter (ou remettre) une photo SANS quitter l'écran de publication : on met à jour, on
+   enregistre, et on rouvre la fenêtre pour que les compteurs, les pastilles et le bouton
+   disent la vérité. Rien n'est envoyé : le site ne bouge qu'à la confirmation. */
+function pubSetHorsSite(r,p,hors){
+  if(!!p.horsSite===!!hors)return;
+  if(hors&&photosPubliees(r).length<=1){
+    toast('Il faut au moins une photo sur le site : retirez plutôt la réalisation entière.');
+    return;
+  }
+  p.horsSite=!!hors;
+  photoTouch(p,hors?'horssite':'sursite','');
+  r.updatedAt=Date.now();
+  saveRealisations();renderRealisations();
+  toast(hors?'Photo retirée du site':'Photo remise sur le site');
+  askPublishRealisation(r);
+}
 async function askPublishRealisation(r){
   if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
   if(!photosPubliees(r).length){toast('Toutes les photos sont écartées du site : il n’y a rien à publier');return;}
@@ -10304,7 +10385,8 @@ async function askPublishRealisation(r){
       : 'Ces photos vont devenir publiques sur le site vitrine. Rien n’est envoyé tant que vous n’avez pas confirmé.')+'</p>'
     +'<div class="pub-resume">'+chips.join('')+'</div>'
     +'<p class="pub-note"><b>'+plan.photos.length+' photo(s) sur '+((r.photos||[]).length)+'</b> partiront sur le site'
-      +(plan.ecartees?' — les '+plan.ecartees+' autres sont écartées (menu ⋯ d’une vignette pour les remettre).':'.')+'</p>'
+      +(plan.ecartees?' — les '+plan.ecartees+' autres sont écartées ; elles sont listées en bas, avec de quoi les remettre.':'.')
+      +' Pour en retirer une, « 🚫 Retirer du site » sur sa ligne ci-dessous.</p>'
     +(plan.couvEcartee?'<p class="pub-note">La photo choisie comme couverture est écartée du site : c’est la première photo publiée qui servira de couverture.</p>':'')
     +(ancienne?'<p class="pub-note">Cette réalisation a été mise en ligne avant que le CRM ne garde trace des versions : on ne peut pas montrer ici ce qui y est en ce moment. Les photos concernées seront réécrites une fois à la prochaine publication, puis le suivi sera exact.</p>':'')
     +'<div class="pub-choix" id="pub-choix" hidden>'
@@ -10347,13 +10429,21 @@ async function askPublishRealisation(r){
       +(photoVersions(p).length?'<button type="button" class="pub-chver" data-chver>Changer la version…</button>':'')
       +'</div>'
       +'</div>'
-      /* Une photo déjà en ligne peut RESTER telle quelle : on décoche, et seuls la fiche,
-         l'ordre et les légendes partent. Une photo jamais mise en ligne n'a pas ce choix —
-         la garder ferait pointer le site sur un fichier qui n'existe pas. */
+      /* Deux choses DIFFÉRENTES, et les confondre était le défaut :
+         - « Envoyer cette photo » = renvoyer le fichier, ou laisser en ligne celui qui y est
+           déjà (réservé à une photo déjà publiée : sinon le site pointerait sur du vide) ;
+         - « Retirer du site » = cette photo n'a rien à faire sur la page publique. Ce
+           geste-là manquait ici, il n'existait qu'au fond du menu ⋯ d'une vignette — donc
+           impossible d'écarter quoi que ce soit au moment de publier, et impossible tout
+           court à la première publication. */
+      +'<div class="pub-actes">'
       +(peutGarder(x)
         ? '<label class="pub-envoi"><input type="checkbox" data-envoi checked> Envoyer cette photo</label>'
-        : (x.etat==='nouvelle'?'<span class="pub-envoi off">Première mise en ligne : cette photo doit partir.</span>':''));
+        : (x.etat==='nouvelle'?'<span class="pub-envoi off">Première mise en ligne : le fichier doit partir.</span>':''))
+      +'<button type="button" class="pub-hors" data-hors>🚫 Retirer du site</button>'
+      +'</div>';
     liste.appendChild(ligne);
+    ligne.querySelector('[data-hors]').addEventListener('click',()=>pubSetHorsSite(r,p,true));
     /* Ce qui est en ligne : l'image PUBLIQUE, à son adresse réelle. C'est la seule preuve
        honnête — un rendu local montrerait ce que le CRM croit avoir publié. */
     const avant=ligne.querySelector('[data-avant]');
@@ -10410,7 +10500,38 @@ async function askPublishRealisation(r){
     }
   });
   if(bouges.length>40)note.textContent='Les 40 premières photos concernées sont montrées ; les '+(bouges.length-40)+' autres partiront aussi.';
-  else if(bouges.length&&plan.inchangees)note.textContent=plan.inchangees+' photo(s) déjà en ligne à l’identique ne seront pas réécrites.';
+
+  /* Les photos DÉJÀ EN LIGNE À L'IDENTIQUE n'apparaissaient nulle part : impossible d'en
+     retirer une du site depuis cet écran, alors que c'est exactement là qu'on décide ce que
+     le visiteur va voir. Elles sont donc listées, repliées, avec leur bouton. */
+  if(bouges.length&&plan.inchangees){
+    const inch=plan.photos.filter(x=>x.etat==='inchangee');
+    const det=document.createElement('details');det.className='pub-bloc';
+    det.innerHTML='<summary>'+plan.inchangees+' photo(s) déjà en ligne à l’identique — ne seront pas réécrites</summary>';
+    inch.forEach(x=>{
+      const l=document.createElement('div');l.className='pub-mini';
+      l.innerHTML='<b>'+esc(x.p.name||'Photo sans titre')+'</b>'
+        +'<button type="button" class="pub-hors" data-hors>🚫 Retirer du site</button>';
+      l.querySelector('[data-hors]').addEventListener('click',()=>pubSetHorsSite(r,x.p,true));
+      det.appendChild(l);
+    });
+    liste.appendChild(det);
+  }
+  /* Et le geste inverse, au même endroit : sans lui, écarter une photo par erreur
+     obligeait à fermer, retrouver la vignette et fouiller son menu. */
+  const ecart=(r.photos||[]).filter(p=>p.horsSite);
+  if(ecart.length){
+    const det=document.createElement('details');det.className='pub-bloc';
+    det.innerHTML='<summary>🚫 '+ecart.length+' photo(s) écartée(s) — elles ne partiront pas</summary>';
+    ecart.forEach(pp=>{
+      const l=document.createElement('div');l.className='pub-mini';
+      l.innerHTML='<b>'+esc(pp.name||'Photo sans titre')+'</b>'
+        +'<button type="button" class="pub-hors" data-hors>↩ Remettre sur le site</button>';
+      l.querySelector('[data-hors]').addEventListener('click',()=>pubSetHorsSite(r,pp,false));
+      det.appendChild(l);
+    });
+    liste.appendChild(det);
+  }
 
   const go=document.getElementById('pub-go');
   /* CE QUI PART, EN DIRECT. Décocher une photo doit se lire tout de suite sur le bouton :

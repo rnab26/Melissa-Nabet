@@ -9,6 +9,60 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 8 septembre 2026 — La sélection par lots ne commandait pas la publication
+
+Raphaël : « J'ai fait une sélection par lots des photos que je souhaitais emporter sur le
+site ; lorsque je fais publier, ça me propose d'envoyer directement toutes les photos. Et
+même si j'acceptais de le faire comme ça, je ne peux même pas dire que je ne veux pas
+envoyer telle et telle photo. »
+
+**Cause racine, trois défauts qui se cumulaient** :
+
+1. `buildSelectionBar` ne proposait que **Retoucher / Télécharger / Supprimer**. Aucune
+   action « site » : la sélection n'avait littéralement **aucun effet** sur la publication.
+2. Le drapeau qui écarte une photo (`p.horsSite`) ne se posait **qu'une photo à la fois**,
+   au fond du **menu ⋯ d'une vignette** — introuvable, et impraticable sur dix photos.
+3. Dans la fenêtre de publication, la case « Envoyer cette photo » n'existait que pour une
+   photo **déjà en ligne** (elle sert à ne PAS réécrire un fichier déjà publié). Une photo
+   jamais publiée affichait « cette photo doit partir ». Donc à la **première publication,
+   rien n'était excluable**. Et sur une republication, seules les photos **modifiées**
+   étaient listées : les autres n'apparaissaient nulle part.
+
+**Fait** :
+
+- La barre de sélection porte **🌐 Site (N)**, qui ouvre trois gestes, un seul à la fois :
+  **« Ne publier que ces N photos »** (les autres sont écartées), **« Remettre ces N sur le
+  site »**, **« Retirer ces N du site »**. Rien n'est supprimé : les photos restent dans le
+  CRM et dans les sauvegardes.
+- Dans la fenêtre de publication, **chaque photo listée** porte **« 🚫 Retirer du site »**,
+  **nouvelle comprise**. La fenêtre se recalcule aussitôt : compteurs, pastilles et libellé
+  du bouton suivent.
+- Les photos **déjà en ligne à l'identique** sont listées dans un bloc dépliable, avec le
+  même bouton — on peut donc en retirer une sans qu'elle ait changé.
+- Les photos **écartées** ont leur propre bloc, avec **« ↩ Remettre sur le site »** : le
+  geste inverse est au même endroit, pas dans un autre écran.
+
+**Ce qu'il ne faut pas casser** :
+
+- « Envoyer cette photo » et « Retirer du site » sont **deux choses différentes**, et les
+  confondre était le défaut : la première dit s'il faut **réécrire le fichier** (réservée à
+  une photo déjà publiée, sinon le manifeste pointerait sur du vide), la seconde dit si la
+  photo **a sa place sur la page publique**.
+- On ne peut pas retirer la **dernière** photo : `pubSetHorsSite` refuse et le dit. Publier
+  une galerie vide effacerait la réalisation du site sans que personne l'ait demandé — le
+  même garde-fou existe déjà dans `publishRealisation`.
+- Chaque bascule laisse une trace dans l'historique de la photo (`horssite` / `sursite`).
+
+**Vérifié** : `tests/realisations.test.mjs` **580/580**, dont 11 contrôles neufs — la barre
+désactivée tant que rien n'est coché, les trois gestes proposés séparément, « ne publier que
+celles-ci » qui écarte **réellement** toutes les autres, un bouton par ligne dans la fenêtre
+de publication, le retrait puis le retour au même endroit, le refus de retirer la dernière
+photo, et une passe à **390 px** sur la barre à six actions (aucun débordement, rien sous
+30 px). Huit autres suites sans régression.
+
+**À faire côté Raphaël** : sélectionner, **🌐 Site → « Ne publier que ces N photos »**, puis
+**Publier**. Les réalisations déjà en ligne dont on change la sélection sont à republier.
+
 ## 8 septembre 2026 — Le vrai cadre de rognage (la correction du matin n'était pas ça)
 
 Raphaël, après la livraison précédente : « Je ne suis pas d'accord. J'ai simplement demandé
