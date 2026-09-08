@@ -9,6 +9,57 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 8 septembre 2026 — « Le cadrage libre ne sert à rien » : il ne rognait pas
+
+Raphaël : « Il n'y a pas la possibilité de rogner la photo dans le cadrage libre. Autrement
+dit, ce cadrage libre ne sert à rien si on ne peut pas le faire. Ou du moins, je n'ai
+peut-être pas compris sa fonctionnalité, explique-la-moi. »
+
+**Il avait raison, et le malentendu venait du mot.** « Libre » ne voulait pas dire « rogner
+librement » : il voulait dire **aucun format imposé**. Dans `cropWindow`, `ratio:'libre'`
+donnait `target = 0`, donc la fenêtre `[0,0] → [1,1]` — la photo entière, rien à recadrer,
+rien à déplacer. L'onglet Cadrage ne savait faire qu'une chose : coller la photo dans une
+proportion (3:2, 1:1…) et choisir **ce qu'on jette** sur l'axe qui dépassait. Il n'existait
+aucun moyen de **rentrer dans la photo**.
+
+**Fait** :
+
+- **« Libre » s'appelle maintenant « Format d'origine »** — c'est ce qu'il a toujours fait.
+- Un curseur **« Resserrer »** (100 % → 300 %) rogne pour de vrai, **avec ou sans format
+  imposé**. C'est lui qui manquait.
+- La photo se **déplace au doigt sur les deux axes** dès qu'il y a du jeu (avant : un seul
+  axe, et seulement si un format était imposé). Deux curseurs « Position ↔ » et « Position ↕ »
+  n'apparaissent que quand l'axe correspondant a du jeu — pas de curseur qui ne fait rien.
+- **« ↺ Annuler le cadrage »** remet format, resserrement et position à plat **sans toucher
+  à la lumière ni aux verticales** déjà réglées.
+- « Appliquer ce cadrage à toute la série » porte désormais le **format ET le resserrement**
+  (avant : le format seul, ce qui donnait des photos au même format mais cadrées
+  différemment). La **position ne suit pas** : le sujet n'est pas au même endroit d'une photo
+  à l'autre.
+- Les curseurs de l'éditeur font **32 px de haut** au lieu des ~20 px natifs : au doigt, on
+  les ratait une fois sur deux.
+
+**Ce qu'il ne faut pas casser** :
+
+- `photoPubSig` inclut maintenant `zoom`, `panX`, `panY`. **Sans eux, recadrer ne
+  republierait pas** : le nom de fichier publié est porté par le contenu, le site garderait
+  l'ancien cadrage en se croyant à jour.
+- `cropWindow` **retombe sur l'ancien champ `pan`** quand `panX`/`panY` sont absents, sur
+  l'axe où `pan` agissait. Les photos réglées avant ce chantier gardent leur cadrage au
+  pixel près — un test le vérifie en comparant les deux écritures.
+- `glRenderTo` dimensionne la sortie sur la fenêtre de `cropWindow` : resserrer réduit
+  vraiment le nombre de pixels exportés, ce n'est pas un zoom d'affichage.
+
+**Vérifié** : `tests/realisations.test.mjs` **563/563**, dont 14 contrôles neufs sur le
+cadrage — que « Format d'origine » + Resserrer rogne réellement (fenêtre à 50 % à 200 %,
+image produite deux fois plus petite, contenu mesuré différent quand on déplace), qu'un
+geste déplace les deux axes, que les curseurs de position n'apparaissent qu'avec du jeu, que
+rogner marque la photo « à republier », et une passe complète du panneau à **390 px** (rien
+ne déborde, tout est touchable au pouce).
+
+**À faire côté Raphaël** : rien. Les photos déjà cadrées ne bougent pas ; pour rogner,
+onglet **Cadrage** → curseur **Resserrer**, puis glisser la photo.
+
 ## 7 septembre 2026 — Le total des actifs remonte juste sous leurs lignes
 
 Raphaël, capture à l'appui, juste après la correction ci-dessous : « refait passer la
