@@ -1010,6 +1010,9 @@
   .site-onglets-note{font-size:10.5px;color:var(--stone-light);margin-left:auto;letter-spacing:.05em;}
   .site-repli{font-size:11px;color:var(--stone-light);font-style:italic;margin:-7px 0 11px;}
   .site-entree{border:1px solid var(--panel-edge);border-radius:4px;padding:10px;margin-bottom:10px;background:var(--panel);}
+  /* Un espace vide se repère d'un coup d'oeil dans la liste : trait pointillé, fond
+     absent. Sinon on le confond avec une carte qu'on aurait oublié de remplir. */
+  .site-entree-vide{border-style:dashed;background:transparent;}
   .site-entree input,.site-entree textarea{font-size:12.5px;padding:6px 8px;min-width:0;}
   .site-entree input[disabled]{opacity:.55;}
   .site-mvt{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;}
@@ -9383,14 +9386,22 @@ function bandeauPar(){
 }
 /* Combien de cartes de présentation par ligne. Raphaël veut décider lui-même — « bandeau
    ou deux, c'est moi qui gère » — donc pas de plafond caché comme le bandeau d'accueil :
-   1 à 4. Au-delà, une carte de texte devient illisible sur la largeur qui lui reste, et le
-   site retombe de toute façon à une seule colonne sur téléphone, quel que soit ce réglage. */
+   1 à 5. Au-delà, une carte de texte devient illisible sur la largeur qui lui reste, et le
+   site retombe de toute façon à une seule colonne sur téléphone, quel que soit ce réglage.
+   Une carte peut occuper DEUX colonnes (`large`) et on peut glisser des ESPACES VIDES
+   (`vide`) entre elles : c'est ce qui permet de poser une carte à gauche, un trou, une
+   carte à droite — sans quoi la grille les tasse toujours les unes contre les autres. */
+const CARTES_PAR_MAX=5;
 function cartesPar(){
   const n=parseInt(siteSettings().cartesPar,10);
-  return (n>=1&&n<=4)?n:2;
+  return (n>=1&&n<=CARTES_PAR_MAX)?n:2;
 }
+/* L'alignement vaut pour TOUT le bloc « À propos » — le texte comme les cartes. Deux
+   réglages séparés donneraient un texte centré au-dessus de cartes à gauche : personne ne
+   veut ça, et ça fait un bouton de plus à comprendre. */
 function cartesAlign(){
-  return siteSettings().cartesAlign==='centre'?'centre':'gauche';
+  const a=siteSettings().cartesAlign;
+  return (a==='centre'||a==='droite')?a:'gauche';
 }
 function cartesGras(){
   return !!siteSettings().cartesGras;
@@ -9451,6 +9462,12 @@ function siteCartes(){
     if(!c.id)c.id=uid();
     ['titre','texte'].forEach(k=>{if(typeof c[k]!=='string')c[k]='';});
     if(!c.i18n||typeof c.i18n!=='object')c.i18n={};
+    /* Un espace vide est une entrée comme une autre : c'est ce qui lui donne une PLACE dans
+       l'ordre. Le représenter autrement (un compteur de trous, par exemple) obligerait à
+       raccorder deux listes à chaque déplacement. */
+    c.vide=!!c.vide;
+    const l=parseInt(c.large,10);
+    c.large=(l===2)?2:1;
   });
   return st.cartes;
 }
@@ -9545,9 +9562,13 @@ function siteInfos(){
     });
   if(journal.length)o.journal=journal;
   const cartes=siteCartes()
-    .filter(c=>langues.some(l=>carteTexte(c,'titre',l).trim()||carteTexte(c,'texte',l).trim()))
+    /* Un espace vide n'a AUCUN texte : le filtre sur le texte le supprimerait, et la mise
+       en page voulue s'effondrerait en silence à la première mise à jour du site. */
+    .filter(c=>c.vide||langues.some(l=>carteTexte(c,'titre',l).trim()||carteTexte(c,'texte',l).trim()))
     .map(c=>{
+      if(c.vide)return {id:c.id,vide:1,large:c.large===2?2:1};
       const e={id:c.id,titre:(c.titre||'').trim(),texte:(c.texte||'').trim()};
+      if(c.large===2)e.large=2;
       const tr={};
       langues.filter(l=>l!=='fr').forEach(l=>{
         const bloc={};
@@ -9557,6 +9578,8 @@ function siteInfos(){
       if(Object.keys(tr).length)e.i18n=tr;
       return e;
     });
+  /* Une grille faite QUE de trous n'est pas une mise en page, c'est du vide publié. */
+  if(cartes.length&&cartes.every(c=>c.vide))cartes.length=0;
   if(cartes.length)o.cartes=cartes;
   /* Toujours envoyés, comme le bandeau d'accueil : ce ne sont pas des coordonnées qu'on
      voudrait laisser vides, ils ont toujours une valeur (leur défaut y compris). */
@@ -9658,12 +9681,23 @@ function openSitePanel(){
   /* Les cartes de la section « À propos » : ordre = position à l'écran (gauche à droite,
      puis ligne suivante) — monter/descendre EST le geste « déplacer à gauche/à droite ». */
   const crt=siteCartes();
-  const cartesHtml=crt.map((c,i)=>`<div class="site-entree" data-ci="${i}" data-idx="${i}">
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+  /* Les mêmes commandes sur une carte et sur un espace vide : ordre, largeur, suppression.
+     Un espace qu'on ne pourrait pas déplacer ni élargir ne servirait à rien. */
+  const cBarre=(c,i,n)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
         <span class="drag-handle carte-drag-handle" title="Glisser pour réordonner">⠿</span>
         <span class="site-rang">${i+1}</span>
+        <button class="mini" data-cmove="-1" ${i===0?'disabled':''} title="Vers la gauche">↑</button>
+        <button class="mini" data-cmove="1" ${i===n-1?'disabled':''} title="Vers la droite">↓</button>
+        <button class="mini" data-clarge aria-pressed="${c.large===2?'true':'false'}" title="Occuper deux colonnes">${c.large===2?'⬛⬛ 2 colonnes':'⬛ 1 colonne'}</button>
         <button class="mini danger" data-cdel title="Supprimer">×</button>
-      </div>
+      </div>`;
+  const cartesHtml=crt.map((c,i)=>c.vide
+    ? `<div class="site-entree site-entree-vide" data-ci="${i}" data-idx="${i}">
+      ${cBarre(c,i,crt.length)}
+      <p class="ias-note" style="margin:0">Espace vide — la place reste libre à cet endroit de la grille. Sur téléphone, il n’apparaît pas (une seule colonne).</p>
+    </div>`
+    : `<div class="site-entree" data-ci="${i}" data-idx="${i}">
+      ${cBarre(c,i,crt.length)}
       <input type="text" data-c="titre" value="${esc(carteTexte(c,'titre',LE))}"${rtl} placeholder="Titre — ex. Rénovation complète" style="margin-bottom:6px">
       <textarea rows="3" data-c="texte"${rtl} placeholder="Description courte">${esc(carteTexte(c,'texte',LE))}</textarea>
       ${repli(carteTexte(c,'titre',LE),c.titre)||repli(carteTexte(c,'texte',LE),c.texte)}
@@ -9739,18 +9773,24 @@ function openSitePanel(){
       <textarea id="site-apropos" rows="4" maxlength="700"${rtl} placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(siteTexte('apropos',LE))}</textarea></label>
     ${repli(siteTexte('apropos',LE),st.apropos)}
     <div class="ed-eyebrow" style="margin-top:14px">Cartes de présentation${suff}</div>
-    <p class="ias-note">Vos services ou prestations, en cartes — un titre et une courte description chacune. Glissez la poignée « ⠿ » pour changer leur ordre, donc leur place sur le site. Sans carte, rien de plus ne s’affiche sous le texte « À propos ».</p>
+    <p class="ias-note">Vos services ou prestations, en cartes — un titre et une courte description chacune. L’ordre ci-dessous est <b>la place sur le site</b> : de gauche à droite, puis ligne suivante. Poignée « ⠿ » ou flèches ↑ ↓ pour déplacer. Sans carte, rien de plus ne s’affiche sous le texte « À propos ».</p>
     <div class="site-mvt" id="site-cartes-par">
-      ${[1,2,3,4].map(n=>`<button type="button" class="mini" data-cartespar="${n}" aria-pressed="${cartesPar()===n?'true':'false'}">${n} par ligne</button>`).join('')}
+      ${Array.from({length:CARTES_PAR_MAX},(_,k)=>k+1).map(n=>`<button type="button" class="mini" data-cartespar="${n}" aria-pressed="${cartesPar()===n?'true':'false'}">${n} par ligne</button>`).join('')}
     </div>
-    <p class="ias-note" style="margin-top:6px">Sur téléphone, toujours une seule colonne — quel que soit ce réglage.</p>
-    <div class="site-mvt" id="site-cartes-align" style="margin-top:9px">
-      <button type="button" class="mini" data-cartesalign="gauche" aria-pressed="${cartesAlign()==='gauche'?'true':'false'}">Aligné à gauche</button>
+    <p class="ias-note" style="margin-top:6px">Sur téléphone, toujours une seule colonne — quel que soit ce réglage. Les espaces vides y disparaissent, et une carte « 2 colonnes » y tient toute la largeur.</p>
+    <div class="ed-eyebrow" style="margin-top:14px">Alignement du texte « À propos »</div>
+    <p class="ias-note">Vaut pour le paragraphe « À propos » <b>et</b> pour les cartes.</p>
+    <div class="site-mvt" id="site-cartes-align" style="margin-top:6px">
+      <button type="button" class="mini" data-cartesalign="gauche" aria-pressed="${cartesAlign()==='gauche'?'true':'false'}">À gauche</button>
       <button type="button" class="mini" data-cartesalign="centre" aria-pressed="${cartesAlign()==='centre'?'true':'false'}">Centré</button>
+      <button type="button" class="mini" data-cartesalign="droite" aria-pressed="${cartesAlign()==='droite'?'true':'false'}">À droite</button>
     </div>
     <label class="site-chk" style="margin-top:9px;display:flex"><input type="checkbox" id="site-cartes-gras" ${cartesGras()?'checked':''}> Titres en gras</label>
     <div id="site-cartes">${cartesHtml}</div>
-    <button class="add-btn" id="site-cartes-add">+ Ajouter une carte</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="add-btn" id="site-cartes-add">+ Ajouter une carte</button>
+      <button class="add-btn" id="site-cartes-vide">+ Laisser un espace vide</button>
+    </div>
     <div class="ed-eyebrow" style="margin-top:14px">Journal${suff}</div>
     <p class="ias-note">Des notes datées, affichées après les projets. Sans entrée, la section n’apparaît pas du tout sur le site.</p>
     ${journalHtml}
@@ -9936,8 +9976,14 @@ function openSitePanel(){
   });
   const cartesAdd=document.getElementById('site-cartes-add');
   if(cartesAdd)cartesAdd.addEventListener('click',()=>{
-    siteCartes().push({id:uid(),titre:'',texte:'',i18n:{}});
+    siteCartes().push({id:uid(),titre:'',texte:'',i18n:{},vide:false,large:1});
     saveLibraryDebounced();openSitePanel();
+  });
+  const cartesVide=document.getElementById('site-cartes-vide');
+  if(cartesVide)cartesVide.addEventListener('click',()=>{
+    siteCartes().push({id:uid(),titre:'',texte:'',i18n:{},vide:true,large:1});
+    saveLibraryDebounced();openSitePanel();
+    document.getElementById('site-msg').textContent='Espace ajouté à la fin. Déplacez-le avec ↑ ↓ pour ouvrir un trou là où vous le voulez.';
   });
   document.querySelectorAll('.site-entree[data-ci]').forEach(bloc=>{
     const i=+bloc.dataset.ci, c=siteCartes()[i];
@@ -9948,10 +9994,24 @@ function openSitePanel(){
         saveLibraryDebounced();
       });
     });
-    const cdel=bloc.querySelector('[data-cdel]');
-    if(cdel)cdel.addEventListener('click',()=>askConfirm('Supprimer cette carte ? Elle disparaîtra du site à la prochaine mise à jour.',()=>{
-      siteCartes().splice(i,1);store.set(K_LIB,library);openSitePanel();
+    /* Les flèches font ce que fait le glisser — et elles, elles marchent au pouce sur un
+       téléphone, où viser une poignée de 15 px pendant qu'on fait défiler est perdu d'avance. */
+    bloc.querySelectorAll('[data-cmove]').forEach(b=>b.addEventListener('click',()=>{
+      const a=siteCartes(), j=i+(+b.dataset.cmove);
+      if(j<0||j>=a.length)return;
+      const t=a[i];a[i]=a[j];a[j]=t;
+      saveLibraryDebounced();openSitePanel();
     }));
+    const clarge=bloc.querySelector('[data-clarge]');
+    if(clarge)clarge.addEventListener('click',()=>{
+      c.large=(c.large===2)?1:2;
+      saveLibraryDebounced();openSitePanel();
+    });
+    const cdel=bloc.querySelector('[data-cdel]');
+    if(cdel)cdel.addEventListener('click',()=>askConfirm(
+      c.vide?'Retirer cet espace vide ? Les cartes qui suivent remonteront d’une place.'
+            :'Supprimer cette carte ? Elle disparaîtra du site à la prochaine mise à jour.',
+      ()=>{siteCartes().splice(i,1);store.set(K_LIB,library);openSitePanel();}));
   });
   attachDragReorder(document.getElementById('site-cartes'),'.site-entree','.carte-drag-handle',newOrder=>{
     const a=siteCartes();

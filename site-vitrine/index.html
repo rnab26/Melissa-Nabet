@@ -388,17 +388,38 @@
   /* À propos et contact : écrits depuis le CRM. Rien de rempli, rien d'affiché — pas de
      titre orphelin ni de bloc vide en bas de page. */
   .apropos{border-top:1px solid var(--hair);margin-top:clamp(40px,7vw,80px);padding-top:clamp(26px,4vw,40px);}
-  .apropos-txt{max-width:62ch;margin:12px 0 0;font-size:15px;line-height:1.75;}
+  .apropos-txt{max-width:74ch;margin:12px 0 0;font-size:15px;line-height:1.75;}
+  /* L'alignement vaut pour tout le bloc. Centré, le paragraphe est AUSSI recentré dans la
+     page : sans `margin-inline:auto` il resterait collé à gauche, avec juste ses lignes
+     centrées à l'intérieur — c'est exactement ce qui donnait l'impression qu'il « ne prend
+     pas toute la place ». */
+  .apropos[data-align="centre"] .apropos-txt{margin-inline:auto;text-align:center;}
+  .apropos[data-align="droite"] .apropos-txt{margin-inline-start:auto;text-align:right;}
+  .apropos[data-align="centre"] .eyebrow{text-align:center;}
+  .apropos[data-align="droite"] .eyebrow{text-align:right;}
   /* Les cartes de présentation (services, prestations…) : leur ORDRE dans le CRM décide
      leur place ici — la même liste que sur une file, pas des coordonnées libres. `flex-wrap`
      les réaligne tout seul quand on en ajoute, en retire, ou change l'ordre. */
   .apropos-cartes{display:grid;grid-template-columns:repeat(var(--cartes-par,2),1fr);gap:clamp(18px,2.6vw,30px) clamp(24px,3vw,40px);margin-top:clamp(24px,3.6vw,36px);}
   .apropos-carte{padding-top:clamp(14px,1.8vw,20px);border-top:1px solid var(--hair);}
   .apropos-cartes[data-align="centre"] .apropos-carte{text-align:center;}
+  .apropos-cartes[data-align="droite"] .apropos-carte{text-align:right;}
+  /* Une carte peut occuper deux colonnes — c'est ce qui permet d'écrire un vrai paragraphe
+     dans la place laissée libre, au lieu d'un texte tassé dans une colonne étroite. */
+  .apropos-cartes > [data-large="2"]{grid-column:span 2;}
+  /* Un espace vide : une case de la grille qui ne montre rien. Pas de trait de séparation —
+     un trait au-dessus du vide se lit comme une carte ratée. */
+  .apropos-vide{border:0;padding:0;}
   .apropos-carte-titre{font-family:var(--titre);font-weight:500;font-size:16px;margin:0 0 7px;line-height:1.35;color:var(--ink);}
   .apropos-cartes[data-gras="1"] .apropos-carte-titre{font-weight:700;}
   .apropos-carte-texte{font-family:var(--texte);font-size:14px;line-height:1.65;color:var(--stone);margin:0;white-space:pre-line;}
-  @media (max-width:640px){.apropos-cartes{grid-template-columns:1fr;}}
+  /* Une seule colonne sur téléphone : les espaces vides n'y ouvrent plus rien, ils
+     n'ajouteraient qu'un trou à faire défiler, et « deux colonnes » n'a plus de sens. */
+  @media (max-width:640px){
+    .apropos-cartes{grid-template-columns:1fr;}
+    .apropos-cartes > [data-large="2"]{grid-column:auto;}
+    .apropos-vide{display:none;}
+  }
   /* Un portfolio se parcourt de projet en projet : sans ce lien, il faut remonter tout en
      haut et revenir à la liste. */
   /* Un projet qui plaît doit pouvoir se transformer en prise de contact, sans quitter la
@@ -1761,16 +1782,33 @@ function renderApropos(site) {
      AUCUNE langue active ne s'affiche pas : un titre seul ne veut rien dire. */
   var hostCartes = el('apropos-cartes');
   hostCartes.innerHTML = '';
-  hostCartes.style.setProperty('--cartes-par', (s.cartesPar >= 1 && s.cartesPar <= 4) ? s.cartesPar : 2);
-  hostCartes.dataset.align = s.cartesAlign === 'centre' ? 'centre' : 'gauche';
+  var par = (s.cartesPar >= 1 && s.cartesPar <= 5) ? s.cartesPar : 2;
+  hostCartes.style.setProperty('--cartes-par', par);
+  var align = (s.cartesAlign === 'centre' || s.cartesAlign === 'droite') ? s.cartesAlign : 'gauche';
+  hostCartes.dataset.align = align;
+  el('apropos').dataset.align = align;
   hostCartes.dataset.gras = s.cartesGras ? '1' : '0';
+  /* Un espace vide n'a pas de texte : le garder est le but, il tient une PLACE. Ce qui est
+     écarté, c'est une entrée sans texte qui n'était pas déclarée vide — une carte oubliée
+     en cours de rédaction, qu'on ne veut pas voir en ligne. */
   var cartes = (s.cartes || []).filter(function (c) {
-    return texteEntree(c, 'titre') || texteEntree(c, 'texte');
+    return c.vide || texteEntree(c, 'titre') || texteEntree(c, 'texte');
   });
+  if (cartes.length && cartes.every(function (c) { return c.vide; })) cartes = [];
   cartes.forEach(function (c) {
+    if (c.vide) {
+      var trou = document.createElement('div');
+      trou.className = 'apropos-vide';
+      trou.setAttribute('aria-hidden', 'true');
+      /* Un trou plus large que la grille pousserait la carte suivante hors de sa ligne. */
+      if (c.large === 2 && par >= 2) trou.dataset.large = '2';
+      hostCartes.appendChild(trou);
+      return;
+    }
     var art = document.createElement('article');
     art.className = 'apropos-carte';
     art.dir = 'auto';
+    if (c.large === 2 && par >= 2) art.dataset.large = '2';
     var ti = texteEntree(c, 'titre');
     if (ti) { var h = document.createElement('h3'); h.className = 'apropos-carte-titre'; h.textContent = ti; art.appendChild(h); }
     var tx = texteEntree(c, 'texte');

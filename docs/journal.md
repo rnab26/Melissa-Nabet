@@ -9,6 +9,56 @@ Source de vérité de ce qui reste à faire : le **tableau des chantiers**
 
 ---
 
+## 8 septembre 2026 — Placer les cartes où on veut, et un « À propos » qui remplit la page
+
+Raphaël, capture à l'appui : « dans les réglages, pouvoir les cartes, les placer comme on
+veut et pouvoir laisser des espaces si nécessaire et voire même y ajouter du texte s'il y a
+de l'espace de libre », « le minimum maximum de cartes, c'est quatre, mais bon, je pense
+qu'on peut aller jusqu'à cinq », et « le à propos ne prend pas toute la place… pouvoir
+régler si on veut mettre le texte aligné au milieu, à gauche ou à droite ».
+
+**Ce qui n'allait pas** : la grille des cartes tassait toujours tout à gauche, dans l'ordre,
+sans trou possible — impossible d'obtenir « une carte à gauche, un espace, une carte à
+droite ». Et le paragraphe « À propos » avait `text-align` mais pas de recentrage du bloc :
+centré, il serait resté collé à gauche avec ses lignes centrées à l'intérieur. C'est
+exactement l'impression qu'il décrivait.
+
+**Fait** :
+
+- **Espaces vides** : « + Laisser un espace vide » ajoute une case qui tient une **place**
+  dans la grille. Elle se déplace comme une carte et se publie comme une carte.
+- **Cartes sur deux colonnes** : un bouton par carte (⬛ 1 colonne / ⬛⬛ 2 colonnes) —
+  c'est là qu'on écrit un vrai paragraphe dans la place laissée libre.
+- **Jusqu'à 5 cartes par ligne** (4 avant).
+- **Flèches ↑ ↓** sur chaque carte, en plus de la poignée « ⠿ » : viser une poignée de
+  15 px au pouce pendant qu'on fait défiler est perdu d'avance.
+- **Alignement gauche / centre / droite**, un seul réglage pour le **paragraphe « À propos »
+  et les cartes** — deux réglages séparés donneraient un texte centré au-dessus de cartes à
+  gauche. Centré, le bloc est **recentré dans la page** (`margin-inline:auto`), pas
+  seulement ses lignes. Largeur de lecture portée de 62 à 74 caractères.
+- Retirer un espace vide **demande confirmation**, comme une carte, et dit ce que ça déplace.
+
+**Ce qu'il ne faut pas casser** :
+
+- Le manifeste garde les entrées `vide` : **le filtre « une carte sans texte ne part pas »
+  les aurait supprimées** et la mise en page se serait effondrée en silence à la première
+  mise à jour du site. Une grille faite QUE de trous est en revanche ramenée à zéro — du
+  vide publié n'est pas une mise en page.
+- Sur téléphone (une seule colonne), les espaces vides **disparaissent** et « 2 colonnes »
+  prend toute la largeur : sinon on ferait défiler des trous.
+- Une carte plus large que le nombre de colonnes réglé pousserait la suivante hors de sa
+  ligne : la largeur 2 n'est appliquée qu'à partir de 2 colonnes.
+
+**Vérifié** : `tests/site.test.mjs` **195/195** (dont la **position réelle** dans la grille :
+carte en colonne 1, trou en colonne 2, carte en colonne 3, sur la même ligne ; une carte
+« 2 colonnes » mesurée 785 px contre 373 ; le paragraphe centré à 245 px de chaque bord ;
+une passe à 390 px sans débord) et `tests/site-langues.test.mjs` **37/37** côté CRM
+(flèches, espace inséré entre deux cartes, largeur, 5 par ligne, alignement à droite, et le
+tout retrouvé dans le manifeste).
+
+**À faire côté Raphaël** : ⚙ **Le site public** → *Cartes de présentation* pour placer les
+cartes et choisir l'alignement (il voulait le centre), puis **« Mettre à jour le site »**.
+
 ## 8 septembre 2026 — « Le cadrage libre ne sert à rien » : il ne rognait pas
 
 Raphaël : « Il n'y a pas la possibilité de rogner la photo dans le cadrage libre. Autrement
