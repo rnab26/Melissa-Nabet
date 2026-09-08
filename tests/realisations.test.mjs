@@ -4089,7 +4089,7 @@ check('Republier en lot : il nomme celle qui a échoué et pourquoi',
 await page.evaluate(() => { _pubLastError = null; _pubLotReport = null; renderDashboard(); showView('realisations'); _rzOpenId = null; renderRealisations(); });
 
 // ============================================================================
-//  ÉDITEUR : déplacer le cadrage au doigt
+//  ÉDITEUR : LE CADRE DE ROGNAGE — on le tire à la main sur la photo
 // ============================================================================
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.evaluate(async () => {
@@ -4097,182 +4097,263 @@ await page.evaluate(async () => {
   if (!document.getElementById('ed-modal')) await openPhotoEditor(r.id, r.photos[0].id);
 });
 await page.waitForTimeout(900);
-const cadrage = await page.evaluate(async () => {
-  _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaintHint();
-  const e = _ed.p.edit;
-  const neutre = () => { e.ratio = 'libre'; e.zoom = 1; e.panX = 0; e.panY = 0; e.pan = 0; };
-  neutre(); buildEditorControls();
-  const enLibre = { deplacable: edCadrageDeplacable(), axe: edCadrageAxe() };
-  // La fenêtre gardée, en fractions de la photo : c'est ELLE qui dit s'il y a rognage.
-  const fen = () => { const c = cropWindow(_ed.p.edit, _ed.img.width, _ed.img.height);
-                      return { w: +(c.c1[0] - c.c0[0]).toFixed(4), h: +(c.c1[1] - c.c0[1]).toFixed(4),
-                               x: +c.c0[0].toFixed(4), y: +c.c0[1].toFixed(4) }; };
-  const fenLibre = fen();
-  // « Format d'origine » + Resserrer : c'est le rognage libre qui manquait.
-  e.zoom = 2; const fenResserre = fen();
-  const resserreDeplacable = { deplacable: edCadrageDeplacable(), jeu: edCadrageJeu() };
-  neutre();
-  // format carré sur une photo paysage : le jeu est horizontal
-  e.ratio = REAL_RATIOS.find(x => x.v === 1) ? REAL_RATIOS.find(x => x.v === 1).id : '1:1';
-  buildEditorControls(); edPaintHint();
-  const enCarre = { deplacable: edCadrageDeplacable(), axe: edCadrageAxe(),
-                    aide: (document.querySelector('#ed-modal [data-cmp]') || {}).textContent || '' };
-  const stage = document.querySelector('#ed-modal .ed-stage');
-  const cv = document.getElementById('ed-canvas');
-  const box = cv.getBoundingClientRect();
-  const souris = (type, x, y) => stage.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true }));
-  souris('mousedown', box.left + box.width / 2, box.top + box.height / 2);
-  souris('mousemove', box.left + box.width / 2 - box.width / 4, box.top + box.height / 2);
-  const pendant = _ed.p.edit.panX;
-  souris('mouseup', box.left + box.width / 4, box.top + box.height / 2);
-  await new Promise(r => setTimeout(r, 150));
-  const apres = { pan: _ed.p.edit.panX, cransAnnulation: _ed.hist.length };
-  // tirer très loin ne doit pas sortir des bornes
-  souris('mousedown', box.left + 10, box.top + 10);
-  souris('mousemove', box.left + box.width * 3, box.top + 10);
-  souris('mouseup', box.left + box.width * 3, box.top + 10);
-  const borne = _ed.p.edit.panX;
-
-  // Resserré SANS format : les deux axes doivent bouger d'un seul geste.
-  neutre(); e.zoom = 2; buildEditorControls();
-  souris('mousedown', box.left + box.width / 2, box.top + box.height / 2);
-  souris('mousemove', box.left + box.width / 2 - box.width / 5, box.top + box.height / 2 - box.height / 5);
-  souris('mouseup', box.left + box.width / 2 - box.width / 5, box.top + box.height / 2 - box.height / 5);
-  const deuxAxes = { x: _ed.p.edit.panX, y: _ed.p.edit.panY };
-
-  // Les curseurs du panneau suivent le resserrement.
-  const libelles = () => [...document.querySelectorAll('#ed-modal .ed-slider label')].map(l => l.textContent.trim());
-  neutre(); buildEditorControls();
-  const cursZoom0 = libelles();
-  e.zoom = 1.5; buildEditorControls();
-  const cursZoom15 = libelles();
-
-  // Une photo réglée AVANT ce chantier n'a que `pan` : son cadrage ne doit pas bouger.
-  const ancienne = { ratio: '1:1', zoom: 1, pan: 0.6, panX: undefined, panY: undefined,
-                     persp: 0, rot: 0, expo: 0, contrast: 0, temp: 0, tint: 0, sat: 0 };
-  const cAnc = cropWindow(ancienne, _ed.img.width, _ed.img.height);
-  const cNeuf = cropWindow(Object.assign({}, ancienne, { pan: 0, panX: 0.6, panY: 0 }), _ed.img.width, _ed.img.height);
-  const compat = { anc: cAnc.c0.map(v => +v.toFixed(5)), neuf: cNeuf.c0.map(v => +v.toFixed(5)) };
-
-  // Rogner CHANGE l'image publiée : la signature doit s'en apercevoir.
-  neutre();
-  const sig0 = photoPubSig(_ed.p);
-  e.zoom = 1.4; const sigZoom = photoPubSig(_ed.p);
-  e.zoom = 1; e.panX = 0.3; const sigPan = photoPubSig(_ed.p);
-
-  // « Annuler le cadrage » remet tout à plat sans toucher à la lumière.
-  e.zoom = 2; e.panX = 0.4; e.panY = -0.2; e.ratio = '16:9'; e.expo = 0.3;
-  buildEditorControls();
-  const razBtn = [...document.querySelectorAll('#ed-modal .ed-panel button')].find(b => /Annuler le cadrage/.test(b.textContent));
-  if (razBtn) razBtn.click();
-  const apresRaz = { ratio: e.ratio, zoom: e.zoom, panX: e.panX, panY: e.panY, expo: e.expo };
-
-  // « Appliquer à toute la série » porte le format ET le resserrement, pas la position.
-  neutre(); e.ratio = '4:3'; e.zoom = 1.6; e.panX = 0.5;
-  buildEditorControls();
-  const serieBtn = [...document.querySelectorAll('#ed-modal .ed-panel button')].find(b => /toute la série/.test(b.textContent));
-  // La réalisation ouverte n'a pas forcément une soeur : on en pose une, le temps du contrôle.
-  const temoin = { id: 'temoin-serie', edit: blankEdit() };
-  _ed.r.photos.push(temoin);
-  if (serieBtn) serieBtn.click();
-  const serie = { ratio: temoin.edit.ratio, zoom: temoin.edit.zoom, panX: temoin.edit.panX || 0 };
-  _ed.r.photos = _ed.r.photos.filter(ph => ph.id !== 'temoin-serie');
-
-  neutre(); buildEditorControls();
-  return { enLibre, fenLibre, fenResserre, resserreDeplacable, enCarre, pendant, apres, borne,
-           deuxAxes, cursZoom0, cursZoom15, compat, sigChange: { zoom: sigZoom !== sig0, pan: sigPan !== sig0 },
-           apresRaz, serie };
+await page.evaluate(() => {
+  Object.assign(_ed.p.edit, blankEdit());
+  _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaintHint(); edPaint();
 });
-check('Cadrage : sans format ni resserrement, la photo entière est gardée',
-  cadrage.enLibre.deplacable === false && cadrage.enLibre.axe === null
-  && cadrage.fenLibre.w === 1 && cadrage.fenLibre.h === 1, JSON.stringify(cadrage.fenLibre));
-check('Cadrage : « Resserrer » ROGNE vraiment, format d’origine compris',
-  Math.abs(cadrage.fenResserre.w - 0.5) < 0.01 && Math.abs(cadrage.fenResserre.h - 0.5) < 0.01
-  && cadrage.fenResserre.x > 0.2 && cadrage.fenResserre.y > 0.2, JSON.stringify(cadrage.fenResserre));
-check('Cadrage : une photo resserrée se déplace, sur les deux axes',
-  cadrage.resserreDeplacable.deplacable === true
-  && cadrage.resserreDeplacable.jeu.x > 0.4 && cadrage.resserreDeplacable.jeu.y > 0.4,
-  JSON.stringify(cadrage.resserreDeplacable));
-check('Cadrage : avec un format imposé, la photo se déplace sur l’axe qui a du jeu',
-  cadrage.enCarre.deplacable === true && cadrage.enCarre.axe === 'x', JSON.stringify(cadrage.enCarre.axe));
-check('Cadrage : l’écran annonce le geste actif',
-  /choisir le cadrage/.test(cadrage.enCarre.aide), cadrage.enCarre.aide);
-check('Cadrage : tirer la photo déplace vraiment le cadre, dans le bon sens',
-  cadrage.pendant > 0 && Math.abs(cadrage.pendant - 0.5) < 0.2, 'panX = ' + cadrage.pendant);
-check('Cadrage : un geste complet = un seul cran d’annulation',
-  cadrage.apres.cransAnnulation === 2, cadrage.apres.cransAnnulation + ' état(s) empilé(s)');
-check('Cadrage : on ne peut pas tirer au-delà de la photo', cadrage.borne >= -1 && cadrage.borne <= 1, 'panX = ' + cadrage.borne);
-check('Cadrage : un seul geste déplace les DEUX axes quand la photo est resserrée',
-  cadrage.deuxAxes.x > 0.1 && cadrage.deuxAxes.y > 0.1, JSON.stringify(cadrage.deuxAxes));
-check('Cadrage : les curseurs de position n’apparaissent qu’une fois qu’il y a du jeu',
-  !cadrage.cursZoom0.some(l => /Position/.test(l))
-  && cadrage.cursZoom15.filter(l => /Position/.test(l)).length === 2,
-  JSON.stringify(cadrage.cursZoom0) + ' → ' + JSON.stringify(cadrage.cursZoom15));
-check('Cadrage : une photo réglée AVANT garde exactement son cadrage',
-  cadrage.compat.anc[0] === cadrage.compat.neuf[0] && cadrage.compat.anc[1] === cadrage.compat.neuf[1],
-  JSON.stringify(cadrage.compat));
-check('Cadrage : rogner marque la photo comme à republier',
-  cadrage.sigChange.zoom === true && cadrage.sigChange.pan === true, JSON.stringify(cadrage.sigChange));
-check('Cadrage : « Annuler le cadrage » remet le cadre à plat sans toucher la lumière',
-  cadrage.apresRaz.ratio === 'libre' && cadrage.apresRaz.zoom === 1
-  && cadrage.apresRaz.panX === 0 && cadrage.apresRaz.panY === 0 && cadrage.apresRaz.expo === 0.3,
-  JSON.stringify(cadrage.apresRaz));
-check('Cadrage : « toute la série » porte le format ET le resserrement, pas la position',
-  cadrage.serie && cadrage.serie.ratio === '4:3' && Math.abs(cadrage.serie.zoom - 1.6) < 0.001
-  && cadrage.serie.panX === 0, JSON.stringify(cadrage.serie));
+await page.waitForTimeout(400);
 
-// L'image RÉELLEMENT produite doit être rognée, pas seulement le calcul du cadre.
-const rendu = await page.evaluate(() => {
+// Le cadre est là, posé exactement sur la photo, et il montre l'image ENTIÈRE : sans ça, on
+// ne pourrait jamais récupérer ce qu'on vient de couper.
+const cadre0 = await page.evaluate(() => {
+  const host = document.getElementById('ed-crop');
+  const cv = document.getElementById('ed-canvas');
+  const rh = host.getBoundingClientRect(), rc = cv.getBoundingClientRect();
+  const rb = document.getElementById('ed-crop-box').getBoundingClientRect();
+  return {
+    visible: !host.hidden,
+    colle: Math.abs(rh.left - rc.left) < 1.5 && Math.abs(rh.top - rc.top) < 1.5
+        && Math.abs(rh.width - rc.width) < 1.5 && Math.abs(rh.height - rc.height) < 1.5,
+    pleinCadre: Math.abs(rb.width - rc.width) < 2 && Math.abs(rb.height - rc.height) < 2,
+    poignees: host.querySelectorAll('.ed-crop-h').length,
+    fenetre: (() => { const c = cropWindow(_ed.p.edit, _ed.img.width, _ed.img.height);
+                      return [c.c0[0], c.c0[1], c.c1[0], c.c1[1]]; })(),
+    aide: (document.querySelector('#ed-modal [data-cmp]') || {}).textContent || '',
+  };
+});
+check('Rognage : le cadre est posé exactement sur la photo, avec ses 8 poignées',
+  cadre0.visible && cadre0.colle && cadre0.poignees === 8, JSON.stringify(cadre0));
+check('Rognage : au départ le cadre tient toute la photo — rien n’est coupé',
+  cadre0.pleinCadre && cadre0.fenetre.join(',') === '0,0,1,1', JSON.stringify(cadre0.fenetre));
+check('Rognage : l’écran dit le geste', /coins du cadre/.test(cadre0.aide), cadre0.aide);
+
+// Tirer la poignée en bas à droite : c'est ÇA, rogner à la main.
+const tire = async (sel, dxFrac, dyFrac) => await page.evaluate(async ([sel, dx, dy]) => {
+  const host = document.getElementById('ed-crop');
+  const b = host.getBoundingClientRect();
+  const el = sel === 'box' ? document.getElementById('ed-crop-box') : host.querySelector('[data-h="' + sel + '"]');
+  const r = el.getBoundingClientRect();
+  const x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+  const env = (t, x, y, tgt) => (tgt || document).dispatchEvent(new PointerEvent(t, {
+    clientX: x, clientY: y, bubbles: true, cancelable: true, pointerId: 1 }));
+  env('pointerdown', x0, y0, el);
+  env('pointermove', x0 + dx * b.width, y0 + dy * b.height);
+  env('pointerup', x0 + dx * b.width, y0 + dy * b.height);
+  await new Promise(r2 => setTimeout(r2, 60));
+  return _ed.p.edit.crop;
+}, [sel, dxFrac, dyFrac]);
+
+const apresSE = await tire('se', -0.4, -0.3);
+check('Rognage : tirer la poignée en bas à droite coupe vraiment la photo',
+  apresSE && Math.abs(apresSE.w - 0.6) < 0.05 && Math.abs(apresSE.h - 0.7) < 0.05
+  && apresSE.x === 0 && apresSE.y === 0, JSON.stringify(apresSE));
+
+const apresNW = await tire('nw', 0.2, 0.1);
+check('Rognage : la poignée en haut à gauche remonte le coin opposé, pas le cadre entier',
+  apresNW && Math.abs(apresNW.x - 0.2) < 0.05 && Math.abs(apresNW.y - 0.1) < 0.05
+  && Math.abs(apresNW.w - 0.4) < 0.05, JSON.stringify(apresNW));
+
+const apresBord = await page.evaluate(() => JSON.parse(JSON.stringify(_ed.p.edit.crop)));
+const apresE = await tire('e', -0.1, 0.3);
+check('Rognage : un bord seul ne bouge qu’un côté — la hauteur ne change pas',
+  Math.abs(apresE.h - apresBord.h) < 0.01 && apresE.w < apresBord.w - 0.05,
+  JSON.stringify(apresBord) + ' → ' + JSON.stringify(apresE));
+
+const apresMove = await tire('box', 0.15, 0.1);
+check('Rognage : glisser dans le cadre le DÉPLACE sans changer sa taille',
+  Math.abs(apresMove.w - apresE.w) < 0.005 && Math.abs(apresMove.h - apresE.h) < 0.005
+  && apresMove.x > apresE.x + 0.05, JSON.stringify(apresE) + ' → ' + JSON.stringify(apresMove));
+
+// On ne peut pas sortir de la photo, ni garder trois pixels.
+const horsBord = await tire('box', 3, 3);
+check('Rognage : le cadre ne sort jamais de la photo',
+  horsBord.x >= 0 && horsBord.y >= 0 && horsBord.x + horsBord.w <= 1.0001
+  && horsBord.y + horsBord.h <= 1.0001, JSON.stringify(horsBord));
+await page.evaluate(() => { _ed.p.edit.crop = { x: 0.1, y: 0.1, w: 0.6, h: 0.6 }; edCropPaint(); });
+const minuscule = await tire('se', -0.9, -0.9);
+check('Rognage : on ne descend pas sous 5 % de la photo',
+  minuscule.w >= 0.049 && minuscule.h >= 0.049, JSON.stringify(minuscule));
+
+// Tracer un cadre neuf en partant du noir, comme dans n'importe quel outil de rognage.
+const neuf = await page.evaluate(async () => {
+  _ed.p.edit.crop = { x: 0.4, y: 0.4, w: 0.2, h: 0.2 }; edCropPaint();
+  const host = document.getElementById('ed-crop');
+  const b = host.getBoundingClientRect();
+  const pt = (fx, fy) => [b.left + fx * b.width, b.top + fy * b.height];
+  const env = (t, p, tgt) => (tgt || document).dispatchEvent(new PointerEvent(t, {
+    clientX: p[0], clientY: p[1], bubbles: true, cancelable: true, pointerId: 2 }));
+  env('pointerdown', pt(0.05, 0.05), host);
+  env('pointermove', pt(0.55, 0.65));
+  env('pointerup', pt(0.55, 0.65));
+  await new Promise(r => setTimeout(r, 60));
+  return _ed.p.edit.crop;
+});
+check('Rognage : on trace un cadre neuf en partant d’une zone sombre',
+  neuf && Math.abs(neuf.x - 0.05) < 0.04 && Math.abs(neuf.y - 0.05) < 0.04
+  && Math.abs(neuf.w - 0.5) < 0.05 && Math.abs(neuf.h - 0.6) < 0.05, JSON.stringify(neuf));
+
+// Un format impose une proportion AU CADRE, et il la garde pendant qu'on tire.
+const carre = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('#ed-modal .ed-ratios button')].find(x => x.textContent === '1:1');
+  b.click();
+  const c = _ed.p.edit.crop;
+  return { c, px: [c.w * _ed.img.width, c.h * _ed.img.height], src: [_ed.img.width, _ed.img.height] };
+});
+check('Rognage : choisir 1:1 reforme le cadre tout de suite, en pixels carrés',
+  Math.abs(carre.px[0] / carre.px[1] - 1) < 0.02, JSON.stringify(carre));
+const carreTire = await tire('se', -0.2, 0);
+check('Rognage : le format tient pendant qu’on tire — ça reste carré',
+  Math.abs((carreTire.w * carre.src[0]) / (carreTire.h * carre.src[1]) - 1) < 0.03,
+  JSON.stringify(carreTire));
+const cadreLibre = await page.evaluate(() => {
+  const b = [...document.querySelectorAll('#ed-modal .ed-ratios button')].find(x => /origine/i.test(x.textContent));
+  b.click(); return _ed.p.edit.crop;
+});
+check('Rognage : « Format d’origine » libère la proportion sans jeter le cadre',
+  cadreLibre && Math.abs(cadreLibre.w - carreTire.w) < 0.02, JSON.stringify(cadreLibre));
+
+// Ce qui compte au bout : l'image produite, et le fait que le site la reprenne.
+const cropRendu = await page.evaluate(() => {
   const lis = (edit) => {
-    // maxSide large exprès : sinon les deux rendus sont ramenés à la même largeur et le
-    // rognage devient invisible dans les dimensions.
     const cv = glRenderTo(_ed.img, edit, 4000, 'ctrl-' + JSON.stringify(edit));
     const c2 = document.createElement('canvas'); c2.width = cv.width; c2.height = cv.height;
     c2.getContext('2d').drawImage(cv, 0, 0);
     const d = c2.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
-    // une empreinte grossière du contenu : la somme des canaux
     let somme = 0; for (let i = 0; i < d.length; i += 4 * 97) somme += d[i] + d[i + 1] + d[i + 2];
     return { w: cv.width, h: cv.height, somme };
   };
-  const base = Object.assign(blankEdit(), { ratio: 'libre' });
+  const base = blankEdit();
   const plein = lis(base);
-  const serre = lis(Object.assign({}, base, { zoom: 2 }));
-  const decale = lis(Object.assign({}, base, { zoom: 2, panX: -1 }));
-  return { plein, serre, decale, src: { w: _ed.img.width, h: _ed.img.height } };
+  const rogne = lis(Object.assign({}, base, { crop: { x: 0, y: 0, w: 0.5, h: 0.5 } }));
+  const ailleurs = lis(Object.assign({}, base, { crop: { x: 0.5, y: 0.5, w: 0.5, h: 0.5 } }));
+  // La signature de publication : sans le rectangle dedans, le site garderait l'ancienne image.
+  const e0 = blankEdit(); Object.assign(_ed.p.edit, e0);
+  const sig0 = photoPubSig(_ed.p);
+  _ed.p.edit.crop = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
+  const sigRogne = photoPubSig(_ed.p);
+  _ed.p.edit.crop = { x: 0.3, y: 0.1, w: 0.5, h: 0.5 };
+  const sigDeplace = photoPubSig(_ed.p);
+  return { plein, rogne, ailleurs, sigChange: sigRogne !== sig0, sigBouge: sigDeplace !== sigRogne };
 });
-check('Cadrage : l’image produite est vraiment rognée (moitié moins de pixels de large à 200 %)',
-  Math.abs(rendu.serre.w / rendu.plein.w - 0.5) < 0.03 && Math.abs(rendu.serre.h / rendu.plein.h - 0.5) < 0.03,
-  JSON.stringify(rendu));
-check('Cadrage : déplacer le cadre change vraiment ce qu’on voit',
-  rendu.decale.somme !== rendu.serre.somme,
-  rendu.serre.somme + ' → ' + rendu.decale.somme);
+check('Rognage : l’image PRODUITE est vraiment coupée (moitié de largeur à 50 %)',
+  Math.abs(cropRendu.rogne.w / cropRendu.plein.w - 0.5) < 0.02
+  && Math.abs(cropRendu.rogne.h / cropRendu.plein.h - 0.5) < 0.02, JSON.stringify(cropRendu));
+check('Rognage : déplacer le cadre change vraiment ce qu’on garde',
+  cropRendu.ailleurs.somme !== cropRendu.rogne.somme, cropRendu.rogne.somme + ' → ' + cropRendu.ailleurs.somme);
+check('Rognage : la photo est marquée « à republier » — sinon le site garderait l’ancienne',
+  cropRendu.sigChange && cropRendu.sigBouge, JSON.stringify(cropRendu.sigChange) + '/' + JSON.stringify(cropRendu.sigBouge));
 
-// --- Le même panneau sur un téléphone : c'est là qu'il sera utilisé.
-await page.setViewportSize({ width: 390, height: 844 });
-await page.waitForTimeout(300);
-const cadragePhone = await page.evaluate(() => {
+// Une photo cadrée AVANT ce chantier (ratio + pan, sans rectangle) garde son cadrage, et le
+// cadre s'ouvre exactement dessus : le premier geste le reprend au lieu de le perdre.
+const compat = await page.evaluate(() => {
+  const ancienne = Object.assign(blankEdit(), { ratio: '1:1', pan: 0.6, crop: null });
+  const c = cropWindow(ancienne, _ed.img.width, _ed.img.height);
+  Object.assign(_ed.p.edit, ancienne);
+  const r = edCropRect();
+  return { fenetre: c.c0.map(v => +v.toFixed(5)),
+           cadre: [+r.x.toFixed(5), +r.y.toFixed(5)],
+           taille: [+r.w.toFixed(5), +r.h.toFixed(5)] };
+});
+check('Rognage : une photo cadrée AVANT garde son cadrage, et le cadre s’ouvre dessus',
+  compat.fenetre[0] === compat.cadre[0] && compat.fenetre[1] === compat.cadre[1]
+  && compat.taille[0] < 0.9, JSON.stringify(compat));
+
+// Un geste = un cran d'annulation, et un simple appui n'efface rien.
+const cropAnnul = await page.evaluate(async () => {
+  Object.assign(_ed.p.edit, blankEdit());
+  _ed.p.edit.crop = { x: 0.2, y: 0.2, w: 0.5, h: 0.5 };
+  _ed.hist = [JSON.parse(JSON.stringify(_ed.p.edit))]; _ed.histPos = 0;
+  buildEditorControls(); edCropPaint();
+  const host = document.getElementById('ed-crop');
+  const b = host.getBoundingClientRect();
+  const env = (t, x, y, tgt) => (tgt || document).dispatchEvent(new PointerEvent(t, {
+    clientX: x, clientY: y, bubbles: true, cancelable: true, pointerId: 3 }));
+  // simple appui, sans mouvement
+  env('pointerdown', b.left + b.width * 0.5, b.top + b.height * 0.5, document.getElementById('ed-crop-box'));
+  env('pointerup', b.left + b.width * 0.5, b.top + b.height * 0.5);
+  await new Promise(r => setTimeout(r, 60));
+  const apresAppui = { crop: JSON.parse(JSON.stringify(_ed.p.edit.crop)), crans: _ed.hist.length };
+  // vrai geste
+  env('pointerdown', b.left + b.width * 0.5, b.top + b.height * 0.5, document.getElementById('ed-crop-box'));
+  env('pointermove', b.left + b.width * 0.6, b.top + b.height * 0.5);
+  env('pointerup', b.left + b.width * 0.6, b.top + b.height * 0.5);
+  await new Promise(r => setTimeout(r, 120));
+  return { apresAppui, crans: _ed.hist.length };
+});
+check('Rognage : un appui sans mouvement n’efface pas le cadrage',
+  cropAnnul.apresAppui.crop && Math.abs(cropAnnul.apresAppui.crop.x - 0.2) < 0.001
+  && cropAnnul.apresAppui.crans === 1, JSON.stringify(cropAnnul.apresAppui));
+check('Rognage : un geste complet = un seul cran d’annulation',
+  cropAnnul.crans === 2, cropAnnul.crans + ' état(s) empilé(s)');
+
+// « Annuler le rognage » rend la photo entière SANS toucher à la lumière ni aux verticales.
+const raz = await page.evaluate(() => {
+  Object.assign(_ed.p.edit, blankEdit());
+  Object.assign(_ed.p.edit, { crop: { x: .2, y: .2, w: .4, h: .4 }, ratio: '16:9', expo: 0.3, rot: 4 });
+  buildEditorControls();
+  const b = [...document.querySelectorAll('#ed-modal .ed-panel button')].find(x => /Annuler le rognage/.test(x.textContent));
+  if (b) b.click();
   const e = _ed.p.edit;
-  Object.assign(e, blankEdit());
-  e.zoom = 1.5;
-  _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaintHint();
+  return { crop: e.crop, ratio: e.ratio, expo: e.expo, rot: e.rot,
+           fenetre: (() => { const c = cropWindow(e, _ed.img.width, _ed.img.height);
+                             return [c.c0[0], c.c0[1], c.c1[0], c.c1[1]].join(','); })() };
+});
+check('Rognage : « Annuler le rognage » rend la photo entière sans toucher lumière ni verticales',
+  raz.crop === null && raz.ratio === 'libre' && raz.fenetre === '0,0,1,1'
+  && raz.expo === 0.3 && raz.rot === 4, JSON.stringify(raz));
+
+// « Toute la série » porte le rectangle lui-même : c'est ce qui donne une galerie régulière.
+const cropSerie = await page.evaluate(() => {
+  Object.assign(_ed.p.edit, blankEdit());
+  _ed.p.edit.ratio = '4:3'; _ed.p.edit.crop = { x: 0.1, y: 0.2, w: 0.6, h: 0.45 };
+  buildEditorControls();
+  const temoin = { id: 'temoin-cropSerie', edit: blankEdit() };
+  _ed.r.photos.push(temoin);
+  const b = [...document.querySelectorAll('#ed-modal .ed-panel button')].find(x => /toute la série/.test(x.textContent));
+  if (b) b.click();
+  const vu = JSON.parse(JSON.stringify(temoin.edit));
+  _ed.r.photos = _ed.r.photos.filter(ph => ph.id !== 'temoin-cropSerie');
+  return vu;
+});
+check('Rognage : « toute la série » porte le rectangle ET le format',
+  cropSerie.ratio === '4:3' && cropSerie.crop && Math.abs(cropSerie.crop.w - 0.6) < 0.001
+  && Math.abs(cropSerie.crop.x - 0.1) < 0.001, JSON.stringify(cropSerie));
+
+// --- Le même cadre sur un téléphone : c'est là qu'il sera utilisé.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.evaluate(() => {
+  Object.assign(_ed.p.edit, blankEdit());
+  _ed.p.edit.crop = { x: 0.2, y: 0.2, w: 0.5, h: 0.5 };
+  buildEditorControls(); edPaint();
+});
+await page.waitForTimeout(500);
+const phone = await page.evaluate(() => {
+  const host = document.getElementById('ed-crop'), cv = document.getElementById('ed-canvas');
+  const rh = host.getBoundingClientRect(), rc = cv.getBoundingClientRect();
+  // La zone TOUCHABLE d'une poignée, pas son carré blanc : au doigt, 14 px se rate.
+  const p = host.querySelector('[data-h="se"]');
+  const zone = getComputedStyle(p, '::after');
+  const inset = parseFloat(zone.top);  // négatif : l'ancre déborde du carré
+  const rp = p.getBoundingClientRect();
   const panel = document.querySelector('#ed-modal .ed-panel');
-  const visibles = [...panel.querySelectorAll('button, input[type=range]')].filter(x => x.offsetParent !== null);
-  const trop = visibles.filter(x => { const r = x.getBoundingClientRect(); return r.right > innerWidth + 1 || r.height < 28; });
   return {
-    debord: panel.scrollWidth - panel.clientWidth,
-    curseurs: [...panel.querySelectorAll('.ed-slider label')].map(l => l.textContent.trim()),
+    colle: Math.abs(rh.left - rc.left) < 1.5 && Math.abs(rh.width - rc.width) < 1.5,
+    touche: Math.round(rp.width - 2 * inset),
+    debordPanneau: panel.scrollWidth - panel.clientWidth,
     boutons: [...panel.querySelectorAll('button')].filter(x => x.offsetParent !== null).map(b => b.textContent.trim()),
-    tropPetits: trop.map(x => (x.textContent || x.type).trim()),
+    curseurs: panel.querySelectorAll('.ed-slider').length,
   };
 });
-check('Cadrage sur téléphone (390px) : le panneau ne déborde pas et tout se touche au pouce',
-  cadragePhone.debord <= 1 && cadragePhone.tropPetits.length === 0,
-  JSON.stringify(cadragePhone.tropPetits) + ' · débord ' + cadragePhone.debord);
-check('Cadrage sur téléphone : les trois curseurs et les deux boutons sont là',
-  cadragePhone.curseurs.length === 3
-  && cadragePhone.boutons.some(b => /Annuler le cadrage/.test(b))
-  && cadragePhone.boutons.some(b => /toute la série/.test(b)),
-  JSON.stringify(cadragePhone.curseurs) + ' | ' + JSON.stringify(cadragePhone.boutons));
+await page.screenshot({ path: '/tmp/mn-rognage-390.png' });
+check('Rognage sur téléphone (390px) : le cadre reste collé à la photo',
+  phone.colle, JSON.stringify(phone.colle));
+check('Rognage sur téléphone : les poignées font au moins 40 px touchables',
+  phone.touche >= 40, phone.touche + ' px');
+check('Rognage sur téléphone : le panneau ne déborde pas, et il n’y a plus de curseur de cadrage',
+  phone.debordPanneau <= 1 && phone.curseurs === 0
+  && phone.boutons.some(b => /Annuler le rognage/.test(b))
+  && phone.boutons.some(b => /toute la série/.test(b)),
+  JSON.stringify(phone.curseurs) + ' curseur(s) · ' + JSON.stringify(phone.boutons));
 await page.evaluate(() => { Object.assign(_ed.p.edit, blankEdit()); buildEditorControls(); });
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.waitForTimeout(300);
