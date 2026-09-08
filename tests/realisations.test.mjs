@@ -4100,8 +4100,18 @@ await page.waitForTimeout(900);
 const cadrage = await page.evaluate(async () => {
   _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaintHint();
   const e = _ed.p.edit;
-  e.ratio = 'libre'; e.pan = 0;
+  const neutre = () => { e.ratio = 'libre'; e.zoom = 1; e.panX = 0; e.panY = 0; e.pan = 0; };
+  neutre(); buildEditorControls();
   const enLibre = { deplacable: edCadrageDeplacable(), axe: edCadrageAxe() };
+  // La fenêtre gardée, en fractions de la photo : c'est ELLE qui dit s'il y a rognage.
+  const fen = () => { const c = cropWindow(_ed.p.edit, _ed.img.width, _ed.img.height);
+                      return { w: +(c.c1[0] - c.c0[0]).toFixed(4), h: +(c.c1[1] - c.c0[1]).toFixed(4),
+                               x: +c.c0[0].toFixed(4), y: +c.c0[1].toFixed(4) }; };
+  const fenLibre = fen();
+  // « Format d'origine » + Resserrer : c'est le rognage libre qui manquait.
+  e.zoom = 2; const fenResserre = fen();
+  const resserreDeplacable = { deplacable: edCadrageDeplacable(), jeu: edCadrageJeu() };
+  neutre();
   // format carré sur une photo paysage : le jeu est horizontal
   e.ratio = REAL_RATIOS.find(x => x.v === 1) ? REAL_RATIOS.find(x => x.v === 1).id : '1:1';
   buildEditorControls(); edPaintHint();
@@ -4113,28 +4123,159 @@ const cadrage = await page.evaluate(async () => {
   const souris = (type, x, y) => stage.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true }));
   souris('mousedown', box.left + box.width / 2, box.top + box.height / 2);
   souris('mousemove', box.left + box.width / 2 - box.width / 4, box.top + box.height / 2);
-  const pendant = _ed.p.edit.pan;
+  const pendant = _ed.p.edit.panX;
   souris('mouseup', box.left + box.width / 4, box.top + box.height / 2);
   await new Promise(r => setTimeout(r, 150));
-  const apres = { pan: _ed.p.edit.pan, cransAnnulation: _ed.hist.length };
+  const apres = { pan: _ed.p.edit.panX, cransAnnulation: _ed.hist.length };
   // tirer très loin ne doit pas sortir des bornes
   souris('mousedown', box.left + 10, box.top + 10);
   souris('mousemove', box.left + box.width * 3, box.top + 10);
   souris('mouseup', box.left + box.width * 3, box.top + 10);
-  const borne = _ed.p.edit.pan;
-  return { enLibre, enCarre, pendant, apres, borne };
+  const borne = _ed.p.edit.panX;
+
+  // Resserré SANS format : les deux axes doivent bouger d'un seul geste.
+  neutre(); e.zoom = 2; buildEditorControls();
+  souris('mousedown', box.left + box.width / 2, box.top + box.height / 2);
+  souris('mousemove', box.left + box.width / 2 - box.width / 5, box.top + box.height / 2 - box.height / 5);
+  souris('mouseup', box.left + box.width / 2 - box.width / 5, box.top + box.height / 2 - box.height / 5);
+  const deuxAxes = { x: _ed.p.edit.panX, y: _ed.p.edit.panY };
+
+  // Les curseurs du panneau suivent le resserrement.
+  const libelles = () => [...document.querySelectorAll('#ed-modal .ed-slider label')].map(l => l.textContent.trim());
+  neutre(); buildEditorControls();
+  const cursZoom0 = libelles();
+  e.zoom = 1.5; buildEditorControls();
+  const cursZoom15 = libelles();
+
+  // Une photo réglée AVANT ce chantier n'a que `pan` : son cadrage ne doit pas bouger.
+  const ancienne = { ratio: '1:1', zoom: 1, pan: 0.6, panX: undefined, panY: undefined,
+                     persp: 0, rot: 0, expo: 0, contrast: 0, temp: 0, tint: 0, sat: 0 };
+  const cAnc = cropWindow(ancienne, _ed.img.width, _ed.img.height);
+  const cNeuf = cropWindow(Object.assign({}, ancienne, { pan: 0, panX: 0.6, panY: 0 }), _ed.img.width, _ed.img.height);
+  const compat = { anc: cAnc.c0.map(v => +v.toFixed(5)), neuf: cNeuf.c0.map(v => +v.toFixed(5)) };
+
+  // Rogner CHANGE l'image publiée : la signature doit s'en apercevoir.
+  neutre();
+  const sig0 = photoPubSig(_ed.p);
+  e.zoom = 1.4; const sigZoom = photoPubSig(_ed.p);
+  e.zoom = 1; e.panX = 0.3; const sigPan = photoPubSig(_ed.p);
+
+  // « Annuler le cadrage » remet tout à plat sans toucher à la lumière.
+  e.zoom = 2; e.panX = 0.4; e.panY = -0.2; e.ratio = '16:9'; e.expo = 0.3;
+  buildEditorControls();
+  const razBtn = [...document.querySelectorAll('#ed-modal .ed-panel button')].find(b => /Annuler le cadrage/.test(b.textContent));
+  if (razBtn) razBtn.click();
+  const apresRaz = { ratio: e.ratio, zoom: e.zoom, panX: e.panX, panY: e.panY, expo: e.expo };
+
+  // « Appliquer à toute la série » porte le format ET le resserrement, pas la position.
+  neutre(); e.ratio = '4:3'; e.zoom = 1.6; e.panX = 0.5;
+  buildEditorControls();
+  const serieBtn = [...document.querySelectorAll('#ed-modal .ed-panel button')].find(b => /toute la série/.test(b.textContent));
+  // La réalisation ouverte n'a pas forcément une soeur : on en pose une, le temps du contrôle.
+  const temoin = { id: 'temoin-serie', edit: blankEdit() };
+  _ed.r.photos.push(temoin);
+  if (serieBtn) serieBtn.click();
+  const serie = { ratio: temoin.edit.ratio, zoom: temoin.edit.zoom, panX: temoin.edit.panX || 0 };
+  _ed.r.photos = _ed.r.photos.filter(ph => ph.id !== 'temoin-serie');
+
+  neutre(); buildEditorControls();
+  return { enLibre, fenLibre, fenResserre, resserreDeplacable, enCarre, pendant, apres, borne,
+           deuxAxes, cursZoom0, cursZoom15, compat, sigChange: { zoom: sigZoom !== sig0, pan: sigPan !== sig0 },
+           apresRaz, serie };
 });
-check('Cadrage : en format libre, il n’y a rien à déplacer',
-  cadrage.enLibre.deplacable === false && cadrage.enLibre.axe === null);
+check('Cadrage : sans format ni resserrement, la photo entière est gardée',
+  cadrage.enLibre.deplacable === false && cadrage.enLibre.axe === null
+  && cadrage.fenLibre.w === 1 && cadrage.fenLibre.h === 1, JSON.stringify(cadrage.fenLibre));
+check('Cadrage : « Resserrer » ROGNE vraiment, format d’origine compris',
+  Math.abs(cadrage.fenResserre.w - 0.5) < 0.01 && Math.abs(cadrage.fenResserre.h - 0.5) < 0.01
+  && cadrage.fenResserre.x > 0.2 && cadrage.fenResserre.y > 0.2, JSON.stringify(cadrage.fenResserre));
+check('Cadrage : une photo resserrée se déplace, sur les deux axes',
+  cadrage.resserreDeplacable.deplacable === true
+  && cadrage.resserreDeplacable.jeu.x > 0.4 && cadrage.resserreDeplacable.jeu.y > 0.4,
+  JSON.stringify(cadrage.resserreDeplacable));
 check('Cadrage : avec un format imposé, la photo se déplace sur l’axe qui a du jeu',
   cadrage.enCarre.deplacable === true && cadrage.enCarre.axe === 'x', JSON.stringify(cadrage.enCarre.axe));
 check('Cadrage : l’écran annonce le geste actif',
   /choisir le cadrage/.test(cadrage.enCarre.aide), cadrage.enCarre.aide);
 check('Cadrage : tirer la photo déplace vraiment le cadre, dans le bon sens',
-  cadrage.pendant > 0 && Math.abs(cadrage.pendant - 0.5) < 0.2, 'pan = ' + cadrage.pendant);
+  cadrage.pendant > 0 && Math.abs(cadrage.pendant - 0.5) < 0.2, 'panX = ' + cadrage.pendant);
 check('Cadrage : un geste complet = un seul cran d’annulation',
   cadrage.apres.cransAnnulation === 2, cadrage.apres.cransAnnulation + ' état(s) empilé(s)');
-check('Cadrage : on ne peut pas tirer au-delà de la photo', cadrage.borne >= -1 && cadrage.borne <= 1, 'pan = ' + cadrage.borne);
+check('Cadrage : on ne peut pas tirer au-delà de la photo', cadrage.borne >= -1 && cadrage.borne <= 1, 'panX = ' + cadrage.borne);
+check('Cadrage : un seul geste déplace les DEUX axes quand la photo est resserrée',
+  cadrage.deuxAxes.x > 0.1 && cadrage.deuxAxes.y > 0.1, JSON.stringify(cadrage.deuxAxes));
+check('Cadrage : les curseurs de position n’apparaissent qu’une fois qu’il y a du jeu',
+  !cadrage.cursZoom0.some(l => /Position/.test(l))
+  && cadrage.cursZoom15.filter(l => /Position/.test(l)).length === 2,
+  JSON.stringify(cadrage.cursZoom0) + ' → ' + JSON.stringify(cadrage.cursZoom15));
+check('Cadrage : une photo réglée AVANT garde exactement son cadrage',
+  cadrage.compat.anc[0] === cadrage.compat.neuf[0] && cadrage.compat.anc[1] === cadrage.compat.neuf[1],
+  JSON.stringify(cadrage.compat));
+check('Cadrage : rogner marque la photo comme à republier',
+  cadrage.sigChange.zoom === true && cadrage.sigChange.pan === true, JSON.stringify(cadrage.sigChange));
+check('Cadrage : « Annuler le cadrage » remet le cadre à plat sans toucher la lumière',
+  cadrage.apresRaz.ratio === 'libre' && cadrage.apresRaz.zoom === 1
+  && cadrage.apresRaz.panX === 0 && cadrage.apresRaz.panY === 0 && cadrage.apresRaz.expo === 0.3,
+  JSON.stringify(cadrage.apresRaz));
+check('Cadrage : « toute la série » porte le format ET le resserrement, pas la position',
+  cadrage.serie && cadrage.serie.ratio === '4:3' && Math.abs(cadrage.serie.zoom - 1.6) < 0.001
+  && cadrage.serie.panX === 0, JSON.stringify(cadrage.serie));
+
+// L'image RÉELLEMENT produite doit être rognée, pas seulement le calcul du cadre.
+const rendu = await page.evaluate(() => {
+  const lis = (edit) => {
+    // maxSide large exprès : sinon les deux rendus sont ramenés à la même largeur et le
+    // rognage devient invisible dans les dimensions.
+    const cv = glRenderTo(_ed.img, edit, 4000, 'ctrl-' + JSON.stringify(edit));
+    const c2 = document.createElement('canvas'); c2.width = cv.width; c2.height = cv.height;
+    c2.getContext('2d').drawImage(cv, 0, 0);
+    const d = c2.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    // une empreinte grossière du contenu : la somme des canaux
+    let somme = 0; for (let i = 0; i < d.length; i += 4 * 97) somme += d[i] + d[i + 1] + d[i + 2];
+    return { w: cv.width, h: cv.height, somme };
+  };
+  const base = Object.assign(blankEdit(), { ratio: 'libre' });
+  const plein = lis(base);
+  const serre = lis(Object.assign({}, base, { zoom: 2 }));
+  const decale = lis(Object.assign({}, base, { zoom: 2, panX: -1 }));
+  return { plein, serre, decale, src: { w: _ed.img.width, h: _ed.img.height } };
+});
+check('Cadrage : l’image produite est vraiment rognée (moitié moins de pixels de large à 200 %)',
+  Math.abs(rendu.serre.w / rendu.plein.w - 0.5) < 0.03 && Math.abs(rendu.serre.h / rendu.plein.h - 0.5) < 0.03,
+  JSON.stringify(rendu));
+check('Cadrage : déplacer le cadre change vraiment ce qu’on voit',
+  rendu.decale.somme !== rendu.serre.somme,
+  rendu.serre.somme + ' → ' + rendu.decale.somme);
+
+// --- Le même panneau sur un téléphone : c'est là qu'il sera utilisé.
+await page.setViewportSize({ width: 390, height: 844 });
+await page.waitForTimeout(300);
+const cadragePhone = await page.evaluate(() => {
+  const e = _ed.p.edit;
+  Object.assign(e, blankEdit());
+  e.zoom = 1.5;
+  _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaintHint();
+  const panel = document.querySelector('#ed-modal .ed-panel');
+  const visibles = [...panel.querySelectorAll('button, input[type=range]')].filter(x => x.offsetParent !== null);
+  const trop = visibles.filter(x => { const r = x.getBoundingClientRect(); return r.right > innerWidth + 1 || r.height < 28; });
+  return {
+    debord: panel.scrollWidth - panel.clientWidth,
+    curseurs: [...panel.querySelectorAll('.ed-slider label')].map(l => l.textContent.trim()),
+    boutons: [...panel.querySelectorAll('button')].filter(x => x.offsetParent !== null).map(b => b.textContent.trim()),
+    tropPetits: trop.map(x => (x.textContent || x.type).trim()),
+  };
+});
+check('Cadrage sur téléphone (390px) : le panneau ne déborde pas et tout se touche au pouce',
+  cadragePhone.debord <= 1 && cadragePhone.tropPetits.length === 0,
+  JSON.stringify(cadragePhone.tropPetits) + ' · débord ' + cadragePhone.debord);
+check('Cadrage sur téléphone : les trois curseurs et les deux boutons sont là',
+  cadragePhone.curseurs.length === 3
+  && cadragePhone.boutons.some(b => /Annuler le cadrage/.test(b))
+  && cadragePhone.boutons.some(b => /toute la série/.test(b)),
+  JSON.stringify(cadragePhone.curseurs) + ' | ' + JSON.stringify(cadragePhone.boutons));
+await page.evaluate(() => { Object.assign(_ed.p.edit, blankEdit()); buildEditorControls(); });
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.waitForTimeout(300);
 await page.evaluate(async () => {
   Object.assign(_ed.p.edit, blankEdit());
   _ed.tab = 'geometrie'; paintEditorTabs(); buildEditorControls();
