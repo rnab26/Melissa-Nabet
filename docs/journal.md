@@ -2755,3 +2755,49 @@ console.anthropic.com → Settings → Admin keys, et la déposer dans les secre
 (Edge Functions → Secrets) sous le nom exact **ANTHROPIC_ADMIN_KEY**. Rien à redéployer
 ensuite. La marche à suivre est affichée dans le CRM, à l'endroit même où le chiffre manque —
 il n'a pas à revenir la chercher ici.
+
+---
+
+## 8 septembre 2026 — Les flèches de défilement descendent sur la photo
+
+Raphaël, capture à l'appui : « repositionne les curseurs de déplacement de la photo, dans
+l'édition des photos. Ils sont là-haut, ce n'est pas intuitif. »
+
+Il avait raison, et pour trois raisons cumulées : les flèches étaient dans la barre du haut,
+donc **loin de la photo** qu'elles font défiler, **hors d'atteinte du pouce** sur un téléphone
+tenu à une main, et **collées au bouton qui ferme l'éditeur** — se tromper de cible faisait
+perdre l'écran.
+
+Elles sont maintenant posées **sur l'image**, à ses bords gauche et droit, centrées en
+hauteur, en pastilles de 48 px. Le compteur « 16 / 21 » descend avec elles, en pastille sous
+la photo. Les trois quittent la barre du haut, qui ne garde que « Terminer », le nom du
+fichier et l'historique.
+
+Trois détails qui décident si c'est utilisable :
+- les flèches sont posées sur la zone qui porte déjà deux gestes (curseur avant/après,
+  déplacement du cadrage) : sans `stopPropagation`, appuyer sur une flèche déplacerait aussi
+  le curseur de comparaison ;
+- au bout de la série, la flèche reste **en place, éteinte**. La faire disparaître
+  déplacerait l'autre sous le doigt au moment où l'on appuie ;
+- une seule photo : ni flèches ni compteur.
+
+Ajouté : les flèches ← → du clavier passent d'une photo à l'autre, **sauf** quand le curseur
+est dans un champ de saisie ou sur un réglage, qui s'en servent aussi.
+
+**Pas de balayage au doigt, volontairement** : la photo porte déjà deux gestes, un troisième
+les volerait.
+
+### Cohabitation avec le cadre de rognage
+
+Livré en parallèle par une autre session le même jour. Ses poignées de gauche et de droite
+tombent exactement là où sont les flèches : tant que le cadre est affiché, **les flèches et
+le compteur s'effacent** — on rogne, on ne feuillette pas.
+
+Le test a révélé un défaut au passage : en quittant l'onglet Cadrage, les flèches ne
+revenaient pas. `edPaint` masquait le cadre de son côté sans passer par son peintre, et la
+classe restait posée. Les trois endroits qui décidaient de la visibilité du cadre passent
+maintenant par **une seule fonction**, `edCropMontre` — ne pas les re-séparer.
+
+**Vérification** : 579 contrôles CRM (10 nouveaux), dont la position réellement **mesurée à
+l'écran** (bords à 8 px, cible 48 px, centrage vertical) plutôt que la seule présence des
+balises ; puis l'éditeur parcouru à 390 px. Déployé et vérifié en ligne.
