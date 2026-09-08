@@ -2184,6 +2184,113 @@ const nav2 = await page.evaluate(() => ({
 }));
 check('Éditeur : ◀ passe à la photo précédente', nav2.pos.trim() === '1 / 4' && nav2.memePhoto, nav2.pos);
 check('Éditeur : sur la première photo, ◀ est désactivé', nav2.reculBloque);
+
+/* OÙ SONT LES FLÈCHES. Elles étaient dans la barre du haut, collées au bouton « Terminer » :
+   loin de la photo, loin du pouce, et voisines de ce qui ferme l'éditeur. Elles sont
+   maintenant posées SUR l'image, à ses bords. Ces contrôles mesurent la position réelle à
+   l'écran — pas la présence des balises. */
+const place = await page.evaluate(() => {
+  const st = document.querySelector('.ed-stage').getBoundingClientRect();
+  const pr = document.querySelector('.ed-nav.prev').getBoundingClientRect();
+  const nx = document.querySelector('.ed-nav.next').getBoundingClientRect();
+  const po = document.querySelector('.ed-pos').getBoundingClientRect();
+  return {
+    dansLaBarre: !!document.querySelector('.ed-bar .ed-nav') || !!document.querySelector('.ed-bar .ed-pos'),
+    dansLimage: document.querySelector('.ed-stage .ed-nav.prev') !== null
+      && document.querySelector('.ed-stage .ed-pos') !== null,
+    aGauche: Math.round(pr.left - st.left), aDroite: Math.round(st.right - nx.right),
+    cible: Math.round(Math.min(pr.width, pr.height)),
+    centreeH: Math.abs((pr.top + pr.height / 2) - (st.top + st.height / 2)) < 4,
+    compteurEnBas: po.bottom < st.bottom && po.top > st.top + st.height / 2,
+  };
+});
+check('Éditeur : les flèches ne sont plus dans la barre du haut', place.dansLaBarre === false);
+check('Éditeur : elles sont posées sur l’image, à ses bords, centrées en hauteur',
+  place.dansLimage && place.aGauche < 20 && place.aDroite < 20 && place.centreeH, JSON.stringify(place));
+check('Éditeur : la cible fait au moins 44 px — en dessous, on vise à côté',
+  place.cible >= 44, place.cible + 'px');
+check('Éditeur : le compteur est sous la photo, dans l’image', place.compteurEnBas === true);
+
+/* Le clic doit changer de photo SANS déclencher le geste de la zone image (curseur
+   avant/après) : les flèches sont posées dessus, la propagation les traverserait. */
+const sansGeste = await page.evaluate(async () => {
+  const avant = _ed.split;
+  document.querySelector('.ed-nav.next').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 10 }));
+  await new Promise(r => setTimeout(r, 60));
+  return { split: _ed ? _ed.split : null, avant };
+});
+check('Éditeur : appuyer sur une flèche ne déplace pas le curseur avant/après',
+  sansGeste.split === sansGeste.avant, JSON.stringify(sansGeste));
+
+// Les flèches du clavier font la même chose — sauf quand on écrit dans un champ.
+await page.evaluate(() => { _ed.tab = 'ia'; paintEditorTabs(); buildEditorControls(); });
+await page.waitForTimeout(200);
+await page.keyboard.press('ArrowRight');
+await page.waitForTimeout(900);
+const navClavier = await page.evaluate(() => (document.querySelector('.ed-pos') || {}).textContent || '');
+check('Éditeur : la flèche → du clavier passe à la photo suivante', navClavier.trim() === '2 / 4', navClavier);
+/* Le champ de saisie est posé pour ce contrôle plutôt que d'aller chercher celui de la
+   consigne : dans ce banc, le panneau de l'éditeur n'est pas rendu visible, et un clic sur
+   un élément invisible expire. Ce qui est éprouvé reste le vrai garde-fou du produit — il
+   lit `document.activeElement`, quel que soit le champ. Le cas réel (la zone de consigne)
+   a été vérifié séparément dans un navigateur, à la main.
+   Le clic est un VRAI clic : dans un navigateur piloté, `element.focus()` reste souvent
+   sans effet et le contrôle passerait alors sans que le champ ait jamais eu le curseur. */
+await page.evaluate(() => {
+  const i = document.createElement('input');
+  i.type = 'text'; i.id = 'essai-focus';
+  i.style.cssText = 'position:fixed;left:10px;bottom:10px;width:180px;height:36px;z-index:99999';
+  document.getElementById('ed-modal').appendChild(i);
+});
+const avantChamp = (await page.textContent('.ed-pos')).trim();
+await page.locator('#essai-focus').click();
+await page.waitForTimeout(150);
+await page.keyboard.press('ArrowRight');
+await page.waitForTimeout(700);
+const dansChamp = { focus: await page.evaluate(() => (document.activeElement || {}).tagName || ''),
+                    avant: avantChamp, apres: (await page.textContent('.ed-pos')).trim() };
+await page.evaluate(() => { const i = document.getElementById('essai-focus'); if (i) i.remove(); });
+check('Éditeur : la flèche ne change pas de photo quand on écrit dans un champ',
+  /TEXTAREA|INPUT/.test(dansChamp.focus) && dansChamp.avant === dansChamp.apres,
+  JSON.stringify(dansChamp));
+
+// Une seule photo : rien à faire défiler, donc aucune flèche.
+const seule = await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  const gardees = r.photos.slice();
+  closePhotoEditor();
+  r.photos = [gardees[0]];
+  await openPhotoEditor(r.id, gardees[0].id);
+  await new Promise(x => setTimeout(x, 700));
+  const res = { fleches: document.querySelectorAll('.ed-nav').length,
+                compteur: document.querySelectorAll('.ed-pos').length };
+  closePhotoEditor();
+  r.photos = gardees;
+  return res;
+});
+/* Le cadre de rognage, livré en parallèle, pose ses poignées aux mêmes endroits que les
+   flèches : celles du milieu gauche et du milieu droit tomberaient exactement dessous. */
+const rognage = await page.evaluate(async () => {
+  const vu = () => { const n = document.querySelector('.ed-nav.prev'); return !!n && n.offsetParent !== null; };
+  const avant = vu();
+  _ed.tab = 'cadrage'; paintEditorTabs(); buildEditorControls(); edPaint();
+  await new Promise(r => setTimeout(r, 400));
+  const pendant = { fleche: vu(), cadre: !document.getElementById('ed-crop').hidden };
+  _ed.tab = 'ia'; paintEditorTabs(); buildEditorControls(); edPaint();
+  await new Promise(r => setTimeout(r, 400));
+  return { avant, pendant, apres: vu() };
+});
+check('Éditeur : le cadre de rognage affiché, les flèches s’effacent — elles visent le même pixel',
+  rognage.avant && rognage.pendant.cadre && rognage.pendant.fleche === false, JSON.stringify(rognage));
+check('Éditeur : en quittant le rognage, les flèches reviennent', rognage.apres === true, JSON.stringify(rognage));
+
+check('Éditeur : une seule photo, aucune flèche ni compteur affichés',
+  seule.fleches === 0 && seule.compteur === 0, JSON.stringify(seule));
+await page.evaluate(async () => {
+  const r = findRealisation(_rzOpenId);
+  await openPhotoEditor(r.id, r.photos[0].id);
+});
+await page.waitForTimeout(800);
 await page.evaluate(() => closePhotoEditor());
 await page.waitForTimeout(300);
 
