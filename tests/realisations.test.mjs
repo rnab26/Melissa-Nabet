@@ -1571,6 +1571,100 @@ check('Site : la vignette le montre — pastille et mise en retrait',
   /écartée du site/.test(ecart.pastille) && ecart.enRetrait, ecart.pastille);
 check('Site : l’historique de la photo en garde la trace', /horssite/.test(ecart.hist), ecart.hist);
 
+// --- LA SÉLECTION PAR LOTS COMMANDE LE SITE. C'était le reproche exact : « je fais une
+//     sélection des photos que je veux emporter sur le site, et la publication n'en tient
+//     aucun compte ». La barre de sélection n'avait aucune action « site ».
+const lotSite = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  r.photos.forEach(x => { delete x.horsSite; });
+  _rzOpenId = r.id; renderRealisations();
+  rzToggleSelectMode(true);
+  const bar = document.querySelector('.rz-selbar');
+  const sansSel = { bouton: !!bar.querySelector('[data-site]'),
+                    desactive: bar.querySelector('[data-site]').hasAttribute('disabled') };
+  // on sélectionne UNE photo sur les trois
+  rzToggleSel(r.photos[0].id);
+  await new Promise(x => setTimeout(x, 200));
+  document.querySelector('.rz-selbar [data-site]').click();
+  await new Promise(x => setTimeout(x, 250));
+  const choix = [...document.querySelectorAll('#modal .btn')].map(b => b.textContent.trim());
+  document.querySelector('#modal [data-only]').click();
+  await new Promise(x => setTimeout(x, 350));
+  const plan = realisationPublishPlan(r);
+  return { sansSel, choix,
+    surLeSite: photosPubliees(r).map(p => p.id),
+    garde: r.photos[0].id, total: r.photos.length,
+    ecartees: plan.ecartees, modeQuitte: _rzSelMode === false,
+    hist: (r.photos[1].hist || []).map(h => h.k).join(',') };
+});
+check('Sélection : la barre porte une action « Site », désactivée tant que rien n’est coché',
+  lotSite.sansSel.bouton && lotSite.sansSel.desactive, JSON.stringify(lotSite.sansSel));
+check('Sélection : elle propose les trois gestes, sans en mélanger deux',
+  lotSite.choix.some(t => /Ne publier que/.test(t)) && lotSite.choix.some(t => /Remettre/.test(t))
+  && lotSite.choix.some(t => /Retirer/.test(t)), JSON.stringify(lotSite.choix));
+check('Sélection : « ne publier que celles-ci » écarte VRAIMENT toutes les autres',
+  lotSite.surLeSite.length === 1 && lotSite.surLeSite[0] === lotSite.garde
+  && lotSite.ecartees === lotSite.total - 1, JSON.stringify(lotSite));
+check('Sélection : le mode sélection se referme, et l’historique garde la trace',
+  lotSite.modeQuitte && /horssite/.test(lotSite.hist), lotSite.hist);
+
+// --- ET DANS LA FENÊTRE DE PUBLICATION : on peut retirer une photo, y compris une photo
+//     jamais mise en ligne — c'était impossible, il n'y avait qu'une case « Envoyer ».
+const dlgSite = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  r.photos.forEach(x => { delete x.horsSite; });
+  r.updatedAt = Date.now(); saveRealisations(); renderRealisations();
+  await askPublishRealisation(r);
+  await new Promise(x => setTimeout(x, 400));
+  const boutons = [...document.querySelectorAll('#modal .pub-ligne [data-hors]')].length;
+  const lignes = [...document.querySelectorAll('#modal .pub-ligne')].length;
+  const cible = document.querySelector('#modal .pub-ligne');
+  const pid = cible.dataset.pid;
+  cible.querySelector('[data-hors]').click();
+  await new Promise(x => setTimeout(x, 500));
+  const apres = {
+    surLeSite: photosPubliees(r).map(p => p.id),
+    encoreLa: (r.photos || []).some(p => p.id === pid),
+    rouverte: !!document.querySelector('#modal .pub-liste'),
+    blocEcart: (document.querySelector('#modal .pub-bloc summary') || {}).textContent || '',
+    remettre: !!document.querySelector('#modal .pub-bloc [data-hors]'),
+  };
+  // le geste inverse, au même endroit
+  document.querySelector('#modal .pub-bloc [data-hors]').click();
+  await new Promise(x => setTimeout(x, 500));
+  const rendue = photosPubliees(r).map(p => p.id);
+  closeModal();
+  return { boutons, lignes, pid, apres, rendue, total: r.photos.length };
+});
+check('Publication : chaque photo listée porte « Retirer du site », nouvelle comprise',
+  dlgSite.boutons === dlgSite.lignes && dlgSite.lignes > 0,
+  dlgSite.boutons + ' bouton(s) pour ' + dlgSite.lignes + ' ligne(s)');
+check('Publication : retirer une photo la sort du site sans la supprimer, et la fenêtre se met à jour',
+  !dlgSite.apres.surLeSite.includes(dlgSite.pid) && dlgSite.apres.encoreLa
+  && dlgSite.apres.rouverte, JSON.stringify(dlgSite.apres.surLeSite));
+check('Publication : les photos écartées sont listées là, avec de quoi les remettre',
+  /écartée/.test(dlgSite.apres.blocEcart) && dlgSite.apres.remettre, dlgSite.apres.blocEcart);
+check('Publication : « Remettre sur le site » la ramène, au même endroit',
+  dlgSite.rendue.length === dlgSite.total, JSON.stringify(dlgSite.rendue));
+
+// On ne peut pas tout retirer : un site avec une réalisation vide n'a pas de sens.
+const dernier = await page.evaluate(async () => {
+  const r = realisations.find(x => x.id === window.__rPub);
+  r.photos.forEach((x, i) => { x.horsSite = i > 0; });
+  let dit = ''; const orig = window.toast; window.toast = (m) => { dit = m; };
+  pubSetHorsSite(r, r.photos[0], true);
+  window.toast = orig;
+  const reste = photosPubliees(r).length;
+  /* On REMET l'état que les contrôles suivants attendent : la photo 1 écartée, comme
+     l'avait laissée le menu ⋯ plus haut. Sans ça, le contrôle « le manifeste ne contient
+     que les photos retenues » repartirait d'une réalisation complète et passerait à côté. */
+  r.photos.forEach((x, i) => { if (i === 1) x.horsSite = true; else delete x.horsSite; });
+  r.updatedAt = Date.now(); saveRealisations(); renderRealisations();
+  return { dit, reste };
+});
+check('Publication : on ne peut pas retirer la DERNIÈRE photo, et l’écran dit pourquoi',
+  dernier.reste === 1 && /au moins une photo/.test(dernier.dit), dernier.dit);
+
 // --- ET LA PUBLICATION SUIT : le site ne reçoit que les photos retenues.
 const pubEcart = await page.evaluate(async () => {
   const r = realisations.find(x => x.id === window.__rPub);
@@ -4581,6 +4675,24 @@ const barres = await page.evaluate(() => {
 });
 check('Menu téléphone : la barre de sélection reste au-dessus des onglets',
   barres && barres.bas <= barres.navHaut + 1, barres ? (barres.bas + ' vs ' + barres.navHaut) : 'barre absente');
+/* Six actions dans cette barre : elle doit s'enrouler proprement et rester touchable, pas
+   déborder l'écran ni empiler des boutons de 20 px. */
+const selPhone = await page.evaluate(() => {
+  rzSelectAll(realisations[0]);
+  const sel = document.querySelector('.rz-selbar');
+  const bts = [...sel.querySelectorAll('button')];
+  return {
+    debord: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    horsEcran: bts.filter(b => b.getBoundingClientRect().right > innerWidth + 1).length,
+    tropPetits: bts.filter(b => b.getBoundingClientRect().height < 30).map(b => b.textContent.trim()),
+    libelles: bts.map(b => b.textContent.trim()),
+  };
+});
+check('Menu téléphone : la barre de sélection ne déborde pas et reste touchable',
+  selPhone.debord <= 1 && selPhone.horsEcran === 0 && selPhone.tropPetits.length === 0,
+  JSON.stringify(selPhone.tropPetits) + ' · débord ' + selPhone.debord);
+check('Menu téléphone : l’action « Site » y est bien, à côté des autres',
+  selPhone.libelles.some(t => /Site/.test(t)), JSON.stringify(selPhone.libelles));
 await page.evaluate(() => rzToggleSelectMode(false));
 
 const menus = await page.evaluate(async () => {
