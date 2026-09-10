@@ -277,6 +277,16 @@
   .task-filter-menu input[type=checkbox]{accent-color:var(--oxblood);flex:0 0 auto;}
   .task-filter-actions{padding:10px 2px 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.12);}
   .task-filter-actions .mini{width:100%;}
+  .tf-client-search{width:100%;font-size:11.5px;padding:5px 6px;margin:2px 0 4px;}
+  .tf-client-list{max-height:160px;overflow-y:auto;}
+  .tf-client-item{padding:5px 6px;font-size:12px;color:var(--stone-light);cursor:pointer;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tf-client-item:hover{background:rgba(255,255,255,.08);color:var(--paper);}
+  .tf-client-item.active{background:var(--oxblood);color:#fff;}
+  .task-client-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:10px 14px;margin:4px 0 12px;font-size:12.5px;color:var(--ink);}
+  .task-client-summary .tcs-name{font-weight:600;font-family:'Cormorant Garamond',serif;font-size:15px;}
+  .task-client-summary .tcs-ok{color:#6a9a5a;}
+  .task-client-summary .tcs-overdue{color:#b6543f;font-weight:600;}
+  .task-client-summary .mini{margin-left:auto;}
   .task-done-log{font-size:10.5px;color:var(--stone);margin-top:3px;}
   .task-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--panel-edge);}
   .task-docs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px;}
@@ -1307,6 +1317,7 @@
       <button class="mini" id="task-sort-dir-btn" onclick="toggleTaskSortDir()" title="Inverser l'ordre">↑ Ordre</button>
       <button class="mini" style="margin-left:auto" onclick="openTaskCategoriesPanel()">⚙ Catégories</button>
     </div>
+    <div id="task-client-summary"></div>
     <div id="dash-tasks"></div>
     <div id="dash-tasks-archive"></div>
     <div class="ed-eyebrow" style="margin-top:22px">Assistant · à faire</div>
@@ -4110,10 +4121,11 @@ let taskFilterCats=new Set();
 let taskFilterPrios=new Set();
 let taskFilterDue=false;
 let taskFilterReminder=false;
+let taskFilterClientId='';
 (function loadTaskFilters(){
   try{
     const raw=localStorage.getItem('mn_task_filters');
-    if(raw){const o=JSON.parse(raw);taskFilterCats=new Set(o.cats||[]);taskFilterPrios=new Set(o.prios||[]);taskFilterDue=!!o.due;taskFilterReminder=!!o.reminder;}
+    if(raw){const o=JSON.parse(raw);taskFilterCats=new Set(o.cats||[]);taskFilterPrios=new Set(o.prios||[]);taskFilterDue=!!o.due;taskFilterReminder=!!o.reminder;taskFilterClientId=o.clientId||'';}
   }catch(e){}
 })();
 let _taskArchiveOpen=false;
@@ -4123,7 +4135,14 @@ function toggleTaskSortDir(){
   renderTaskList();
 }
 function persistTaskFilters(){
-  try{localStorage.setItem('mn_task_filters',JSON.stringify({cats:[...taskFilterCats],prios:[...taskFilterPrios],due:taskFilterDue,reminder:taskFilterReminder}));}catch(e){}
+  try{localStorage.setItem('mn_task_filters',JSON.stringify({cats:[...taskFilterCats],prios:[...taskFilterPrios],due:taskFilterDue,reminder:taskFilterReminder,clientId:taskFilterClientId}));}catch(e){}
+}
+function setTaskFilterClient(id){taskFilterClientId=id;persistTaskFilters();renderTaskList();}
+function filterTaskClientOptions(q){
+  const needle=(q||'').toLowerCase().trim();
+  document.querySelectorAll('.tf-client-item[data-name]').forEach(el=>{
+    el.style.display=!needle||el.dataset.name.indexOf(needle)>=0?'':'none';
+  });
 }
 function onTaskFilterToggle(tok,checked){
   if(tok==='__due__')taskFilterDue=checked;
@@ -4135,11 +4154,11 @@ function onTaskFilterToggle(tok,checked){
   renderTaskList();
 }
 function clearTaskFilters(){
-  taskFilterCats=new Set();taskFilterPrios=new Set();taskFilterDue=false;taskFilterReminder=false;
+  taskFilterCats=new Set();taskFilterPrios=new Set();taskFilterDue=false;taskFilterReminder=false;taskFilterClientId='';
   persistTaskFilters();
   renderTaskList();
 }
-function taskFilterActiveCount(){return taskFilterCats.size+taskFilterPrios.size+(taskFilterDue?1:0)+(taskFilterReminder?1:0);}
+function taskFilterActiveCount(){return taskFilterCats.size+taskFilterPrios.size+(taskFilterDue?1:0)+(taskFilterReminder?1:0)+(taskFilterClientId?1:0);}
 function taskFilterMenuHtml(){
   ensureTaskCategories();
   const isChecked=tok=>tok==='__due__'?taskFilterDue:tok==='__reminder__'?taskFilterReminder:tok.indexOf('__prio_')===0?taskFilterPrios.has(tok.slice(7)):taskFilterCats.has(tok);
@@ -4148,7 +4167,14 @@ function taskFilterMenuHtml(){
   const colReminder=`<div class="tf-col"><div class="tf-col-h">Rappel</div>${row('__reminder__','🔔 Avec rappel')}</div>`;
   const colCat=`<div class="tf-col"><div class="tf-col-h">Catégorie</div>${library.taskCategories.map(c=>row(c.id,`${c.icon} ${esc(c.label)}`)).join('')}</div>`;
   const colPrio=`<div class="tf-col"><div class="tf-col-h">Priorité</div>${Object.entries(TASK_PRIORITIES).map(([k,p])=>row('__prio_'+k,`${p.icon} ${p.label}`)).join('')}</div>`;
-  return `<div class="task-filter-table">${colDue}${colReminder}${colCat}${colPrio}</div>`+
+  const clientsSorted=[...clients].sort((a,b)=>a.name.localeCompare(b.name));
+  const colClient=`<div class="tf-col tf-col-client"><div class="tf-col-h">👤 Client</div>
+    <input type="text" class="tf-client-search" placeholder="🔍 Rechercher…" oninput="filterTaskClientOptions(this.value)">
+    <div class="tf-client-list">
+      <div class="tf-client-item${taskFilterClientId?'':' active'}" onclick="setTaskFilterClient('')">— Tous les clients —</div>
+      ${clientsSorted.map(c=>`<div class="tf-client-item${taskFilterClientId===c.id?' active':''}" data-name="${esc(c.name.toLowerCase())}" onclick="setTaskFilterClient('${c.id}')">${esc(c.name)}</div>`).join('')}
+    </div></div>`;
+  return `<div class="task-filter-table">${colDue}${colReminder}${colCat}${colPrio}${colClient}</div>`+
     `<div class="task-filter-actions"><button type="button" class="mini" onclick="clearTaskFilters()">Réinitialiser</button></div>`;
 }
 function toggleTaskFilterMenu(e){if(e)e.stopPropagation();const m=$('task-filter-menu');if(m)m.classList.toggle('open');}
@@ -4162,6 +4188,7 @@ function applyTaskFilter(list){
     if(anyPrio&&!taskFilterPrios.has(taskPriority(t)))return false;
     if(taskFilterDue&&!t.dueDate)return false;
     if(taskFilterReminder&&!t.reminderDate)return false;
+    if(taskFilterClientId&&t.clientId!==taskFilterClientId)return false;
     return true;
   });
 }
@@ -4298,6 +4325,24 @@ function renderTaskList(){
   const fcount=taskFilterActiveCount();
   const fbadge=$('task-filter-badge');if(fbadge){fbadge.style.display=fcount?'inline-flex':'none';fbadge.textContent=fcount||'';}
   const dirBtn=$('task-sort-dir-btn');if(dirBtn)dirBtn.textContent=(taskSortDir==='asc'?'↑':'↓')+' Ordre';
+  const csum=$('task-client-summary');
+  if(csum){
+    const cl=taskFilterClientId?clients.find(c=>c.id===taskFilterClientId):null;
+    if(cl){
+      const clientTasks=tasks.filter(t=>t.clientId===cl.id);
+      const done=clientTasks.filter(t=>t.done).length;
+      const pending=clientTasks.length-done;
+      const overdue=clientTasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<todayIso()).length;
+      csum.innerHTML=`<div class="task-client-summary">
+        <span class="tcs-name">👤 ${esc(cl.name)}</span>
+        <span>${clientTasks.length} tâche${clientTasks.length>1?'s':''}</span>
+        <span class="tcs-ok">${done} terminée${done>1?'s':''}</span>
+        <span>${pending} en cours</span>
+        ${overdue?`<span class="tcs-overdue">${overdue} en retard</span>`:''}
+        <button type="button" class="mini" onclick="gotoClient('${cl.id}')">Voir la fiche →</button>
+      </div>`;
+    }else{csum.innerHTML='';}
+  }
   const filtered=applyTaskFilter(sortedTasks());
   const active=filtered.filter(t=>!t.done);
   const archived=filtered.filter(t=>t.done).sort((a,b)=>(b.completedAt||0)-(a.completedAt||0));
