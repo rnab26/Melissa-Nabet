@@ -2,6 +2,18 @@
 
 Journal des chantiers sur ce dépôt (CRM + générateur de devis, single-file `index.html`, hébergé sur GitHub Pages, sync via Supabase). Une section par chantier, mise à jour aux étapes importantes — pas un historique de chaque message. Chaque section a une liste "Notes / À faire" : cases cochées [x] = déjà fait, non cochées [ ] = pas encore traité.
 
+## Tâches — filtre par client + résumé
+
+**État** : dans l'onglet Tâches, le menu "🔍 Filtrer" a une 5e colonne "👤 Client" avec un champ de recherche (filtrage local instantané, sans re-rendu) au-dessus d'une liste cliquable de tous les clients triés par nom ; sélection = filtre à sélection unique (comme "Tous les clients" pour réinitialiser). Un client sélectionné : (1) filtre la liste de tâches (actives + archives) à ce client, (2) affiche une bannière résumé au-dessus de la liste — nombre total de tâches de ce client, terminées, en cours, en retard, + bouton "Voir la fiche →" vers sa fiche client. Le résumé est calculé sur TOUTES les tâches du client (indépendant des autres filtres actifs cat/prio/échéance), pour répondre à "ai-je bien attribué mes tâches à ce client".
+
+**Ne pas casser** : `taskFilterClientId` persisté dans `localStorage['mn_task_filters']` aux côtés de cats/prios/due/reminder — `clearTaskFilters()` le réinitialise aussi. Le champ de recherche filtre le DOM directement (`filterTaskClientOptions`) sans toucher l'état ni déclencher `renderTaskList()`, pour ne pas perdre le focus/texte tapé à chaque frappe (le menu entier est régénéré à chaque `renderTaskList()`).
+
+**Notes / À faire**
+- [x] Colonne client (recherche + liste) dans `taskFilterMenuHtml()`, `setTaskFilterClient()`, `filterTaskClientOptions()`.
+- [x] `applyTaskFilter()` filtre par `t.clientId`.
+- [x] Bannière résumé `#task-client-summary`, calculée dans `renderTaskList()`.
+- [x] Testé réel (Playwright) : recherche "sarah" → liste réduite à 1 résultat ; sélection → tâches filtrées + résumé correct + badge "1" ; reset "Tous les clients" et `clearTaskFilters()` → filtre vidé ; persistance localStorage vérifiée ; zéro erreur page.
+
 ## Authentification & synchronisation cloud
 
 **État** : connexion à un compte obligatoire. Le bouton "Continuer hors ligne" (mode anonyme, données locales uniquement) a été retiré de l'UI — c'est ce mode qui a causé une vraie perte de données quand l'utilisatrice a vidé le cache du navigateur. `loginOffline()` reste en JS pour les tests automatisés uniquement, jamais exposée dans l'UI de production.
