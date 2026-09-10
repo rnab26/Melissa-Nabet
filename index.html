@@ -1871,7 +1871,13 @@ let _renderT;
 function renderDebounced(){clearTimeout(_renderT);_renderT=setTimeout(render,120);}
 let _draftT;
 function saveDraftDebounced(){clearTimeout(_draftT);_draftT=setTimeout(saveDraft,600);}
-function saveDraft(){const snap=JSON.parse(JSON.stringify(current));snap._draftDevisId=currentDevisId;store.set(K_DRAFT,snap);}
+/* L'autosave local (K_DRAFT) protège contre une fermeture d'onglet, mais ne synchronise
+   PAS entre appareils : sans le upsertDevis ci-dessous, un brouillon travaillé sur un
+   appareil sans jamais cliquer sur « Enregistrer brouillon » restait invisible sur les
+   autres (raison du ticket : « je le travaille sur la tablette, je ne le retrouve pas sur
+   le téléphone »). Poussé dès qu'un nom de client existe, pour ne pas créer de devis
+   fantômes vides à chaque écran « Nouveau devis » ouvert puis abandonné. */
+function saveDraft(){const snap=JSON.parse(JSON.stringify(current));snap._draftDevisId=currentDevisId;store.set(K_DRAFT,snap);if(current.raison&&current.raison.trim())upsertDevis('brouillon');}
 function clearDraft(){store.del(K_DRAFT);}
 async function saveDraftManual(){
   saveDraft(); /* garde aussi la reprise auto */
@@ -2104,21 +2110,28 @@ function chItemEdit(cid,iid,key,val){
   updateChantierTotals();
 }
 let _chDraftT;
-function saveChantierDraftDebounced(){clearTimeout(_chDraftT);_chDraftT=setTimeout(()=>store.set('mn_chantier_draft',chantier),500);}
+/* Même piège que pour les devis (voir saveDraft) : store.set('mn_chantier_draft',...) est
+   purement local, K_CHANTIER n'existait dans aucune synchro. Ajout de persistChantierSilent
+   pour que l'estimation en cours parte aussi vers le cloud dès qu'un nom de projet existe,
+   sans le toast du bouton manuel (appelé toutes les 500ms pendant la frappe). */
+function saveChantierDraftDebounced(){clearTimeout(_chDraftT);_chDraftT=setTimeout(()=>{store.set('mn_chantier_draft',chantier);if(chantier.title&&chantier.title.trim())persistChantierSilent();},500);}
 function newChantier(){
   askConfirm('Créer une nouvelle estimation ? Les modifications non enregistrées de celle-ci seront perdues.',()=>{
     currentChantierId=null;chantier=blankChantier();renderChantier();toast('Nouvelle estimation');
   });
 }
-async function saveChantier(){
-  if(!chantier.title||!chantier.title.trim()){toast('Donnez un nom de projet avant d\'enregistrer');return;}
+async function persistChantierSilent(){
+  if(!chantier.title||!chantier.title.trim())return false;
   chantier.updatedAt=Date.now();
   if(!chantier.num)chantier.num=String(Math.max(0,...chantierList.map(c=>parseInt(c.num)||0))+1).padStart(4,'0');
   const i=chantierList.findIndex(c=>c.id===chantier.id);
   if(i>=0)chantierList[i]=JSON.parse(JSON.stringify(chantier));else chantierList.push(JSON.parse(JSON.stringify(chantier)));
   currentChantierId=chantier.id;
   await store.set(K_CHANTIER,chantierList);
-  toast('Estimation enregistrée');
+  return true;
+}
+async function saveChantier(){
+  if(await persistChantierSilent())toast('Estimation enregistrée');else toast('Donnez un nom de projet avant d\'enregistrer');
 }
 function loadChantier(id){
   const c=chantierList.find(x=>x.id===id);if(!c)return;
@@ -11050,11 +11063,12 @@ const SB_URL='https://njaamykxnvohoesrtpvv.supabase.co';
 const SITE_URL='https://rnab26.github.io/melissa-nabet-site/';
 const SB_KEY='sb_publishable_h7zdNqYow8o3jdofbWKIlg_IaEEcjj0';
 const APP_VERSION='v14 · 2026-08-03 (Supabase)';
-const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL,K_PROD]);
+const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL,K_PROD,K_CHANTIER]);
 let sb=null,sbUser=null,ownerId=null,sbChannel=null,applyingRemote=false,offlineMode=false,lastSyncError='',cloudReady=false,loggedIn=false;
-let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRealJson='',remoteProdJson='',pushT=null;
+let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRealJson='',remoteProdJson='',remoteChantierJson='',pushT=null;
 function setSyncStatus(s){const b=document.getElementById('sync-badge');if(!b)return;b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+function isEditingChantier(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#chantier-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 /* Id du client dont une fiche est en cours de saisie (champ actif dans .cl-group[data-cid]).
    Sert à protéger cette fiche d'un écrasement par une mise à jour distante (voir handleRealtime) :
    sans ça, un écho temps-réel de notre propre écriture (ou une synchro d'un autre appareil)
@@ -11112,18 +11126,19 @@ async function loadAll(){
       else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=r.data;remoteTasksJson=JSON.stringify(tasks);}}
       else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=JSON.stringify(realisations);}}
       else if(r.kind==='produits'){if(Array.isArray(r.data)){produits=r.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
+      else if(r.kind==='chantier'){if(Array.isArray(r.data)){chantierList=r.data;remoteChantierJson=JSON.stringify(chantierList);}}
     });
     clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
     devisList=devisList.filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));
     Object.keys(remoteClients).forEach(id=>{if(!cloudIds.has(id))delete remoteClients[id];});
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);store.set(K_CHANTIER,chantierList);
     applyingRemote=false;cloudReady=true;
     /* APRÈS la lecture du cloud : les fiches restées « Nouveau client » alors que leur
        contact est rempli reprennent leur contact comme nom. Avant, on réparerait une copie
        locale qui serait aussitôt écrasée par les données distantes. */
     reparerNomsClients();
-    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();}catch(e){}
+    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();if(!isEditingChantier())renderChantier();}catch(e){}
     setSyncStatus('ok');
     scheduleSyncPush();
     /* Les demandes en vol vivent dans `library` : c'est ici, une fois la bibliothèque
@@ -11167,14 +11182,20 @@ function handleRealtime(payload){
            écraser par un écho distant, et le prochain push renverra la version locale. */
         else if(row.kind==='produits'&&isEditingBoutique()){}
         else if(row.kind==='produits'){if(Array.isArray(row.data)){produits=row.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
+        /* Même protection : une estimation en cours de saisie ne se fait pas écraser par un
+           écho distant, remoteChantierJson n'est pas mis à jour, le prochain cloudPush
+           renverra la version locale. */
+        else if(row.kind==='chantier'&&isEditingChantier()){}
+        else if(row.kind==='chantier'){if(Array.isArray(row.data)){chantierList=row.data;remoteChantierJson=JSON.stringify(chantierList);}}
       }
     }
-    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);store.set(K_CHANTIER,chantierList);
   }catch(e){}
   applyingRemote=false;
   try{if(!isEditingClients())renderClients();}catch(e){}
   try{if(!isEditingRealisations())renderRealisations();}catch(e){}
   try{if(!isEditingBoutique())renderBoutique();}catch(e){}
+  try{if(!isEditingChantier())renderChantier();}catch(e){}
   setSyncStatus('ok');
 }
 async function cloudPush(){
@@ -11184,7 +11205,7 @@ async function cloudPush(){
      appliqué qu'APRÈS confirmation d'écriture réussie — sinon un push qui échoue (hors ligne,
      erreur réseau) était marqué à tort comme envoyé, et la modification locale ne repartait
      plus jamais en synchro (silencieusement perdue au prochain rechargement/loadAll). */
-  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null,pendingReal=null,pendingProd=null;
+  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null,pendingReal=null,pendingProd=null,pendingChantier=null;
   const pendingDelC=[],pendingDelD=[];
   clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){pendingC[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
   devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){pendingD[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
@@ -11192,6 +11213,7 @@ async function cloudPush(){
   const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){pendingTasks=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
   const rj=JSON.stringify(realisations);if(rj!==remoteRealJson){pendingReal=rj;rows.push({id:'realisations',owner:ownerId,kind:'realisations',data:realisations,updated_at:new Date().toISOString()});}
   const pj=JSON.stringify(produits);if(pj!==remoteProdJson){pendingProd=pj;rows.push({id:'produits',owner:ownerId,kind:'produits',data:produits,updated_at:new Date().toISOString()});}
+  const chj=JSON.stringify(chantierList);if(chj!==remoteChantierJson){pendingChantier=chj;rows.push({id:'chantier',owner:ownerId,kind:'chantier',data:chantierList,updated_at:new Date().toISOString()});}
   Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id))pendingDelC.push(id);});
   Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id))pendingDelD.push(id);});
   delIds.push(...pendingDelC,...pendingDelD);
@@ -11203,6 +11225,7 @@ async function cloudPush(){
     if(pendingTasks!==null)remoteTasksJson=pendingTasks;
     if(pendingReal!==null)remoteRealJson=pendingReal;
     if(pendingProd!==null)remoteProdJson=pendingProd;
+    if(pendingChantier!==null)remoteChantierJson=pendingChantier;
     pendingDelC.forEach(id=>delete remoteClients[id]);
     pendingDelD.forEach(id=>delete remoteDevis[id]);
     lastSyncError='';setSyncStatus('ok');

@@ -2855,3 +2855,46 @@ maintenant par **une seule fonction**, `edCropMontre` — ne pas les re-séparer
 **Vérification** : 579 contrôles CRM (10 nouveaux), dont la position réellement **mesurée à
 l'écran** (bords à 8 px, cible 48 px, centrage vertical) plutôt que la seule présence des
 balises ; puis l'éditeur parcouru à 390 px. Déployé et vérifié en ligne.
+
+---
+
+## 10 septembre 2026 — Deux vrais trous de synchro entre appareils
+
+Raphaël : « je travaille un devis en brouillon sur la tablette, je l'enregistre, puis je
+modifie des choses sur le téléphone — ce n'est pas la même chose d'un appareil à l'autre »,
+et pareil en enregistrant une catégorie de chantier / une édition de service.
+
+Deux causes distinctes, toutes les deux réelles, trouvées en remontant le circuit de
+synchro plutôt qu'en devinant :
+
+**Le brouillon de devis** autosauvegarde à chaque frappe, mais uniquement dans `K_DRAFT` —
+une clé qui n'a jamais fait partie de `SYNC_KEYS`. Seul un clic explicite sur
+« 📝 Enregistrer brouillon » poussait réellement le devis vers le cloud (`upsertDevis` →
+`devisList` → `K_DEVIS`, lui bien synchronisé). Un brouillon travaillé sans jamais cliquer
+ce bouton précis restait donc prisonnier de l'appareil.
+
+**Le module Chantier / Estimation** est pire : `K_CHANTIER` n'existait **dans aucun** des
+trois endroits qui font la synchro (`SYNC_KEYS`, `cloudPush`, `loadAll`/`handleRealtime`).
+Ni le brouillon en cours, ni même la liste des estimations *déjà enregistrées* via le
+bouton « Enregistrer » ne partaient jamais vers le cloud — le module entier tournait en
+local uniquement, depuis toujours.
+
+**Corrigé** : `saveDraft()` (devis) et `saveChantierDraftDebounced()` (chantier) poussent
+maintenant automatiquement vers la collection synchronisée dès qu'un contenu identifiable
+existe (nom de client / titre de projet) — pas avant, pour ne pas créer de brouillons
+fantômes à chaque écran vide ouvert puis abandonné. Le module Chantier a reçu le même
+traitement que `realisations`/`produits` : kind `'chantier'` dans les trois fonctions de
+synchro, `remoteChantierJson`, et la même protection `isEditingChantier()` qu'ailleurs
+contre un écho distant qui écraserait une frappe en cours.
+
+**Piège à ne pas rouvrir** : une clé locale (`store.set`) qui *a l'air* sauvegardée ne
+l'est pas forcément pour les autres appareils — il faut les trois endroits à la fois
+(`SYNC_KEYS`, `cloudPush`, `loadAll`+`handleRealtime`), et tout brouillon local doit pousser
+vers sa collection synchronisée dès que son contenu est réel, pas seulement sur un clic
+manuel facile à oublier.
+
+**Vérification** : test réel (faux Supabase en mémoire, même patron que
+`tests/realisations.test.mjs`) — frappe dans le champ raison sociale d'un devis sans jamais
+cliquer « Enregistrer brouillon », `cloudPush` ramasse bien la ligne ; idem pour le titre
+d'un chantier ; aucun devis/chantier fantôme créé pour un écran resté vide ; protection de
+la frappe en cours contre un écho distant confirmée sur le chantier. 0 erreur page.

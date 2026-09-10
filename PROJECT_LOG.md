@@ -10,10 +10,19 @@ Bug corrigé dans `cloudPush()` : un push qui échouait (hors ligne, erreur rés
 
 **Ne pas casser** : ne jamais réintroduire de mode de stockage purement local non lié à un compte dans l'UI de production. Toute nouvelle donnée utilisateur (nouveau champ, nouvelle collection) doit être synchronisée au même titre que `clients`/`devis`/`library`/`tasks` (voir `SYNC_KEYS`).
 
+Deux vrais trous de synchro trouvés (signalés par Raphaël : « je travaille un devis sur la tablette, je ne retrouve pas les modifs sur le téléphone », et une catégorie de chantier/service qui ne se retrouvait pas non plus d'un appareil à l'autre) :
+
+1. **Brouillon de devis** : l'autosave qui tourne à chaque frappe (`render()` → `saveDraftDebounced()` → `saveDraft()`) n'écrivait que dans `K_DRAFT`, une clé **hors** `SYNC_KEYS` — purement locale à l'appareil. Seul un clic explicite sur « 📝 Enregistrer brouillon » poussait réellement le devis dans `devisList` (`K_DEVIS`, synchronisé). Un brouillon travaillé sans jamais cliquer ce bouton restait donc invisible sur les autres appareils. `saveDraft()` appelle maintenant aussi `upsertDevis('brouillon')` dès qu'un nom de client (`current.raison`) existe — pas avant, pour ne pas créer de devis fantômes à chaque écran « Nouveau devis » ouvert puis abandonné.
+2. **Chantier / Estimation** (catégories, services, lignes) : `K_CHANTIER` n'était présent **nulle part** dans le circuit de synchro — ni dans `SYNC_KEYS`, ni dans `cloudPush()`, ni dans `loadAll()`/`handleRealtime()`. Le module entier (brouillon en cours ET liste des estimations enregistrées) ne synchronisait jamais, quoi qu'on fasse. Corrigé à l'identique du patron `clients`/`devis`/`library`/`tasks`/`realisations`/`produits` : `K_CHANTIER` ajouté à `SYNC_KEYS`, kind `'chantier'` géré dans `cloudPush`/`loadAll`/`handleRealtime` (avec `remoteChantierJson` et la même protection anti-écrasement d'une saisie en cours que pour les réalisations/la boutique, via `isEditingChantier()`), et `saveChantierDraftDebounced()` pousse maintenant aussi vers `chantierList` (via `persistChantierSilent()`, la même logique que le bouton « Enregistrer » mais sans le toast) dès qu'un nom de projet (`chantier.title`) existe.
+
+**Ne pas casser (suite)** : toute future donnée utilisateur doit être ajoutée aux TROIS endroits (`SYNC_KEYS`, `cloudPush`, `loadAll`+`handleRealtime`) — avoir une clé locale (`store.set`) ne suffit pas, c'est exactement ce qui a créé ces deux trous. Et pour tout brouillon local (`K_DRAFT`, `mn_chantier_draft` ou futur équivalent) : l'autosave local seul ne suffit pas non plus, il doit systématiquement pousser vers la collection synchronisée correspondante dès que le contenu est identifiable (pas de sync prématurée d'un écran vide, pas de sync manquante d'un contenu réel).
+
 **Notes / À faire**
 - [x] Retirer le mode "Continuer hors ligne" de l'UI (connexion à un compte obligatoire).
 - [x] Corriger le marquage "synchronisé" à tort sur un push qui a échoué.
 - [x] Retry automatique de la synchro (évènement `online` + filet 20s).
+- [x] Brouillon de devis synchronisé automatiquement (pas seulement sur clic manuel).
+- [x] Module Chantier/Estimation entièrement raccordé à la synchro cloud (brouillon + liste enregistrée), auparavant totalement absent du circuit.
 - [ ] Parcours d'inscription self-service (voir section Commercialisation).
 
 ## Sauvegarde automatique (exports/imports + panneaux)
