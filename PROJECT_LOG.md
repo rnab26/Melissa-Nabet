@@ -54,9 +54,12 @@ Renommer une section (`libEdit`, ex. « Compléments ») persiste bien réelleme
 
 **Ne pas casser (bibliothèque)** : `propagateSectionRename` doit rester borné aux devis `brouillon` — ne jamais l'étendre aux devis `valide` sans qu'on le redemande explicitement, c'est le contraire de ce qui a été demandé pour ceux-là.
 
+Déplacer un service vers une autre section : le glisser-déposer maison (`attachDragReorder`) est strictement scopé à un seul conteneur (`.lib-items` d'une section) — mesure les frères/sœurs via `container.children` uniquement, aucun support multi-conteneur. Plutôt que de réécrire ce mécanisme (rects figés au début du geste, décalages visuels par `transform`, remapping d'index au drop — fragile à toucher), ajout d'un simple `<select>` "→ Déplacer vers…" par ligne (`libMoveItem(si,ii,targetSi)` : `splice` hors de la section source, `push` dans la section cible). Ne touche AUCUN devis existant — un item de bibliothèque déplacé change juste l'organisation pour les FUTURS devis (un devis déjà seedé a sa propre copie indépendante de `sv.cat`/`sv.title`, comme pour le reste de cette section).
+
 **Notes / À faire**
 - [x] Corriger `resetLibrary()` pour ne toucher que `sections`/`exclus`.
 - [x] Renommer une section de bibliothèque propage le nouveau nom aux devis brouillons (composeur ouvert inclus), jamais aux devis validés.
+- [x] Déplacer un service d'une section de bibliothèque vers une autre (`<select>` par ligne, le glisser-déposer restant limité au réordonnancement dans une même section).
 
 ## Devis — éditeur & aperçu
 

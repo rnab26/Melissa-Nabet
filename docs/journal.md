@@ -2975,3 +2975,32 @@ texte), les deux brouillons suivent le nouveau nom (mémoire ET stockage), le de
 garde l'ancien nom sans y toucher ; case option cochée → deux cases apparaissent dans le
 rendu imprimé avec le bon texte, décochée → disparaissent, ligne cochée via un vrai clic
 dans l'interface (pas une mutation directe de l'état). 0 erreur page.
+
+---
+
+## 14 septembre 2026 (suite 2) — Déplacer un service vers une autre section
+
+Raphaël : un service de la bibliothèque était limité à sa section, aucun moyen de le
+déplacer ailleurs.
+
+Le glisser-déposer maison de la bibliothèque (`attachDragReorder`) est un mécanisme assez
+délicat — rects figés une fois au début du geste (les re-mesurer en cours de glissement
+ferait boucler le calcul sur lui-même), décalage visuel par `transform`, remapping
+d'index seulement au relâchement — mais **strictement scopé à un seul conteneur** :
+chaque `.lib-items` (une section) mesure ses frères/sœurs uniquement parmi ses propres
+enfants DOM, sans aucune notion de conteneur voisin. Le réécrire pour supporter le
+inter-sections aurait été une réécriture risquée d'un code déjà délicat, pour un besoin
+qui n'a pas besoin de glisser-déposer pour être résolu correctement.
+
+À la place : un simple `<select>` « → Déplacer vers… » sur chaque ligne de service,
+listant toutes les AUTRES sections. `libMoveItem(si,ii,targetSi)` sort l'item de la
+section source (`splice`) et le pousse dans la section cible (`push`). Ne touche aucun
+devis existant : un item de bibliothèque déplacé ne change que l'organisation pour les
+FUTURS devis — un devis déjà composé a sa propre copie indépendante (`sv.cat`, figé à la
+création, même logique que pour le renommage de section plus haut).
+
+**Vérification** : test réel — service pris dans "Conseil", déplacé vers "Compléments"
+via un vrai `selectOption` sur le menu ; disparu de la section source, apparu dans la
+section cible, persisté après fermeture/réouverture du panneau (relecture du `store`) ;
+un nouveau devis créé après le déplacement montre bien la ligne sous sa nouvelle section.
+0 erreur page.

@@ -147,6 +147,7 @@
   .dragging-row{box-shadow:0 6px 16px rgba(0,0,0,.18);border-radius:4px;}
   .cgv-body{display:block;width:calc(100% - 22px);margin:0 11px 11px;min-height:60px;font-size:12.5px;padding:7px 9px;border:1px solid var(--panel-edge);border-radius:3px;font-family:'Inter';resize:vertical;}
   .lib-item input{font-size:12.5px;padding:6px 8px;}
+  .lib-item-move{width:auto;flex:0 0 auto;font-size:11px;padding:5px 6px;color:var(--stone);}
   .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;}
   .toast.show{opacity:1;}
@@ -3016,9 +3017,11 @@ function newDevis(){currentDevisId=null;seedComposerFromLibrary();
 function openLibraryPanel(){
   if(!library.exclus)library.exclus=DEFAULT_EXCLUS.slice();
   const secs=library.sections.map((sec,si)=>{
+    const moveOptions=`<option value="">→ Déplacer vers…</option>`+library.sections.map((s2,si2)=>si2===si?'':`<option value="${si2}">${esc(s2.name)}</option>`).join('');
     const items=sec.items.map((it,ii)=>`<div class="lib-item" data-idx="${ii}">
       <span class="drag-handle item-drag-handle" title="Glisser pour réordonner">⠿</span>
       <input type="text" value="${esc(it.title)}" oninput="libEdit(${si},${ii},'title',this.value)">
+      <select class="lib-item-move" title="Déplacer ce service vers une autre section" onchange="libMoveItem(${si},${ii},this.value)">${moveOptions}</select>
       <button class="mini danger" onclick="libDelItem(${si},${ii})">×</button></div>`).join('');
     return `<div class="lib-sec" data-idx="${si}"><div class="lib-sec-h">
       <span class="drag-handle sec-drag-handle" title="Glisser pour réordonner">⠿</span>
@@ -3165,6 +3168,13 @@ function propagateSectionRename(oldName,newName){
 }
 function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvelle prestation',desc:'',mode:'none',price:0,qty:1,pu:0,defaultOn:false});openLibraryPanel();saveLibraryDebounced();}
 function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
+function libMoveItem(si,ii,targetSiStr){
+  const targetSi=parseInt(targetSiStr,10);
+  if(isNaN(targetSi)||targetSi===si||!library.sections[targetSi])return;
+  const item=library.sections[si].items.splice(ii,1)[0];if(!item)return;
+  library.sections[targetSi].items.push(item);
+  openLibraryPanel();saveLibraryDebounced();
+}
 function libAddSection(){library.sections.push({id:uid(),name:'Nouvelle section',items:[]});openLibraryPanel();saveLibraryDebounced();}
 function libDelSection(si){askConfirm('Supprimer cette section ?',()=>{library.sections.splice(si,1);openLibraryPanel();saveLibraryDebounced();});}
 function libExclEdit(ii,val){library.exclus[ii]=val;saveLibraryDebounced();}
