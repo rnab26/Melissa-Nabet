@@ -107,6 +107,8 @@
   .ai-btn{flex:0 0 auto;border:1px solid var(--stone-light);background:transparent;color:var(--oxblood);border-radius:3px;cursor:pointer;font-size:14px;padding:4px 8px;align-self:stretch;}
   .ai-btn:hover{background:var(--oxblood);color:#fff;}
   .ai-btn:disabled{opacity:.4;cursor:wait;}
+  .it-opt-toggle{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--stone);cursor:pointer;margin:0 0 6px;}
+  .it-opt-toggle input{width:14px;height:14px;accent-color:var(--oxblood);flex:0 0 auto;}
   .it-price{display:flex;gap:8px;align-items:center;}
   #prest.mode-global .it-price{display:none;}
   .it-price select{flex:0 0 140px;font-size:12px;padding:6px 8px;}
@@ -526,6 +528,8 @@
   .dv-item .it-t .price{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:16px;color:var(--oxblood);white-space:nowrap;}
   .dv-item .it-meta{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:var(--stone);font-style:italic;}
   .dv-item .it-d{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.8px;line-height:1.66;color:#544d43;margin-top:2px;white-space:pre-wrap;}
+  .dv-option-choice{display:flex;align-items:center;gap:6px;margin-top:2mm;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:var(--ink);}
+  .dv-opt-box{display:inline-block;width:10px;height:10px;border:1.2px solid var(--stone);flex:0 0 auto;}
   .dv-excl{margin:6mm 0;}
   .dv-excl ul{margin:2mm 0 0;padding-left:5mm;}
   .dv-excl li{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.6px;color:#6a6255;line-height:1.6;margin-bottom:1.5mm;}
@@ -1479,7 +1483,8 @@ function buildDevisHTML(S){
   const groupsHtml=order.map(cat=>{
     const items=inc.filter(v=>v.cat===cat).map(v=>{
       const pl=detail?priceLabel(S,v):'',ml=detail?metaLabel(S,v):'';
-      return `<div class="dv-item"><div class="it-t"><span>${esc(v.title)}</span>${pl?`<span class="price">${pl}</span>`:''}</div>${ml?`<div class="it-meta">${ml}</div>`:''}${v.desc?`<div class="it-d">${esc(v.desc)}</div>`:''}</div>`;
+      const optHtml=v.optionClient?'<div class="dv-option-choice"><span class="dv-opt-box"></span> Oui, je valide cette option &nbsp;&nbsp; <span class="dv-opt-box"></span> Non</div>':'';
+      return `<div class="dv-item${v.optionClient?' dv-item-option':''}"><div class="it-t"><span>${esc(v.title)}</span>${pl?`<span class="price">${pl}</span>`:''}</div>${ml?`<div class="it-meta">${ml}</div>`:''}${v.desc?`<div class="it-d">${esc(v.desc)}</div>`:''}${optHtml}</div>`;
     }).join('');
     return `<div class="dv-group" data-cat="${esc(cat)}"><div class="dv-group-h">${esc(cat)}</div>${items}</div>`;
   }).join('');
@@ -1956,12 +1961,13 @@ function buildPrest(){
     const body=acc.querySelector('.acc-body');
     items.forEach(sv=>{
       const row=document.createElement('div');row.className='it'+(sv.on?' on':'');
-      row.innerHTML=`<div class="it-head"><input type="checkbox" ${sv.on?'checked':''}><input class="it-title" type="text" value="${esc(sv.title)}" placeholder="Intitulé">${sv.custom?'<button class="it-rm" title="Supprimer">×</button>':''}</div><div class="it-sub"><div class="it-descrow"><textarea class="it-desc" placeholder="Texte qui embellit et raconte…">${esc(sv.desc)}</textarea><button class="ai-btn" title="Embellir avec l'IA">✨</button></div><div class="it-price">${priceInputs(sv)}</div></div>`;
-      const cb=row.querySelector('input[type=checkbox]');
+      row.innerHTML=`<div class="it-head"><input type="checkbox" ${sv.on?'checked':''}><input class="it-title" type="text" value="${esc(sv.title)}" placeholder="Intitulé">${sv.custom?'<button class="it-rm" title="Supprimer">×</button>':''}</div><div class="it-sub"><div class="it-descrow"><textarea class="it-desc" placeholder="Texte qui embellit et raconte…">${esc(sv.desc)}</textarea><button class="ai-btn" title="Embellir avec l'IA">✨</button></div><label class="it-opt-toggle" title="Affiche deux cases « Oui / Non » sur le devis, pour que le client coche s'il accepte cette option."><input type="checkbox" class="it-opt-cb" ${sv.optionClient?'checked':''}> Option à valider par le client</label><div class="it-price">${priceInputs(sv)}</div></div>`;
+      const cb=row.querySelector('.it-head input[type=checkbox]');
       cb.addEventListener('change',()=>{sv.on=cb.checked;row.classList.toggle('on',sv.on);const c=sectionCount(name);const b=acc.querySelector('.acc-count');b.textContent=c;b.classList.toggle('zero',!c);render();});
       row.querySelector('.it-title').addEventListener('input',e=>{sv.title=e.target.value;renderDebounced();});
       row.querySelector('.it-desc').addEventListener('input',e=>{sv.desc=e.target.value;renderDebounced();});
       row.querySelector('.ai-btn').addEventListener('click',e=>embellish(sv,e.target,row.querySelector('.it-desc')));
+      row.querySelector('.it-opt-cb').addEventListener('change',e=>{sv.optionClient=e.target.checked;render();});
       const rm=row.querySelector('.it-rm');if(rm)rm.addEventListener('click',()=>{current.services=current.services.filter(x=>x.id!==sv.id);buildPrest();render();});
       const pr=row.querySelector('.it-price');
       bindPriceRow(pr,sv);
@@ -3120,7 +3126,43 @@ function wireLibraryDrag(){
     });
   });
 }
-function libEdit(si,ii,key,val){if(ii===null)library.sections[si].name=val;else library.sections[si].items[ii][key]=val;saveLibraryDebounced();}
+function libEdit(si,ii,key,val){
+  if(ii===null){
+    const oldName=library.sections[si].name;
+    library.sections[si].name=val;
+    if(oldName!==val)propagateSectionRename(oldName,val);
+  }else library.sections[si].items[ii][key]=val;
+  saveLibraryDebounced();
+}
+/* Renommer une section de bibliothèque ne doit PAS changer un devis déjà validé/envoyé
+   (sv.cat est une copie figée du nom au moment de la création du devis, volontairement,
+   pour la stabilité des devis déjà partis) — mais un brouillon encore en cours de travail
+   doit suivre le nouveau nom, sinon le renommage a l'air de « ne rien faire » pour
+   l'utilisatrice qui l'a fait exprès pour ce brouillon. */
+function propagateSectionRename(oldName,newName){
+  devisList.forEach(d=>{
+    if(d.status!=='brouillon'||!d.snapshot||!Array.isArray(d.snapshot.services))return;
+    let touched=false;
+    d.snapshot.services.forEach(sv=>{if(sv.cat===oldName){sv.cat=newName;touched=true;}});
+    if(touched&&d.snapshot.open&&Object.prototype.hasOwnProperty.call(d.snapshot.open,oldName)){
+      d.snapshot.open[newName]=d.snapshot.open[oldName];delete d.snapshot.open[oldName];
+    }
+  });
+  store.set(K_DEVIS,devisList);
+  const curEntry=currentDevisId?devisList.find(x=>x.id===currentDevisId):null;
+  const curIsDraft=!currentDevisId||!curEntry||curEntry.status!=='valide';
+  if(!curIsDraft)return;
+  let touchedCurrent=false;
+  current.services.forEach(sv=>{if(sv.cat===oldName){sv.cat=newName;touchedCurrent=true;}});
+  if(touchedCurrent&&current.open&&Object.prototype.hasOwnProperty.call(current.open,oldName)){
+    current.open[newName]=current.open[oldName];delete current.open[oldName];
+  }
+  /* render() ne repeint que l'aperçu imprimé (#devis) — l'accordéon d'édition (#prest, avec
+     les en-têtes de section visibles pendant qu'on compose) est une vue SÉPARÉE construite
+     par buildPrest(). Sans elle, l'en-tête du composeur restait affiché avec l'ancien nom
+     malgré des données à jour en mémoire (trouvé par le test, pas par relecture). */
+  if(touchedCurrent){buildPrest();render();}
+}
 function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvelle prestation',desc:'',mode:'none',price:0,qty:1,pu:0,defaultOn:false});openLibraryPanel();saveLibraryDebounced();}
 function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
 function libAddSection(){library.sections.push({id:uid(),name:'Nouvelle section',items:[]});openLibraryPanel();saveLibraryDebounced();}

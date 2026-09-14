@@ -2942,3 +2942,36 @@ pas de libellé si la bibliothèque évolue ensuite. Seul un NOUVEAU devis cré�
 renommage montre le nouveau nom. À trancher avec lui avant de toucher au code : veut-il
 que ça se propage aussi à un devis en cours (brouillon, pas encore validé), et si oui,
 comment protéger les devis déjà validés/envoyés de ce même changement rétroactif.
+
+---
+
+## 14 septembre 2026 (suite) — Renommage propagé aux brouillons, et une case « option client »
+
+Réponse de Raphaël aux deux questions laissées ouvertes plus haut : oui pour la
+propagation aux brouillons, et oui pour la case à cocher, avec une exigence précise —
+« cette option de case à cocher doit être activable comme désactivable ».
+
+**Renommage d'une section** (`libEdit` → `propagateSectionRename`) : parcourt `devisList`
+et ne touche QUE les devis `status==='brouillon'` (jamais `'valide'`, ligne rouge
+explicite de Raphaël) ; si le devis actuellement ouvert dans le composeur est lui-même un
+brouillon, `current` est mis à jour à l'identique. **Premier bug trouvé par le test, pas
+par relecture** : `render()` seul ne suffisait pas pour rafraîchir l'écran — il ne repeint
+que l'aperçu imprimé (`#devis`), pas l'accordéon d'édition (`#prest`, construit par
+`buildPrest()`, une vue séparée). Sans `buildPrest()` en plus, les données en mémoire
+étaient à jour mais l'en-tête affiché à l'écran restait sur l'ancien nom — corrigé avant
+livraison, le test l'a immédiatement révélé au premier passage.
+
+**Case « Option à valider par le client »** : nouveau flag `sv.optionClient` par ligne de
+prestation, off par défaut, activable/désactivable à tout moment via une case dans le
+composeur (`.it-opt-toggle`). Actif, le devis imprimé/PDF affiche sous la ligne deux
+cases vides « ☐ Oui, je valide cette option » / « ☐ Non » (dessinées en CSS, `.dv-opt-box`
+— pas un glyphe Unicode ☐, peu fiable selon le moteur d'export PDF utilisé ailleurs dans
+l'app). N'affecte que la présentation : le prix et l'inclusion dans le total restent
+gouvernés par `sv.on`, comme toute autre ligne.
+
+**Vérification** : test réel — 3 devis préparés (un brouillon ouvert dans le composeur,
+un brouillon enregistré mais fermé, un validé), renommage via la bibliothèque (vrai champ
+texte), les deux brouillons suivent le nouveau nom (mémoire ET stockage), le devis validé
+garde l'ancien nom sans y toucher ; case option cochée → deux cases apparaissent dans le
+rendu imprimé avec le bon texte, décochée → disparaissent, ligne cochée via un vrai clic
+dans l'interface (pas une mutation directe de l'état). 0 erreur page.

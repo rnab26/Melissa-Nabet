@@ -50,8 +50,13 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 
 **Ne pas casser** : `library` porte de nombreuses sous-fonctionnalités indépendantes (`branding`, `bgLibrary`, `taskCategories`, `chantierCats`, `cgv`, `sections`, `exclus`). Un reset ciblé sur l'une d'elles ne doit **jamais** faire `library = defaultLibrary()` ou équivalent — ne reset que les clés concernées.
 
+Renommer une section (`libEdit`, ex. « Compléments ») persiste bien réellement (vérifié : survit fermeture/réouverture du panneau, relecture du `store`) — mais chaque devis fige une COPIE du nom au moment de sa création (`sv.cat`, pas une référence vivante vers `library.sections`), volontairement, pour qu'un devis déjà validé/envoyé ne change pas de libellé si la bibliothèque évolue ensuite. Un devis **brouillon** (pas encore validé) doit en revanche suivre le renommage — demande explicite de Raphaël. `propagateSectionRename(oldName,newName)` : parcourt `devisList`, ne touche que les entrées `status==='brouillon'` (jamais `'valide'`), met à jour `sv.cat` + la clé correspondante de `snapshot.open` ; si le devis actuellement ouvert dans le composeur est lui-même un brouillon (ou pas encore enregistré), `current.services`/`current.open` sont mis à jour à l'identique et **`buildPrest()` + `render()`** repeignent l'écran tout de suite (`render()` seul ne suffit pas : il ne repeint que l'aperçu imprimé `#devis`, pas l'accordéon d'édition `#prest` — bug réel trouvé par le premier passage du test, corrigé avant livraison).
+
+**Ne pas casser (bibliothèque)** : `propagateSectionRename` doit rester borné aux devis `brouillon` — ne jamais l'étendre aux devis `valide` sans qu'on le redemande explicitement, c'est le contraire de ce qui a été demandé pour ceux-là.
+
 **Notes / À faire**
 - [x] Corriger `resetLibrary()` pour ne toucher que `sections`/`exclus`.
+- [x] Renommer une section de bibliothèque propage le nouveau nom aux devis brouillons (composeur ouvert inclus), jamais aux devis validés.
 
 ## Devis — éditeur & aperçu
 
@@ -66,8 +71,13 @@ Les 5 panneaux qui ne persistaient qu'au clic explicite sur "Enregistrer" (Bibli
 
 **Ne pas casser** : le rendu print (`@media print`) doit rester en vrai format A4 — toute modif de `.devis`/`.devis-page` doit être vérifiée séparément en aperçu écran et en impression/export PDF.
 
+Ligne de prestation « option à valider par le client » (demande explicite de Raphaël) : nouveau flag `sv.optionClient` (booléen, off par défaut), activable/désactivable par ligne via une case dans le composeur (`.it-opt-toggle`, visible une fois la ligne cochée « on »). Quand actif, le devis imprimé/PDF affiche sous l'intitulé et le prix deux cases vides côte à côte (`.dv-opt-box`, dessinées en CSS — pas un glyphe Unicode, peu fiable selon le moteur PDF) : « ☐ Oui, je valide cette option » / « ☐ Non ». N'affecte que la présentation — le prix et l'inclusion dans le total restent gouvernés par `sv.on` comme n'importe quelle ligne.
+
+**Ne pas casser (option client)** : `sv.optionClient` est lu de façon simplement "truthy" partout — pas besoin de l'initialiser explicitement sur les items existants (créés avant cette fonctionnalité), `undefined` se comporte comme `false`.
+
 **Notes / À faire**
 - [x] Aperçu devis plein largeur au lieu du grand vide gris.
+- [x] Case « Option à valider par le client » par ligne de prestation, activable/désactivable, affichée en case à cocher Oui/Non sur le devis imprimé/PDF.
 - [x] Corriger le scroll figé sur tablette/vue bureau (scope `body.devis-active`).
 - [x] Section Client en deux colonnes.
 - [x] Signataire modulable (personne physique différente de la raison sociale).
