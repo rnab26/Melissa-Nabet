@@ -2898,3 +2898,47 @@ manuel facile à oublier.
 cliquer « Enregistrer brouillon », `cloudPush` ramasse bien la ligne ; idem pour le titre
 d'un chantier ; aucun devis/chantier fantôme créé pour un écran resté vide ; protection de
 la frappe en cours contre un écho distant confirmée sur le chantier. 0 erreur page.
+
+---
+
+## 14 septembre 2026 — Le composeur de devis restait figé face à un autre appareil
+
+Raphaël, suite directe du trou de synchro du 10 : « je veux du vrai live comme un Google
+Sheet sur le CRM, je n'ai pas l'impression que c'est le cas actuellement ». Il avait
+raison, et le correctif du 10 ne suffisait pas : `devisList` recevait bien l'écho distant
+en coulisse, mais **le composeur affiché à l'écran ne se repeignait jamais** —
+`handleRealtime` mettait à jour le tableau sans jamais toucher `#f-raison`, `#prest`, etc.
+Travailler le même devis sur téléphone et tablette donnait donc l'impression que rien
+n'était en direct : il fallait fermer puis rouvrir le devis pour voir l'autre appareil.
+
+Corrigé sur le même patron que la protection déjà en place pour les clients
+(`activeEditingClientId`) : nouvelle garde `isEditingDevisComposer()` (scope `.editor`).
+Si le devis actuellement ouvert reçoit un écho distant **et** qu'on est en train d'y
+taper, l'écho est ignoré — la frappe locale n'est jamais écrasée, et repartira au
+prochain `cloudPush` (comme pour un client). Sinon, `current` est rechargé depuis la
+donnée distante et l'écran se repeint immédiatement (`fillFields`/`buildPrest`/
+`buildExclu`/`render`), sans réinitialiser les accordéons ouverts/fermés localement.
+
+**Ce que ça n'est pas, dit clairement plutôt qu'enjolivé** : ce n'est pas une fusion
+caractère par caractère si deux personnes tapent au même instant dans le même champ — la
+dernière écriture gagne, exactement comme pour les clients, les réalisations, la boutique
+et le chantier ailleurs dans l'app. Ce qui est corrigé : éditer sur un appareil puis
+simplement regarder l'autre (sans y taper) montre la mise à jour en ~1 seconde, sans rien
+rouvrir — c'est précisément ce qui manquait.
+
+**Vérification** : test réel (faux Supabase en mémoire) — écho distant sur le devis
+ouvert, composeur pas en frappe → les champs à l'écran se mettent à jour tout seuls ;
+même écho pendant que le champ « Projet » est activement tapé → la frappe locale est
+conservée, rien n'est marqué synchronisé côté distant ; écho sur un AUTRE devis que celui
+ouvert → aucun effet sur l'écran. 0 erreur page.
+
+Question annexe posée par Raphaël en même temps, **pas encore traitée** : renommer une
+section de la bibliothèque de prestations (ex. « Compléments ») enregistre bien (vérifié
+réel : persiste dans `store`, survit à la fermeture/réouverture du panneau) — mais un
+devis DÉJÀ ouvert au moment du renommage garde l'ancien nom, parce que chaque devis fige
+une COPIE du nom de section au moment où il est créé (`sv.cat`, pas une référence vivante
+vers `library.sections`) — volontaire à l'origine, pour qu'un devis déjà envoyé ne change
+pas de libellé si la bibliothèque évolue ensuite. Seul un NOUVEAU devis créé après le
+renommage montre le nouveau nom. À trancher avec lui avant de toucher au code : veut-il
+que ça se propage aussi à un devis en cours (brouillon, pas encore validé), et si oui,
+comment protéger les devis déjà validés/envoyés de ce même changement rétroactif.

@@ -11076,6 +11076,7 @@ function isEditingChantier(){const a=document.activeElement;return !!(a&&a.close
    à écrire dans un objet devenu orphelin (jamais sauvegardé), ou une valeur plus ancienne
    écrasait en partie le texte tout juste tapé. */
 function activeEditingClientId(){const a=document.activeElement;const grp=a&&a.closest&&a.closest('.cl-group[data-cid]');return grp?grp.dataset.cid:null;}
+function isEditingDevisComposer(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('.editor')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function friendlyAuthErr(e){const m=((e&&e.message)||'').toLowerCase();
   if(m.includes('invalid login'))return "E-mail ou mot de passe incorrect.";
   if(m.includes('email not confirmed'))return "Compte non confirmé (cochez « Auto Confirm » dans Supabase).";
@@ -11170,7 +11171,21 @@ function handleRealtime(payload){
              donc notre version locale (plus récente), qui redeviendra la référence pour tout le
              monde — rien n'est perdu. */
         }else if(row.kind==='client'){const nc=normalizeClient(row.data);const i=clients.findIndex(x=>x.id===row.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[row.id]=JSON.stringify(nc);}
-        else if(row.kind==='devis'){const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);}
+        /* Le devis affiché dans le composeur ne se rafraîchissait JAMAIS sur un écho distant
+           (seul devisList était mis à jour en coulisse) : travailler le même devis sur deux
+           appareils donnait l'impression que rien n'était « vraiment en direct » — il fallait
+           fermer/rouvrir pour voir l'autre appareil. Même garde que pour un client en cours de
+           saisie : si CE devis est ouvert ET qu'on est en train d'y taper, on ignore l'écho
+           (remoteDevis pas mis à jour, le prochain cloudPush renverra notre version) ; sinon
+           on recharge `current` depuis la donnée distante et on repeint l'écran tout de suite. */
+        else if(row.kind==='devis'&&row.id===currentDevisId&&isEditingDevisComposer()){}
+        else if(row.kind==='devis'){
+          const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
+          if(row.id===currentDevisId&&row.data&&row.data.snapshot){
+            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;
+            fillFields();buildPrest();buildExclu();render();
+          }
+        }
         else if(row.kind==='library'){if(row.data&&row.data.sections){library=row.data;remoteLibJson=JSON.stringify(library);}}
         else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=row.data;remoteTasksJson=JSON.stringify(tasks);}}
         else if(row.kind==='realisations'&&isEditingRealisations()){

@@ -17,12 +17,19 @@ Deux vrais trous de synchro trouvés (signalés par Raphaël : « je travaille u
 
 **Ne pas casser (suite)** : toute future donnée utilisateur doit être ajoutée aux TROIS endroits (`SYNC_KEYS`, `cloudPush`, `loadAll`+`handleRealtime`) — avoir une clé locale (`store.set`) ne suffit pas, c'est exactement ce qui a créé ces deux trous. Et pour tout brouillon local (`K_DRAFT`, `mn_chantier_draft` ou futur équivalent) : l'autosave local seul ne suffit pas non plus, il doit systématiquement pousser vers la collection synchronisée correspondante dès que le contenu est identifiable (pas de sync prématurée d'un écran vide, pas de sync manquante d'un contenu réel).
 
+**Troisième trou, trouvé en creusant le retour « je veux du vrai live comme un Google Sheet »** : le devis synchronisait bien en coulisse (`devisList`/`K_DEVIS`), mais le composeur **affiché à l'écran** ne se rafraîchissait jamais sur un écho distant — `handleRealtime` mettait à jour `devisList` sans jamais repeindre `#f-raison`, `#prest`, etc. Travailler le même devis sur deux appareils donnait donc l'impression figée « il faut fermer/rouvrir pour voir l'autre appareil ». Corrigé : nouvelle garde `isEditingDevisComposer()` (même patron que `activeEditingClientId()`) — si CE devis est ouvert et qu'on y tape, l'écho est ignoré (la frappe locale n'est jamais écrasée, et repartira au prochain `cloudPush`) ; sinon `current` est rechargé depuis la donnée distante et l'écran (`fillFields`/`buildPrest`/`buildExclu`/`render`) se repeint tout de suite, sans toucher aux accordéons ouverts/fermés localement.
+
+**Honnêteté sur la limite** : ce n'est PAS une co-édition à la Google Sheets au sens strict (pas de fusion caractère par caractère si deux personnes tapent au même instant dans le même champ — la dernière écriture gagne, comme partout ailleurs dans l'app pour clients/réalisations/boutique/chantier). Ce qui est corrigé : éditer sur un appareil puis regarder l'autre (sans y taper) le montre à jour en ~1 seconde, sans rouvrir quoi que ce soit — ce qui manquait réellement.
+
+**Ne pas casser (suite 2)** : `isEditingDevisComposer()` scope sur `.editor` (le formulaire du composeur) — si la structure DOM du composeur change, vérifier que cette classe existe toujours à sa racine, sinon la garde ne protège plus rien silencieusement.
+
 **Notes / À faire**
 - [x] Retirer le mode "Continuer hors ligne" de l'UI (connexion à un compte obligatoire).
 - [x] Corriger le marquage "synchronisé" à tort sur un push qui a échoué.
 - [x] Retry automatique de la synchro (évènement `online` + filet 20s).
 - [x] Brouillon de devis synchronisé automatiquement (pas seulement sur clic manuel).
 - [x] Module Chantier/Estimation entièrement raccordé à la synchro cloud (brouillon + liste enregistrée), auparavant totalement absent du circuit.
+- [x] Le composeur de devis se rafraîchit en direct sur un écho distant (au lieu de rester figé jusqu'à fermeture/réouverture), avec protection de la frappe active.
 - [ ] Parcours d'inscription self-service (voir section Commercialisation).
 
 ## Sauvegarde automatique (exports/imports + panneaux)
