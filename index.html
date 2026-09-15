@@ -34,9 +34,21 @@
   #split-toggle{display:none;}
   /* Bouton flottant Composer/Aperçu (mobile étroit uniquement) : remplace les anciens onglets
      dans la barre du haut, trop chargée. Toujours accessible en bas de l'écran, peu importe où
-     on a défilé. Masqué en Vue bureau forcée (les deux volets sont déjà côte à côte). */
+     on a défilé. Restait auparavant masqué en Vue bureau forcée (le raisonnement : les deux
+     volets sont déjà côte à côte, pas besoin de bouton) — mais sur un écran de téléphone
+     réel, "Vue bureau" les serre l'un à côté de l'autre en deux colonnes étroites, illisibles ;
+     demande explicite de Raphaël pour retrouver un aperçu plein écran d'un geste, même en
+     Vue bureau forcée sur mobile. */
   #devis-tab-fab{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:20px;z-index:45;border-radius:30px;padding:15px 30px;box-shadow:0 6px 22px rgba(0,0,0,.32);background:var(--oxblood);color:#fff;border:none;font-family:'Inter';font-size:14.5px;font-weight:700;letter-spacing:.03em;cursor:pointer;}
-  @media (max-width:900px){body.devis-active:not(.force-split) #devis-tab-fab{display:block;}}
+  @media (max-width:900px){
+    body.devis-active #devis-tab-fab{display:block;}
+    /* Vue bureau forcée impose normalement les deux volets côte à côte quelle que soit la
+       largeur réelle (règles plus bas, .force-split.show-preview .editor{display:block} etc.) —
+       ces deux règles, plus spécifiques (4 classes) et scopées à cette largeur, rétablissent le
+       vrai basculement plein écran quand on est à la fois en Vue bureau ET sur un petit écran. */
+    body.force-split.devis-active.show-preview .editor{display:none;}
+    body.force-split.devis-active.show-editor .preview-wrap{display:none;}
+  }
   /* Dropdown "Devis" dans la nav du haut : regroupe Composer / Mes devis, au lieu de deux
      boutons permanents qui encombrent la barre. */
   .vnav-dropdown{position:relative;}

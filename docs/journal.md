@@ -3527,3 +3527,29 @@ enregistrement, jamais redescendu.
 l'ouvrir/l'abandonner trois fois de suite reste à 0080 ; ce 0080 une fois réellement
 enregistré PUIS supprimé, le "Nouveau devis" suivant propose 0081, jamais une deuxième
 fois 0080. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 13) — Le bouton Aperçu manquant en Vue bureau sur téléphone
+
+Raphaël : « rajoute sur la vue mobile le bouton de l'aperçu du devis comme on a sur la
+vue bureau ». Vérifié avec lui avant de coder (les mots seuls prêtaient à deux lectures
+possibles) : il parle bien du bouton flottant « 👁 Aperçu », déjà présent en mobile normal
+mais qui disparaît dès qu'on active « Vue bureau » sur un téléphone.
+
+Le raisonnement d'origine de ce masquage était sain en théorie (Vue bureau affiche déjà
+les deux volets côte à côte, pas besoin de basculer) — mais sur un écran de téléphone
+réel, forcer ces deux volets donne deux colonnes de quelques centimètres chacune,
+illisibles. Sans bouton pour revenir à un seul volet plein écran, Vue bureau devient un
+piège sur mobile plutôt qu'un choix.
+
+Corrigé : le bouton reste visible sur tout écran ≤900px, Vue bureau activée ou non.
+Comme les règles CSS de Vue bureau forcent normalement les deux volets à rester visibles
+quelle que soit la largeur (c'est tout leur but), il a fallu une deuxième règle, plus
+spécifique et scopée à cette largeur, pour que le clic sur le bouton bascule vraiment
+entre les deux plutôt que de rester sans effet.
+
+**Vérification** : test réel (Playwright, 390px) — bouton visible une fois Vue bureau
+activée, premier clic masque l'éditeur et affiche l'aperçu plein écran, second clic
+revient au composeur ; vrai bureau (1280px) inchangé, bouton resté masqué. 0 erreur
+page.
