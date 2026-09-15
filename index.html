@@ -11242,14 +11242,41 @@ async function loadAll(){
     iaRepriseAuto();
   }catch(e){lastSyncError=(e&&(e.message||e.code))||'lecture impossible';setSyncStatus('err');}
 }
+let _rtRetryT=null;
 function subscribeRealtime(){
   if(!sb||sbChannel)return;
   try{
     sbChannel=sb.channel('app_data_rt')
       .on('postgres_changes',{event:'*',schema:'public',table:'app_data'},payload=>handleRealtime(payload))
-      .subscribe(status=>{if(status==='SUBSCRIBED')setSyncStatus('ok');});
+      .subscribe(status=>{
+        if(status==='SUBSCRIBED'){setSyncStatus('ok');return;}
+        /* Sans ceci, un canal qui tombe (CHANNEL_ERROR/TIMED_OUT/CLOSED — fréquent sur
+           mobile quand l'onglet passe en arrière-plan et que le WebSocket est coupé par le
+           système) restait mort en silence pour le reste de la session : `sbChannel` gardait
+           une référence non nulle, donc `subscribeRealtime()` refusait tout nouvel essai
+           (garde `if(!sb||sbChannel)return`) — le badge « synchronisé » restait affiché
+           (posé ailleurs, sans rapport avec l'état réel du canal) alors que plus aucun
+           changement distant n'arrivait. On efface la référence et on retente. */
+        if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+          try{sb.removeChannel(sbChannel);}catch(e){}
+          sbChannel=null;
+          clearTimeout(_rtRetryT);
+          _rtRetryT=setTimeout(()=>{if(sb&&sbUser)subscribeRealtime();},5000);
+        }
+      });
   }catch(e){}
 }
+/* Le WebSocket temps réel ne survit pas toujours à une mise en arrière-plan prolongée sur
+   mobile, même sans passer par un des statuts gérés ci-dessus (le navigateur peut le geler
+   sans jamais notifier de fermeture). Au retour au premier plan : on pousse d'abord tout
+   changement local resté en attente (cloudPush, sans risque si rien n'a changé), PUIS on
+   recharge depuis le cloud (loadAll) pour rattraper ce qui a pu arriver pendant l'absence,
+   et on s'assure que le canal est bien vivant. Pousser avant de tirer évite qu'un
+   rechargement écrase une modification locale pas encore envoyée. */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'||!sb||!sbUser||offlineMode)return;
+  cloudPush().then(loadAll).then(()=>{if(!sbChannel)subscribeRealtime();});
+});
 function handleRealtime(payload){
   applyingRemote=true;
   try{

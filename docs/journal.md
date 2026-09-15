@@ -3169,3 +3169,50 @@ fonctionnalités non demandées.
 cours d'édition → repeint immédiatement ; même écho avec le champ Titre d'une tâche
 réellement cliqué et en cours de frappe → frappe conservée, rien écrasé, rien marqué
 synchronisé côté distant. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 4) — Le vrai trou : le canal temps réel, pas telle ou telle fonction
+
+Raphaël, capture à l'appui (Réglages ouverts sur son téléphone, « Aucune signature »
+alors qu'il l'a configurée sur sa tablette) : « il n'y a pas de coordination entre les
+appareils. Tout ce que je fais dans mon compte, j'ai l'impression que c'est en local et
+pas en ligne. » Et, avec raison : « je comprends pas comment tu peux me dire que tout est
+passé, aucun problème, pas de fantôme, etc. »
+
+Il avait raison de ne pas se satisfaire des correctifs précédents. Chacun réglait
+correctement CE QUI SE PASSE quand un écho distant arrive (protection de la frappe,
+repeint de l'écran…) — mais aucun ne vérifiait que le canal lui-même restait VIVANT.
+
+**Root cause trouvée dans le code, mais pas confirmée en base** (honnêteté : je n'ai pas
+accès en lecture à la vraie base Supabase dans cet environnement —
+`SUPABASE_SERVICE_ROLE_KEY_MELISSA` n'y est pas déposée, `scripts/sql.sh` s'arrête avec
+« No API key found »). `subscribeRealtime()` ne gérait QUE le statut `SUBSCRIBED` du
+canal. Un canal qui tombe (`CHANNEL_ERROR`/`TIMED_OUT`/`CLOSED` — courant sur mobile
+quand l'onglet passe en arrière-plan et que le système coupe le WebSocket pour économiser
+la batterie) laissait `sbChannel` avec une référence non nulle : `subscribeRealtime()`
+refusait alors tout nouvel essai pour le RESTE DE LA SESSION (`if(!sb||sbChannel)return`)
+— en silence, le badge « synchronisé » restant affiché (posé ailleurs, sans rapport avec
+l'état réel du canal). Un canal mort dès le début d'une session téléphone expliquerait
+tous les cas signalés depuis plusieurs jours, quelle que soit la fonctionnalité précise —
+une explication bien plus cohérente que de continuer à chercher fonctionnalité par
+fonctionnalité.
+
+**Corrigé** :
+1. `subscribeRealtime()` gère maintenant les statuts d'échec — `sbChannel` remis à
+   `null`, nouvel essai après 5 secondes.
+2. Nouvel écouteur `visibilitychange` : au retour au premier plan, on pousse d'abord tout
+   changement local resté en attente (`cloudPush`), PUIS on tire depuis le cloud
+   (`loadAll`, rattrape ce qui est arrivé pendant l'absence), PUIS on réabonne le canal
+   s'il était mort. Pousser avant de tirer, volontairement : inverser l'ordre risquerait
+   d'écraser une modification locale pas encore envoyée. Ce filet couvre aussi le cas où
+   le système gèle le WebSocket sans jamais notifier de fermeture (aucun statut ne se
+   déclenche alors) — la reprise au premier plan agit indépendamment de ça.
+
+**Vérification** : test réel (faux canal Supabase en mémoire) — un canal qui envoie
+`CHANNEL_ERROR` déclenche bien un second abonnement après le délai ; simuler un retour au
+premier plan (`visibilitychange`) déclenche bien push puis pull puis réabonnement, dans
+cet ordre. 0 erreur page. **Ce qui reste ouvert** : confirmer sur la vraie base que
+c'était précisément la cause du cas de Raphaël demanderait un accès que je n'ai pas ici —
+à vérifier avec lui sur son téléphone (fermer l'app en arrière-plan puis y revenir, ou
+simplement la rouvrir) une fois ce correctif en ligne.
