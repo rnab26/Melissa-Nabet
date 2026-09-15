@@ -3299,3 +3299,35 @@ vérifiable, cohérent avec ce qu'il décrit — mais je n'ai toujours pas d'acc
 base ni à son téléphone pour confirmer que c'était precisément la cause de CE cas précis.
 À vérifier avec lui une fois en ligne : supprimer un devis puis verrouiller le téléphone
 tout de suite ne devrait plus jamais le faire revenir.
+
+---
+
+## 15 septembre 2026 (suite 8) — Deux boutons, deux moteurs de PDF : un seul marchait
+
+Raphaël, PDF réel à l'appui : le bouton « ⬇ Télécharger le PDF » produit un fichier mal
+mis en page (une page blanche en trop entre le devis et les conditions générales), alors
+que « Imprimer » (juste à côté, même écran) donne un résultat correct — sa demande :
+reprendre les mêmes règles que le bouton qui marche.
+
+En lisant le code : les deux boutons n'ont jamais partagé le même moteur. « Imprimer »
+appelle `window.print()`, qui suit le vrai CSS `@media print` de l'app — celui-là même
+vérifié à chaque modification de mise en page du devis. « Télécharger le PDF » passait
+par une bibliothèque tierce (html2pdf.js, qui combine html2canvas et jsPDF) : elle
+rasterise le devis en image puis recalcule SA PROPRE pagination, indépendamment du CSS
+d'impression. Un commentaire dans le code notait déjà, à propos du fond d'écran du devis,
+que ce moteur avait déjà causé une page blanche en trop par le passé — la cause n'a
+jamais été résolue à la racine, seulement contournée à un endroit précis.
+
+Plutôt que de patcher encore une fois les réglages de pagination d'html2canvas (mode
+d'échec déjà rencontré), les deux boutons appellent maintenant `window.print()` : un seul
+moteur de rendu pour tout export, celui qui est déjà fiable. `html2pdf.js` retiré du
+chargement de la page, plus aucun code ne s'en sert. Conséquence assumée par Raphaël dans
+sa propre demande : les deux boutons ouvrent maintenant le même dialogue d'impression — le
+second garde sa raison d'être pour les réglages avancés de l'imprimante de l'appareil.
+
+**Vérification** : test réel (Playwright) — plus aucune référence à `html2pdf`/`genPDF`
+dans la fenêtre d'export générée, les deux boutons appellent bien `window.print()`,
+structure des pages (`.devis-page`/`.devis-page.cond`) intacte, 0 erreur. Je n'ai pas pu
+produire un vrai PDF depuis cet environnement (pas d'imprimante/« Enregistrer en PDF »
+disponible ici) — la garantie vient d'avoir supprimé le second moteur de pagination
+entièrement, pas d'un PDF généré et relu.
