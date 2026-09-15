@@ -3553,3 +3553,37 @@ entre les deux plutôt que de rester sans effet.
 activée, premier clic masque l'éditeur et affiche l'aperçu plein écran, second clic
 revient au composeur ; vrai bureau (1280px) inchangé, bouton resté masqué. 0 erreur
 page.
+
+---
+
+## 15 septembre 2026 (suite 14) — Le bouton disparaît en paysage, et un interrupteur plus clair
+
+Raphaël, deux demandes liées au correctif du bouton Aperçu de tout à l'heure. D'abord un
+bug : en tournant le téléphone en mode paysage, le bouton disparaît de nouveau. Ensuite
+une demande d'ergonomie, avec l'insistance explicite « surtout pas de régression » : le
+bouton unique « 🖥 Vue bureau » / « 📱 Vue mobile » (le texte change selon l'état) est
+confus — il faut le lire pour savoir où on en est. Il préfère un interrupteur à deux
+positions, où l'état actif se voit d'un coup d'œil.
+
+**Le bug du paysage** : toute la logique mobile de ce correctif (et de la plupart des
+règles responsive de l'app) repose sur `max-width:900px`. Un téléphone récent tourné en
+paysage peut dépasser cette largeur tout en restant un petit écran de poche — exactement
+le trou. Plutôt que d'élargir la règle existante (risque de toucher plein d'autres
+comportements, contraire à la consigne « pas de régression »), nouvelle requête séparée
+et strictement scopée : `min-width:901px` ET `max-height:500px` — un téléphone, même
+large en paysage, reste toujours bas ; une tablette ou un bureau ne descend quasiment
+jamais sous 500px de haut. Ne touche à rien d'autre que ce cas précis.
+
+**L'interrupteur** : nouveau composant `.view-switch`, deux boutons toujours affichés
+côte à côte (Mobile / Bureau), celui actif surligné en permanence — pas besoin de
+cliquer pour découvrir l'état. Partagé entre la barre du haut (écrans 821-900px, où
+l'ancien bouton vivait) et le menu compact « ⋯ Plus » (≤820px, où il était réduit à une
+ligne de texte) via une fonction commune qui garde toutes les instances synchronisées.
+La logique en dessous (`applySplitView`/`toggleSplitView`) n'a pas changé — seulement la
+façon de la montrer, pour respecter la consigne de ne rien casser.
+
+**Vérification** : test réel (Playwright) — 915×412 (paysage large, exactement le cas
+signalé) → bouton visible ; 1280×900 (vrai bureau) → toujours masqué, comme avant ;
+interrupteur : état initial correct (Mobile actif par défaut), bascule dans les deux
+sens confirmée à la fois dans la barre du haut et dans le menu Plus, la sélection s'y
+reflète immédiatement des deux côtés. 0 erreur page.

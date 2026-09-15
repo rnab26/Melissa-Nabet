@@ -31,6 +31,16 @@
   .btn-onlight:hover{background:var(--ink);color:var(--paper);}
   .btn-primary{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
   .btn-primary:hover{filter:brightness(.88);}
+  /* Interrupteur Mobile/Bureau à deux positions : l'ancien bouton unique ("🖥 Vue bureau" /
+     "📱 Vue mobile" selon l'état) obligeait à lire le texte pour savoir où on était — signalé
+     comme confus. Les deux options restent affichées en permanence, celle active surlignée :
+     l'état se voit d'un coup d'œil, pas besoin de cliquer pour le découvrir. */
+  .view-switch{display:inline-flex;border:1px solid var(--stone-light);border-radius:20px;overflow:hidden;flex-shrink:0;}
+  .view-switch button{background:transparent;border:none;color:var(--stone-light);font-family:'Inter';font-size:12px;font-weight:600;padding:7px 13px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s;}
+  .view-switch button.active{background:var(--oxblood);color:#fff;}
+  .view-switch.onlight{border-color:var(--stone);}
+  .view-switch.onlight button{color:var(--stone);}
+  .view-switch.onlight button.active{background:var(--ink);color:var(--paper);}
   #split-toggle{display:none;}
   /* Bouton flottant Composer/Aperçu (mobile étroit uniquement) : remplace les anciens onglets
      dans la barre du haut, trop chargée. Toujours accessible en bas de l'écran, peu importe où
@@ -46,6 +56,18 @@
        largeur réelle (règles plus bas, .force-split.show-preview .editor{display:block} etc.) —
        ces deux règles, plus spécifiques (4 classes) et scopées à cette largeur, rétablissent le
        vrai basculement plein écran quand on est à la fois en Vue bureau ET sur un petit écran. */
+    body.force-split.devis-active.show-preview .editor{display:none;}
+    body.force-split.devis-active.show-editor .preview-wrap{display:none;}
+  }
+  /* Téléphone tourné en mode paysage : sa largeur peut dépasser les 900px ci-dessus (un
+     téléphone récent tourné peut faire plus large que ça) alors que c'est toujours un
+     petit écran de poche, pas une tablette ni un bureau — sans ça le bouton disparaissait
+     en tournant l'écran (signalé). Repéré par la hauteur (toujours faible sur un
+     téléphone, même large en paysage) plutôt que la largeur, dans une requête séparée et
+     scopée au strict nécessaire (`min-width:901px` = uniquement le cas hors de la règle
+     ci-dessus) pour ne toucher à aucune autre règle de mise en page. */
+  @media (min-width:901px) and (max-height:500px){
+    body.devis-active #devis-tab-fab{display:block;}
     body.force-split.devis-active.show-preview .editor{display:none;}
     body.force-split.devis-active.show-editor .preview-wrap{display:none;}
   }
@@ -581,7 +603,7 @@
   .dv-pricesign{break-inside:avoid;page-break-inside:avoid;}
 
   @media (max-width:900px){
-    #split-toggle{display:inline-block;}
+    #split-toggle{display:inline-flex;}
     .stage{flex-direction:column;}
     .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
     .preview-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
@@ -1206,7 +1228,10 @@
   </div>
   <span id="sync-badge" class="sync-badge" onclick="openSyncPanel()" title="Diagnostic synchro"></span>
   <div class="spacer"></div>
-  <button class="btn" id="split-toggle" style="flex-shrink:0;" onclick="toggleSplitView()">🖥 Vue bureau</button>
+  <div class="view-switch" id="split-toggle" role="group" aria-label="Vue">
+    <button type="button" class="vs-mobile" onclick="applySplitView(false)">📱 Mobile</button>
+    <button type="button" class="vs-bureau" onclick="applySplitView(true)">🖥 Bureau</button>
+  </div>
   <div class="toolbar-actions">
     <button class="btn" onclick="openSettingsPanel()">⚙ Réglages</button>
     <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
@@ -4120,20 +4145,22 @@ function showView(v){
 /* Sur téléphone, le menu déroulant « Devis » de la barre du haut est invisible (cette
    barre est masquée) : on pose la même question dans une fenêtre, au même endroit que
    toutes les autres questions de l'appli. */
-/* Réglages, Sauvegarde et Vue bureau, sur téléphone. Le libellé de la vue reprend celui
-   du bouton d'origine (il change quand on bascule) : une seule vérité affichée. */
+/* Réglages, Sauvegarde et Vue mobile/bureau, sur téléphone. L'interrupteur reprend le
+   même composant que la barre du haut (.view-switch) — une seule façon de le montrer. */
 function menuPlusMobile(){
-  const vue=($('split-toggle')||{}).textContent||'🖥 Vue bureau';
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
     <h3>Plus</h3>
     <div class="ph-menu">
-      <button class="mini" id="plus-vue">${esc(vue)}</button>
+      <div class="view-switch onlight" style="align-self:flex-start;margin-bottom:2px;">
+        <button type="button" class="vs-mobile" onclick="applySplitView(false);closeModal();">📱 Mobile</button>
+        <button type="button" class="vs-bureau" onclick="applySplitView(true);closeModal();">🖥 Bureau</button>
+      </div>
       <button class="mini" id="plus-reglages">⚙ Réglages</button>
       <button class="mini" id="plus-sauvegarde">💾 Sauvegarde</button>
       <button class="mini" id="plus-sync">🔄 Synchronisation</button>
     </div>`);
+  syncViewSwitches();
   const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
-  go('plus-vue',toggleSplitView);
   go('plus-reglages',openSettingsPanel);
   go('plus-sauvegarde',openBackupPanel);
   go('plus-sync',openSyncPanel);
@@ -5055,12 +5082,24 @@ function gotoMesDevis(){closeDevisMenu();showView('devis');openDevisPanel();}
    sa propre entrée de navigation. */
 function gotoEstimation(){closeDevisMenu();showView('chantier');}
 document.addEventListener('click',e=>{if(!e.target.closest('#vn-devis-wrap'))closeDevisMenu();});
+/* Deux instances possibles de l'interrupteur Mobile/Bureau à la fois (barre du haut +
+   menu "Plus" sur téléphone étroit) : on les tient toutes les deux à jour ensemble,
+   plutôt que de ne mettre à jour qu'un seul bouton texte comme avant. */
+function syncViewSwitches(){
+  const on=document.body.classList.contains('force-split');
+  document.querySelectorAll('.view-switch').forEach(w=>{
+    const m=w.querySelector('.vs-mobile'),b=w.querySelector('.vs-bureau');
+    if(m)m.classList.toggle('active',!on);
+    if(b)b.classList.toggle('active',on);
+  });
+}
 function applySplitView(on){
   document.body.classList.toggle('force-split',on);
-  const btn=$('split-toggle');if(btn)btn.textContent=on?'📱 Vue mobile':'🖥 Vue bureau';
+  syncViewSwitches();
   try{localStorage.setItem('mn_split_view',on?'1':'0');}catch(e){}
 }
 function toggleSplitView(){applySplitView(!document.body.classList.contains('force-split'));}
+syncViewSwitches();
 try{if(localStorage.getItem('mn_split_view')==='1')applySplitView(true);}catch(e){}
 
 
