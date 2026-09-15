@@ -122,6 +122,7 @@ Ligne de prestation « option à valider par le client » (demande explicite de 
 - [x] Sections de services repliées par défaut à chaque ouverture (nouveau devis, devis existant rechargé, ou rechargement de la page) — restaient ouvertes tant qu'on ne fermait pas manuellement, remplissant toute la page.
 - [x] Fond de l'aperçu (papier) qui s'arrêtait au milieu d'un devis long (2 pages+) en bureau/Vue bureau — `.devis` (flex item de `.preview-wrap`) plafonnait à sa `min-height` (une page) au lieu de grandir avec le contenu réel ; fix `align-self:flex-start`.
 - [x] Bouton flottant Aperçu recentré (bas d'écran, horizontalement centré) et agrandi pour être plus visible/facile à toucher.
+- [x] Numérotation des duplicatas (`duplicateDevis`) corrigée : `" v2"` était codé en dur, donc dupliquer deux fois le même original (ou dupliquer une copie déjà versionnée) donnait plusieurs "N°0079 v2" au lieu de v2/v3/v4… Le numéro de base est retrouvé en retirant un éventuel suffixe `" vN"` existant, puis la version attribuée est la plus haute déjà utilisée pour ce numéro de base + 1 (parmi tout `devisList`, l'original valant implicitement v1) — quelle que soit la copie d'où l'on duplique. Testé réel : deux duplications du même original → v2 puis v3 ; dupliquer la copie v3 → v4 (pas "v3 v2").
 
 ## Tableau de bord — tâches
 

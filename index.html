@@ -2998,7 +2998,22 @@ async function duplicateDevis(id){
   const d=devisList.find(x=>x.id===id);if(!d)return;
   const snap=JSON.parse(JSON.stringify(d.snapshot));
   snap.branding={...library.branding};
-  const rec={id:uid(),num:(d.num||'')+' v2',title:(d.title||'Devis')+' (copie)',clientId:d.clientId,status:'brouillon',updatedAt:Date.now(),snapshot:snap};
+  /* Toujours " v2" en dur donnait plusieurs devis "N°0079 v2" dès qu'on dupliquait deux
+     fois le même original (ou qu'on dupliquait une copie déjà versionnée). Le numéro de
+     base est retrouvé en retirant un éventuel suffixe " vN" existant, puis on cherche la
+     version la plus haute déjà utilisée pour CE numéro de base (parmi tout devisList,
+     l'original valant implicitement v1) — la nouvelle copie prend le numéro suivant,
+     quelle que soit la copie d'où l'on duplique. */
+  const baseNum=(d.num||'').replace(/\s+v(\d+)$/i,'');
+  let maxV=1;
+  devisList.forEach(x=>{
+    if((x.num||'').replace(/\s+v(\d+)$/i,'')!==baseNum)return;
+    const m=/\sv(\d+)$/i.exec(x.num||'');
+    const v=m?parseInt(m[1],10):1;
+    if(v>maxV)maxV=v;
+  });
+  const newNum=baseNum+' v'+(maxV+1);
+  const rec={id:uid(),num:newNum,title:(d.title||'Devis')+' (copie)',clientId:d.clientId,status:'brouillon',updatedAt:Date.now(),snapshot:snap};
   rec.snapshot.num=rec.num;devisList.push(rec);await store.set(K_DEVIS,devisList);openDevisPanel();toast('Copie créée (brouillon)');
 }
 function deleteDevis(id){

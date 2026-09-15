@@ -3216,3 +3216,20 @@ cet ordre. 0 erreur page. **Ce qui reste ouvert** : confirmer sur la vraie base 
 c'était précisément la cause du cas de Raphaël demanderait un accès que je n'ai pas ici —
 à vérifier avec lui sur son téléphone (fermer l'app en arrière-plan puis y revenir, ou
 simplement la rouvrir) une fois ce correctif en ligne.
+
+---
+
+## 15 septembre 2026 (suite 5) — Deux duplicatas, deux fois "v2"
+
+Raphaël, capture à l'appui (« Salle de box — N°0079 (copie) » en double, toutes les deux
+« N°0079 v2 ») : dupliquer deux fois le même devis attribue le même numéro de version aux
+deux copies, alors qu'il faudrait v2 puis v3.
+
+Cause simple : `duplicateDevis` codait `" v2"` en dur, sans regarder ce qui existait déjà.
+Corrigé : le numéro de base est retrouvé en retirant un éventuel suffixe `" vN"` du numéro
+d'origine, puis la nouvelle copie reçoit la version la plus haute déjà utilisée pour ce
+numéro de base (parmi tous les devis, l'original valant implicitement v1) plus un — que
+l'on duplique l'original ou une copie déjà versionnée, le résultat reste cohérent.
+
+**Vérification** : test réel — deux duplications successives du même original donnent
+v2 puis v3 ; dupliquer ensuite la copie v3 donne v4 (pas "v3 v2"). 0 erreur page.
