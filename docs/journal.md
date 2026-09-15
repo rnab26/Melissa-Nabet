@@ -3497,3 +3497,33 @@ corrigées sont réelles et vérifiées, pas des suppositions, et elles rendent 
 ENTIÈRE des symptômes d'aujourd'hui structurellement impossible — quelle que soit la
 cause précise de la coupure initiale. Si la vraie bannière d'erreur réapparaît malgré
 tout, elle affichera enfin le message exact plutôt que de me laisser deviner à nouveau.
+
+---
+
+## 15 septembre 2026 (suite 12) — Bonne nouvelle confirmée, et la numérotation des nouveaux devis
+
+Raphaël a confirmé, en usage réel sur plusieurs appareils et après vidage complet du
+cache/historique : les devis s'ouvrent vides, les suppressions tiennent partout,
+« on a plus ou moins un vrai live actuellement ». Le correctif de fond de ce matin tient.
+
+Nouvelle demande, réfléchie par lui-même avant de me la poser : le numéro proposé pour un
+« Nouveau devis » ne suivait pas toujours le dernier devis réel (ex. Rony Partouche en
+0079, mais le nouveau devis proposait 0077). Il a lui-même comparé deux logiques
+possibles — réattribuer les numéros des brouillons supprimés, ou toujours avancer de 1
+sans jamais réutiliser un numéro — et penché pour la seconde, plus simple, en me
+demandant de confirmer.
+
+Confirmé et choisi : toujours +1 par rapport au dernier devis RÉELLEMENT enregistré,
+jamais de réutilisation d'un numéro même après suppression. Nuance ajoutée qui n'a pas
+été discutée mais qui découle de ce qui a déjà été construit cette session (le principe
+« ouvrir un + Nouveau devis sans l'enregistrer ne doit rien coûter », établi lors des
+correctifs sur les brouillons fantômes) : ouvrir/abandonner "Nouveau devis" plusieurs
+fois de suite sans jamais enregistrer ne fait PAS avancer le compteur — seul un
+enregistrement réel le fait. Techniquement : `library.branding.maxIssuedNum`, un
+plancher synchronisé qui n'avance que dans `upsertDevis()` au moment d'un vrai
+enregistrement, jamais redescendu.
+
+**Vérification** : test réel — après un devis 0079, "Nouveau devis" propose 0080 ;
+l'ouvrir/l'abandonner trois fois de suite reste à 0080 ; ce 0080 une fois réellement
+enregistré PUIS supprimé, le "Nouveau devis" suivant propose 0081, jamais une deuxième
+fois 0080. 0 erreur page.

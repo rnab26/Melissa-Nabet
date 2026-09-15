@@ -2911,6 +2911,12 @@ async function upsertDevis(status, clientIdOverride){
   if(idx>=0)devisList[idx]=rec;else devisList.push(rec);
   currentDevisId=id;
   await store.set(K_DEVIS,devisList);
+  /* Numérotation : une fois un numéro réellement enregistré (ce devis existe pour de
+     vrai), il ne doit plus jamais être réattribué à un autre — même si CE devis est
+     supprimé ensuite. maxIssuedNum est le plancher, jamais redescendu, synchronisé au
+     même titre que le reste de library.branding (voir SYNC_KEYS). */
+  const numVal=parseInt(current.num)||0;
+  if(numVal>(library.branding.maxIssuedNum||0)){library.branding.maxIssuedNum=numVal;await store.set(K_LIB,library);}
   if(finalStatus==='valide'&&clientId)await syncClientFromDevis(clientId,id);
   return rec;
 }
@@ -3061,8 +3067,17 @@ function viewDevisSnapshot(id){
 }
 function newDevis(){currentDevisId=null;seedComposerFromLibrary();
   ensureBranding();
+  /* Le numéro suivant ne redescend jamais, même après suppression du devis qui portait
+     le numéro le plus haut : maxIssuedNum (mis à jour dans upsertDevis, à l'enregistrement
+     réel) est le plancher. Math.max avec devisList reste en garde-fou (au cas où
+     maxIssuedNum ne serait pas encore à jour, ex. anciennes données). Ouvrir/abandonner
+     "Nouveau Devis" sans jamais l'enregistrer ne consomme aucun numéro — seul un vrai
+     enregistrement (upsertDevis) avance le plancher, demande explicite de Raphaël pour
+     que la suite reste simple : toujours +1 par rapport au dernier devis réellement créé,
+     jamais de réattribution d'un numéro déjà utilisé. */
   const numBase=(library.branding.numStart||1)-1;
-  current.num=(library.branding.numPrefix||'')+String(Math.max(numBase,...devisList.map(d=>parseInt(d.num)||0))+1).padStart(4,'0');
+  const floor=Math.max(numBase,library.branding.maxIssuedNum||0,...devisList.map(d=>parseInt(d.num)||0));
+  current.num=(library.branding.numPrefix||'')+String(floor+1).padStart(4,'0');
   current.date=new Date().toLocaleDateString('fr-FR');
   current.raison='';current.contact='';current.cphone='';current.cemail='';current.caddr='';current.ville='';current.cp='';current.siret='';
   current.proj='';current.surf='';current.paddr='';current.intro='';
