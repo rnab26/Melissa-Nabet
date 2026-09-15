@@ -3587,3 +3587,31 @@ signalé) → bouton visible ; 1280×900 (vrai bureau) → toujours masqué, com
 interrupteur : état initial correct (Mobile actif par défaut), bascule dans les deux
 sens confirmée à la fois dans la barre du haut et dans le menu Plus, la sélection s'y
 reflète immédiatement des deux côtés. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 15) — Le seuil de hauteur ne suffisait pas, capture à l'appui
+
+Raphaël a testé le correctif précédent sur son vrai téléphone, en paysage : toujours pas
+de bouton Aperçu, capture à l'appui. Une question de clarification avant d'agir (le
+message était très court) a confirmé qu'il s'agissait bien de ça, et pas d'un problème
+de donnée sur le devis affiché à l'écran (qui, lui, était correct — juste utilisé comme
+preuve du bug d'affichage).
+
+Le correctif d'hier reposait sur un seuil de hauteur (`max-height:500px`) pour repérer
+"c'est un téléphone même si la largeur dépasse 900px". Devinette qui ne tenait pas : les
+hauteurs réelles en mode paysage varient trop selon l'appareil et le navigateur (grand
+téléphone, mode "Site pour ordinateur" du navigateur qui élargit le viewport rapporté,
+etc.) pour qu'un seul nombre soit fiable partout.
+
+Corrigé avec un signal plus robuste qu'un nombre de pixels deviné : `(hover:none) and
+(pointer:coarse)` repère un écran tactile SANS souris — vrai sur absolument tout
+téléphone et toute tablette, jamais sur un bureau à souris, quelle que soit la taille de
+la fenêtre. Combiné à une largeur encore raisonnable (`max-width:1024px`, au-delà c'est
+une vraie tablette) pour ne pas déborder sur un usage tablette large.
+
+**Vérification** : test réel (Playwright, contextes avec/sans `hasTouch`) — téléphone
+large en paysage (950×550, tactile) → bouton visible, exactement le cas signalé ; LA
+MÊME taille de fenêtre sans tactile (un bureau redimensionné à cette taille) → bouton
+reste masqué, aucune régression ; portrait normal et vrai bureau (1280×900) → inchangés ;
+tablette large en paysage (1194×834, tactile) → correctement exclue. 0 erreur page.

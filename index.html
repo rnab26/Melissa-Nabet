@@ -62,11 +62,15 @@
   /* Téléphone tourné en mode paysage : sa largeur peut dépasser les 900px ci-dessus (un
      téléphone récent tourné peut faire plus large que ça) alors que c'est toujours un
      petit écran de poche, pas une tablette ni un bureau — sans ça le bouton disparaissait
-     en tournant l'écran (signalé). Repéré par la hauteur (toujours faible sur un
-     téléphone, même large en paysage) plutôt que la largeur, dans une requête séparée et
-     scopée au strict nécessaire (`min-width:901px` = uniquement le cas hors de la règle
-     ci-dessus) pour ne toucher à aucune autre règle de mise en page. */
-  @media (min-width:901px) and (max-height:500px){
+     en tournant l'écran (signalé, et un premier essai basé sur la hauteur d'écran n'a pas
+     suffi : les hauteurs réelles en paysage varient trop selon l'appareil/le navigateur
+     pour deviner un seuil fiable). Repéré autrement, de façon plus robuste : un écran
+     tactile sans souris (`hover:none`/`pointer:coarse`, vrai partout sur téléphone et
+     tablette, jamais sur un bureau à souris) plutôt qu'un seuil de pixels — combiné à une
+     largeur encore raisonnable (`max-width:1024px`, au-delà c'est une vraie tablette) pour
+     ne pas déborder sur un usage tablette large. Scopé à `min-width:901px` = uniquement le
+     cas hors de la règle ci-dessus, pour ne toucher à aucune autre règle de mise en page. */
+  @media (hover:none) and (pointer:coarse) and (min-width:901px) and (max-width:1024px){
     body.devis-active #devis-tab-fab{display:block;}
     body.force-split.devis-active.show-preview .editor{display:none;}
     body.force-split.devis-active.show-editor .preview-wrap{display:none;}
