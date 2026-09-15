@@ -2975,7 +2975,17 @@ function deleteDevis(id){
 async function deleteDevisRecord(id){
   devisList=devisList.filter(x=>x.id!==id);await store.set(K_DEVIS,devisList);
   const cli=clients.find(x=>x.devisId===id);if(cli){cli.devisId=null;await store.set(K_CLIENTS,clients);}
-  if(currentDevisId===id)currentDevisId=null;
+  if(currentDevisId===id){
+    /* Supprimer le devis actuellement ouvert dans le composeur ne suffisait pas à vider
+       currentDevisId : current.raison/services restaient affichés tels quels à l'écran, donc
+       la frappe suivante — ou un debounce déjà programmé (saveDraftDebounced, 600ms) au
+       moment du clic sur Supprimer — relançait upsertDevis('brouillon') et recréait presque
+       le même devis sous un nouvel id. C'est exactement le « il revient tout seul » signalé,
+       et la source des doublons qui rendaient la liste illisible. newDevis() vide vraiment
+       l'écran (et annule le debounce en vol via clearTimeout dans saveDraftDebounced). */
+    clearTimeout(_draftT);
+    newDevis();
+  }
 }
 /* --- Actions devis depuis une fiche client --- */
 function editDevis(id){

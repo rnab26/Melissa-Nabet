@@ -23,6 +23,10 @@ Deux vrais trous de synchro trouvés (signalés par Raphaël : « je travaille u
 
 **Ne pas casser (suite 2)** : `isEditingDevisComposer()` scope sur `.editor` (le formulaire du composeur) — si la structure DOM du composeur change, vérifier que cette classe existe toujours à sa racine, sinon la garde ne protège plus rien silencieusement.
 
+**Régression directe du point 1 ci-dessus, signalée par Raphaël** : « les devis en brouillon que je supprime ne se suppriment pas vraiment » — vrai bug, introduit par l'autosync automatique du brouillon. `deleteDevisRecord(id)` videait bien `currentDevisId` quand on supprimait le devis actuellement ouvert dans le composeur, mais laissait `current.raison`/`current.services` intacts à l'écran — la frappe suivante (ou un debounce déjà programmé à 600ms, en vol au moment du clic sur Supprimer) relançait `upsertDevis('brouillon')`, qui recréait un devis quasi identique sous un nouvel id. C'est aussi la source du problème connexe signalé dans le même message : des « doublons » créés sans le vouloir, plus moyen de savoir lequel est le bon. Corrigé : supprimer le devis ouvert vide vraiment le composeur (`newDevis()`) et annule un debounce en vol (`clearTimeout(_draftT)`), au lieu de juste vider le pointeur `currentDevisId`.
+
+**Ne pas casser (suite 3)** : tout nouveau chemin qui touche `currentDevisId` sans vider `current` en même temps recrée ce même risque de résurrection, maintenant que le brouillon autosynchronise sur chaque frappe — les deux doivent toujours changer ensemble quand on quitte/supprime le devis affiché.
+
 **Notes / À faire**
 - [x] Retirer le mode "Continuer hors ligne" de l'UI (connexion à un compte obligatoire).
 - [x] Corriger le marquage "synchronisé" à tort sur un push qui a échoué.
@@ -30,6 +34,7 @@ Deux vrais trous de synchro trouvés (signalés par Raphaël : « je travaille u
 - [x] Brouillon de devis synchronisé automatiquement (pas seulement sur clic manuel).
 - [x] Module Chantier/Estimation entièrement raccordé à la synchro cloud (brouillon + liste enregistrée), auparavant totalement absent du circuit.
 - [x] Le composeur de devis se rafraîchit en direct sur un écho distant (au lieu de rester figé jusqu'à fermeture/réouverture), avec protection de la frappe active.
+- [x] Supprimer le devis ouvert dans le composeur ne le fait plus réapparaître (résurrection par l'autosync du brouillon, corrigée).
 - [ ] Parcours d'inscription self-service (voir section Commercialisation).
 
 ## Sauvegarde automatique (exports/imports + panneaux)

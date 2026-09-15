@@ -3004,3 +3004,37 @@ via un vrai `selectOption` sur le menu ; disparu de la section source, apparu da
 section cible, persisté après fermeture/réouverture du panneau (relecture du `store`) ;
 un nouveau devis créé après le déplacement montre bien la ligne sous sa nouvelle section.
 0 erreur page.
+
+---
+
+## 15 septembre 2026 — Un devis « supprimé » revenait tout seul
+
+Raphaël : « les devis en brouillon que je supprime ne se suppriment pas vraiment » — et,
+conséquence directe qu'il a aussi remarquée sans forcément en voir le lien : « je suis
+perdu, des fois je fais des dupliquer, je sais plus lequel est le bon ».
+
+**Régression directe du correctif de synchro du 10/09** (brouillon poussé automatiquement
+au cloud à chaque frappe, pas seulement sur clic manuel). `deleteDevisRecord(id)` vidait
+bien `currentDevisId` quand on supprimait le devis ouvert dans le composeur — mais
+laissait `current.raison`/`current.services` intacts à l'écran, comme si de rien n'était.
+La frappe suivante (ou pire : un debounce de 600ms déjà programmé au moment précis du
+clic sur « Supprimer », s'il restait une saisie en vol) relançait `upsertDevis('brouillon')`,
+qui recréait un devis presque identique sous un nouvel id — silencieusement, sans rien
+demander. Exactement le « il revient tout seul », et la source réelle des doublons
+signalés dans la foulée : ce n'était pas Raphaël qui dupliquait par erreur, c'était l'app.
+
+**Corrigé** : supprimer le devis actuellement ouvert appelle maintenant `newDevis()` (vide
+vraiment l'écran) et annule un éventuel debounce en vol (`clearTimeout(_draftT)`), au lieu
+de se contenter de vider le pointeur `currentDevisId`.
+
+**Piège à ne pas rouvrir** : depuis que le brouillon autosynchronise sur chaque frappe,
+tout code qui touche `currentDevisId` sans vider `current` en même temps recrée ce risque
+de résurrection — les deux doivent toujours changer ensemble en quittant/supprimant le
+devis affiché.
+
+**Vérification** : test réel — cas limite volontairement provoqué (frappe juste avant le
+clic Supprimer, debounce encore en vol) : le devis supprimé ne réapparaît pas même après
+avoir largement dépassé les 600ms du debounce original ; cas simple (suppression puis
+saisie ailleurs dans l'app) : aucun fantôme créé ; régression vérifiée : supprimer un
+AUTRE devis que celui ouvert ne touche ni `currentDevisId` ni le contenu affiché à
+l'écran. 0 erreur page.
