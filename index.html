@@ -329,7 +329,14 @@
      rapport à l'écran lui-même, pas au bouton. Voir `toggleTaskFilterMenu()` : sur un
      écran étroit, la position passe en `fixed` avec des marges fixes par rapport au bord
      de l'écran (calculées en JS à l'ouverture), au lieu de `absolute` ancré au bouton. */
-  .task-filter-menu.mobile-fixed{position:fixed;left:12px;right:12px;width:auto;margin-top:0;}
+  /* La largeur ne débordait plus (correctif précédent), mais rien ne limitait la HAUTEUR :
+     le menu pouvait continuer sous la barre de navigation du bas, la coupant net —
+     colonnes Priorité/Client et le bouton Réinitialiser devenus inatteignables (signalé,
+     capture à l'appui : « c'est coupé, ça flotte pas »). `max-height` calculé en JS à
+     l'ouverture (voir `toggleTaskFilterMenu()`, tient compte de la vraie hauteur de la
+     barre du bas mesurée sur l'appareil, pas devinée) + défilement interne si ça ne
+     suffit toujours pas. */
+  .task-filter-menu.mobile-fixed{position:fixed;left:12px;right:12px;width:auto;margin-top:0;overflow-y:auto;}
   .task-filter-table{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px 4px;}
   .tf-col{border-right:1px solid rgba(255,255,255,.12);padding:0 8px;}
   .tf-col:last-child{border-right:none;}
@@ -4396,8 +4403,11 @@ function taskFilterMenuHtml(){
   ensureTaskCategories();
   const isChecked=tok=>tok==='__due__'?taskFilterDue:tok==='__reminder__'?taskFilterReminder:tok.indexOf('__prio_')===0?taskFilterPrios.has(tok.slice(7)):taskFilterCats.has(tok);
   const row=(tok,label)=>`<label><input type="checkbox" ${isChecked(tok)?'checked':''} onchange="onTaskFilterToggle('${tok}',this.checked)"> ${label}</label>`;
-  const colDue=`<div class="tf-col"><div class="tf-col-h">Échéance</div>${row('__due__','📅 Avec échéance')}</div>`;
-  const colReminder=`<div class="tf-col"><div class="tf-col-h">Rappel</div>${row('__reminder__','🔔 Avec rappel')}</div>`;
+  /* Demande explicite de Raphaël, pour gagner de la place sur mobile : Échéance et Rappel
+     n'ont chacun qu'une seule case à cocher — leur donner chacun une colonne pleine
+     largeur était du gaspillage. Regroupés dans UNE colonne, titres conservés, l'un
+     au-dessus de l'autre plutôt que côte à côte. */
+  const colDueReminder=`<div class="tf-col"><div class="tf-col-h">Échéance</div>${row('__due__','📅 Avec échéance')}<div class="tf-col-h" style="margin-top:8px;">Rappel</div>${row('__reminder__','🔔 Avec rappel')}</div>`;
   const colCat=`<div class="tf-col"><div class="tf-col-h">Catégorie</div>${library.taskCategories.map(c=>row(c.id,`${c.icon} ${esc(c.label)}`)).join('')}</div>`;
   const colPrio=`<div class="tf-col"><div class="tf-col-h">Priorité</div>${Object.entries(TASK_PRIORITIES).map(([k,p])=>row('__prio_'+k,`${p.icon} ${p.label}`)).join('')}</div>`;
   const clientsSorted=[...clients].sort((a,b)=>a.name.localeCompare(b.name));
@@ -4407,7 +4417,7 @@ function taskFilterMenuHtml(){
       <div class="tf-client-item${taskFilterClientId?'':' active'}" onclick="setTaskFilterClient('')">— Tous les clients —</div>
       ${clientsSorted.map(c=>`<div class="tf-client-item${taskFilterClientId===c.id?' active':''}" data-name="${esc(c.name.toLowerCase())}" onclick="setTaskFilterClient('${c.id}')">${esc(c.name)}</div>`).join('')}
     </div></div>`;
-  return `<div class="task-filter-table">${colDue}${colReminder}${colCat}${colPrio}${colClient}</div>`+
+  return `<div class="task-filter-table">${colDueReminder}${colCat}${colPrio}${colClient}</div>`+
     `<div class="task-filter-actions"><button type="button" class="mini" onclick="clearTaskFilters()">Réinitialiser</button></div>`;
 }
 function toggleTaskFilterMenu(e){
@@ -4424,12 +4434,21 @@ function toggleTaskFilterMenu(e){
   if(opening&&window.innerWidth<=680){
     const btn=e&&e.currentTarget;
     m.classList.add('mobile-fixed');
-    m.style.top=(btn?btn.getBoundingClientRect().bottom+6:60)+'px';
+    const top=btn?btn.getBoundingClientRect().bottom+6:60;
+    m.style.top=top+'px';
+    /* La largeur ne débordait plus, mais rien ne limitait la hauteur : le menu pouvait
+       continuer sous la barre de navigation du bas, la coupant net (signalé, capture à
+       l'appui). Hauteur dispo = du bas du bouton jusqu'au haut de la barre du bas — sa
+       vraie hauteur est MESURÉE sur l'appareil (pas devinée), une barre de navigation
+       n'a pas la même hauteur partout (icônes+texte+marge de sécurité de l'encoche). */
+    const navbas=document.querySelector('.navbas');
+    const navH=(navbas&&getComputedStyle(navbas).display!=='none')?navbas.getBoundingClientRect().height:0;
+    m.style.maxHeight=Math.max(window.innerHeight-top-navH-10,150)+'px';
   }else if(opening){
-    m.classList.remove('mobile-fixed');m.style.top='';
+    m.classList.remove('mobile-fixed');m.style.top='';m.style.maxHeight='';
   }
 }
-function closeTaskFilterMenu(){const m=$('task-filter-menu');if(m){m.classList.remove('open');m.classList.remove('mobile-fixed');m.style.top='';}}
+function closeTaskFilterMenu(){const m=$('task-filter-menu');if(m){m.classList.remove('open');m.classList.remove('mobile-fixed');m.style.top='';m.style.maxHeight='';}}
 document.addEventListener('click',e=>{if(!e.target.closest('#task-filter-wrap'))closeTaskFilterMenu();});
 function applyTaskFilter(list){
   const anyCat=taskFilterCats.size>0;

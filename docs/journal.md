@@ -3720,3 +3720,40 @@ deux bords, aucun débordement ; fermeture au clic extérieur puis réouverture 
 correctes ; cases à cocher toujours cliquables à l'intérieur ; bureau (1280px) :
 comportement identique à avant, la nouvelle logique ne s'active jamais à cette largeur.
 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 19) — La largeur était réglée, restait la hauteur
+
+Raphaël, deux captures : une du vrai mobile montrant le menu « Filtrer » toujours coupé
+(« c'est coupé en fait, c'est pas, ça flotte pas ») — mais cette fois le problème n'est
+plus la largeur (réglée), c'est la HAUTEUR : le bas du menu (colonnes Priorité, Client,
+bouton Réinitialiser) disparaît sous la barre de navigation du bas de l'écran. L'autre
+capture, prise en simulant une vue bureau depuis son téléphone, montre à quoi le menu
+ressemble une fois qu'il a toute la place : cinq colonnes complètes, rien de coupé — la
+référence de ce qui doit rester accessible, juste organisé différemment sur un petit
+écran.
+
+Root cause simple : le correctif précédent fixait la largeur du menu mais rien ne
+contraignait sa hauteur. Sur un menu qui contient potentiellement une longue liste de
+clients (colonne "Client"), la hauteur totale peut largement dépasser l'espace
+disponible entre le bouton qui l'ouvre et le bas de l'écran — et rien n'y renonçait,
+le contenu débordait simplement invisible sous la barre de navigation fixe.
+
+Corrigé en mesurant, pas en devinant : à l'ouverture, `max-height` est calculée comme
+l'espace réellement disponible entre le bas du bouton et le haut de la barre de
+navigation — dont la hauteur exacte est lue sur l'appareil via `getBoundingClientRect()`
+(elle varie selon l'appareil : icônes, texte, marge de sécurité de l'encoche). Un
+défilement interne prend le relais si le contenu dépasse quand même cette hauteur.
+
+Demande complémentaire dans le même message, pour gagner encore de la place : Échéance
+et Rappel n'ont chacun qu'une seule case à cocher — leur donner une colonne pleine
+largeur chacun était du gaspillage. Regroupés dans une seule colonne, les deux titres
+gardés, l'un au-dessus de l'autre plutôt que côte à côte.
+
+**Vérification** : test réel (Playwright, 390px, 15 clients ajoutés pour reproduire une
+vraie longue liste) — le bas du menu reste toujours strictement au-dessus du haut de la
+barre de navigation (mesuré, pas supposé) ; le bouton Réinitialiser, invisible au premier
+coup d'œil, devient atteignable en faisant défiler à l'intérieur du menu ; les colonnes
+Échéance/Rappel bien fusionnées en une seule ; bureau (1280px) totalement inchangé. 0
+erreur page.
