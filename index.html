@@ -531,6 +531,13 @@
   .dv-item .it-d{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.8px;line-height:1.66;color:#544d43;margin-top:2px;white-space:pre-wrap;}
   .dv-option-choice{display:flex;align-items:center;gap:6px;margin-top:2mm;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:var(--ink);}
   .dv-opt-box{display:inline-block;width:10px;height:10px;border:1.2px solid var(--stone);flex:0 0 auto;}
+  /* Repère « OPTION » dans la marge gauche de la page, pas juste dans le texte : demande
+     explicite pour que ça saute aux yeux même sans lire la ligne. .devis-page a 18mm de
+     marge gauche (padding) — le label est positionné dans cette marge, pas hors de la page
+     (qui a overflow:hidden : au-delà, il serait invisible), avec de la place avant le début
+     du texte. */
+  .dv-item-option{position:relative;}
+  .dv-item-option::before{content:"Option";position:absolute;left:-15mm;top:1px;width:13mm;text-align:right;font-family:'Inter',sans-serif;font-size:8px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--oxblood);}
   .dv-excl{margin:6mm 0;}
   .dv-excl ul{margin:2mm 0 0;padding-left:5mm;}
   .dv-excl li{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.6px;color:#6a6255;line-height:1.6;margin-bottom:1.5mm;}

@@ -3233,3 +3233,28 @@ l'on duplique l'original ou une copie déjà versionnée, le résultat reste coh
 
 **Vérification** : test réel — deux duplications successives du même original donnent
 v2 puis v3 ; dupliquer ensuite la copie v3 donne v4 (pas "v3 v2"). 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 6) — « Option » dans la marge, pour que le client la voie
+
+Raphaël, capture annotée à l'appui (deux flèches rouges dessinées à la main pointant la
+marge gauche à côté des lignes à case à cocher) : les deux cases "Oui, je valide cette
+option / Non" existent déjà sur le devis imprimé, mais rien ne signale au client, avant
+même qu'il lise la ligne, qu'il s'agit d'une option — il risque de la lire comme une
+prestation normale et de passer à côté du choix à faire.
+
+Rien à changer côté données ou logique : `buildDevisHTML()` posait déjà la classe
+`dv-item-option` sur la div de la ligne dès que `sv.optionClient` est actif (chantier
+"case à cocher option client"). Correctif pur CSS : un `::before` sur `.dv-item-option`
+qui écrit "OPTION" en petites majuscules, dans la marge gauche de la page, aligné avec le
+début de la ligne. Seule contrainte réelle : `.devis-page` a `overflow:hidden` — un
+élément positionné en dehors de sa boîte serait invisible plutôt que de déborder
+visuellement dans le vide gris autour.
+
+**Vérification** : test réel (Playwright, mesure `getBoundingClientRect` des lignes +
+capture d'écran pleine page) — sur trois lignes de test (deux avec l'option, une sans),
+le repère n'apparaît que sur les deux lignes concernées ; sa position calculée reste à
+l'intérieur du cadre de page (~3mm du bord gauche en écran, ~1mm en impression où le
+padding se resserre) et se termine avant le début du texte, sans chevaucher ni être
+rogné. Capture visuelle conforme. 0 erreur page.
