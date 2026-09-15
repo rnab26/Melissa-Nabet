@@ -52,26 +52,30 @@
   #devis-tab-fab{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:20px;z-index:45;border-radius:30px;padding:15px 30px;box-shadow:0 6px 22px rgba(0,0,0,.32);background:var(--oxblood);color:#fff;border:none;font-family:'Inter';font-size:14.5px;font-weight:700;letter-spacing:.03em;cursor:pointer;}
   @media (max-width:900px){
     body.devis-active #devis-tab-fab{display:block;}
-    /* Vue bureau forcée impose normalement les deux volets côte à côte quelle que soit la
-       largeur réelle (règles plus bas, .force-split.show-preview .editor{display:block} etc.) —
-       ces deux règles, plus spécifiques (4 classes) et scopées à cette largeur, rétablissent le
-       vrai basculement plein écran quand on est à la fois en Vue bureau ET sur un petit écran. */
-    body.force-split.devis-active.show-preview .editor{display:none;}
-    body.force-split.devis-active.show-editor .preview-wrap{display:none;}
   }
   /* Téléphone tourné en mode paysage : sa largeur peut dépasser les 900px ci-dessus (un
      téléphone récent tourné peut faire plus large que ça) alors que c'est toujours un
      petit écran de poche, pas une tablette ni un bureau — sans ça le bouton disparaissait
-     en tournant l'écran (signalé, et un premier essai basé sur la hauteur d'écran n'a pas
-     suffi : les hauteurs réelles en paysage varient trop selon l'appareil/le navigateur
-     pour deviner un seuil fiable). Repéré autrement, de façon plus robuste : un écran
-     tactile sans souris (`hover:none`/`pointer:coarse`, vrai partout sur téléphone et
-     tablette, jamais sur un bureau à souris) plutôt qu'un seuil de pixels — combiné à une
-     largeur encore raisonnable (`max-width:1024px`, au-delà c'est une vraie tablette) pour
-     ne pas déborder sur un usage tablette large. Scopé à `min-width:901px` = uniquement le
-     cas hors de la règle ci-dessus, pour ne toucher à aucune autre règle de mise en page. */
+     en tournant l'écran. Repéré via un écran tactile sans souris (`hover:none`/
+     `pointer:coarse`, vrai sur téléphone ET tablette, jamais sur un bureau à souris) —
+     seule la visibilité du bouton dépend de ça ici, voir plus bas pour le basculement
+     plein écran (qui, lui, doit rester réservé aux téléphones, jamais aux tablettes). */
   @media (hover:none) and (pointer:coarse) and (min-width:901px) and (max-width:1024px){
     body.devis-active #devis-tab-fab{display:block;}
+  }
+  /* Basculement plein écran (un seul volet affiché, l'autre caché) de Vue bureau forcée :
+     réservé aux TÉLÉPHONES, jamais aux tablettes — signalé par Raphaël, capture à l'appui,
+     sur sa tablette en Vue bureau : l'aperçu de base à droite avait disparu (cette règle,
+     ajoutée pour corriger le cas du téléphone en paysage, était trop large et attrapait
+     aussi sa tablette dans les largeurs 900-1024px, un chevauchement réel entre "grand
+     téléphone en paysage" et "petite tablette"). Repéré par la hauteur — PAS la largeur,
+     qui se recoupe entre téléphone et tablette — puisqu'un téléphone, dans N'IMPORTE
+     QUELLE orientation, a toujours son petit côté sous 500px (portrait : sa largeur ;
+     paysage : sa hauteur, qui est la même mesure physique), alors qu'une tablette, même la
+     plus petite, dépasse 650px sur son petit côté quelle que soit l'orientation. Les deux
+     branches de la requête (largeur OU hauteur) couvrent donc les deux orientations d'un
+     téléphone sans jamais attraper de tablette. */
+  @media (max-width:500px),(max-height:500px){
     body.force-split.devis-active.show-preview .editor{display:none;}
     body.force-split.devis-active.show-editor .preview-wrap{display:none;}
   }
@@ -541,6 +545,15 @@
        contenu par elle. */
     .cl-two-col{flex-direction:column;align-items:stretch;}
     .cl-side{flex:1 1 auto;width:100%;}
+    /* Fiche client sur mobile : demande explicite de compacter les champs de coordonnées
+       en paires côte à côte (au lieu d'un champ pleine largeur par ligne) pour réduire la
+       hauteur de la carte. Contact+Téléphone (2 champs → 1 rangée pleine), puis
+       Adresse/Ville+Email+Début+Fin (4 champs pairs → 2 rangées), Commentaire seul retombe
+       naturellement à la ligne suivante (5 champs, le dernier n'a personne à côté).
+       Uniquement à cette largeur : le bureau garde l'empilement vertical d'origine, un
+       champ par ligne, inchangé. */
+    .cl-side-body,.cl-side-more{flex-direction:row;flex-wrap:wrap;gap:10px 12px;}
+    .cl-side-body .fld,.cl-side-more .fld{flex:1 1 calc(50% - 6px);min-width:0;}
   }
   .cl-totals{display:flex;flex-direction:column;gap:8px;padding:14px 16px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);margin-top:14px;border-top:2px solid var(--hair);}
 
@@ -3609,12 +3622,23 @@ function buildClientDetail(c){
     <div class="cl-side-body">
       <label class="fld"><span class="lbl">Contact</span><input type="text" data-cf="contact" value="${esc(c.contact||'')}"></label>
       <label class="fld"><span class="lbl">Téléphone</span><input type="text" data-cf="phone" value="${esc(c.phone||'')}"></label>
-      <label class="fld"><span class="lbl">Email</span><input type="text" data-cf="email" value="${esc(c.email||'')}"></label>
     </div>`;
   wireMetaInputs(side,c);
   const nameInp=side.querySelector('input[data-name]');
   nameInp.addEventListener('input',()=>{c.name=nameInp.value;saveClientsDebounced();});
-  nameInp.addEventListener('change',()=>{saveClients();updateClientRow(c);});
+  nameInp.addEventListener('change',()=>{
+    /* Demande explicite : le contact est souvent la même personne que le client — au lieu
+       de retaper le même nom, un nom enregistré alors que le contact est encore vide le
+       reprend automatiquement. Ne touche jamais un contact déjà renseigné (même chemin de
+       garde que l'auto-remplissage inverse ci-dessous : on ne remplace jamais une vraie
+       saisie). */
+    if(!((c.contact||'').trim())&&(c.name||'').trim()){
+      c.contact=c.name.trim();
+      const contactInp=side.querySelector('input[data-cf="contact"]');
+      if(contactInp)contactInp.value=c.contact;
+    }
+    saveClients();updateClientRow(c);
+  });
   /* Changer de statut peut faire passer le client d'un bloc à l'autre du tableau : on
      redessine, sinon il resterait affiché là où il n'est plus. */
   side.querySelector('select[data-statut]').addEventListener('change',e=>{
@@ -3640,7 +3664,8 @@ function buildClientDetail(c){
   const sep=document.createElement('div');sep.className='cl-side-sep';side.querySelector('.cl-side-body').appendChild(sep);
   const generalBody=document.createElement('div');generalBody.className='cl-side-more';
   generalBody.innerHTML=
-    `<label class="fld"><span class="lbl">Ville</span><input type="text" data-cf="ville" value="${esc(c.ville||'')}"></label>`+
+    `<label class="fld"><span class="lbl">Adresse/Ville</span><input type="text" data-cf="ville" value="${esc(c.ville||'')}"></label>`+
+    `<label class="fld"><span class="lbl">Email</span><input type="text" data-cf="email" value="${esc(c.email||'')}"></label>`+
     `<label class="fld"><span class="lbl">Début du projet</span><input type="date" data-cf="debut" value="${isoDate(c.debut)}"></label>`+
     `<label class="fld"><span class="lbl">Fin du projet</span><input type="date" data-cf="fin" value="${isoDate(c.fin)}"></label>`+
     `<label class="fld"><span class="lbl">Commentaire</span><input type="text" data-cf="commentaire" value="${esc(c.commentaire||'')}"></label>`;

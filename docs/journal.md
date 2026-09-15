@@ -3615,3 +3615,49 @@ large en paysage (950×550, tactile) → bouton visible, exactement le cas signa
 MÊME taille de fenêtre sans tactile (un bureau redimensionné à cette taille) → bouton
 reste masqué, aucune régression ; portrait normal et vrai bureau (1280×900) → inchangés ;
 tablette large en paysage (1194×834, tactile) → correctement exclue. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 16) — Confirmé pour le paysage, une vraie régression trouvée sur tablette, et la fiche client compactée
+
+Raphaël confirme que le correctif du paysage marche. Deux nouvelles demandes dans le
+même message, avec l'insistance habituelle sur l'absence de régression :
+
+**Une vraie régression, découverte par lui sur sa tablette.** Capture à l'appui : en Vue
+bureau, l'aperçu de base à droite (celui qui doit normalement s'afficher CÔTE À CÔTE avec
+l'éditeur, sans rien avoir à cliquer) avait complètement disparu — bien distingué du
+bouton flottant, qui lui fonctionne très bien. En reprenant le correctif d'hier soir : la
+règle `(hover:none) and (pointer:coarse) and (max-width:1024px)`, pensée pour les
+téléphones larges en paysage, attrapait AUSSI les tablettes dans cette même fourchette de
+largeur (900-1024px) — recouvrement réel entre "grand téléphone" et "petite tablette",
+pas un cas limite imaginaire. Sur cette tablette, le corps de page démarre avec la classe
+`show-editor` (état par défaut avant tout clic) : la règle de bascule cachait donc
+l'aperçu par défaut, exactement comme sur un téléphone — sauf que sur une tablette, les
+deux volets sont censés rester visibles ensemble sans rien avoir à basculer.
+
+Corrigé en séparant deux effets qui n'auraient jamais dû partager la même condition : la
+visibilité du BOUTON reste comme avant (largeur + tactile, sans risque même sur
+tablette) ; le vrai BASCULEMENT plein écran passe à un critère fiable dans les deux
+orientations — `(max-width:500px),(max-height:500px)` — un téléphone a toujours son petit
+côté sous 500px quelle que soit sa rotation, une tablette dépasse toujours 650px sur son
+petit côté. Testé réel : tablette paysage ET portrait → les deux volets restent visibles
+ensemble (régression corrigée) ; téléphone paysage ET portrait → la bascule reste comme
+voulue ; vrai bureau → inchangé.
+
+**Fiche client compactée sur mobile.** Capture annotée : les champs Contact, Téléphone,
+Email, Ville empilés un par ligne rendaient la carte trop haute sur téléphone. Demande
+précise en 4 blocs : Contact+Téléphone, Adresse/Ville+Email, Début+Fin du projet,
+Commentaire seul. Champs réordonnés (Email déplacé à côté de Ville, renommée
+« Adresse/Ville » — même champ de données, rien de cassé) et mis en `flex-wrap` à deux
+par rangée, strictement sous 760px (le même seuil déjà utilisé pour l'empilement général
+de la fiche) — le bureau garde l'empilement un-champ-par-ligne d'origine, intact.
+
+Au passage, une convenance demandée en même temps : le nom du client remplit maintenant
+le champ Contact tout seul quand celui-ci est encore vide (souvent la même personne) —
+ne touche jamais un contact déjà rempli, même garde que le chemin inverse qui existait
+déjà (taper un contact sur une fiche sans nom lui donne son nom).
+
+**Vérification** : test réel (Playwright) — regroupement en 4 rangées exactement comme
+demandé, auto-remplissage du contact vide confirmé, contact déjà rempli jamais écrasé,
+champ `data-cf="ville"` intact (seul le libellé change), bureau (1280px) toujours en
+colonne, aucune régression. 0 erreur page dans les deux correctifs.
