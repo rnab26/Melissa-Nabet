@@ -3072,3 +3072,55 @@ avancé après une vraie modification, ligne « Mes devis » affiche bien date +
 écho distant `library` sur un brouillon déjà ouvert → signature visible immédiatement
 dans l'aperçu ; même écho sur un devis VALIDÉ → signature inchangée (gelée, comme prévu).
 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 2) — Le correctif de la veille était incomplet, capture à l'appui
+
+Raphaël a testé le correctif du jour, capture à l'appui (liste « Mes devis » avec plusieurs
+« N°0080 » en double, datés du matin même) : « vérifie bien que c'est une vraie
+modification qui apparaît, car c'est faux, y'a des trucs ce matin que j'ai rien modifié à
+l'instant même, ça me met [modifié] ». Et : « ma signature n'apparaît toujours pas ».
+
+**« Modifié le » toujours faux — la vraie cause avait échappé au correctif de la veille.**
+La comparaison de contenu ajoutée hier incluait `snapshot.branding` — qui change tout
+seul à chaque fois qu'un brouillon suit la bibliothèque (à l'ouverture, au rechargement,
+ou en direct depuis un autre appareil, trois mécanismes ajoutés ces derniers jours).
+Rouvrir un vieux brouillon un autre jour suffisait à le faire paraître « modifié à
+l'instant », sans qu'aucun contenu réel n'ait changé. Corrigé : `branding` est
+explicitement exclu de la comparaison — un pur suivi passif, jamais une modification du
+devis lui-même.
+
+**Les doublons du matin : une régression du correctif de synchro du 10/09, jamais
+repérée.** `saveDraft()` poussait vers le cloud dès qu'un nom de client existait, MÊME
+pour un devis jamais enregistré une seule fois (`currentDevisId` encore vide). Chaque
+« + Nouveau devis » ouvert, essayé puis abandonné sans jamais cliquer sur « Enregistrer
+brouillon » devenait quand même un brouillon permanent — avec le même numéro que les
+autres essais abandonnés, puisqu'aucun n'avait compté pour le calcul du suivant. Voilà
+d'où venaient les « N°0080 » en triple sans que Raphaël n'ait rien fait de volontaire. Le
+correctif du 15/09 au matin (résurrection à la suppression) ne réglait que la moitié du
+problème ; celui-ci règle l'autre moitié, à la racine : la toute première sauvegarde
+d'un devis reste manuelle, la synchro automatique à chaque frappe ne prend le relais
+qu'une fois le devis déjà enregistré une première fois — exactement le scénario
+tablette/téléphone d'origine, inchangé.
+
+**La signature, elle, testée de bout en bout sans trouver de défaut dans son propre
+circuit** : un vrai trait dessiné à la souris sur le canvas de signature, dans trois
+scénarios (même session, nouveau devis créé après, brouillon préexistant rouvert) —
+s'affiche correctement dans les trois. Un vrai trou existait ailleurs, trouvé en
+creusant : `saveSignaturePad()` enregistrait sans vérifier qu'un trait avait
+effectivement été tracé. Le canvas démarre entièrement TRANSPARENT (le fond blanc visible
+est du CSS, pas un pixel peint) — valider sans dessiner (un tap raté sur mobile, une
+pression trop légère) enregistrait silencieusement une image invisible mais bien
+« configurée », indiscernable d'une vraie signature côté données jusqu'à ce que le devis
+s'affiche sans rien montrer. Ajouté : lecture du canal alpha des pixels avant validation,
+refus avec un message si rien n'est dessiné. Honnêteté : je n'ai pas pu confirmer que
+c'était EXACTEMENT ce qui s'est passé chez Raphaël (root cause plausible, pas prouvée sur
+son cas précis) — mais c'est un vrai trou, corrigé, qui empêchera que ça se reproduise.
+
+**Vérification** : test réel — une frappe seule (sans clic "Enregistrer brouillon") ne
+crée plus aucune entrée ; le clic explicite en crée une, et les frappes suivantes
+continuent de la synchroniser automatiquement sans reclic ; `updatedAt` reste identique
+après un changement de branding seul, avance après une vraie édition ; valider le pad de
+signature sans dessiner refuse (modal reste ouvert, rien n'est enregistré), valider avec
+un vrai trait fonctionne normalement. 0 erreur page.

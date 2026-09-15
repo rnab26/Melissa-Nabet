@@ -1855,6 +1855,16 @@ function clearSigCanvas(){
 }
 function saveSignaturePad(){
   const cv=$('sig-canvas');if(!cv)return;
+  /* Le canvas démarre entièrement TRANSPARENT (le fond blanc vient du CSS, pas d'un vrai
+     pixel peint) : valider sans avoir tracé un seul trait (mobile, un tap raté, une pression
+     trop légère…) enregistrait silencieusement une image invisible, mais bien présente et
+     "configurée" — indiscernable d'une vraie signature côté données, jusqu'à ce que le devis
+     s'affiche sans rien montrer. Refuser ce cas précisément plutôt que de le laisser passer. */
+  const ctx=cv.getContext('2d');
+  const px=ctx.getImageData(0,0,cv.width,cv.height).data;
+  let hasInk=false;
+  for(let i=3;i<px.length;i+=4){if(px[i]>0){hasInk=true;break;}}
+  if(!hasInk){toast('Rien n\'est dessiné — tracez votre signature avant de valider.');return;}
   const uri=cv.toDataURL('image/png');
   closeModal();
   if(_sigPadOnSave)_sigPadOnSave(uri);
@@ -1881,9 +1891,17 @@ function saveDraftDebounced(){clearTimeout(_draftT);_draftT=setTimeout(saveDraft
    PAS entre appareils : sans le upsertDevis ci-dessous, un brouillon travaillé sur un
    appareil sans jamais cliquer sur « Enregistrer brouillon » restait invisible sur les
    autres (raison du ticket : « je le travaille sur la tablette, je ne le retrouve pas sur
-   le téléphone »). Poussé dès qu'un nom de client existe, pour ne pas créer de devis
-   fantômes vides à chaque écran « Nouveau devis » ouvert puis abandonné. */
-function saveDraft(){const snap=JSON.parse(JSON.stringify(current));snap._draftDevisId=currentDevisId;store.set(K_DRAFT,snap);if(current.raison&&current.raison.trim())upsertDevis('brouillon');}
+   le téléphone »).
+   MAIS ne pousse jamais la toute PREMIÈRE création automatiquement (currentDevisId encore
+   vide) : un premier essai avait poussé dès qu'un nom de client existait, pour éviter les
+   devis fantômes vides — sauf que ÇA en créait d'autres, bien pires : chaque « + Nouveau
+   devis » ouvert, essayé, puis abandonné (sans jamais cliquer Enregistrer) devenait quand
+   même un brouillon permanent dans « Mes devis », plusieurs par jour, tous avec le même
+   numéro puisque aucun n'avait vraiment compté pour le calcul du suivant. C'était la vraie
+   source des doublons signalés. Une fois le devis déjà enregistré une première fois
+   (manuellement, ou en le rouvrant), currentDevisId est posé et la synchro continue de
+   suivre chaque frappe automatiquement — c'est le scénario tablette/téléphone d'origine. */
+function saveDraft(){const snap=JSON.parse(JSON.stringify(current));snap._draftDevisId=currentDevisId;store.set(K_DRAFT,snap);if(currentDevisId&&current.raison&&current.raison.trim())upsertDevis('brouillon');}
 function clearDraft(){store.del(K_DRAFT);}
 async function saveDraftManual(){
   saveDraft(); /* garde aussi la reprise auto */
@@ -2879,8 +2897,15 @@ async function upsertDevis(status, clientIdOverride){
   /* "Modifié le" ne doit avancer que sur un VRAI changement de contenu, pas juste parce
      qu'on a ouvert/regardé le devis (ce qui déclenche aussi ce chemin via l'autosave —
      voir saveDraft). Sinon la date affichée dans « Mes devis » ne veut plus rien dire :
-     demande explicite pour ne pas embrouiller Raphaël sur lequel est vraiment le bon. */
-  const contentChanged=!existing||JSON.stringify({title:existing.title,clientId:existing.clientId,status:existing.status,snapshot:existing.snapshot})!==JSON.stringify({title,clientId,status:finalStatus,snapshot});
+     demande explicite pour ne pas embrouiller Raphaël sur lequel est vraiment le bon.
+     `branding` est EXCLU de cette comparaison : un brouillon le recopie en suivant la
+     bibliothèque (signature, logo, thème…) à chaque ouverture et à chaque changement reçu
+     d'un autre appareil — un pur effet de bord de réglages modifiés ailleurs, pas une
+     modification de CE devis. Sans l'exclure, rouvrir un vieux brouillon un autre jour
+     (bibliothèque forcément différente entre-temps) le faisait apparaître "modifié à
+     l'instant" alors que rien n'avait été touché — exactement ce que Raphaël a signalé. */
+  const dirtyPart=s=>({...s,branding:undefined});
+  const contentChanged=!existing||JSON.stringify({title:existing.title,clientId:existing.clientId,status:existing.status,snapshot:dirtyPart(existing.snapshot)})!==JSON.stringify({title,clientId,status:finalStatus,snapshot:dirtyPart(snapshot)});
   const rec={
     id,num:current.num,
     title,
