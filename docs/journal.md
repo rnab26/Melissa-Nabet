@@ -3258,3 +3258,44 @@ le repère n'apparaît que sur les deux lignes concernées ; sa position calcul�
 l'intérieur du cadre de page (~3mm du bord gauche en écran, ~1mm en impression où le
 padding se resserre) et se termine avant le début du texte, sans chevaucher ni être
 rogné. Capture visuelle conforme. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 7) — Ce que la synchro « live » cachait encore : une suppression qui n'arrive jamais à partir
+
+Raphaël a confirmé avoir supprimé lui-même les anciens doublons N°0079 (rien à faire de
+ce côté, la nouvelle numérotation de version ne s'applique qu'aux prochains). Mais dans
+la foulée, capture à l'appui, un problème plus grave : sur SON PROPRE téléphone (pas
+seulement un écart entre deux appareils), tout ce qu'il avait supprimé était réapparu.
+
+Premier réflexe : vérifier avant de conclure. Comparaison des horodatages de sa capture
+précédente (5 brouillons "Sans client" fantômes) avec l'historique git des correctifs :
+tous datent d'avant le 15/09 04:46, heure à laquelle le trou de résurrection des brouillons
+a été fermé — donc ce n'était pas un nouveau cas, juste du résidu jamais nettoyé
+rétroactivement. Mais la nouvelle plainte ("réapparu après suppression, sur le MÊME
+appareil") est un phénomène différent, et je ne pouvais pas la confirmer par de la simple
+relecture — il fallait retrouver le vrai chemin du code.
+
+**Root cause trouvée, pas supposée** : `deleteDevisRecord()` retire bien le devis
+immédiatement à l'écran, mais l'envoi réel vers le serveur passe par le même circuit que
+n'importe quelle frappe — un `setTimeout` débouncé à 500ms (`scheduleSyncPush`). Rien ne
+force cet envoi avant que la page se mette en arrière-plan ou se ferme. Verrouiller le
+téléphone (ou changer d'appli) dans cette fenêtre de 500ms — un geste très naturel juste
+après avoir fini de "faire du ménage" — peut geler ou perdre ce minuteur en vol,
+comportement courant des navigateurs mobiles sur un onglet caché. Au prochain chargement,
+le serveur n'a jamais reçu la suppression : elle revient.
+
+**Corrigé** : l'écouteur `visibilitychange` déclenche maintenant un envoi IMMÉDIAT
+(`cloudPush()`, sans attendre le minuteur) dès que la page passe en arrière-plan, plus un
+filet indépendant sur `pagehide` pour le cas où l'app est carrément fermée plutôt que
+juste masquée.
+
+**Vérification** : test réel (faux Supabase en mémoire, compteur d'appels de suppression)
+— sans le correctif, 0 appel de suppression 150ms après avoir masqué la page (le
+débounce à 500ms n'a pas eu le temps de partir, exactement le trou décrit) ; avec le
+correctif, l'appel part tout de suite sur la mise en arrière-plan, et indépendamment sur
+`pagehide`. 0 erreur page. **Ce qui reste ouvert** : ceci explique un mécanisme réel et
+vérifiable, cohérent avec ce qu'il décrit — mais je n'ai toujours pas d'accès à sa vraie
+base ni à son téléphone pour confirmer que c'était precisément la cause de CE cas précis.
+À vérifier avec lui une fois en ligne : supprimer un devis puis verrouiller le téléphone
+tout de suite ne devrait plus jamais le faire revenir.

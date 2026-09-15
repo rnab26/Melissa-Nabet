@@ -43,6 +43,8 @@ Corrigé : (1) `subscribeRealtime()` gère maintenant `CHANNEL_ERROR`/`TIMED_OUT
 
 **Ne pas casser (suite 4)** : le nouvel écouteur `visibilitychange` doit rester "push avant pull" — inverser l'ordre réintroduirait le risque qu'un `loadAll()` écrase une modification locale pas encore envoyée au cloud.
 
+**Cinquième trou, root cause du « tout ce que j'avais supprimé est réapparu » (Raphaël, sur son propre téléphone — pas juste un écart entre appareils)** : `deleteDevisRecord()` retire bien le devis de `devisList` immédiatement (l'écran le montre supprimé), mais l'envoi côté serveur passe par le même circuit débouncé à 500ms que n'importe quelle frappe (`store.set` → `scheduleSyncPush` → `setTimeout(cloudPush,500)`, via `pushT`). Rien ne forçait cet envoi avant que la page se mette en arrière-plan ou se ferme. Verrouiller le téléphone ou changer d'appli dans cette fenêtre de 500ms pouvait geler/perdre ce `setTimeout` en vol (comportement courant des navigateurs mobiles sur un onglet caché) — le prochain `loadAll()` (retour au premier plan, ou simple réouverture de l'appli) retrouvait alors côté serveur une ligne jamais réellement supprimée, et la remettait dans `devisList`. Corrigé : `visibilitychange` déclenche maintenant un `cloudPush()` immédiat (`clearTimeout(pushT)` puis appel direct, sans attendre le minuteur) dès que `document.visibilityState==='hidden'` ; nouveau filet `pagehide` pour le cas où la page est carrément fermée plutôt que seulement mise en arrière-plan (peut se déclencher plus fiablement que `visibilitychange` à la fermeture réelle sur certains navigateurs mobiles). Testé réel (faux Supabase en mémoire, compteur d'appels `delete`) : sans le correctif, 0 appel de suppression 150ms après avoir masqué la page (le débounce à 500ms n'a pas eu le temps de partir) ; avec le correctif, l'appel part immédiatement sur `hidden`, et indépendamment sur `pagehide`.
+
 **Notes / À faire**
 - [x] Retirer le mode "Continuer hors ligne" de l'UI (connexion à un compte obligatoire).
 - [x] Corriger le marquage "synchronisé" à tort sur un push qui a échoué.
@@ -58,6 +60,7 @@ Corrigé : (1) `subscribeRealtime()` gère maintenant `CHANNEL_ERROR`/`TIMED_OUT
 - [x] Garde-fou : impossible d'enregistrer une signature vide (canvas non dessiné) comme si elle était configurée.
 - [x] Régression du 10/09 corrigée : la première sauvegarde d'un devis reste manuelle, pour ne plus créer de brouillons fantômes à chaque "+ Nouveau devis" abandonné.
 - [x] Supprimer le devis ouvert dans le composeur ne le fait plus réapparaître (résurrection par l'autosync du brouillon, corrigée).
+- [x] Une suppression (ou toute modif) n'est plus perdue si l'app passe en arrière-plan/se ferme dans les 500ms qui suivent — flush immédiat sur `visibilitychange:hidden` et `pagehide`, plus besoin d'attendre le débounce.
 - [ ] Parcours d'inscription self-service (voir section Commercialisation).
 
 ## Sauvegarde automatique (exports/imports + panneaux)

@@ -11296,8 +11296,26 @@ function subscribeRealtime(){
    et on s'assure que le canal est bien vivant. Pousser avant de tirer évite qu'un
    rechargement écrase une modification locale pas encore envoyée. */
 document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){
+    /* Une suppression (ou toute frappe) passe par scheduleSyncPush, débouncé à 500ms —
+       sans ce flush, verrouiller le téléphone ou changer d'appli dans cette fenêtre pouvait
+       geler/perdre le setTimeout en vol : le prochain loadAll() (retour au premier plan,
+       ou simple réouverture de l'appli) retrouvait alors côté serveur une ligne jamais
+       vraiment supprimée/envoyée, qui « revenait toute seule ». On déclenche l'envoi
+       immédiatement au lieu d'attendre le minuteur, qui peut ne jamais se déclencher une
+       fois l'onglet caché. */
+    if(sb&&sbUser&&!offlineMode){clearTimeout(pushT);cloudPush();}
+    return;
+  }
   if(document.visibilityState!=='visible'||!sb||!sbUser||offlineMode)return;
   cloudPush().then(loadAll).then(()=>{if(!sbChannel)subscribeRealtime();});
+});
+/* Filet supplémentaire : un onglet/app fermé (pas seulement mis en arrière-plan) peut ne
+   jamais recevoir 'visibilitychange' à temps sur certains navigateurs mobiles — 'pagehide'
+   se déclenche de façon plus fiable à la fermeture réelle. Même flush, sans risque à
+   l'appeler deux fois (cloudPush ne pousse que ce qui a réellement changé). */
+window.addEventListener('pagehide',()=>{
+  if(sb&&sbUser&&!offlineMode){clearTimeout(pushT);cloudPush();}
 });
 function handleRealtime(payload){
   applyingRemote=true;
