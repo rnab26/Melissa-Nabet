@@ -39,10 +39,11 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const errs = [];
 page.on('pageerror', e => errs.push(e.message));
 page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-// Le bac à sable n'a pas d'accès réseau sortant : les polices Google et le manifeste
-// volontairement absent de la page "vide" produisent des erreurs de chargement qui ne
-// sont pas des bugs du site.
-const envNoise = e => /fonts\.googleapis|fonts\.gstatic|ERR_CONNECTION_RESET|404|ERR_NAME_NOT_RESOLVED|favicon/i.test(e);
+// Le bac à sable ne peut pas charger les polices Google (selon l'environnement : pas
+// d'accès réseau sortant, ou un proxy dont le certificat n'est pas approuvé par le
+// navigateur de test) et le manifeste volontairement absent de la page "vide" produit
+// une erreur de chargement : rien de tout ça n'est un bug du site.
+const envNoise = e => /fonts\.googleapis|fonts\.gstatic|ERR_CONNECTION_RESET|ERR_CERT|404|ERR_NAME_NOT_RESOLVED|favicon/i.test(e);
 await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
 await page.waitForTimeout(500);
 

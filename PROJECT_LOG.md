@@ -1374,3 +1374,17 @@ Safari/Mac) parcourant tout l'applicatif : 0 erreur.
       GitHub ou en élargissant l'accès de l'environnement.
 - [ ] Un vrai test sur iPhone/Mac physique reste la seule vérification Safari définitive,
       cet environnement ne pouvant pas lancer WebKit.
+
+**Addendum (même jour, contrôle redemandé)** : branches distantes revérifiées par le
+contenu, pas seulement `git branch --merged` — 50 fusionnées (pur encombrement), 8 sans
+aucun ancêtre commun avec `main` (racine d'avant la reprise à zéro de l'historique du 5
+septembre, tout leur contenu déjà réimplémenté et dépassé dans `main` actuel, vérifié
+marqueur par marqueur), 1 (`claude/solde-sans-cle-admin`) doublon confirmé une seconde
+fois. Suppression toujours bloquée (HTTP 403, reconfirmé). Les trois suites de tests non
+lancées lors de l'audit précédent (`site.test.mjs`, `bout-en-bout.test.mjs`,
+`pont-ia.test.mjs`) ont tourné cette fois : `site.test.mjs` échouait sur
+`ERR_CERT_AUTHORITY_INVALID` (polices Google via le proxy de cet environnement, dont le
+certificat n'est pas approuvé par le Chromium de test) — le filtre `envNoise` du test ne
+couvrait que les échecs DNS/connexion, pas les échecs de certificat ; ajouté `ERR_CERT`
+au filtre. Sans lien avec le code du site. Total après correctif : 826 vérifications sur
+les quatre suites, 0 échec.

@@ -3827,3 +3827,61 @@ huit profils — iPhone 13 portrait/paysage, Pixel 5 portrait/paysage, iPad Pro 
 portrait/paysage, bureau Chrome 1440px, bureau UA Safari/Mac — parcourant tableau de
 bord, clients, composeur de devis + bouton Aperçu, filtre des tâches, réalisations,
 boutique, réglages/bibliothèque : **0 erreur** sur les huit profils.
+
+---
+
+## 15 septembre 2026 (suite 21) — Raphaël redemande le même audit : passe de contrôle plus poussée
+
+Même demande, mot pour mot, que la suite 20. Rien n'avait changé sur `main` entre-temps
+(aucun commit distant depuis l'audit précédent) — plutôt que de refaire à l'identique,
+cette passe est allée plus loin sur deux points laissés en surface la dernière fois :
+l'inventaire des branches distantes (fait par supposition, cette fois vérifié par le
+contenu réel), et les trois autres suites de tests (`site.test.mjs`,
+`bout-en-bout.test.mjs`, `pont-ia.test.mjs`) qui n'avaient pas tourné pendant l'audit
+précédent — seule `realisations.test.mjs` l'avait été.
+
+**Branches distantes, cette fois vérifiées par le contenu et pas seulement `--merged`** :
+sur les 59 branches distantes hors `main`, **50 sont fusionnées** (rien à perdre, pur
+encombrement) et **9 ne le sont pas**. De ces 9, **8 n'ont même pas d'ancêtre commun avec
+`main`** (`git merge-base` renvoie vide) — leur racine remonte à début août, alors que
+`main` a une racine à part, du 5 septembre : l'historique a été repris à zéro à cette
+date, et ces 8 branches sont les restes d'AVANT ce point de départ, jamais reliées à la
+ligne actuelle. Vérifié qu'aucune n'est perdue pour autant : chacune correspond à une
+fonctionnalité (bouton retouche IA, file d'attente fal.ai, thème du site, recopie
+automatique vers le dépôt de publication, etc.) **déjà présente et plus complète dans
+`main` actuel** (11 846 lignes contre 3 849 pour la plus grosse de ces branches),
+confirmé en cherchant dans `main` les marqueurs de code propres à chacune (`falQueue`,
+`.github/workflows/sync-site-vitrine.yml`, etc. — tous présents). La 9ᵉ
+(`claude/solde-sans-cle-admin`) partage bien un ancêtre avec `main`, et son unique commit
+est déjà dans `main` avec un contenu identique (même compteur `adminManquante`) : pur
+doublon, confirmé une seconde fois.
+
+Fait notable : la branche assignée à CETTE session par l'infrastructure de tâches
+(`claude/magic-labels-button-cx9i9v`) fait partie des 8 branches orphelines d'avant le 5
+septembre — un vestige d'un système d'attribution de branche antérieur au découpage par
+chantier utilisé depuis. Sans effet sur le travail : cette session, comme les
+précédentes, développe sur des branches dédiées au chantier réel puis fusionne dans
+`main`, sans jamais utiliser cette assignation générique.
+
+Toujours **impossible de supprimer ces branches distantes depuis ici** : retesté
+`git push origin --delete`, toujours HTTP 403. Recherché une seconde fois un chemin par
+les outils GitHub disponibles (`create_branch`, `delete_file`, `list_branches`,
+`list_commits`, `search_commits`, `update_pull_request_branch`,
+`create_or_update_file`) : toujours aucun ne supprime une branche. Confirmation, pas une
+nouvelle découverte : reste à faire depuis l'interface GitHub.
+
+**Un vrai petit bug de test trouvé en faisant tourner les trois suites laissées de côté
+la dernière fois** : `tests/site.test.mjs` échouait sur « Aucune erreur JavaScript du
+site » — `net::ERR_CERT_AUTHORITY_INVALID` au chargement des polices Google. Le filtre
+`envNoise` qui écarte déjà ce genre de bruit d'environnement (pas d'accès réseau sortant
+au moment où ce filtre a été écrit) ne couvrait que les échecs par DNS/connexion refusée
+(`ERR_CONNECTION_RESET`, `ERR_NAME_NOT_RESOLVED`) — pas un échec par certificat, qui est
+la forme que prend ce même bruit maintenant que l'environnement passe par un proxy dont
+le certificat n'est pas approuvé par le Chromium de test. Rien à voir avec le site lui-
+même : ajouté `ERR_CERT` au filtre, sur le même principe que les autres motifs déjà
+présents.
+
+**Vérification** : les quatre suites, toutes à zéro échec — `realisations.test.mjs`
+**590/590** (inchangé, confirme qu'aucune régression n'est apparue depuis la suite 20),
+`site.test.mjs` **195/195** (194/1 avant ce correctif), `bout-en-bout.test.mjs`
+**21/21**, `pont-ia.test.mjs` **20/20**. Total : **826 vérifications, 0 échec**.
