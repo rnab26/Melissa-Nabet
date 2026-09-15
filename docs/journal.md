@@ -3423,3 +3423,77 @@ je ne peux pas reproduire l'autocomplétion réelle d'un Samsung Internet dans c
 environnement de test (c'est un comportement du navigateur, pas du code) — la correction
 est la pratique standard reconnue pour la désactiver, mais la confirmation viendra de
 Raphaël en usage réel.
+
+---
+
+## 15 septembre 2026 (suite 11) — Le vrai fond du problème : trois failles dans le circuit de synchro
+
+Raphaël, à bout après trois heures (depuis la veille au soir) de patches qui ne réglaient
+jamais le fond : capture à l'appui, badge « ⚠ hors ligne » visible, le devis VALIDÉ de
+Rony Partouche repassé en « Brouillon », les anciens fantômes toujours là malgré un
+chargement garanti neuf. Demande explicite et légitime : arrêter les patches ponctuels,
+prendre le temps qu'il faut, corriger le fond une bonne fois pour toutes.
+
+Le détail qui a tout débloqué : ce badge « hors ligne » n'est PAS un vrai mode
+hors-ligne — c'est l'état d'ERREUR de synchro (`setSyncStatus('err')`), affiché sous ce
+libellé trompeur dès qu'un appel Supabase échoue. Ce n'était donc plus une question de
+cache navigateur (déjà écarté par le lien cache-cassé) : un vrai appel réseau échouait
+réellement. En reprenant tout le circuit de synchro avec ce fil, sans rien supposer,
+trois failles structurelles distinctes, toutes réelles, toutes vérifiées par lecture
+directe du code :
+
+**1. `loadAll()` n'avait aucune reprise automatique.** Contrairement à `cloudPush()`
+(retry après 20s), un échec de `loadAll()` — réseau, session expirée après une longue
+mise en veille — laissait `cloudReady` bloqué à `false` pour TOUJOURS, tant que rien
+d'autre ne relançait un chargement. L'app restait alors indéfiniment sur les données
+locales, potentiellement périmées de plusieurs heures.
+
+**2. `cloudPush()` ne vérifiait jamais `cloudReady`.** Seul le déclenchement débouncé le
+faisait. Or mes propres correctifs du jour (suppression immédiate, flush sur mise en
+arrière-plan) appellent `cloudPush()` directement, contournant cette garde. Tant que
+`loadAll()` n'a jamais réussi une fois dans la session, `remoteDevis` démarre vide :
+CHAQUE ligne locale ressemble à une nouveauté et serait réécrite sur le serveur — un
+devis resté en mémoire dans son état d'AVANT validation (parce que la vraie validation,
+faite plus tôt ou sur un autre appareil, n'avait jamais pu être rapatriée) écraserait
+alors le "Validé" du serveur avec un "Brouillon" périmé. C'est très probablement
+l'explication exacte de ce que Raphaël a vu sur le devis de Rony Partouche — pas une
+downgrade de code (la protection contre ça existe déjà et a été vérifiée intacte), mais
+une donnée locale jamais rafraîchie, poussée comme si elle était la vérité.
+
+**3. Une suppression avant ce tout premier `loadAll()` pouvait être annulée par lui.**
+`loadAll()` rajoute tout ce qu'il trouve côté serveur sans savoir qu'un id vient d'être
+supprimé localement dans l'intervalle — exactement le "ça revient tout seul" répété
+depuis hier, à une échelle plus large que le seul cas du débounce déjà corrigé.
+
+**Corrigé, les trois ensemble** :
+- `loadAll()` retente automatiquement, backoff exponentiel 5s → 60s, remis à zéro dès
+  qu'un chargement réussit.
+- `cloudPush()` refuse de s'exécuter tant que `cloudReady` n'est pas vrai — aucune
+  poussée locale→serveur avant d'avoir une vraie base de comparaison.
+- Nouvel ensemble `_pendingDeletedDevisIds` : une suppression y est ajoutée
+  immédiatement et `loadAll()` ne la contredit jamais tant que le serveur n'a pas
+  confirmé.
+- Au retour au premier plan, `sb.auth.getSession()` est appelé explicitement AVANT tout
+  le reste — rafraîchit la session si le jeton a expiré pendant que le minuteur interne
+  de supabase-js était lui-même gelé en arrière-plan, réduisant la probabilité même de
+  tomber sur l'erreur.
+- Le petit badge discret ne suffisait pas : une vraie bannière rouge s'affiche
+  maintenant sur toute erreur de synchro, avec le message réel et un bouton
+  « Réessayer » — pour que la prochaine fois, la vraie cause soit visible d'un coup
+  d'œil plutôt qu'une nouvelle hypothèse à vérifier à l'aveugle.
+
+**Vérification** : test réel (faux Supabase en mémoire, premier appel simulé en échec
+puis reconnexion) — premier `loadAll()` en échec → badge et bannière d'erreur,
+`cloudReady` reste faux ; suppression pendant cette fenêtre → zéro appel réseau
+prématuré, id gardé en attente ; reprise automatique → `cloudReady` passe à vrai, badge
+« synchronisé », bannière masquée ; **le devis supprimé pendant la panne ne revient pas**
+une fois le chargement enfin réussi. 0 erreur page.
+
+**Honnêteté, comme à chaque fois** : je n'ai toujours pas accès à la vraie base ni aux
+vrais journaux Supabase (`SUPABASE_SERVICE_ROLE_KEY_MELISSA` absente de cet
+environnement) pour confirmer que c'est EXACTEMENT une session expirée qui a déclenché
+tout ça chez Raphaël plutôt qu'un autre incident réseau ponctuel. Mais les trois failles
+corrigées sont réelles et vérifiées, pas des suppositions, et elles rendent la classe
+ENTIÈRE des symptômes d'aujourd'hui structurellement impossible — quelle que soit la
+cause précise de la coupure initiale. Si la vraie bannière d'erreur réapparaît malgré
+tout, elle affichera enfin le message exact plutôt que de me laisser deviner à nouveau.

@@ -153,6 +153,9 @@
   .update-bar{position:fixed;left:0;right:0;bottom:0;z-index:9999;background:var(--ink);color:var(--paper);padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;justify-content:center;gap:14px;font-family:'Inter',sans-serif;font-size:13.5px;box-shadow:0 -2px 14px rgba(0,0,0,.2);transform:translateY(120%);transition:transform .25s ease;flex-wrap:wrap;}
   .update-bar.show{transform:translateY(0);}
   .update-bar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;border:none;background:var(--oxblood);color:#fff;padding:9px 16px;border-radius:4px;cursor:pointer;white-space:nowrap;}
+  .sync-error-bar{position:fixed;left:0;right:0;top:0;z-index:9998;background:#7a2e2e;color:#fff;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:center;gap:12px;font-family:'Inter',sans-serif;font-size:12.5px;box-shadow:0 2px 14px rgba(0,0,0,.2);transform:translateY(-120%);transition:transform .25s ease;flex-wrap:wrap;text-align:center;}
+  .sync-error-bar.show{transform:translateY(0);}
+  .sync-error-bar button{font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;white-space:nowrap;}
   .sync-badge{font-size:10.5px;color:var(--stone-light);letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
   #login-overlay{display:none;position:fixed;inset:0;z-index:110;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
   .login-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:10px;padding:30px 26px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(60,50,35,.2);text-align:center;}
@@ -3012,6 +3015,7 @@ function deleteDevis(id){
   askConfirm('Supprimer ce devis ?',async()=>{await deleteDevisRecord(id);openDevisPanel();renderClients();toast('Devis supprimé');});
 }
 async function deleteDevisRecord(id){
+  _pendingDeletedDevisIds.add(id);
   devisList=devisList.filter(x=>x.id!==id);await store.set(K_DEVIS,devisList);
   const cli=clients.find(x=>x.devisId===id);if(cli){cli.devisId=null;await store.set(K_CLIENTS,clients);}
   /* Une suppression est un geste ponctuel et délibéré (clic sur "Suppr."), pas une frappe
@@ -11175,7 +11179,34 @@ const APP_VERSION='v14 · 2026-08-03 (Supabase)';
 const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL,K_PROD,K_CHANTIER]);
 let sb=null,sbUser=null,ownerId=null,sbChannel=null,applyingRemote=false,offlineMode=false,lastSyncError='',cloudReady=false,loggedIn=false;
 let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRealJson='',remoteProdJson='',remoteChantierJson='',pushT=null;
-function setSyncStatus(s){const b=document.getElementById('sync-badge');if(!b)return;b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';}
+/* Un devis supprimé localement AVANT que le tout premier loadAll() de la session n'ait
+   réussi pouvait revenir tout seul : ce loadAll() rajoute dans devisList tout ce qu'il
+   trouve côté serveur sans savoir qu'un id vient d'être supprimé localement (il ne peut
+   comparer qu'à un remoteDevis déjà rempli par un chargement précédent — vide au tout
+   premier). Cet ensemble garde la mémoire des suppressions en cours tant que le serveur
+   n'a pas confirmé, pour que loadAll() ne les résurrecte jamais par erreur. */
+let _pendingDeletedDevisIds=new Set();
+/* Le badge seul (10px, discret dans la barre du haut) ne suffisait pas : une vraie erreur
+   de synchro (session expirée après une longue mise en veille, réseau perdu) passait
+   inaperçue — l'app continuait à tourner sur les données locales, potentiellement
+   périmées, sans que rien de visible ne le signale clairement. Une bannière en haut
+   d'écran, avec le message d'erreur réel et un bouton "Réessayer", pour que ça ne
+   puisse plus passer inaperçu. */
+function setSyncStatus(s){
+  const b=document.getElementById('sync-badge');if(b)b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';
+  let bar=document.getElementById('sync-error-bar');
+  if(s==='err'){
+    if(!bar){
+      bar=document.createElement('div');bar.id='sync-error-bar';bar.className='sync-error-bar';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML='<span>Synchronisation impossible'+(lastSyncError?(' : '+esc(lastSyncError)):'')+' — les données affichées peuvent être périmées.</span><button onclick="retrySync()">Réessayer</button>';
+    requestAnimationFrame(()=>bar.classList.add('show'));
+  }else if(bar){
+    bar.classList.remove('show');
+  }
+}
+function retrySync(){if(!sb||!sbUser)return;loadAll();cloudPush();}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function isEditingChantier(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#chantier-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function isEditingTasks(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#dashboard-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
@@ -11222,6 +11253,7 @@ function onLogin(session){
   setSyncStatus('sync');
   loadAll().then(subscribeRealtime);
 }
+let _loadAllRetryT=null,_loadAllRetryDelay=5000;
 async function loadAll(){
   if(!sb||!sbUser)return;setSyncStatus('sync');
   try{
@@ -11230,7 +11262,13 @@ async function loadAll(){
     applyingRemote=true;
     const prevC=new Set(Object.keys(remoteClients)),prevD=new Set(Object.keys(remoteDevis));
     const cloudIds=new Set();
-    (data||[]).forEach(r=>{cloudIds.add(r.id);
+    (data||[]).forEach(r=>{
+      /* Une suppression locale pas encore confirmée côté serveur (cloudPush en vol ou pas
+         encore tenté, ex. tout premier loadAll d'une session) ne doit jamais être annulée
+         par ce chargement — sinon le devis supprimé revient dans devisList comme si de
+         rien n'était, exactement le symptôme signalé. */
+      if(r.kind==='devis'&&_pendingDeletedDevisIds.has(r.id))return;
+      cloudIds.add(r.id);
       if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
       else if(r.kind==='devis'){const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
       else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
@@ -11251,11 +11289,23 @@ async function loadAll(){
     reparerNomsClients();
     try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();if(!isEditingChantier())renderChantier();if(!isEditingTasks())renderTaskList();}catch(e){}
     setSyncStatus('ok');
+    clearTimeout(_loadAllRetryT);_loadAllRetryDelay=5000;
     scheduleSyncPush();
     /* Les demandes en vol vivent dans `library` : c'est ici, une fois la bibliothèque
        vraiment chargée, qu'on sait s'il y a quelque chose à récupérer. */
     iaRepriseAuto();
-  }catch(e){lastSyncError=(e&&(e.message||e.code))||'lecture impossible';setSyncStatus('err');}
+  }catch(e){
+    lastSyncError=(e&&(e.message||e.code))||'lecture impossible';setSyncStatus('err');
+    /* Contrairement à cloudPush() (qui retente déjà après 20s), un échec ici n'avait AUCUNE
+       reprise automatique — si le tout premier chargement d'une session échouait (réseau,
+       session expirée après une longue mise en veille), cloudReady ne passait jamais à
+       true et l'app restait bloquée sur les données locales, potentiellement périmées,
+       pour le reste de la session, sans jamais se rattraper toute seule. Backoff
+       exponentiel plafonné à 60s, remis à 5s dès qu'un chargement réussit. */
+    clearTimeout(_loadAllRetryT);
+    _loadAllRetryT=setTimeout(()=>{if(sb&&sbUser)loadAll();},_loadAllRetryDelay);
+    _loadAllRetryDelay=Math.min(_loadAllRetryDelay*2,60000);
+  }
 }
 let _rtRetryT=null;
 function subscribeRealtime(){
@@ -11301,7 +11351,15 @@ document.addEventListener('visibilitychange',()=>{
     return;
   }
   if(document.visibilityState!=='visible'||!sb||!sbUser||offlineMode)return;
-  cloudPush().then(loadAll).then(()=>{if(!sbChannel)subscribeRealtime();});
+  /* Après une longue mise en veille (l'appli gelée en arrière-plan pendant des heures,
+     pas juste des minutes), le jeton de session peut avoir expiré pendant que le minuteur
+     de rafraîchissement automatique de supabase-js était lui-même gelé. getSession()
+     rafraîchit la session si besoin AVANT qu'on tente le moindre appel — sans ça, le
+     premier cloudPush()/loadAll() du retour pouvait échouer avec une session périmée,
+     déclenchant l'état d'erreur (badge "hors ligne") sans jamais se rattraper si ce
+     retour-là ne se reproduisait pas. */
+  (sb.auth.getSession?sb.auth.getSession().catch(()=>{}):Promise.resolve())
+    .then(cloudPush).then(loadAll).then(()=>{if(!sbChannel)subscribeRealtime();});
 });
 /* Filet supplémentaire : un onglet/app fermé (pas seulement mis en arrière-plan) peut ne
    jamais recevoir 'visibilitychange' à temps sur certains navigateurs mobiles — 'pagehide'
@@ -11429,7 +11487,16 @@ function handleRealtime(payload){
   setSyncStatus('ok');
 }
 async function cloudPush(){
-  if(!sb||!sbUser)return;setSyncStatus('sync');
+  /* Ne JAMAIS pousser vers le serveur avant qu'un premier loadAll() ait réussi cette
+     session (cloudReady). Sans cette garde : remoteDevis/remoteClients démarrent vides,
+     donc CHAQUE ligne locale (potentiellement une copie périmée restée en cache depuis
+     avant une mise en veille prolongée, un devis validé ailleurs et jamais rapatrié…)
+     paraît "nouvelle ou changée" et serait réécrite sur le serveur — écrasant une donnée
+     serveur correcte avec une copie locale obsolète. Le correctif de loadAll() qui
+     retente désormais automatiquement garantit que cloudReady finit toujours par passer
+     à true ; scheduleSyncPush() (appelé à la fin d'un loadAll réussi) rattrape alors tout
+     changement resté en attente pendant ce délai. */
+  if(!sb||!sbUser||!cloudReady)return;setSyncStatus('sync');
   const rows=[],seenC=new Set(),seenD=new Set(),delIds=[];
   /* Le marquage "synchronisé" (remoteClients/remoteDevis/remoteLibJson/remoteTasksJson) n'est
      appliqué qu'APRÈS confirmation d'écriture réussie — sinon un push qui échoue (hors ligne,
@@ -11457,7 +11524,7 @@ async function cloudPush(){
     if(pendingProd!==null)remoteProdJson=pendingProd;
     if(pendingChantier!==null)remoteChantierJson=pendingChantier;
     pendingDelC.forEach(id=>delete remoteClients[id]);
-    pendingDelD.forEach(id=>delete remoteDevis[id]);
+    pendingDelD.forEach(id=>{delete remoteDevis[id];_pendingDeletedDevisIds.delete(id);});
     lastSyncError='';setSyncStatus('ok');
   }catch(e){lastSyncError=(e&&(e.message||e.code))||'écriture refusée';setSyncStatus('err');scheduleSyncRetry();}
 }
