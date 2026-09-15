@@ -3038,3 +3038,37 @@ avoir largement dépassé les 600ms du debounce original ; cas simple (suppressi
 saisie ailleurs dans l'app) : aucun fantôme créé ; régression vérifiée : supprimer un
 AUTRE devis que celui ouvert ne touche ni `currentDevisId` ni le contenu affiché à
 l'écran. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite) — « Modifié le » qui ne voulait rien dire, et une signature invisible
+
+Deux demandes de Raphaël dans le même message :
+
+**A) Horodatage réel.** Il a anticipé lui-même le piège avant que je code quoi que ce
+soit : « à quelle heure ça a été modifié, si on a réellement touché le devis, pas juste
+si on y est rentré, sinon ça risquerait de nous embrouiller ». Il avait raison de s'en
+méfier — `upsertDevis` posait `updatedAt:Date.now()` à CHAQUE appel, et l'autosync du
+brouillon (correctif du 10/09) appelle `upsertDevis` à chaque `render()`, y compris juste
+après avoir ouvert un devis sans rien taper. La date dans « Mes devis » avançait donc sur
+une simple consultation. Corrigé : `upsertDevis` compare le contenu réel avant de faire
+avancer `updatedAt` ; affichage passé à la date **et l'heure** (`fmtDateTimeFr`).
+
+**B) « J'ai actualisé ma signature et je coche la case mais rien ne s'affiche »**, avec la
+question explicite : est-ce spécifique à cette fonction, ou un problème de fond ?
+Vérifié par test, pas supposé : `handleRealtime` recevait bien l'écho `kind==='library'`
+et mettait à jour la bibliothèque en mémoire, mais ne touchait jamais `current.branding`
+ni ne repeignait l'aperçu — un brouillon déjà ouvert sur l'appareil qui REGARDE restait
+figé sur l'ancienne signature si le changement venait d'un AUTRE appareil pendant que ce
+devis était déjà à l'écran. Ouvrir/rouvrir le devis (`loadDevis`) ou recharger la page
+(`init()`) rafraîchissent déjà correctement le branding pour un brouillon — seul le cas
+« déjà ouvert + changement reçu en direct » manquait, exactement le même trou que celui
+comblé pour le devis lui-même le 14/09, jamais étendu à la bibliothèque. Réponse à sa
+question : spécifique à ce chemin (`handleRealtime` → branding), pas un défaut général —
+le principe brouillon-vivant/validé-figé est appliqué et marche partout ailleurs.
+
+**Vérification** : test réel — `updatedAt` identique après une simple réouverture,
+avancé après une vraie modification, ligne « Mes devis » affiche bien date + heure ;
+écho distant `library` sur un brouillon déjà ouvert → signature visible immédiatement
+dans l'aperçu ; même écho sur un devis VALIDÉ → signature inchangée (gelée, comme prévu).
+0 erreur page.

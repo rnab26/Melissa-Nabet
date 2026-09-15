@@ -27,6 +27,12 @@ Deux vrais trous de synchro trouvés (signalés par Raphaël : « je travaille u
 
 **Ne pas casser (suite 3)** : tout nouveau chemin qui touche `currentDevisId` sans vider `current` en même temps recrée ce même risque de résurrection, maintenant que le brouillon autosynchronise sur chaque frappe — les deux doivent toujours changer ensemble quand on quitte/supprime le devis affiché.
 
+**« Modifié le » ne voulait rien dire** (demande explicite, anticipée par Raphaël avant même que je code : « pas juste si on y est rentré, sinon ça risquerait de nous embrouiller ») : `upsertDevis` posait `updatedAt:Date.now()` à chaque appel, or l'autosync du brouillon (voir plus haut) appelle `upsertDevis` à CHAQUE `render()` — y compris juste après avoir ouvert/regardé un devis sans rien taper (`loadDevis` → `render()` → `saveDraftDebounced` → `saveDraft` → `upsertDevis`). La date affichée dans « Mes devis » avançait donc sur une simple consultation, pas sur une vraie modification. Corrigé : `upsertDevis` compare maintenant le contenu (`title`/`clientId`/`status`/`snapshot`) à la version existante et ne fait avancer `updatedAt` que s'il a réellement changé. Affichage passé de la date seule à `fmtDateTimeFr(d.updatedAt)` (date + heure) dans `openDevisPanel()`.
+
+**Signature/logo mis à jour sur un autre appareil, invisibles sur un brouillon déjà ouvert** (signalé par Raphaël : « j'ai actualisé ma signature et je coche la case mais rien ne s'affiche »). Root cause vérifiée par test, pas supposée : `handleRealtime` recevait bien l'écho `kind==='library'` et mettait à jour la variable globale `library`, mais ne touchait jamais `current.branding` ni ne repeignait `#devis` — un brouillon déjà ouvert sur CET appareil restait donc figé sur l'ancienne signature jusqu'à fermeture/réouverture du devis (`loadDevis` la rafraîchit) ou rechargement de la page (`init()` la rafraîchit aussi, ligne ~11446). Seul le cas « déjà ouvert + changement arrivé d'ailleurs en direct » manquait — même trou que celui comblé pour le devis lui-même le 14/09, jamais étendu à la bibliothèque. Corrigé sur le même principe : si le devis actuellement ouvert n'est pas `valide`, `current.branding` est recalé sur la nouvelle bibliothèque et l'écran se repeint tout de suite ; un devis déjà validé garde son branding gelé (vérifié : n'est PAS affecté par l'écho).
+
+**Réponse à la question générale de Raphaël** (« est-ce un bug de cette fonction spécialement ou de façon générale ? ») : spécifique à ce chemin précis (`handleRealtime` → branding), pas un problème de fond dans toute l'app — le même principe (brouillon vivant, validé figé) est déjà appliqué et fonctionne à l'ouverture d'un devis et au rechargement de page ; il manquait seulement pour le cas « déjà ouvert + changement reçu en direct depuis un autre appareil », maintenant comblé.
+
 **Notes / À faire**
 - [x] Retirer le mode "Continuer hors ligne" de l'UI (connexion à un compte obligatoire).
 - [x] Corriger le marquage "synchronisé" à tort sur un push qui a échoué.
@@ -34,6 +40,8 @@ Deux vrais trous de synchro trouvés (signalés par Raphaël : « je travaille u
 - [x] Brouillon de devis synchronisé automatiquement (pas seulement sur clic manuel).
 - [x] Module Chantier/Estimation entièrement raccordé à la synchro cloud (brouillon + liste enregistrée), auparavant totalement absent du circuit.
 - [x] Le composeur de devis se rafraîchit en direct sur un écho distant (au lieu de rester figé jusqu'à fermeture/réouverture), avec protection de la frappe active.
+- [x] "Modifié le" (date + heure) reflète une vraie modification, pas une simple ouverture.
+- [x] La bibliothèque (signature, logo, thème…) se propage en direct à un brouillon déjà ouvert reçu d'un autre appareil, pas seulement à l'ouverture/rechargement.
 - [x] Supprimer le devis ouvert dans le composeur ne le fait plus réapparaître (résurrection par l'autosync du brouillon, corrigée).
 - [ ] Parcours d'inscription self-service (voir section Commercialisation).
 

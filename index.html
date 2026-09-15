@@ -2874,12 +2874,19 @@ async function upsertDevis(status, clientIdOverride){
   const clientId=(clientIdOverride!==undefined)?clientIdOverride
                 :existing?existing.clientId
                 :(pendingClientId||null);
+  const title=existing&&existing.title?existing.title:currentDevisTitle();
+  const snapshot=JSON.parse(JSON.stringify(current));
+  /* "Modifié le" ne doit avancer que sur un VRAI changement de contenu, pas juste parce
+     qu'on a ouvert/regardé le devis (ce qui déclenche aussi ce chemin via l'autosave —
+     voir saveDraft). Sinon la date affichée dans « Mes devis » ne veut plus rien dire :
+     demande explicite pour ne pas embrouiller Raphaël sur lequel est vraiment le bon. */
+  const contentChanged=!existing||JSON.stringify({title:existing.title,clientId:existing.clientId,status:existing.status,snapshot:existing.snapshot})!==JSON.stringify({title,clientId,status:finalStatus,snapshot});
   const rec={
     id,num:current.num,
-    title:existing&&existing.title?existing.title:currentDevisTitle(),
+    title,
     clientId,status:finalStatus,
-    updatedAt:Date.now(),
-    snapshot:JSON.parse(JSON.stringify(current))
+    updatedAt:contentChanged?Date.now():(existing?existing.updatedAt:Date.now()),
+    snapshot
   };
   if(idx>=0)devisList[idx]=rec;else devisList.push(rec);
   currentDevisId=id;
@@ -2941,7 +2948,7 @@ function openDevisPanel(){
     const byClient={};devisList.forEach(d=>{(byClient[d.clientId]=byClient[d.clientId]||[]).push(d);});
     body=Object.keys(byClient).map(cid=>{
       const rows=byClient[cid].sort((a,b)=>b.updatedAt-a.updatedAt).map(d=>`
-        <div class="list-row"><div class="lr-main"><div class="lr-t">${esc(d.title)}${devisStatusBadge(d)}</div><div class="lr-s">N°${esc(d.num)} · ${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-t">${esc(d.title)}${devisStatusBadge(d)}</div><div class="lr-s">N°${esc(d.num)} · Modifié le ${fmtDateTimeFr(d.updatedAt)}</div></div>
           ${clientStatusSelect(d)}
           <button class="mini" onclick="loadDevis('${d.id}')">Ouvrir</button>
           <button class="mini" onclick="openReattribute('${d.id}')">Attribuer</button>
@@ -11248,7 +11255,20 @@ function handleRealtime(payload){
             fillFields();buildPrest();buildExclu();render();
           }
         }
-        else if(row.kind==='library'){if(row.data&&row.data.sections){library=row.data;remoteLibJson=JSON.stringify(library);}}
+        else if(row.kind==='library'){
+          if(row.data&&row.data.sections){
+            library=row.data;remoteLibJson=JSON.stringify(library);
+            /* Un réglage changé (ex. signature, logo) sur un AUTRE appareil pendant que
+               celui-ci a déjà un devis ouvert n'apparaissait qu'après avoir quitté/rouvert
+               le devis, ou rechargé la page — même trou que pour le devis lui-même, réglé le
+               14/09, mais jamais étendu à la bibliothèque. Un brouillon doit suivre les
+               derniers réglages (comme au chargement de la page ou à la réouverture d'un
+               devis) ; un devis déjà validé garde son branding gelé pour l'exactitude
+               historique. */
+            const openDevis=currentDevisId?devisList.find(x=>x.id===currentDevisId):null;
+            if(!openDevis||openDevis.status!=='valide'){current.branding={...library.branding};render();}
+          }
+        }
         else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=row.data;remoteTasksJson=JSON.stringify(tasks);}}
         else if(row.kind==='realisations'&&isEditingRealisations()){
           /* Saisie ou retouche en cours : on ignore la mise à jour distante et on ne marque
