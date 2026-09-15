@@ -3380,3 +3380,46 @@ version différente AVEC un champ actif affiche la bannière et ne recharge jama
 cet environnement de test (le serveur local n'a pas ce cache-control) — la logique de
 détection est testée et solide, mais la preuve définitive sera l'absence de récidive chez
 Raphaël dans les jours qui viennent.
+
+---
+
+## 15 septembre 2026 (suite 10) — Deux bugs restants, prouvés distincts d'un problème de cache
+
+Raphaël a testé avec un lien cache-cassé (chargement forcément neuf) et a signalé : toujours
+les mêmes anciens devis supprimés qui semblent traîner, et un nouveau devis qui se
+remplit tout seul avec d'anciennes valeurs. Message explicite, à prendre au sérieux :
+arrêter les patches temporaires, corriger le fond une bonne fois pour toutes.
+
+En regardant sa capture de près (le composeur d'un "Nouveau Devis" fraîchement ouvert) :
+tous les champs client/projet étaient en réalité VIDES. Les "anciens devis" dans la liste
+étaient les mêmes fantômes déjà identifiés hier (mêmes dates : 14/09, 10/09, 21/08,
+04/08) — encore présents parce que jamais réellement supprimés dans cette session fraîche,
+pas parce qu'une suppression avait échoué. Ça a permis d'isoler deux bugs réels et
+distincts, plutôt que de re-chasser un problème de cache déjà réglé :
+
+**1) Suppression qui peut encore se perdre, même avec le correctif d'hier.** Le flush
+immédiat sur `visibilitychange`/`pagehide` (hier) suppose que l'évènement a le temps de
+se déclencher ET que la promesse asynchrone se résout avant que la page soit déchargée —
+`pagehide` ne garantit ni l'un ni l'autre. Un rafraîchissement manuel juste après avoir
+cliqué "Suppr." (le geste le plus naturel pour vérifier que ça a marché) pouvait couper
+la requête en plein vol. Corrigé en changeant d'approche plutôt qu'en repatchant : une
+suppression est un clic ponctuel, pas une frappe continue — elle n'a aucune raison de
+passer par le même débounce à 500ms que le reste. `deleteDevisRecord()` appelle
+maintenant `cloudPush()` tout de suite, sans minuteur, sans dépendre d'un évènement de
+fermeture de page.
+
+**2) Le "remplissage automatique" n'était pas un bug de synchro du tout.** Aucun des
+champs du composeur (raison sociale, ville, adresse du projet…) n'avait
+`autocomplete="off"` ni de nom distinctif. Un navigateur mobile — Samsung Internet en
+particulier, celui que Raphaël utilise — peut proposer ou injecter d'anciennes valeurs
+tapées dans un champ du même type, complètement indépendamment de tout code JS ou de
+toute donnée réellement stockée quelque part. Corrigé : `autocomplete="off"` + `name`
+namespacé sur les 12 champs concernés.
+
+**Vérification** : test réel (faux Supabase en mémoire) — l'appel de suppression part en
+~30ms après le clic, bien avant que l'ancien débounce à 500ms n'aurait même commencé à
+attendre ; les 12 champs portent bien `autocomplete="off"`. 0 erreur page. **Honnêteté** :
+je ne peux pas reproduire l'autocomplétion réelle d'un Samsung Internet dans cet
+environnement de test (c'est un comportement du navigateur, pas du code) — la correction
+est la pratique standard reconnue pour la désactiver, mais la confirmation viendra de
+Raphaël en usage réel.

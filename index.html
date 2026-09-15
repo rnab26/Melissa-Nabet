@@ -1244,27 +1244,27 @@
       <p class="ed-eyebrow">Client</p>
       <div class="two-col">
         <div class="col">
-          <label class="fld"><span class="lbl">Raison sociale / nom</span><input type="text" id="f-raison"></label>
-          <label class="fld"><span class="lbl">Contact</span><input type="text" id="f-contact"></label>
-          <label class="fld"><span class="lbl">Téléphone</span><input type="text" id="f-cphone"></label>
-          <label class="fld"><span class="lbl">Email</span><input type="email" id="f-cemail"></label>
+          <label class="fld"><span class="lbl">Raison sociale / nom</span><input type="text" id="f-raison" autocomplete="off" name="mn-raison-sociale"></label>
+          <label class="fld"><span class="lbl">Contact</span><input type="text" id="f-contact" autocomplete="off" name="mn-contact"></label>
+          <label class="fld"><span class="lbl">Téléphone</span><input type="text" id="f-cphone" autocomplete="off" name="mn-tel"></label>
+          <label class="fld"><span class="lbl">Email</span><input type="email" id="f-cemail" autocomplete="off" name="mn-email"></label>
         </div>
         <div class="col">
-          <label class="fld"><span class="lbl">Adresse</span><input type="text" id="f-caddr"></label>
-          <label class="fld"><span class="lbl">N° société</span><input type="text" id="f-siret"></label>
-          <label class="fld"><span class="lbl">Ville</span><input type="text" id="f-ville"></label>
-          <label class="fld"><span class="lbl">Code postal</span><input type="text" id="f-cp"></label>
+          <label class="fld"><span class="lbl">Adresse</span><input type="text" id="f-caddr" autocomplete="off" name="mn-adresse"></label>
+          <label class="fld"><span class="lbl">N° société</span><input type="text" id="f-siret" autocomplete="off" name="mn-siret"></label>
+          <label class="fld"><span class="lbl">Ville</span><input type="text" id="f-ville" autocomplete="off" name="mn-ville"></label>
+          <label class="fld"><span class="lbl">Code postal</span><input type="text" id="f-cp" autocomplete="off" name="mn-cp"></label>
         </div>
       </div>
     </div>
     <div class="ed-section">
       <p class="ed-eyebrow">Projet</p>
       <div class="row2">
-        <label class="fld"><span class="lbl">Intitulé du projet</span><input type="text" id="f-proj"></label>
-        <label class="fld"><span class="lbl">Surface (m²)</span><input type="number" id="f-surf"></label>
+        <label class="fld"><span class="lbl">Intitulé du projet</span><input type="text" id="f-proj" autocomplete="off" name="mn-proj"></label>
+        <label class="fld"><span class="lbl">Surface (m²)</span><input type="number" id="f-surf" autocomplete="off" name="mn-surf"></label>
       </div>
-      <label class="fld"><span class="lbl">Adresse du projet</span><input type="text" id="f-paddr"></label>
-      <label class="fld"><span class="lbl">Texte d'introduction</span><textarea id="f-intro" style="min-height:88px;"></textarea></label>
+      <label class="fld"><span class="lbl">Adresse du projet</span><input type="text" id="f-paddr" autocomplete="off" name="mn-paddr"></label>
+      <label class="fld"><span class="lbl">Texte d'introduction</span><textarea id="f-intro" style="min-height:88px;" autocomplete="off" name="mn-intro"></textarea></label>
     </div>
     <div class="ed-section">
       <p class="ed-eyebrow">Tarification</p>
@@ -3014,6 +3014,14 @@ function deleteDevis(id){
 async function deleteDevisRecord(id){
   devisList=devisList.filter(x=>x.id!==id);await store.set(K_DEVIS,devisList);
   const cli=clients.find(x=>x.devisId===id);if(cli){cli.devisId=null;await store.set(K_CLIENTS,clients);}
+  /* Une suppression est un geste ponctuel et délibéré (clic sur "Suppr."), pas une frappe
+     continue — pas de raison de la faire attendre le débounce de 500ms comme le reste. La
+     débouncer laissait une fenêtre où recharger la page tout de suite après (pour vérifier
+     que ça a marché, justement) pouvait couper l'envoi en plein vol avant qu'il n'atteigne
+     le serveur — la ligne réapparaissait alors, jamais vraiment supprimée. On pousse
+     immédiatement, en plus du filet debounce/visibilitychange/pagehide qui reste en place
+     pour tout le reste. */
+  clearTimeout(pushT);cloudPush();
   if(currentDevisId===id){
     /* Supprimer le devis actuellement ouvert dans le composeur ne suffisait pas à vider
        currentDevisId : current.raison/services restaient affichés tels quels à l'écran, donc

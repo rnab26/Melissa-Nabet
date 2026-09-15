@@ -49,6 +49,10 @@ Corrigé : (1) `subscribeRealtime()` gère maintenant `CHANNEL_ERROR`/`TIMED_OUT
 
 **Ne pas casser (suite 5)** : `checkForUpdate()` ne doit jamais recharger sans vérifier `document.activeElement` d'abord — un rechargement pendant une frappe active perdrait ce qui n'est pas encore sauvegardé localement (contrairement à un `cloudPush`, qui ne perd rien puisqu'il pousse ce qui existe déjà en mémoire).
 
+**Septième trou, persistant même après un chargement garanti neuf (Raphaël a testé avec un lien cache-cassé — donc le cache HTTP n'était plus en cause)** : `deleteDevisRecord()` déclenchait bien un envoi (via le flush immédiat sur `visibilitychange`/`pagehide`, voir plus haut), mais SEULEMENT si l'un de ces deux évènements avait le temps de se déclencher avant que la page ne soit vraiment déchargée. Un rafraîchissement manuel immédiatement après le clic sur "Suppr." (exactement le geste naturel pour vérifier que la suppression a marché) pouvait couper la requête réseau en plein vol avant qu'elle n'atteigne le serveur — `pagehide` ne garantit pas qu'une promesse `await` en cours ait le temps de se résoudre. Corrigé à la racine : une suppression est un geste ponctuel et délibéré (un clic), pas une frappe continue à débouncer comme le reste — `deleteDevisRecord()` appelle maintenant `cloudPush()` immédiatement, sans passer par le minuteur à 500ms ni dépendre d'un évènement de fermeture de page. Testé réel (faux Supabase en mémoire) : l'appel de suppression part en ~30ms après le clic, largement avant que le débounce d'origine n'aurait même commencé à attendre.
+
+**Champs du composeur remplis tout seuls avec d'anciennes valeurs sur un nouveau devis, root cause distincte** : aucun des champs texte du composeur (raison sociale, contact, ville, adresse du projet, etc.) n'avait `autocomplete="off"` ni de `name` distinctif — un navigateur mobile (Samsung Internet en particulier) peut proposer/injecter d'anciennes valeurs précédemment tapées dans un champ du même type, indépendamment de tout code JS ou de toute donnée réellement stockée. Ce n'est pas une resynchronisation d'un ancien devis : c'est l'autocomplétion native du navigateur. Corrigé : `autocomplete="off"` et un `name` namespacé (`mn-...`) posés sur les 12 champs du composeur (client + projet).
+
 **Notes / À faire**
 - [x] Retirer le mode "Continuer hors ligne" de l'UI (connexion à un compte obligatoire).
 - [x] Corriger le marquage "synchronisé" à tort sur un push qui a échoué.
@@ -66,6 +70,8 @@ Corrigé : (1) `subscribeRealtime()` gère maintenant `CHANNEL_ERROR`/`TIMED_OUT
 - [x] Supprimer le devis ouvert dans le composeur ne le fait plus réapparaître (résurrection par l'autosync du brouillon, corrigée).
 - [x] Une suppression (ou toute modif) n'est plus perdue si l'app passe en arrière-plan/se ferme dans les 500ms qui suivent — flush immédiat sur `visibilitychange:hidden` et `pagehide`, plus besoin d'attendre le débounce.
 - [x] Détection automatique d'une nouvelle version déployée (jusqu'à 10 min de cache HTTP GitHub Pages) — rechargement auto si rien n'est en cours de saisie, bannière sinon.
+- [x] Suppression d'un devis envoyée immédiatement (pas de débounce) — un rafraîchissement juste après le clic ne peut plus couper l'envoi en plein vol.
+- [x] Champs du composeur protégés de l'autocomplétion native du navigateur (`autocomplete="off"` + `name` namespacé) — ce n'était pas d'anciennes données qui revenaient, mais le navigateur qui proposait/injectait de vieilles saisies.
 - [ ] Parcours d'inscription self-service (voir section Commercialisation).
 
 ## Sauvegarde automatique (exports/imports + panneaux)
