@@ -3124,3 +3124,48 @@ continuent de la synchroniser automatiquement sans reclic ; `updatedAt` reste id
 après un changement de branding seul, avance après une vraie édition ; valider le pad de
 signature sans dessiner refuse (modal reste ouvert, rien n'est enregistré), valider avec
 un vrai trait fonctionne normalement. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 3) — Vérification en ligne, et un audit qui trouve un vrai trou
+
+Raphaël, deux demandes : vérifier que la signature s'affiche bien maintenant sur son
+téléphone, et « fais un tour sur le code de tout le site pour vérifier ce genre d'erreur
+et faire les correctifs plutôt qu'on s'en rende compte au fur et à mesure ».
+
+**Vérification en ligne** : je ne peux pas accéder à son téléphone ni à son compte réel —
+dit clairement plutôt que de prétendre l'avoir fait. Ce qui est vérifiable et a été fait :
+le site RÉELLEMENT déployé (`rnab26.github.io/Melissa-Nabet`, pas une copie locale),
+navigateur en émulation mobile (390×844, tactile), un vrai trait dessiné à la souris sur
+le canvas de signature — s'enregistre et s'affiche dans l'aperçu du devis. Confirme que
+le code déployé fonctionne ; ne remplace pas une vérification sur son appareil réel.
+
+**Audit du reste du code**, en cherchant d'autres instances du même type de trou
+(synchro qui met à jour les données en coulisse sans repeindre l'écran, ou sans protéger
+une saisie en cours) : vérifié que toutes les clés `store.set` ont bien leur kind couvert
+dans `SYNC_KEYS`/`cloudPush`/`loadAll`/`handleRealtime` ; vérifié qu'aucun autre canvas
+dessinable à la main n'existe dans l'app à part celui de la signature (déjà corrigé) — les
+autres usages de `toDataURL` partent tous d'une vraie photo chargée, jamais d'un tracé
+libre, donc pas exposés au même risque.
+
+**Un vrai trou trouvé** : `handleRealtime` traitait `kind==='tasks'` (mettait à jour le
+tableau `tasks` en mémoire) mais ne repeignait JAMAIS le tableau de bord affiché à
+l'écran, et n'avait aucune garde contre l'écrasement d'une tâche en cours d'édition —
+seul type de donnée synchronisée sur les cinq (clients, réalisations, boutique, chantier,
+tâches) à ne pas avoir ce filet, jamais remarqué jusqu'ici faute d'avoir été signalé.
+Corrigé à l'identique du patron déjà en place ailleurs : `isEditingTasks()` (scope
+`#dashboard-view`), `renderTaskList()` appelé après un écho distant et après le
+chargement initial, sauf en cas de saisie active.
+
+**Noté mais volontairement pas construit** : renommer une catégorie de la bibliothèque
+Chantier (`library.chantierCats`) ne se répercute pas sur les catégories déjà ajoutées à
+une estimation existante — structurellement identique au cas des sections de devis réglé
+plus tôt, mais PAS un bug : le chantier n'a aucune notion de brouillon/validé à protéger,
+et rien n'indique que Raphaël attend ce comportement pour cette fonctionnalité précise.
+Signalé ici pour mémoire, pas corrigé sans demande explicite — éviter d'ajouter des
+fonctionnalités non demandées.
+
+**Vérification** : test réel — écho distant sur les tâches avec le tableau de bord pas en
+cours d'édition → repeint immédiatement ; même écho avec le champ Titre d'une tâche
+réellement cliqué et en cours de frappe → frappe conservée, rien écrasé, rien marqué
+synchronisé côté distant. 0 erreur page.

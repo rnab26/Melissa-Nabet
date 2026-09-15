@@ -11163,6 +11163,7 @@ let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRe
 function setSyncStatus(s){const b=document.getElementById('sync-badge');if(!b)return;b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function isEditingChantier(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#chantier-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+function isEditingTasks(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#dashboard-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 /* Id du client dont une fiche est en cours de saisie (champ actif dans .cl-group[data-cid]).
    Sert à protéger cette fiche d'un écrasement par une mise à jour distante (voir handleRealtime) :
    sans ça, un écho temps-réel de notre propre écriture (ou une synchro d'un autre appareil)
@@ -11233,7 +11234,7 @@ async function loadAll(){
        contact est rempli reprennent leur contact comme nom. Avant, on réparerait une copie
        locale qui serait aussitôt écrasée par les données distantes. */
     reparerNomsClients();
-    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();if(!isEditingChantier())renderChantier();}catch(e){}
+    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();if(!isEditingChantier())renderChantier();if(!isEditingTasks())renderTaskList();}catch(e){}
     setSyncStatus('ok');
     scheduleSyncPush();
     /* Les demandes en vol vivent dans `library` : c'est ici, une fois la bibliothèque
@@ -11294,6 +11295,12 @@ function handleRealtime(payload){
             if(!openDevis||openDevis.status!=='valide'){current.branding={...library.branding};render();}
           }
         }
+        /* Trouvé en auditant le reste de handleRealtime après les trous devis/bibliothèque :
+           aucune protection de la frappe en cours (contrairement à client/réalisations/
+           boutique/chantier) ET aucun repeint du tableau de bord — une tâche modifiée sur un
+           autre appareil mettait bien à jour `tasks` en coulisse mais l'écran restait figé
+           jusqu'à un changement de vue ou un rechargement. */
+        else if(row.kind==='tasks'&&isEditingTasks()){}
         else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=row.data;remoteTasksJson=JSON.stringify(tasks);}}
         else if(row.kind==='realisations'&&isEditingRealisations()){
           /* Saisie ou retouche en cours : on ignore la mise à jour distante et on ne marque
@@ -11318,6 +11325,7 @@ function handleRealtime(payload){
   try{if(!isEditingRealisations())renderRealisations();}catch(e){}
   try{if(!isEditingBoutique())renderBoutique();}catch(e){}
   try{if(!isEditingChantier())renderChantier();}catch(e){}
+  try{if(!isEditingTasks())renderTaskList();}catch(e){}
   setSyncStatus('ok');
 }
 async function cloudPush(){
