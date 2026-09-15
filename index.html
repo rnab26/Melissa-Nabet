@@ -634,6 +634,18 @@
   }
   @media (max-width:600px){
     .two-col{flex-direction:column;gap:0;}
+    /* Section Client du composeur de devis, sur mobile : demande explicite de la
+       compacter comme la fiche client (même technique) — les 8 champs empilés un par
+       ligne rendaient l'écran trop long. Chaque colonne d'origine (identité+contact à
+       gauche, adresse à droite) passe de "un champ par ligne" à deux par rangée, sans
+       changer l'ordre ni le regroupement des champs (juste la présentation) : Raison
+       sociale/Contact, Téléphone/Email, Adresse/N° société, Ville/Code postal.
+       `.two-col` seule (juste au-dessus) reste inchangée : ce sont les DEUX colonnes qui
+       se réempilent l'une sous l'autre comme avant, chacune devenant ensuite compacte
+       en interne. Bureau (>600px) intact : .col garde son display block d'origine, un
+       champ par ligne, comme toujours. */
+    .two-col>.col{display:flex;flex-wrap:wrap;gap:0 12px;}
+    .two-col>.col .fld{flex:1 1 calc(50% - 6px);min-width:0;}
     .row3{flex-direction:column;}
     .sub-line.with-cat{grid-template-columns:1fr 1fr;grid-template-areas:"cat cat" "label label" "montant date" "doc rm";}
     .sub-line.with-cat select[data-cat]{grid-area:cat;}

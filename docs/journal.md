@@ -3661,3 +3661,31 @@ déjà (taper un contact sur une fiche sans nom lui donne son nom).
 demandé, auto-remplissage du contact vide confirmé, contact déjà rempli jamais écrasé,
 champ `data-cf="ville"` intact (seul le libellé change), bureau (1280px) toujours en
 colonne, aucune régression. 0 erreur page dans les deux correctifs.
+
+---
+
+## 15 septembre 2026 (suite 17) — Même compactage pour le composeur de devis
+
+Raphaël a confirmé que la fiche client compactée fonctionne bien, et a demandé le même
+traitement pour la section Client du composeur de devis sur mobile — les 8 champs
+(Raison sociale, Contact, Téléphone, Email, Adresse, N° société, Ville, Code postal)
+étaient empilés un par ligne, rendant l'écran très long avant même d'arriver aux
+prestations.
+
+Contrairement à la fiche client (où il avait fallu déplacer Email pour l'accoler à
+Ville), la structure existante ici s'y prêtait déjà : deux colonnes de 4 champs chacune
+en bureau (identité/contact à gauche, adresse à droite), déjà réempilées l'une sous
+l'autre sur mobile mais restées un champ par ligne à l'intérieur de chaque colonne. Il a
+suffi de rendre CHAQUE colonne compacte en interne (deux champs par rangée au lieu d'un),
+sans toucher à quel champ vit dans quelle colonne — la même technique CSS que la fiche
+client (`flex-wrap` + moitié de largeur par champ), strictement sous 600px, le seuil déjà
+en place pour cette section précise. Résultat : Raison sociale/Contact,
+Téléphone/Email, Adresse/N° société, Ville/Code postal.
+
+Vérifié avant de toucher au CSS : `.two-col` n'est utilisée qu'à cet unique endroit du
+fichier (pas de risque de casser une autre section en modifiant son comportement mobile).
+
+**Vérification** : test réel (Playwright, 390px) — regroupement en 4 rangées confirmé
+exactement comme prévu ; tous les `id` de champs (`f-raison`, `f-contact`, etc.) toujours
+présents, saisie et lecture des valeurs inchangées ; bureau (1280px) : chaque colonne
+reste en `display:block`, un champ par ligne, identique à avant. 0 erreur page.
