@@ -3757,3 +3757,73 @@ barre de navigation (mesuré, pas supposé) ; le bouton Réinitialiser, invisibl
 coup d'œil, devient atteignable en faisant défiler à l'intérieur du menu ; les colonnes
 Échéance/Rappel bien fusionnées en une seule ; bureau (1280px) totalement inchangé. 0
 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 20) — Audit général demandé par Raphaël
+
+Raphaël, sans point précis à corriger cette fois : vérifier que tout le dépôt est propre
+(pas de branches ou doublons qui traînent), qu'il n'y a ni régression ni risque futur,
+que tout fonctionne quel que soit le navigateur/appareil/orientation, que la synchro
+couvre bien tous les sujets — et corriger ce qui doit l'être, sans jamais casser ce qui
+marche.
+
+**Branches** : `main` à jour et propre. Les 26 branches locales `claude/*` de cette
+session étaient toutes déjà fusionnées — supprimées sans risque. Sur le dépôt distant,
+8 branches sans rapport avec `main` et une (`claude/solde-sans-cle-admin`) redondante
+avec du travail déjà fusionné par un autre chemin : identifiées, mais **pas supprimées**
+— `git push origin --delete` est bloqué ici par une restriction de permission de
+l'environnement (HTTP 403 confirmé), et les outils GitHub disponibles n'ont pas
+d'équivalent. Reste à faire à la main sur GitHub, ou à élargir les permissions.
+
+**Code mort retiré** (confirmé par comptage d'occurrences + absence d'appel dynamique,
+puis testé) : `askInfo()`, `printDevis()`, `toggleSplitView()` — trois fonctions
+orphelines, plus un `console.log` de debug oublié dans `reparerNomsClients()`.
+
+**Vraie faille de synchro trouvée et corrigée** : de tous les types de données
+synchronisées (client, devis, bibliothèque, tâches, réalisations, produits, chantier),
+seule la **bibliothèque** (Réglages/branding et catalogue de prestations) n'avait
+**aucune** protection contre un écho distant qui écrase une saisie en cours — les six
+autres en ont une. Ajouté `isEditingLibrary()` sur le même modèle que les autres
+(`#modal.dataset.editing='library'` posé à l'ouverture des deux panneaux concernés,
+effacé à la fermeture), et le garde-fou correspondant dans `handleRealtime()`.
+
+**Compatibilité multi-navigateurs/appareils** — quatre points corrigés après revue :
+- `body.force-split.devis-active` utilisait `height:100vh` seul : sur Safari iOS, la
+  barre d'outils dynamique peut laisser un vide ou couper le bas de l'écran. Ajouté
+  `100dvh` en complément (progressive enhancement, ignoré des navigateurs qui ne le
+  connaissent pas).
+- `.rz-tag` avait `backdrop-filter` sans le préfixe `-webkit-` — absent sur Safari,
+  contrairement aux autres usages du même effet ailleurs dans le fichier. Ajouté.
+- `.toast` et `#devis-tab-fab` (le bouton Aperçu flottant) étaient positionnés à
+  `bottom:20px` fixe, sans tenir compte de l'encoche/barre de gestes en bas d'un iPhone
+  récent. Ajouté `env(safe-area-inset-bottom)` aux deux, comme les autres éléments
+  flottants du fichier le font déjà.
+
+Vérifié par ailleurs et jugés déjà corrects sans besoin de toucher : tous les accès à
+`localStorage` sont protégés par try/catch (nécessaire en navigation privée Safari),
+aucun usage risqué de `:has()` ou d'API récente non protégée.
+
+**Limite honnête de cet audit** : seul Chromium est disponible dans cet environnement
+pour les tests Playwright (ni WebKit ni Firefox, et interdiction d'installer un
+navigateur ici) — la compatibilité Safari a donc été vérifiée par revue de code des
+pièges connus + émulation Chromium avec UA/appareil Safari, pas par un vrai moteur
+WebKit. Si un doute reste sur un point précis, un test sur un vrai iPhone/Mac reste la
+seule vérification définitive.
+
+**Un test qui échouait, sans lien avec ce qui précède** : `tests/realisations.test.mjs`
+donnait "n/c" pour le solde fal.ai au lieu du montant simulé. Cause : l'éditeur photo
+est ouvert une première fois plus haut dans le test (pour vérifier le redressement de
+façade) **avant** que le mock réseau du pont `photo-ia` ne soit posé — son onglet IA par
+défaut déclenche alors un vrai appel réseau pour le solde, qui échoue (pas d'accès
+réseau ici) et reste en cache 60 secondes. Le test du solde, plus bas, lisait ce cache
+périmé au lieu du mock pourtant correctement posé entre-temps. Corrigé en vidant ce
+cache (`_iaBalance = null`) juste après avoir posé le mock. Confirmé sans lien avec le
+reste de l'audit (le code du pont IA n'a pas été touché).
+
+**Vérification** : suite complète `tests/realisations.test.mjs` — **590 OK, 0 ÉCHEC**
+(588 OK/2 échecs au départ de cet audit). Passe multi-appareils dédiée (Playwright) sur
+huit profils — iPhone 13 portrait/paysage, Pixel 5 portrait/paysage, iPad Pro 11
+portrait/paysage, bureau Chrome 1440px, bureau UA Safari/Mac — parcourant tableau de
+bord, clients, composeur de devis + bouton Aperçu, filtre des tâches, réalisations,
+boutique, réglages/bibliothèque : **0 erreur** sur les huit profils.

@@ -569,6 +569,11 @@ await page.route('**/functions/v1/photo-ia', async (route) => {
   // chemin hérité `edit` (appel synchrone), conservé côté pont pour les pages déjà ouvertes
   await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ imageDataUri: JPEG_TEST, model: body.model, raw: { seed: 42 } }) });
 });
+// L'éditeur a déjà été ouvert plus haut (redressement de la façade), avant que ce mock
+// n'existe : son onglet IA par défaut avait donc tenté un vrai appel réseau pour le solde,
+// qui a échoué (pas d'accès réseau ici) et est resté en cache 60s. Sans ce nettoyage, le
+// test du solde plus bas lirait cet échec au lieu du mock, alors même que le pont fonctionne.
+await page.evaluate(() => { _iaBalance = null; });
 
 const iaOnglet = await page.evaluate(async () => {
   await openPhotoEditor(realisations[0].id, realisations[0].photos[0].id);
@@ -4710,8 +4715,8 @@ const menus = await page.evaluate(async () => {
   closeModal();
   return { plus, ouvert, devis, vueDevis };
 });
-check('Menu téléphone : « ⋯ » donne accès à la vue, aux réglages, à la sauvegarde et à la synchro',
-  menus.plus.length === 4 && /Réglages/.test(menus.plus.join(' ')) && /Sauvegarde/.test(menus.plus.join(' ')) && /Synchronisation/.test(menus.plus.join(' ')),
+check('Menu téléphone : « ⋯ » donne accès à la vue (interrupteur Mobile/Bureau), aux réglages, à la sauvegarde et à la synchro',
+  menus.plus.length === 5 && /Mobile/.test(menus.plus.join(' ')) && /Bureau/.test(menus.plus.join(' ')) && /Réglages/.test(menus.plus.join(' ')) && /Sauvegarde/.test(menus.plus.join(' ')) && /Synchronisation/.test(menus.plus.join(' ')),
   menus.plus.join(' | '));
 check('Menu téléphone : une entrée du menu ouvre vraiment son panneau', menus.ouvert);
 check('Menu téléphone : « Devis » propose Composer, Mes devis et Estimation du Projet',

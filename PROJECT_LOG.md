@@ -1317,3 +1317,60 @@ Trois corrections de la même famille, trouvées en écrivant des tests d'échec
 **Règle** : rien ne se marque « fait » tant que la dernière écriture n'a pas réussi, et tout
 ce qui a été écrit avant l'échec se nettoie. Les trois cas ont chacun leur test d'échec —
 c'est le seul moyen de les voir, aucun ne se manifeste en usage normal.
+
+## Audit général du dépôt CRM (15 septembre 2026)
+
+Demandé sans point précis : propreté du dépôt, absence de régression/risque futur,
+compatibilité multi-navigateurs/appareils/orientations, complétude de la synchro. Détail
+narratif dans `docs/journal.md` (suite 20) ; ici, le résumé technique.
+
+**Branches** : `main` propre et à jour. 26 branches locales `claude/*` déjà fusionnées,
+supprimées. 8 branches distantes orphelines + 1 redondante (`claude/solde-sans-cle-admin`)
+repérées mais **non supprimées côté distant** : `git push origin --delete` renvoie une
+HTTP 403 dans cet environnement (restriction de permission confirmée, pas un bug), et
+aucun outil GitHub disponible ici n'a d'équivalent à la suppression de branche. À faire
+depuis l'interface GitHub, ou à débloquer côté permissions de l'environnement.
+
+**Code mort retiré** (vérifié par comptage d'occurrences dans tout le fichier + absence
+d'invocation dynamique `eval`/`window[...]`) : `askInfo()`, `printDevis()`,
+`toggleSplitView()`, et un `console.log` de debug dans `reparerNomsClients()`.
+
+**Faille de synchro comblée** : `library` (Réglages/branding + bibliothèque de
+prestations) était le seul type de donnée synchronisée sans garde-fou contre un écho
+temps réel écrasant une saisie en cours — les six autres (`client`, `devis`, `tasks`,
+`realisations`, `produits`, `chantier`) en ont chacun un. Ajouté `isEditingLibrary()`,
+posé/effacé via `#modal.dataset.editing` dans `openSettingsPanel()`/`openLibraryPanel()`/
+`closeModal()`, et le branchement correspondant dans `handleRealtime()`.
+
+**Compatibilité navigateurs/appareils**, quatre correctifs :
+- `body.force-split.devis-active` : `height:100dvh` ajouté en complément de `100vh`
+  (barre d'outils dynamique de Safari iOS).
+- `.rz-tag` : préfixe `-webkit-backdrop-filter` manquant, ajouté (comme ailleurs dans le
+  fichier).
+- `.toast` et `#devis-tab-fab` : `bottom` fixe remplacé par
+  `calc(20px + env(safe-area-inset-bottom,0px))` (encoche/barre de gestes iPhone).
+
+Déjà corrects, vérifiés sans modification : tous les accès `localStorage` protégés par
+try/catch ; aucun `:has()` ni API récente non protégée.
+
+**Limite de l'audit** : seul Chromium est disponible ici pour Playwright (pas de WebKit
+ni Firefox, installation interdite) — Safari a été couvert par revue de code + émulation
+Chromium avec UA/appareil Safari, pas par un vrai moteur WebKit.
+
+**Test corrigé, sans lien avec le reste** : `tests/realisations.test.mjs` échouait sur le
+solde fal.ai simulé (« n/c » au lieu du montant attendu). Cause : l'éditeur photo,
+ouvert une première fois plus tôt dans le test pour vérifier le redressement de façade,
+tente un vrai appel réseau de solde avant que le mock du pont `photo-ia` ne soit posé —
+l'échec réseau reste en cache 60s et masque le mock, posé correctement juste après.
+Corrigé en vidant `_iaBalance` après la pose du mock.
+
+**Vérification** : `tests/realisations.test.mjs` 590/590 (588/2 échecs au départ). Passe
+Playwright dédiée sur 8 profils (iPhone/Pixel/iPad portrait+paysage, bureau Chrome, UA
+Safari/Mac) parcourant tout l'applicatif : 0 erreur.
+
+**Notes / À faire**
+- [ ] Supprimer les 9 branches distantes orphelines/redondantes identifiées — bloqué ici
+      par une permission (HTTP 403 sur la suppression de ref distante), à faire depuis
+      GitHub ou en élargissant l'accès de l'environnement.
+- [ ] Un vrai test sur iPhone/Mac physique reste la seule vérification Safari définitive,
+      cet environnement ne pouvant pas lancer WebKit.

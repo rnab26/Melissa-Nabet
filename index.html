@@ -49,7 +49,9 @@
      réel, "Vue bureau" les serre l'un à côté de l'autre en deux colonnes étroites, illisibles ;
      demande explicite de Raphaël pour retrouver un aperçu plein écran d'un geste, même en
      Vue bureau forcée sur mobile. */
-  #devis-tab-fab{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:20px;z-index:45;border-radius:30px;padding:15px 30px;box-shadow:0 6px 22px rgba(0,0,0,.32);background:var(--oxblood);color:#fff;border:none;font-family:'Inter';font-size:14.5px;font-weight:700;letter-spacing:.03em;cursor:pointer;}
+  /* bottom via calc() + env() : même raison que .toast plus bas — évite d'empiéter sur la
+     zone de geste du bas sur iPhone à encoche, repli sans risque si env() n'est pas compris. */
+  #devis-tab-fab{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:45;border-radius:30px;padding:15px 30px;box-shadow:0 6px 22px rgba(0,0,0,.32);background:var(--oxblood);color:#fff;border:none;font-family:'Inter';font-size:14.5px;font-weight:700;letter-spacing:.03em;cursor:pointer;}
   @media (max-width:900px){
     body.devis-active #devis-tab-fab{display:block;}
   }
@@ -190,7 +192,10 @@
   .lib-item input{font-size:12.5px;padding:6px 8px;}
   .lib-item-move{width:auto;flex:0 0 auto;font-size:11px;padding:5px 6px;color:var(--stone);}
   .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
-  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;}
+  /* bottom via calc() + env() : sur iPhone à encoche/barre de gestes, un élément flottant
+     ancré à 20px du bas plein peut empiéter sur la zone de geste du système — un appareil
+     sans cette info (env() non supporté) ignore juste l'ajout, revient au 20px d'origine. */
+  .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;}
   .toast.show{opacity:1;}
   .update-bar{position:fixed;left:0;right:0;bottom:0;z-index:9999;background:var(--ink);color:var(--paper);padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;justify-content:center;gap:14px;font-family:'Inter',sans-serif;font-size:13.5px;box-shadow:0 -2px 14px rgba(0,0,0,.2);transform:translateY(120%);transition:transform .25s ease;flex-wrap:wrap;}
   .update-bar.show{transform:translateY(0);}
@@ -708,7 +713,14 @@
      Scopé à .devis-active comme la règle bureau ≥901px : sinon, activer Vue bureau depuis
      le Tableau de bord (ou Clients/Estimation) fige la page en overflow:hidden sans qu'aucune
      colonne éditeur/aperçu n'existe pour absorber le scroll — plus moyen de descendre. */
-  body.force-split.devis-active{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+  /* height:100dvh en repli : sur Safari iOS, la barre d'adresse dynamique (qui apparaît/
+     disparaît au défilement) fait que 100vh ne correspond pas toujours à la hauteur
+     RÉELLEMENT visible — combiné à overflow:hidden ici (aucun scroll pour "rattraper" le
+     décalage), du contenu peut rester caché derrière la barre. dvh mesure la hauteur
+     réellement visible à l'instant présent ; un navigateur qui ne le comprend pas encore
+     ignore simplement cette ligne et garde 100vh (repli sans risque, rien ne change là où
+     ça marchait déjà). */
+  body.force-split.devis-active{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;}
   body.force-split.devis-active .stage{flex-direction:row;flex:1 1 auto;min-height:0;overflow:hidden;}
   body.force-split.devis-active .editor{width:44%;max-width:600px;min-width:360px;border-right:1px solid var(--panel-edge);height:100%;min-height:0;overflow-y:auto;}
   body.force-split.devis-active .preview-wrap{width:auto;overflow-x:visible;height:100%;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:auto;}
@@ -876,7 +888,7 @@
   .rz-ph-tags{position:absolute;left:5px;bottom:5px;right:5px;display:flex;flex-wrap:wrap;gap:4px;}
   .rz-tag{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;
     padding:3px 7px;border-radius:999px;color:#fff;background:rgba(61,57,52,.85);
-    backdrop-filter:blur(2px);white-space:nowrap;}
+    -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);white-space:nowrap;}
   .rz-tag.t-enligne{background:rgba(74,124,89,.92);}
   .rz-tag.t-modifiee{background:rgba(183,124,52,.94);}
   .rz-tag.t-absente{background:rgba(61,57,52,.72);}
@@ -2774,6 +2786,7 @@ function openSettingsPanel(){
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
       <button class="mini" onclick="settingsReset()">↺ Tout réinitialiser</button>
       <button class="btn btn-primary" onclick="settingsSave()">Enregistrer</button></div>`);
+  $('modal').dataset.editing='library';
 }
 function settingsReset(){
   askConfirm('Réinitialiser tous les réglages (identité, coordonnées, apparence) sur les valeurs par défaut ?',()=>{
@@ -2790,7 +2803,6 @@ async function settingsSave(){
 }
 
 /* ============ EXPORT PDF ============ */
-function printDevis(){render();window.print();}
 function openDevisWindowHTML(devisHTML,num,companyName,docType){
   const styles=Array.from(document.querySelectorAll('style,link[rel=stylesheet]')).map(n=>n.outerHTML).join('');
   const docLabel=docType==='facture'?'Facture':'Devis';
@@ -2894,14 +2906,7 @@ async function embellish(sv,btn,textarea){
 
 /* ============ MODALES ============ */
 function openModal(html){$('modal').innerHTML=html;$('overlay').classList.add('open');}
-function closeModal(){$('overlay').classList.remove('open');}
-/* Une explication qu'on lit puis qu'on ferme — pas une décision. `askConfirm` avec un seul
-   bouton ferait croire qu'on valide quelque chose. */
-function askInfo(titre,msg){
-  openModal(`<h3 style="font-size:19px;margin-bottom:2px">${esc(titre)}</h3><p class="msub" style="white-space:pre-line">${esc(msg)}</p>
-    <div style="display:flex;justify-content:flex-end;margin-top:16px">
-      <button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
-}
+function closeModal(){$('overlay').classList.remove('open');delete $('modal').dataset.editing;}
 function askConfirm(msg,onYes){
   openModal(`<h3 style="font-size:19px;margin-bottom:2px">Confirmer</h3><p class="msub" style="white-space:pre-line">${esc(msg)}</p>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
@@ -3216,6 +3221,7 @@ function openLibraryPanel(){
       <div style="display:flex;gap:8px;">
         <button class="mini" onclick="libApplyToCurrent()">Recharger dans ce devis</button>
         <button class="btn btn-primary" onclick="libSave()">Enregistrer la bibliothèque</button></div></div>`);
+  $('modal').dataset.editing='library';
   wireLibraryDrag();
 }
 /* Réorganisation par glisser-déposer (souris + tactile via Pointer Events) */
@@ -4098,7 +4104,7 @@ function reparerNomsClients(){
     if(!contact)return;
     c.name=contact;n++;
   });
-  if(n){saveClients();console.log('clients renommés depuis leur contact :',n);}
+  if(n)saveClients();
   return n;
 }
 function addClient(){
@@ -5188,7 +5194,6 @@ function applySplitView(on){
   syncViewSwitches();
   try{localStorage.setItem('mn_split_view',on?'1':'0');}catch(e){}
 }
-function toggleSplitView(){applySplitView(!document.body.classList.contains('force-split'));}
 syncViewSwitches();
 try{if(localStorage.getItem('mn_split_view')==='1')applySplitView(true);}catch(e){}
 
@@ -11365,6 +11370,13 @@ function setSyncStatus(s){
 function retrySync(){if(!sb||!sbUser)return;loadAll();cloudPush();}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function isEditingChantier(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#chantier-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+/* Trouvé lors d'un audit demandé par Raphaël (relecture complète du code, pas un bug
+   signalé) : la bibliothèque (Réglages/branding ET catalogue de prestations, panneaux
+   `openSettingsPanel`/`openLibraryPanel`) était le seul type de donnée synchronisée sans
+   AUCUNE protection contre l'écrasement d'une saisie en cours par un écho distant —
+   client/devis/tâches/réalisations/boutique/chantier en ont tous une. Les deux panneaux
+   posent `#modal.dataset.editing='library'` à l'ouverture (`closeModal()` l'efface). */
+function isEditingLibrary(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#modal')&&$('modal').dataset.editing==='library'&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function isEditingTasks(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#dashboard-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 /* Id du client dont une fiche est en cours de saisie (champ actif dans .cl-group[data-cid]).
    Sert à protéger cette fiche d'un écrasement par une mise à jour distante (voir handleRealtime) :
@@ -11595,6 +11607,7 @@ function handleRealtime(payload){
             fillFields();buildPrest();buildExclu();render();
           }
         }
+        else if(row.kind==='library'&&isEditingLibrary()){}
         else if(row.kind==='library'){
           if(row.data&&row.data.sections){
             library=row.data;remoteLibJson=JSON.stringify(library);
