@@ -318,6 +318,18 @@
   .task-filter-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:8px;background:var(--oxblood);color:#fff;font-size:10px;font-weight:700;}
   .task-controls-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;}
   .task-filter-menu{width:min(94vw,620px);padding:10px;}
+  /* Sur mobile, le menu (quasi pleine largeur, 94vw) s'ouvrait ancré au bord GAUCHE du
+     bouton "Filtrer" (`.vnav-menu{left:0}`, hérité, pensé pour un menu étroit près du
+     bord de l'écran comme le menu "Devis") — mais ce bouton est au milieu d'une rangée
+     de trois, pas au bord : le menu débordait largement hors de l'écran (signalé, capture
+     à l'appui). Un simple centrage CSS sur le bouton ne suffit pas non plus de façon
+     fiable (testé : déborde encore, juste de l'autre côté, selon la position exacte du
+     bouton) — la seule façon de garantir qu'un menu presque pleine largeur reste DANS
+     l'écran quel que soit l'endroit où le bouton se trouve est de le positionner par
+     rapport à l'écran lui-même, pas au bouton. Voir `toggleTaskFilterMenu()` : sur un
+     écran étroit, la position passe en `fixed` avec des marges fixes par rapport au bord
+     de l'écran (calculées en JS à l'ouverture), au lieu de `absolute` ancré au bouton. */
+  .task-filter-menu.mobile-fixed{position:fixed;left:12px;right:12px;width:auto;margin-top:0;}
   .task-filter-table{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px 4px;}
   .tf-col{border-right:1px solid rgba(255,255,255,.12);padding:0 8px;}
   .tf-col:last-child{border-right:none;}
@@ -4398,8 +4410,26 @@ function taskFilterMenuHtml(){
   return `<div class="task-filter-table">${colDue}${colReminder}${colCat}${colPrio}${colClient}</div>`+
     `<div class="task-filter-actions"><button type="button" class="mini" onclick="clearTaskFilters()">Réinitialiser</button></div>`;
 }
-function toggleTaskFilterMenu(e){if(e)e.stopPropagation();const m=$('task-filter-menu');if(m)m.classList.toggle('open');}
-function closeTaskFilterMenu(){const m=$('task-filter-menu');if(m)m.classList.remove('open');}
+function toggleTaskFilterMenu(e){
+  if(e)e.stopPropagation();
+  const m=$('task-filter-menu');if(!m)return;
+  const opening=!m.classList.contains('open');
+  m.classList.toggle('open',opening);
+  /* Sur un écran étroit, un menu presque pleine largeur (94vw) ancré au bouton qui l'ouvre
+     déborde tôt ou tard de l'écran — ce bouton n'est pas au bord, il est au milieu d'une
+     rangée de trois. On le repositionne par rapport à l'ÉCRAN plutôt qu'au bouton :
+     marges fixes de 12px de chaque côté, seul le "top" (calculé ici depuis la position
+     réelle du bouton) varie. Au-delà de 680px, le menu garde son ancrage normal au
+     bouton (`position:absolute`, bien plus étroit, pas de risque de déborder). */
+  if(opening&&window.innerWidth<=680){
+    const btn=e&&e.currentTarget;
+    m.classList.add('mobile-fixed');
+    m.style.top=(btn?btn.getBoundingClientRect().bottom+6:60)+'px';
+  }else if(opening){
+    m.classList.remove('mobile-fixed');m.style.top='';
+  }
+}
+function closeTaskFilterMenu(){const m=$('task-filter-menu');if(m){m.classList.remove('open');m.classList.remove('mobile-fixed');m.style.top='';}}
 document.addEventListener('click',e=>{if(!e.target.closest('#task-filter-wrap'))closeTaskFilterMenu();});
 function applyTaskFilter(list){
   const anyCat=taskFilterCats.size>0;

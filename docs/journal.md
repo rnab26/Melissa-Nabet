@@ -3689,3 +3689,34 @@ fichier (pas de risque de casser une autre section en modifiant son comportement
 exactement comme prévu ; tous les `id` de champs (`f-raison`, `f-contact`, etc.) toujours
 présents, saisie et lecture des valeurs inchangées ; bureau (1280px) : chaque colonne
 reste en `display:block`, un champ par ligne, identique à avant. 0 erreur page.
+
+---
+
+## 15 septembre 2026 (suite 18) — Le menu « Filtrer » des tâches débordait de l'écran
+
+Raphaël, capture à l'appui : sur le tableau de bord mobile, ouvrir le menu « 🔍 Filtrer »
+des tâches donne un panneau largement coupé sur le bord droit de l'écran.
+
+Root cause simple une fois regardée : ce menu (presque pleine largeur, `94vw`) partage le
+même mécanisme CSS que le menu "Devis" de la barre du haut (`.vnav-menu`, ancré au bord
+gauche du bouton qui l'ouvre) — un choix qui marche bien pour un menu étroit près du bord
+de l'écran, mais le bouton "Filtrer" est au MILIEU d'une rangée de trois boutons, pas au
+bord. Un menu presque pleine largeur ancré à un point au milieu de l'écran déborde
+forcément d'un côté ou de l'autre.
+
+Premier essai — centrer le menu en CSS pur sur le bouton — insuffisant : revérifié par
+mesure réelle, ça déborde encore, juste de l'autre côté selon où le bouton tombe
+exactement. La seule façon de garantir qu'un menu presque pleine largeur reste TOUJOURS
+dans l'écran, quelle que soit la position du bouton qui l'ouvre, c'est de le positionner
+par rapport à l'écran lui-même plutôt qu'au bouton. Corrigé : à l'ouverture, sous 680px,
+le menu passe en position fixe avec 12px de marge de chaque côté de l'écran — seule sa
+hauteur (juste sous le bouton) est encore calculée depuis la position réelle du bouton.
+Au-delà de 680px, rien ne change (comportement d'origine, ancré au bouton, sans risque de
+déborder à cette largeur). Le menu "Devis", qui partage le même mécanisme CSS de base
+mais reste étroit et proche du bord, n'est pas concerné par ce changement.
+
+**Vérification** : test réel (Playwright, 390px) — menu contenu entre 12px et 378px des
+deux bords, aucun débordement ; fermeture au clic extérieur puis réouverture toujours
+correctes ; cases à cocher toujours cliquables à l'intérieur ; bureau (1280px) :
+comportement identique à avant, la nouvelle logique ne s'active jamais à cette largeur.
+0 erreur page.
