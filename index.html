@@ -150,6 +150,9 @@
   .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;}
   .toast.show{opacity:1;}
+  .update-bar{position:fixed;left:0;right:0;bottom:0;z-index:9999;background:var(--ink);color:var(--paper);padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;justify-content:center;gap:14px;font-family:'Inter',sans-serif;font-size:13.5px;box-shadow:0 -2px 14px rgba(0,0,0,.2);transform:translateY(120%);transition:transform .25s ease;flex-wrap:wrap;}
+  .update-bar.show{transform:translateY(0);}
+  .update-bar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;border:none;background:var(--oxblood);color:#fff;padding:9px 16px;border-radius:4px;cursor:pointer;white-space:nowrap;}
   .sync-badge{font-size:10.5px;color:var(--stone-light);letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
   #login-overlay{display:none;position:fixed;inset:0;z-index:110;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
   .login-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:10px;padding:30px 26px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(60,50,35,.2);text-align:center;}
@@ -11299,6 +11302,46 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('pagehide',()=>{
   if(sb&&sbUser&&!offlineMode){clearTimeout(pushT);cloudPush();}
 });
+/* GitHub Pages sert index.html avec cache-control: max-age=600 — un appareil peut donc
+   continuer à exécuter le JS d'il y a 10 minutes (ou plus, tant que l'onglet n'est pas
+   rechargé) après un déploiement de correctif, silencieusement : aucune erreur, juste un
+   comportement obsolète (un bouton qui semblait ne "rien faire", des infos d'un ancien
+   devis qui restent affichées). Root cause d'une confusion réelle chez Raphaël (bouton
+   "Nouveau Devis" apparemment cassé, données de Rony Partouche visibles sur ce qui devait
+   être un devis vierge). On compare périodiquement l'ETag/Last-Modified réel du fichier
+   servi (requête HEAD, cache:'no-store' — contourne le cache HTTP pour CETTE requête
+   précise) à celui chargé au démarrage : si l'appareil est resté sans rien taper (aucun
+   champ actif), on recharge tout seul sans rien demander ; sinon on affiche une bannière
+   non intrusive plutôt que d'écraser une saisie en cours. */
+let _pageVersion=null,_updateBannerShown=false;
+function forceReload(){location.replace(location.pathname+'?_r='+Date.now()+location.hash);}
+function showUpdateBanner(){
+  _updateBannerShown=true;
+  let bar=document.getElementById('update-bar');
+  if(!bar){
+    bar=document.createElement('div');bar.id='update-bar';bar.className='update-bar';
+    bar.innerHTML='<span>Une nouvelle version du CRM est disponible.</span><button onclick="forceReload()">Recharger maintenant</button>';
+    document.body.appendChild(bar);
+  }
+  requestAnimationFrame(()=>bar.classList.add('show'));
+}
+async function checkForUpdate(){
+  try{
+    const res=await fetch(location.pathname||'./',{method:'HEAD',cache:'no-store'});
+    if(!res.ok)return;
+    const v=res.headers.get('etag')||res.headers.get('last-modified');
+    if(!v)return;
+    if(_pageVersion===null){_pageVersion=v;return;}
+    if(v===_pageVersion||_updateBannerShown)return;
+    const a=document.activeElement;
+    const isTyping=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT');
+    if(!isTyping){forceReload();return;}
+    showUpdateBanner();
+  }catch(e){}
+}
+setInterval(checkForUpdate,60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkForUpdate();});
+setTimeout(checkForUpdate,4000);
 function handleRealtime(payload){
   applyingRemote=true;
   try{

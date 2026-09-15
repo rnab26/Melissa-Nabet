@@ -3331,3 +3331,52 @@ structure des pages (`.devis-page`/`.devis-page.cond`) intacte, 0 erreur. Je n'a
 produire un vrai PDF depuis cet environnement (pas d'imprimante/« Enregistrer en PDF »
 disponible ici) — la garantie vient d'avoir supprimé le second moteur de pagination
 entièrement, pas d'un PDF généré et relu.
+
+---
+
+## 15 septembre 2026 (suite 9) — Le trou qui rendait tous les autres invisibles : le cache du navigateur
+
+Raphaël a signalé le bouton « Nouveau Devis » cassé, puis, après un vidage de cache, a
+confirmé que ça remarchait — mais avec deux dégâts collatéraux bien plus inquiétants :
+son propre composeur avait réaffiché d'anciennes infos (« David », « Shomron ») au lieu
+d'être vide, et surtout, SA FEMME, en voulant créer un nouveau devis, s'est retrouvée
+avec le devis de Rony Partouche encore chargé à l'écran — elle a tapé « David » par-dessus.
+Puis, message suivant, plus direct : les anciens devis supprimés reviennent ENCORE,
+malgré le correctif du jour, et une demande claire de arrêter les patches ponctuels et
+régler le problème de fond une bonne fois pour toutes — le CRM doit être « en ligne live »
+pour le moindre geste, pas dépendant de l'appareil utilisé.
+
+Vérifié avant de conclure quoi que ce soit (bonne nouvelle) : le devis réel de Rony
+Partouche n'a pas été écrasé — juste de la confusion à l'écran, pas de perte de données.
+
+**La vraie explication, cohérente avec TOUS les symptômes de la journée** : GitHub Pages
+sert `index.html` avec `cache-control: max-age=600` — un appareil peut continuer à
+exécuter le JavaScript d'AVANT un correctif pendant jusqu'à 10 minutes après sa mise en
+ligne (ou plus si l'onglet reste ouvert sans jamais se recharger), sans la moindre
+erreur visible. Sur une session où plusieurs correctifs ont été déployés coup sur coup
+en quelques minutes, c'est exactement le terrain pour qu'un bouton "ne fasse rien"
+silencieusement (vieux JS), et pour qu'un problème déjà réglé côté serveur continue à
+sembler présent côté appareil. Ce n'est pas une excuse qui efface les bugs réels trouvés
+et corrigés aujourd'hui (le débounce de suppression perdu, le canal temps réel mort,
+etc.) — mais ça explique pourquoi certains d'entre eux ont semblé "revenir" après avoir
+été corrigés : le correctif était bien en ligne, l'appareil ne le savait juste pas encore.
+
+**Corrigé structurellement** (pas un patch de plus sur un symptôme précis, une garantie
+générale) : l'app vérifie maintenant toutes les 60 secondes, et à chaque retour au
+premier plan, si une version plus récente du fichier existe sur le serveur (comparaison
+d'ETag via une requête HEAD qui contourne volontairement le cache HTTP). Si oui et que
+rien n'est en cours de saisie : rechargement automatique et silencieux, avec une URL
+"cache-cassée" pour être sûr de ne pas retomber sur la même version en cache. Si un champ
+est activement en train d'être rempli : une bannière discrète invite à recharger plutôt
+que d'écraser la saisie en cours. Ça ne rend pas chaque geste "instantanément en ligne"
+au sens strict — mais ça ferme la vraie fenêtre de risque : plus jamais 10 minutes (ou
+plus) de JS obsolète invisible après un déploiement.
+
+**Vérification** : test réel (Playwright, fausse réponse HEAD avec ETag simulé) —
+premier appel établit la référence sans rien déclencher ; version inchangée ne déclenche
+rien ; version différente sans saisie active déclenche un rechargement automatique ;
+version différente AVEC un champ actif affiche la bannière et ne recharge jamais de force.
+0 erreur page. **Honnêteté** : je ne peux pas reproduire "10 minutes de cache réel" dans
+cet environnement de test (le serveur local n'a pas ce cache-control) — la logique de
+détection est testée et solide, mais la preuve définitive sera l'absence de récidive chez
+Raphaël dans les jours qui viennent.
