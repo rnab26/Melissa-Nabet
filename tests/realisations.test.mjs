@@ -4258,6 +4258,58 @@ check('Republier après renommage : le NOUVEAU titre part vraiment sur le site',
 check('Republier après renommage : plus rien en attente ensuite',
   renomme.besoinApres === false, JSON.stringify(renomme));
 
+// Le vrai bug en production (18 sept. 2026, confirmé par une lecture directe du stockage) :
+// le CDN devant Supabase Storage met en cache le manifeste MÊME sur l'endpoint « authentifié »
+// que readManifest() utilise pour éviter précisément ça — un GET juste après une écriture
+// répondait `cf-cache-status: HIT`. Deux publications rapprochées faisaient donc lire, pour
+// la seconde, un manifeste plus vieux que ce que la première venait d'écrire — et la seconde
+// écrasait alors le titre corrigé par la première. Le test simule ce cache périmé (les
+// lectures suivant une écriture renvoient d'abord l'ANCIEN contenu, comme le vrai CDN) et
+// vérifie que `readManifest` réessaie jusqu'à obtenir une version au moins aussi récente que
+// sa propre dernière écriture, au lieu de rendre la première réponse (périmée) telle quelle.
+const raceCdn = await page.evaluate(async () => {
+  const a = realisations.find(x => x.published && (x.photos || []).length);
+  if (!a) return { pasDeCas: true };
+  await publishRealisation(a); // état stable et connu avant le test
+  a.title = 'Titre Anti-Course CDN';
+  saveRealisations();
+
+  let contenuPerime = null, lecturesPerimeesRestantes = 0;
+  const origFrom = sb.storage.from.bind(sb.storage);
+  sb.storage.from = (bucket) => {
+    const chain = origFrom(bucket);
+    const origUpload = chain.upload.bind(chain);
+    const origDownload = chain.download.bind(chain);
+    chain.upload = async (path, blob, opts) => {
+      const avant = window.__files.get(path); // snapshot juste AVANT cette écriture
+      const r = await origUpload(path, blob, opts);
+      if (path.endsWith('manifest.json') && !r.error) { contenuPerime = avant; lecturesPerimeesRestantes = 2; }
+      return r;
+    };
+    chain.download = async (path) => {
+      if (path.endsWith('manifest.json') && lecturesPerimeesRestantes > 0 && contenuPerime) {
+        lecturesPerimeesRestantes--;
+        return { data: contenuPerime, error: null };
+      }
+      return origDownload(path);
+    };
+    return chain;
+  };
+
+  await publishRealisation(a); // écrit le nouveau titre ; les 2 lectures SUIVANTES seront « périmées »
+  const debut = Date.now();
+  const man = await readManifest(); // doit réessayer et obtenir le contenu FRAIS, pas la 1re réponse (vieille)
+  const duree = Date.now() - debut;
+  sb.storage.from = origFrom;
+
+  const fiche = man.realisations.find(x => x.id === a.id);
+  return { titreAttendu: a.title, titreLu: fiche && fiche.title, aAttendu: duree >= 1000 };
+});
+check('Une lecture juste après l’écriture, servie par un cache périmé, ne fait pas régresser le titre',
+  raceCdn.pasDeCas || raceCdn.titreLu === raceCdn.titreAttendu, JSON.stringify(raceCdn));
+check('La lecture a bien réessayé (pas juste accepté la première réponse périmée)',
+  raceCdn.pasDeCas || raceCdn.aAttendu, JSON.stringify(raceCdn));
+
 // ============================================================================
 //  REPUBLIER PLUSIEURS RÉALISATIONS D'UN COUP
 // ============================================================================

@@ -9907,20 +9907,45 @@ function shareImagePath(){return ownerId+'/share.jpg';}
    - une simple coupure réseau renverrait "pas de manifeste", et repartir d'un manifeste
      vide dépublierait tout le reste.
    Un manifeste absent (première publication) est le SEUL cas où l'on part de zéro ;
-   toute autre erreur interrompt la publication au lieu d'écraser. */
+   toute autre erreur interrompt la publication au lieu d'écraser.
+
+   CE QUE L'API « AUTHENTIFIÉE » NE GARANTIT PAS, EN PRATIQUE : sur ce projet, le CDN
+   devant Supabase Storage met en cache la réponse de CET ENDPOINT AUSSI (vérifié : un
+   GET authentifié juste après une écriture répond `cf-cache-status: HIT`, ni un
+   paramètre d'URL différent ni un en-tête `Cache-Control: no-cache` côté requête ne le
+   contourne). Deux publications rapprochées (moins d'une minute d'écart — le temps
+   d'une « republication en lot ») pouvaient donc lire une version PÉRIMÉE : la seconde
+   écrasait alors le titre (ou toute autre fiche) que la première venait tout juste de
+   corriger, en silence. C'est ce qui s'est produit : une réalisation renommée puis
+   republiée gardait l'ancien titre sur le site, malgré une republication qui semblait
+   avoir réussi.
+   _dernierEcritAt retient l'horodatage de la dernière écriture RÉUSSIE par CETTE session
+   (pas par une autre — on ne peut rien garantir sur ce qu'une autre session écrit en
+   parallèle, comme avant). Si la lecture renvoie un manifeste plus vieux que ça, c'est
+   forcément le cache qui répond : on réessaie, avec un court délai, avant de continuer —
+   plutôt que d'écrire par-dessus notre propre changement récent. */
+let _dernierManifesteEcritAt=null;
+function _attendre(ms){return new Promise(r=>setTimeout(r,ms));}
 async function readManifest(){
-  const {data,error}=await sb.storage.from(GALLERY_BUCKET).download(manifestPath());
-  if(error){
-    const msg=((error&&(error.message||error.error))||'').toLowerCase();
-    const code=(error&&(error.statusCode||error.status))||0;
-    if(String(code)==='404'||msg.includes('not found')||msg.includes('does not exist'))return emptyManifest();
-    throw new Error('manifeste illisible : '+((error&&error.message)||'erreur'));
+  const ESSAIS=6,DELAI_MS=1500;
+  for(let essai=0;essai<ESSAIS;essai++){
+    const {data,error}=await sb.storage.from(GALLERY_BUCKET).download(manifestPath());
+    if(error){
+      const msg=((error&&(error.message||error.error))||'').toLowerCase();
+      const code=(error&&(error.statusCode||error.status))||0;
+      if(String(code)==='404'||msg.includes('not found')||msg.includes('does not exist'))return emptyManifest();
+      throw new Error('manifeste illisible : '+((error&&error.message)||'erreur'));
+    }
+    if(!data)return emptyManifest();
+    let m=null;
+    try{m=JSON.parse(await data.text());}catch(e){throw new Error('manifeste illisible (format)');}
+    if(!m||!Array.isArray(m.realisations))throw new Error('manifeste illisible (contenu)');
+    /* Comparaison de chaînes ISO 8601 : valide tant que les deux dates sont au même
+       format (toujours le cas ici, `toISOString()` des deux côtés). */
+    if(!_dernierManifesteEcritAt||!m.updatedAt||m.updatedAt>=_dernierManifesteEcritAt)return m;
+    if(essai<ESSAIS-1)await _attendre(DELAI_MS);
+    else return m; // dernier essai : on continue avec ce qu'on a plutôt que de bloquer la publication
   }
-  if(!data)return emptyManifest();
-  let m=null;
-  try{m=JSON.parse(await data.text());}catch(e){throw new Error('manifeste illisible (format)');}
-  if(!m||!Array.isArray(m.realisations))throw new Error('manifeste illisible (contenu)');
-  return m;
 }
 /* L'ORDRE DES PROJETS SUR LE SITE.
    Il était subi : le dernier publié passait en tête, point. Chez tous les architectes, cet
@@ -9952,11 +9977,19 @@ function ordonnerManifeste(man){
 }
 async function writeManifest(man){
   ordonnerManifeste(man);
+  /* Horodatage posé ICI, juste avant l'envoi — pas celui que l'appelant a pu fixer plus
+     tôt — pour que `_dernierManifesteEcritAt` corresponde exactement à ce qui part
+     vraiment, et que `readManifest` sache reconnaître une réponse plus vieille que CETTE
+     écriture précise, même si l'appelant a mis du temps entre le calcul de `man` et l'appel. */
+  man.updatedAt=new Date().toISOString();
   const blob=new Blob([JSON.stringify(man)],{type:'application/json'});
-  /* cacheControl court : le site doit refléter une republication en une minute, pas
-     après l'heure de cache par défaut du CDN. */
-  const {error}=await sb.storage.from(GALLERY_BUCKET).upload(manifestPath(),blob,{contentType:'application/json',cacheControl:'60',upsert:true});
+  /* cacheControl court : le site doit refléter une republication en quelques secondes.
+     Raccourci de 60s à 5s le 18 sept. 2026 : le CDN devant Supabase Storage met en cache
+     CETTE réponse aussi (voir le commentaire de `readManifest`), et 60s de fenêtre
+     suffisaient pour qu'une republication en lot écrase silencieusement la précédente. */
+  const {error}=await sb.storage.from(GALLERY_BUCKET).upload(manifestPath(),blob,{contentType:'application/json',cacheControl:'5',upsert:true});
   if(error)throw error;
+  _dernierManifesteEcritAt=man.updatedAt;
 }
 /* ---- Ce que le site public dit de lui-même ----
    Tout est VIDE par défaut, et rien ne part en ligne tant que ce n'est pas rempli ici :
