@@ -5444,6 +5444,18 @@ function realisationPublishPlan(r){
 }
 /* Les champs du projet qui partent dans le manifeste. Le titre de la photo n'y est pas :
    il ne quitte jamais le CRM. */
+/* Les champs TEXTE d'une fiche publiée, nettoyés comme le manifeste les veut — utilisé à
+   la fois par une publication complète (avec les photos) et par la synchro automatique du
+   texte seul (`syncRealisationFicheEnLigne`), pour que les deux écrivent exactement la
+   même chose et ne divergent jamais. */
+function ficheTexteChamps(r){
+  const f={title:(r.title||'').trim(),date:(r.date||'').trim()};
+  [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
+    if((v||'').trim())f[k]=String(v).trim();
+  });
+  if(r.personnelle)f.personnelle=true;
+  return f;
+}
 function realisationFicheSig(r){
   return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||'',
     r.personnelle?'perso':''].join('\u0001');
@@ -6378,14 +6390,16 @@ function renderRealisationDetail(host,r){
   selCat.addEventListener('change',()=>{
     if(selCat.value==='__gerer'){selCat.value=r.categorie||'';openSitePanel();return;}
     r.categorie=selCat.value;r.updatedAt=Date.now();saveRealisationsDebounced();
+    scheduleFicheSync(r);
   });
   /* Changer de section change ce que le site montre : la réalisation quitte la liste
-     principale pour une autre. C'est donc une modification de la fiche publiée, et le
-     rappel « à republier » doit le voir. */
+     principale pour une autre. C'est donc une modification de la fiche publiée — elle part
+     donc, comme le reste du texte, sans repasser par l'écran de republication des photos. */
   const perso=meta.querySelector('[data-perso]');
   perso.addEventListener('change',()=>{
     r.personnelle=perso.checked;r.updatedAt=Date.now();
     saveRealisations();renderRealisations();
+    scheduleFicheSync(r);
   });
   const sel=meta.querySelector('[data-f="clientId"]');
   sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
@@ -6409,7 +6423,12 @@ function renderRealisationDetail(host,r){
   /* La catégorie a sa propre poignée (elle porte une option « Gérer… » qui n'est pas une
      valeur) : l'écriture générique ci-dessous y inscrirait « __gerer » dans la fiche. */
   [...meta.querySelectorAll('[data-f]:not([data-f="categorie"])'),...pres.querySelectorAll('[data-f]')].forEach(el=>{
-    const ecrire=()=>{r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();};
+    /* `clientId` ne part jamais sur le site — c'est un lien interne du CRM, pas un champ
+       de la fiche publique — donc pas de synchro live pour lui. */
+    const ecrire=()=>{
+      r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();
+      if(el.dataset.f!=='clientId')scheduleFicheSync(r);
+    };
     el.addEventListener('input',ecrire);
     /* Changer de client change les raccourcis affichés juste en dessous : on redessine. */
     el.addEventListener('change',()=>{ecrire();if(el.dataset.f==='clientId'){saveRealisations();renderRealisations();}});
@@ -9991,6 +10010,54 @@ async function writeManifest(man){
   if(error)throw error;
   _dernierManifesteEcritAt=man.updatedAt;
 }
+/* ---- Synchro live du TEXTE d'une fiche déjà publiée ----------------------------------
+   Le reproche : pour corriger un titre ou une ligne de texte, il fallait rouvrir l'écran
+   de republication, retrier quelles photos garder ou renvoyer, puis confirmer — alors que
+   rien, dans une simple correction de texte, ne touche une image. Une fois qu'un projet
+   est en ligne, tout changement de texte (titre, année, lieu, surface, mission, catégorie,
+   texte de présentation, « personnelle ») part donc tout seul, sans bouton ni confirmation,
+   quelques secondes après la dernière frappe. Les photos, elles, gardent leur geste
+   explicite : plus lourd à envoyer, et plus difficile à annuler qu'une phrase. */
+let _publishingIds=new Set();     /* republication complète en cours pour ce projet : la synchro attend son tour */
+let _ficheSyncEnCours=new Set();
+let _ficheSyncTimers={};
+function scheduleFicheSync(r){
+  if(!r||!r.published)return;    /* rien en ligne à corriger tant que la première publication (avec ses photos) n'a pas eu lieu */
+  clearTimeout(_ficheSyncTimers[r.id]);
+  _ficheSyncTimers[r.id]=setTimeout(()=>syncRealisationFicheEnLigne(r),1200);
+}
+async function syncRealisationFicheEnLigne(r){
+  if(!r||!r.published)return;
+  if(!(sb&&sbUser&&ownerId))return;             // pas connecté : le badge « à republier » reste le filet de secours
+  if(_publishingIds.has(r.id)){scheduleFicheSync(r);return;}   // une republication complète est en cours sur CE projet : on repasse après
+  if(_ficheSyncEnCours.has(r.id))return;          // déjà en train d'écrire pour ce projet
+  _ficheSyncEnCours.add(r.id);
+  try{
+    const man=await readManifest();
+    const entree=man.realisations.find(x=>x.id===r.id);
+    if(!entree)return;   // pas (encore) connu du site : la publication normale, avec ses photos, s'en chargera
+    const champs=ficheTexteChamps(r);
+    Object.assign(entree,champs);
+    /* Un champ facultatif redevenu vide doit disparaître de la fiche, pas y laisser une
+       ancienne valeur : `ficheTexteChamps` omet déjà les champs vides à l'écriture. */
+    ['lieu','surface','mission','categorie','texte','personnelle'].forEach(k=>{if(!(k in champs))delete entree[k];});
+    man.updatedAt=new Date().toISOString();
+    await writeManifest(man);
+    /* Le texte est en ligne : le badge « à republier » ne doit plus le dire pour autant que
+       les photos, elles, sont déjà à jour — exactement ce que `realisationFicheSig` compare. */
+    if(r.pub)r.pub=Object.assign({},r.pub,{fiche:realisationFicheSig(r)});
+    saveRealisationsDebounced();renderRealisations();
+  }catch(e){
+    /* Pas de modale — juste un toast : `realisationEnAttente` reste vrai (rien n'a changé
+       côté `r.pub`), donc le badge « à republier » et le bouton « Republier » restent le
+       filet de secours manuel visible si la synchro automatique n'a pas pu passer. */
+    console.error('synchro fiche en ligne',e);
+    toast('Texte pas encore en ligne (connexion) — le badge « à republier » le rappellera');
+    renderRealisations();
+  }finally{
+    _ficheSyncEnCours.delete(r.id);
+  }
+}
 /* ---- Ce que le site public dit de lui-même ----
    Tout est VIDE par défaut, et rien ne part en ligne tant que ce n'est pas rempli ici :
    une adresse e-mail ou un numéro sur une page publique, c'est une décision, pas un
@@ -11013,6 +11080,10 @@ async function publishRealisation(r,opts){
   const garder=new Set((opts&&opts.garder)||[]);
   const btn=document.querySelector('#rz-body [data-publish]');
   if(btn){btn.disabled=true;btn.textContent='Publication…';}
+  /* Le temps de cette republication complète, la synchro automatique du texte
+     (`syncRealisationFicheEnLigne`) se met en pause pour ce projet plutôt que d'écrire
+     par-dessus — les deux touchent la même fiche du manifeste. */
+  _publishingIds.add(r.id);
   try{
     const folder=ownerId+'/'+r.id;
     const plan=realisationPublishPlan(r);
@@ -11131,17 +11202,9 @@ async function publishRealisation(r,opts){
     man.updatedAt=new Date().toISOString();
     const avant=man.realisations.find(x=>x.id===r.id)||null;
     man.realisations=man.realisations.filter(x=>x.id!==r.id);
-    /* Titre et date nettoyés comme les autres champs : une espace en trop se retrouvait
-       sinon dans le titre de l'onglet, dans l'adresse partagée et dans les données que
-       lisent les moteurs de recherche. */
-    const fiche={id:r.id,title:(r.title||'').trim(),date:(r.date||'').trim(),photos:entries,publishedAt:new Date().toISOString()};
-    /* Champs vides omis : le site ne doit pas afficher d'étiquette sans valeur. */
-    [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
-      if((v||'').trim())fiche[k]=String(v).trim();
-    });
-    /* Le drapeau ne part QUE s'il est levé : un `false` dans chaque fiche alourdirait le
-       manifeste pour ne rien dire de plus qu'une clé absente. */
-    if(r.personnelle)fiche.personnelle=true;
+    /* Champs texte partagés avec `syncRealisationFicheEnLigne` (voir plus bas) : mêmes
+       règles de nettoyage et d'omission des champs vides des deux côtés. */
+    const fiche=Object.assign({id:r.id,photos:entries,publishedAt:new Date().toISOString()},ficheTexteChamps(r));
     man.realisations.unshift(fiche);
     await writeManifest(man);
 
@@ -11195,6 +11258,8 @@ async function publishRealisation(r,opts){
     renderRealisations();
     toast('Échec de la publication — le détail reste affiché');
     if(btn){btn.disabled=false;btn.textContent=r.published?'✓ En ligne — republier':'🌐 Publier sur le site';}
+  }finally{
+    _publishingIds.delete(r.id);
   }
 }
 

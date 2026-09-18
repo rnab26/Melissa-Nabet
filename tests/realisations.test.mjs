@@ -4311,6 +4311,44 @@ check('La lecture a bien réessayé (pas juste accepté la première réponse p�
   raceCdn.pasDeCas || raceCdn.aAttendu, JSON.stringify(raceCdn));
 
 // ============================================================================
+//  SYNCHRO LIVE DU TEXTE : corriger un titre ne doit ni republier les photos ni
+//  demander de passer par l'écran de republication.
+// ============================================================================
+const liveSync = await page.evaluate(async () => {
+  const r = realisations.find(x => x.published && (x.photos || []).length >= 2);
+  await publishRealisation(r); // état stable et connu, rien en attente
+  const photosAvant = JSON.stringify(r.photos.map(p => p.pub));
+  _rzOpenId = r.id; renderRealisations();
+  const inp = document.querySelector('#rz-body [data-f="title"]');
+  inp.value = 'Titre Synchro Live';
+  inp.dispatchEvent(new Event('input', { bubbles: true }));
+  const boutonJusteApresLaFrappe = (document.querySelector('#rz-body [data-publish]') || {}).textContent;
+  const enLigneAvant = (await readManifest()).realisations.find(x => x.id === r.id).title;
+  const overlayOuvert = document.getElementById('overlay').classList.contains('open');
+  await new Promise(res => setTimeout(res, 1700)); // 1200ms de silence avant la synchro + marge réseau
+  const man = await readManifest();
+  const fiche = man.realisations.find(x => x.id === r.id);
+  return {
+    ancien: r.title, // déjà écrasé par la frappe ci-dessus dans le DOM, mais r.title a suivi via l'écouteur
+    enLigneAvantSynchro: enLigneAvant,
+    enLigneApresSynchro: fiche && fiche.title,
+    photosInchangees: photosAvant === JSON.stringify(r.photos.map(p => p.pub)),
+    overlayOuvertPendantLaFrappe: overlayOuvert,
+    boutonJusteApresLaFrappe,
+    boutonApresSynchro: (document.querySelector('#rz-body [data-publish]') || {}).textContent,
+  };
+});
+check('Corriger le titre ne fait apparaître aucune modale',
+  liveSync.overlayOuvertPendantLaFrappe === false, JSON.stringify(liveSync));
+check('Le nouveau titre part sur le site tout seul, sans clic sur « Republier »',
+  liveSync.enLigneAvantSynchro !== 'Titre Synchro Live' && liveSync.enLigneApresSynchro === 'Titre Synchro Live',
+  JSON.stringify(liveSync));
+check('…et les photos déjà en ligne ne sont pas retouchées ni renvoyées au passage',
+  liveSync.photosInchangees, JSON.stringify(liveSync));
+check('Le bouton de publication redevient « en ligne » une fois la synchro passée',
+  /en ligne/i.test(liveSync.boutonApresSynchro), JSON.stringify(liveSync));
+
+// ============================================================================
 //  REPUBLIER PLUSIEURS RÉALISATIONS D'UN COUP
 // ============================================================================
 const lot = await page.evaluate(async () => {
