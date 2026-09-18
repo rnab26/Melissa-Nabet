@@ -4349,6 +4349,109 @@ check('Le bouton de publication redevient « en ligne » une fois la synchro pas
   /en ligne/i.test(liveSync.boutonApresSynchro), JSON.stringify(liveSync));
 
 // ============================================================================
+//  QUITTER L'ÉCRAN PENDANT UNE PUBLICATION : ça ne doit ni l'interrompre, ni permettre
+//  de la relancer une seconde fois par-dessus elle-même en revenant dessus.
+// ============================================================================
+const navPendantPublish = await page.evaluate(async () => {
+  const r = realisations.find(x => x.published && (x.photos || []).length >= 1);
+  r.photos[0].edit.expo = (r.photos[0].edit.expo || 0) + 0.05;
+  photoTouch(r.photos[0], 'reglages'); // du vrai travail à envoyer, pas un aller-retour instantané
+
+  const origFrom = sb.storage.from.bind(sb.storage);
+  sb.storage.from = (bucket) => {
+    const chain = origFrom(bucket);
+    const origUpload = chain.upload.bind(chain);
+    chain.upload = async (...args) => { await new Promise(res => setTimeout(res, 500)); return origUpload(...args); };
+    return chain;
+  };
+
+  const enCours = publishRealisation(r); // SANS await : on veut être au milieu pendant qu'on navigue
+  await new Promise(res => setTimeout(res, 150)); // laisser la publication vraiment démarrer
+
+  showView('dashboard'); // on quitte l'écran…
+  const dashboardAffiche = document.getElementById('dashboard-view').style.display !== 'none';
+  gotoRealisation(r.id); // …et on revient PENDANT que ça publie encore
+
+  const boutonPendant = document.querySelector('#rz-body [data-publish]');
+  const etatPendant = { texte: boutonPendant && boutonPendant.textContent, verrouille: boutonPendant && boutonPendant.disabled };
+
+  await enCours; // laisse la vraie publication (et son délai simulé) se terminer
+  sb.storage.from = origFrom;
+
+  const boutonApres = document.querySelector('#rz-body [data-publish]');
+  return {
+    dashboardAffiche, etatPendant,
+    boutonApresTexte: boutonApres && boutonApres.textContent,
+    publie: r.published, aucuneErreur: !_pubLastError,
+  };
+});
+check('Changer d’onglet pendant une publication ne la casse pas — le tableau de bord s’affiche normalement',
+  navPendantPublish.dashboardAffiche === true, JSON.stringify(navPendantPublish));
+check('En revenant PENDANT la publication, le bouton reste verrouillé (« Publication… », désactivé) — pas de doublon possible',
+  navPendantPublish.etatPendant.verrouille === true && /publication/i.test(navPendantPublish.etatPendant.texte || ''),
+  JSON.stringify(navPendantPublish));
+check('La publication se termine normalement malgré l’aller-retour, et le bouton reflète l’état final',
+  navPendantPublish.publie === true && navPendantPublish.aucuneErreur, JSON.stringify(navPendantPublish));
+
+// ============================================================================
+//  « TOUT REPUBLIER » : fermer la fenêtre de progression ne doit pas arrêter le lot.
+// ============================================================================
+const lotFermeture = await page.evaluate(async () => {
+  const deux = realisations.filter(r => (r.photos || []).length).slice(0, 2);
+  if (deux.length < 2) return { pasAssez: true };
+  const t = Date.now() - 10000;
+  deux.forEach(r => { r.published = true; r.photos.forEach(p => {
+    p.publishedAt = t; p.edit.expo = (p.edit.expo || 0) + 0.05; photoTouch(p, 'reglages');
+  }); });
+  realisations.filter(r => deux.indexOf(r) < 0).forEach(r => { r.published = false; });
+  saveRealisations();
+
+  const origFrom = sb.storage.from.bind(sb.storage);
+  sb.storage.from = (bucket) => {
+    const chain = origFrom(bucket);
+    const origUpload = chain.upload.bind(chain);
+    chain.upload = async (...args) => { await new Promise(res => setTimeout(res, 400)); return origUpload(...args); };
+    return chain;
+  };
+
+  showView('dashboard'); renderDashboard();
+  const bouton = [...document.querySelectorAll('#dash-todos button')].find(b => /Tout republier/.test(b.textContent));
+  const termine = new Promise((res, rej) => {
+    const orig = window.askConfirm;
+    const secours = setTimeout(() => { window.askConfirm = orig; rej(new Error('pas de confirmation demandée')); }, 30000);
+    window.askConfirm = (m, cb) => {
+      clearTimeout(secours); window.askConfirm = orig;
+      Promise.resolve(cb()).then(() => {
+        // republierToutes() ne renvoie rien d'attendable depuis ici : on regarde le bilan apparaître.
+        const attendreBilan = setInterval(() => {
+          if (_pubLotReport) { clearInterval(attendreBilan); res(); }
+        }, 100);
+      }, rej);
+    };
+    bouton.click();
+  });
+
+  await new Promise(res => setTimeout(res, 200)); // laisser la boucle démarrer vraiment
+  const fondBtn = document.getElementById('lot-fond');
+  const modaleOuvertePendant = document.getElementById('overlay').classList.contains('open');
+  if (fondBtn) fondBtn.click(); // « Continuer en arrière-plan »
+  const modaleFermeeApresClic = !document.getElementById('overlay').classList.contains('open');
+
+  await termine;
+  sb.storage.from = origFrom;
+  return {
+    modaleOuvertePendant, modaleFermeeApresClic,
+    bilan: _pubLotReport, publiees: deux.filter(r => r.published).length,
+  };
+});
+check('« Continuer en arrière-plan » ferme bien la fenêtre sans arrêter la republication',
+  lotFermeture.pasAssez || (lotFermeture.modaleOuvertePendant && lotFermeture.modaleFermeeApresClic),
+  JSON.stringify(lotFermeture));
+check('…et le lot va bien jusqu’au bout, bilan compris, alors que la fenêtre était fermée',
+  lotFermeture.pasAssez || (lotFermeture.bilan && lotFermeture.bilan.ok === 2 && lotFermeture.publiees === 2),
+  JSON.stringify(lotFermeture));
+
+// ============================================================================
 //  REPUBLIER PLUSIEURS RÉALISATIONS D'UN COUP
 // ============================================================================
 const lot = await page.evaluate(async () => {
