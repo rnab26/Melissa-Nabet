@@ -6295,6 +6295,13 @@ function renderRealisationDetail(host,r){
      visible (primaire) et inviter à republier — sinon rien ne distingue « à jour » de
      « titre modifié, jamais republié ». */
   const _pubBesoin=r.published&&!plan.rien;
+  /* En cours DÉJÀ DEPUIS UNE AUTRE VUE : la publication n'est pas liée à l'écran ouvert,
+     elle continue en tâche de fond — mais si on revenait ici sans le savoir, le bouton
+     rendrait « Republier » comme si de rien n'était, et un second clic enverrait une
+     deuxième publication par-dessus la première. `_publishingIds` (posé par
+     publishRealisation) survit à la navigation ; le bouton s'en sert pour rester
+     verrouillé tant que ce n'est pas fini, qu'on ait quitté l'écran entre-temps ou non. */
+  const enCours=_publishingIds.has(r.id);
   const head=document.createElement('div');
   const back=document.createElement('button');back.className='rz-back';back.textContent='← Toutes les réalisations';
   back.addEventListener('click',()=>{_rzOpenId=null;renderRealisations();});
@@ -6302,15 +6309,16 @@ function renderRealisationDetail(host,r){
   const bar=document.createElement('div');bar.className='rz-detail-head';
   bar.innerHTML=`<h2 style="font-family:'Cormorant Garamond',serif;font-size:23px;font-weight:600;">${esc(r.title||'Réalisation sans titre')}</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn ${r.published?(_pubBesoin?'btn-primary':'btn-onlight'):'btn-primary'}" data-publish>${r.published?(_pubEnAttente>0?('⬆ Republier ('+_pubEnAttente+')'):(_pubBesoin?'⬆ Mettre le site à jour':'✓ En ligne — republier')):'🌐 Publier sur le site'}</button>
+      <button class="btn ${enCours?'btn-onlight':(r.published?(_pubBesoin?'btn-primary':'btn-onlight'):'btn-primary')}" data-publish${enCours?' disabled':''}>${enCours?'Publication…':(r.published?(_pubEnAttente>0?('⬆ Republier ('+_pubEnAttente+')'):(_pubBesoin?'⬆ Mettre le site à jour':'✓ En ligne — republier')):'🌐 Publier sur le site')}</button>
       ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
       <button class="btn btn-onlight" data-serie>✨ Retoucher plusieurs photos</button>
       <button class="btn btn-onlight" data-order>⇅ Réordonner</button>
       <button class="btn btn-onlight" data-select>☑ Sélectionner</button>
       <button class="btn btn-onlight" data-export>⬇ Tout télécharger</button>
       <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
-    </div>`;
-  bar.querySelector('[data-publish]').addEventListener('click',()=>askPublishRealisation(r));
+    </div>
+    ${enCours?'<p class="pub-note">Publication en cours — vous pouvez changer d’onglet ou fermer cet écran, elle continue toute seule.</p>':''}`;
+  if(!enCours)bar.querySelector('[data-publish]').addEventListener('click',()=>askPublishRealisation(r));
   const unpub=bar.querySelector('[data-unpublish]');
   if(unpub)unpub.addEventListener('click',()=>unpublishRealisation(r));
   bar.querySelector('[data-serie]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
@@ -8865,14 +8873,21 @@ async function republierToutes(){
       <p class="msub" id="lot-etat"></p>
       <div class="rz-bar"><i style="width:0%"></i></div>
       <ul class="rz-refus" id="lot-echecs"></ul>
-      <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <p class="msub">Vous pouvez fermer cette fenêtre ou changer d'onglet : la republication continue en arrière-plan, et le bilan restera affiché sur le tableau de bord à la fin.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
         <button class="mini" id="lot-stop">Interrompre</button>
+        <button class="btn btn-onlight" id="lot-fond">Continuer en arrière-plan</button>
       </div>`);
     const stop=$('lot-stop');
     stop.addEventListener('click',()=>{
       if(!_pubLot)return;
       _pubLot.stop=true;stop.disabled=true;stop.textContent='Arrêt après celle-ci…';
     });
+    /* Fermer la fenêtre n'arrête RIEN — la boucle plus bas ne dépend d'aucun élément de ce
+       modal (tous les accès DOM de `peindre()` sont gardés). Un bouton dédié, en plus du
+       clic sur le fond, pour que ce soit visible sans avoir à le deviner. */
+    const fond=$('lot-fond');
+    if(fond)fond.addEventListener('click',closeModal);
     const peindre=()=>{
       const e=$('lot-etat');
       if(e&&_pubLot)e.textContent='Réalisation '+Math.min(_pubLot.n+1,_pubLot.total)+' sur '+_pubLot.total+' · '+(_pubLot.nom||'');
