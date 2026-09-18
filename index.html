@@ -3956,8 +3956,8 @@ function buildClientRealisationsBox(c){
   const liees=(realisations||[]).filter(r=>r.clientId===c.id);
   if(liees.length){
     liees.forEach(r=>{
-      const n=realisationARepublier(r);
-      const etat=r.published?(n?'<span class="rz-warn">● à republier</span>':'<span class="rz-live">● en ligne</span>'):'pas encore publiée';
+      const enAttente=realisationEnAttente(r);
+      const etat=r.published?(enAttente?'<span class="rz-warn">● à republier</span>':'<span class="rz-live">● en ligne</span>'):'pas encore publiée';
       const row=document.createElement('div');row.className='list-row';
       row.innerHTML=`<div class="lr-main" style="cursor:pointer">
           <div class="lr-t">${esc(r.title||'Réalisation sans titre')}</div>
@@ -4799,7 +4799,7 @@ function computeTodos(){
   /* Le site ne se met pas à jour tout seul : une réalisation retouchée reste en ligne dans
      sa version précédente jusqu'à ce qu'on republie. Personne n'y pense — d'où ce rappel
      là où l'on regarde en premier. */
-  const republier=(realisations||[]).map(r=>({r,n:realisationARepublier(r)})).filter(x=>x.n>0);
+  const republier=(realisations||[]).filter(realisationEnAttente).map(r=>({r,n:realisationARepublier(r)}));
   return {relances,brouillons,enAttente,republier};
 }
 function renderDashboard(){
@@ -4830,7 +4830,7 @@ function renderDashboard(){
   }
   if(republier.length){
     html+=`<div class="dash-sec-title">🖼 À republier sur le site (${republier.length})</div>`;
-    html+=republier.map(({r,n})=>`<div class="dash-todo" onclick="gotoRealisation('${r.id}')"><span class="dash-todo-main">${esc(r.title||'Réalisation sans titre')}</span><span class="dash-todo-amt due">${n} photo(s)</span></div>`).join('');
+    html+=republier.map(({r,n})=>`<div class="dash-todo" onclick="gotoRealisation('${r.id}')"><span class="dash-todo-main">${esc(r.title||'Réalisation sans titre')}</span><span class="dash-todo-amt due">${n?(n+' photo(s)'):'fiche modifiée'}</span></div>`).join('');
     /* Ouvrir chaque fiche pour recliquer « Publier » est exactement ce que personne ne fait.
        Le rappel porte donc le geste avec lui. */
     html+=`<button class="mini" style="margin-top:6px" onclick="republierToutes()">🌐 Tout republier (${republier.length})</button>`;
@@ -5396,6 +5396,15 @@ const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',a
 function realisationARepublier(r){
   if(!r||!r.published)return 0;
   return realisationPublishPlan(r).change;
+}
+/* `realisationARepublier` ne compte que les PHOTOS à renvoyer : un renommage ou un
+   changement de lieu/texte, qui ne touche aucune photo, y vaut 0 — alors que le site,
+   lui, affiche encore l'ancien texte tant qu'on n'a pas republié. Sans ce second signal,
+   rien n'invitait à republier une fiche renommée : ni le badge, ni le rappel du tableau de
+   bord, ni « Tout republier ». */
+function realisationEnAttente(r){
+  if(!r||!r.published)return false;
+  return !realisationPublishPlan(r).rien;
 }
 /* Le plan de publication : ce qui partirait si on publiait maintenant, photo par photo.
    C'est LA source unique — le bandeau de la fiche, le compte sur le bouton, l'écran de
@@ -6202,8 +6211,8 @@ const RZ_FILTRE_SEUIL=6;
 let _rzFiltre='';   /* '' | 'republier' | 'enligne' | 'brouillon' | 'cat:<catégorie>' */
 function rzFiltreTest(r){
   if(!_rzFiltre)return true;
-  if(_rzFiltre==='republier')return realisationARepublier(r)>0;
-  if(_rzFiltre==='enligne')return !!r.published&&realisationARepublier(r)===0;
+  if(_rzFiltre==='republier')return realisationEnAttente(r);
+  if(_rzFiltre==='enligne')return !!r.published&&!realisationEnAttente(r);
   if(_rzFiltre==='brouillon')return !r.published;
   if(_rzFiltre.startsWith('cat:'))return (r.categorie||'')===_rzFiltre.slice(4);
   return true;
@@ -6237,7 +6246,7 @@ function renderRealisationList(host){
       <div class="rz-cbody">
         <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
         <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.categorie?' · '+esc(r.categorie):''}${
-          r.published?(realisationARepublier(r)?' · <span class="rz-warn">● à republier</span>':' · <span class="rz-live">● en ligne</span>'):''}</div>
+          r.published?(realisationEnAttente(r)?' · <span class="rz-warn">● à republier</span>':' · <span class="rz-live">● en ligne</span>'):''}</div>
       </div>`;
     if(cover){
       const im=card.querySelector('img');
@@ -6270,6 +6279,10 @@ function renderRealisationDetail(host,r){
      le bandeau doivent dire la même chose, sinon l'un annoncerait un état déjà périmé. */
   const plan=realisationPublishPlan(r);
   _pubEnAttente=r.published?plan.change:0;
+  /* Une fiche renommée sans qu'aucune photo ne bouge doit quand même rendre le bouton
+     visible (primaire) et inviter à republier — sinon rien ne distingue « à jour » de
+     « titre modifié, jamais republié ». */
+  const _pubBesoin=r.published&&!plan.rien;
   const head=document.createElement('div');
   const back=document.createElement('button');back.className='rz-back';back.textContent='← Toutes les réalisations';
   back.addEventListener('click',()=>{_rzOpenId=null;renderRealisations();});
@@ -6277,7 +6290,7 @@ function renderRealisationDetail(host,r){
   const bar=document.createElement('div');bar.className='rz-detail-head';
   bar.innerHTML=`<h2 style="font-family:'Cormorant Garamond',serif;font-size:23px;font-weight:600;">${esc(r.title||'Réalisation sans titre')}</h2>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn ${r.published?(_pubEnAttente>0?'btn-primary':'btn-onlight'):'btn-primary'}" data-publish>${r.published?(_pubEnAttente>0?('⬆ Republier ('+_pubEnAttente+')'):'✓ En ligne — republier'):'🌐 Publier sur le site'}</button>
+      <button class="btn ${r.published?(_pubBesoin?'btn-primary':'btn-onlight'):'btn-primary'}" data-publish>${r.published?(_pubEnAttente>0?('⬆ Republier ('+_pubEnAttente+')'):(_pubBesoin?'⬆ Mettre le site à jour':'✓ En ligne — republier')):'🌐 Publier sur le site'}</button>
       ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
       <button class="btn btn-onlight" data-serie>✨ Retoucher plusieurs photos</button>
       <button class="btn btn-onlight" data-order>⇅ Réordonner</button>
@@ -8823,7 +8836,7 @@ function buildPubLotPanel(){
 }
 async function republierToutes(){
   if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
-  const liste=(realisations||[]).filter(r=>realisationARepublier(r)>0);
+  const liste=(realisations||[]).filter(realisationEnAttente);
   if(!liste.length){toast('Tout est déjà à jour sur le site');return;}
   const total=liste.reduce((a,r)=>a+realisationARepublier(r),0);
   askConfirm('Republier '+liste.length+' réalisation(s) sur le site ? '+total+' photo(s) seront renvoyées.',async()=>{
