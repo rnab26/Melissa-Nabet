@@ -4452,6 +4452,72 @@ check('…et le lot va bien jusqu’au bout, bilan compris, alors que la fenêtr
   JSON.stringify(lotFermeture));
 
 // ============================================================================
+//  VIDÉOS : ajout, republication (à republier), publication (upload + manifeste),
+//  suppression — le même circuit que les photos, en plus simple (pas de retouche).
+// ============================================================================
+const video = await page.evaluate(async () => {
+  const r = realisations.find(x => (x.photos || []).length);
+  r.published = false; // repart d'un état propre pour ce test
+  delete r.pub;
+  const octets = new Uint8Array(1024).fill(1); // contenu bidon : l'app ne décode jamais la vidéo
+  const fichier = new File([octets], 'visite.mp4', { type: 'video/mp4' });
+
+  // --- Refus : mauvais type, fichier trop lourd
+  const refusType = videoFileRefus(new File([octets], 'photo.jpg', { type: 'image/jpeg' }));
+  const gros = new File([new Uint8Array(10)], 'enorme.mp4', { type: 'video/mp4' });
+  Object.defineProperty(gros, 'size', { value: VIDEO_MAX_FILE + 1 });
+  const refusTaille = videoFileRefus(gros);
+
+  await addVideosToRealisation(r, [fichier]);
+  const apresAjout = { n: (r.videos || []).length, nom: r.videos[0] && r.videos[0].name };
+
+  // La grille doit montrer la tuile vidéo, avec de quoi la supprimer.
+  _rzOpenId = r.id; renderRealisations();
+  const tuile = document.querySelector('.rz-video-tile');
+  const aUnBoutonSupprimer = !!(tuile && tuile.querySelector('.rz-video-del'));
+
+  // Publier — la réalisation a une photo ET une vidéo neuve.
+  await publishRealisation(r);
+  const man = await readManifest();
+  const fiche = man.realisations.find(x => x.id === r.id);
+  const videoEnLigne = fiche && fiche.videos && fiche.videos[0];
+
+  // Republier sans rien changer : plus rien en attente à cause de la vidéo.
+  const rienApresPublish = realisationPublishPlan(r).rien;
+
+  // Suppression : la fiche locale, et l'original privé, disparaissent.
+  const vidId = r.videos[0].id;
+  await new Promise(res => {
+    const orig = window.askConfirm;
+    window.askConfirm = (m, cb) => { window.askConfirm = orig; Promise.resolve(cb()).then(res); };
+    deleteVideo(r, r.videos[0]);
+  });
+  const videoStoreVideVide = await videoStore.get(videoKey(vidId));
+
+  return {
+    refusType, refusTaille, apresAjout, aUnBoutonSupprimer,
+    videoEnLigne, rienApresPublish,
+    videosApresSuppression: (r.videos || []).length,
+    videoStoreVideApresSuppression: videoStoreVideVide,
+  };
+});
+check('Une vidéo qui n’est pas un fichier vidéo est refusée, avec le pourquoi',
+  /pas une vidéo/.test(video.refusType), video.refusType);
+check('Une vidéo trop lourde est refusée, avec la taille et le plafond',
+  /trop lourde/.test(video.refusTaille), video.refusTaille);
+check('Ajouter une vidéo l’entre dans la réalisation, avec son nom',
+  video.apresAjout.n === 1 && video.apresAjout.nom === 'visite.mp4', JSON.stringify(video.apresAjout));
+check('La tuile vidéo est affichée avec un moyen de la retirer',
+  video.aUnBoutonSupprimer, JSON.stringify(video));
+check('Publier envoie vraiment la vidéo dans le manifeste, sous `videos`',
+  !!video.videoEnLigne && /\.mp4$/.test(video.videoEnLigne.src || ''), JSON.stringify(video.videoEnLigne));
+check('Une fois publiée, la vidéo ne relance pas « à republier » pour rien',
+  video.rienApresPublish === true, JSON.stringify(video));
+check('Supprimer la vidéo la retire de la réalisation ET de son stockage privé',
+  video.videosApresSuppression === 0 && video.videoStoreVideApresSuppression === null,
+  JSON.stringify(video));
+
+// ============================================================================
 //  REPUBLIER PLUSIEURS RÉALISATIONS D'UN COUP
 // ============================================================================
 const lot = await page.evaluate(async () => {
