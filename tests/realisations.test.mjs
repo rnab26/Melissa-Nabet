@@ -4219,6 +4219,45 @@ const rappelClic = await page.evaluate((rid) => {
 check('Republier : le rappel ouvre directement la bonne réalisation',
   rappelClic.vue === 'block' && rappelClic.ouverte, JSON.stringify(rappelClic));
 
+// Renommer une réalisation déjà publiée, SANS toucher à une seule photo : le site garde
+// l'ancien titre tant qu'on n'a pas republié, mais rien (badge, tableau de bord, bouton)
+// ne le signalait avant que `realisationEnAttente` n'existe — seul le nombre de PHOTOS à
+// renvoyer comptait, et il reste à 0 pour un simple renommage.
+const renomme = await page.evaluate(async () => {
+  const r = realisations.find(x => x.published && (x.photos || []).length);
+  await publishRealisation(r); // repart d'un état « en ligne », sans rien en attente
+  const ancien = r.title;
+  r.title = 'Bureau Tech S.770';
+  saveRealisations();
+  _rzOpenId = null; // liste des cartes, pas la fiche détail
+  renderRealisations(); renderDashboard();
+  const cards = [...document.querySelectorAll('.rz-card')];
+  const carte = cards.find(x => (x.querySelector('.rz-ctitle') || {}).textContent === r.title);
+  const dash = (document.getElementById('dash-todos') || {}).textContent || '';
+  const manAvant = JSON.parse(JSON.stringify(await readManifest()));
+  const titreAvant = (manAvant.realisations.find(x => x.id === r.id) || {}).title;
+  await publishRealisation(r);
+  const manApres = await readManifest();
+  const titreApres = (manApres.realisations.find(x => x.id === r.id) || {}).title;
+  return {
+    ancien, nouveau: r.title,
+    carteMarquee: carte ? /à republier/.test(carte.querySelector('.rz-cmeta').textContent) : null,
+    dashSignale: /fiche modifiée/.test(dash) && new RegExp(r.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(dash),
+    titreAvant, titreApres,
+    besoinApres: realisationEnAttente(r),
+  };
+});
+check('Renommer sans toucher aux photos marque la carte « à republier »',
+  renomme.carteMarquee === true, JSON.stringify(renomme).slice(0, 220));
+check('Renommer sans toucher aux photos apparaît au tableau de bord, sous « fiche modifiée »',
+  renomme.dashSignale === true, JSON.stringify(renomme).slice(0, 220));
+check('Renommer sans republier : le site garde encore l’ANCIEN titre dans le manifeste',
+  renomme.titreAvant === renomme.ancien, JSON.stringify(renomme));
+check('Republier après renommage : le NOUVEAU titre part vraiment sur le site',
+  renomme.titreApres === renomme.nouveau, JSON.stringify(renomme));
+check('Republier après renommage : plus rien en attente ensuite',
+  renomme.besoinApres === false, JSON.stringify(renomme));
+
 // ============================================================================
 //  REPUBLIER PLUSIEURS RÉALISATIONS D'UN COUP
 // ============================================================================
