@@ -357,6 +357,8 @@
      tient la place avant : rien ne bouge. */
   .shot img{width:100%;height:auto;display:block;opacity:0;transition:opacity .45s ease;}
   .shot img.chargee{opacity:1;}
+  .videos{display:grid;gap:clamp(14px,2.5vw,26px);margin-top:clamp(14px,2.5vw,26px);}
+  .videos video{width:100%;display:block;background:#000;}
   /* Légende écrite depuis le CRM. Absente, rien ne s'affiche : une photo sans légende ne
      doit pas laisser un blanc sous elle. */
   .shot-cap{display:block;padding:9px 2px 0;text-align:left;font-size:13px;line-height:1.55;
@@ -580,6 +582,7 @@
     <p class="project-meta" id="d-meta" dir="auto"></p>
     <p class="detail-text" id="d-text" hidden dir="auto"></p>
     <div class="shots" id="d-shots"></div>
+    <div class="videos" id="d-videos" hidden></div>
     <p class="projet-contact" id="projet-contact" hidden></p>
     <button class="suivant" id="suivant" hidden>
       <span class="eyebrow" id="t-suivant">Projet suivant</span>
@@ -1484,6 +1487,22 @@ function afficherProjet(i) {
     /* Les deux premières photos d'un projet sont visibles d'emblée : les faire apparaître
        en fondu ferait clignoter l'ouverture. Les suivantes se dévoilent au défilement. */
     if (k > 1) guetter(b);
+  });
+  /* Vidéos : après la galerie photo, dans l'ordre où elles ont été ajoutées dans le CRM.
+     Publiées telles quelles (pas de recompression), donc `controls` et `preload="metadata"`
+     — pas de lecture automatique, qui gaspillerait des données sur mobile pour rien. */
+  var videosHost = el('d-videos');
+  videosHost.innerHTML = '';
+  var videos = current.videos || [];
+  videosHost.hidden = !videos.length;
+  videos.forEach(function (v) {
+    var vid = document.createElement('video');
+    vid.src = url(v.src);
+    vid.controls = true;
+    vid.preload = 'metadata';
+    vid.playsInline = true;
+    if (v.name) vid.setAttribute('aria-label', v.name);
+    videosHost.appendChild(vid);
   });
   document.body.classList.add('viewing');
   /* Le bandeau n'est plus à l'écran : le laisser tourner téléchargerait des photos que

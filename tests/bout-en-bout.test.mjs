@@ -104,6 +104,8 @@ const publication = await crm.evaluate(async () => {
   await addPhotosToRealisation(r, [await mk('sejour.jpg', 1200, 800, '#b9ada0'), await mk('escalier.jpg', 800, 1200, '#9fb0a6')]);
   r.photos[0].caption = 'Séjour traversant, parquet point de Hongrie.';
   r.cover = r.photos[0].id;
+  // vidéo : contenu bidon (l'app ne décode jamais le fichier), juste pour suivre le circuit
+  await addVideosToRealisation(r, [new File([new Uint8Array(256).fill(2)], 'visite-guidee.mp4', { type: 'video/mp4' })]);
   // ce que le site doit dire du studio
   library.site = Object.assign({}, library.site, { sousTitre: 'Architecture d’intérieur', apropos: 'Texte de présentation.', email: 'essai@example.com' });
   saveRealisations();
@@ -217,6 +219,7 @@ const projet = await site.evaluate(() => ({
   portraits: document.querySelectorAll('.shot.portrait').length,
   apropos: (document.getElementById('apropos-txt').textContent || '').trim(),
   contact: [...document.querySelectorAll('#contact a')].map(a => a.getAttribute('href')),
+  videos: [...document.querySelectorAll('#d-videos video')].map(v => ({ src: v.getAttribute('src'), nom: v.getAttribute('aria-label') })),
 }));
 check('Le titre, le lieu, la surface et la mission traversent le manifeste',
   projet.titre === 'Duplex Rothschild' && /Tel Aviv/.test(projet.meta) && /120 m²/.test(projet.meta)
@@ -231,6 +234,9 @@ check('L’orientation publiée décide de la mise en page (une verticale sur de
 check('Ce que le CRM dit du studio arrive aussi : à propos et contact',
   /Texte de présentation/.test(projet.apropos) && projet.contact.some(h => h === 'mailto:essai@example.com'),
   projet.apropos + ' | ' + projet.contact.join(' '));
+check('La vidéo publiée par le CRM apparaît sur la page du projet, après les photos',
+  projet.videos.length === 1 && /\.mp4$/.test(projet.videos[0].src || '') && projet.videos[0].nom === 'visite-guidee.mp4',
+  JSON.stringify(projet.videos));
 
 const bruit = e => /favicon|net::ERR|Failed to load resource|fonts\.googleapis|fonts\.gstatic/i.test(e);
 check('Aucune erreur JavaScript des deux côtés',

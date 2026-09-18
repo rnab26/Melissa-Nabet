@@ -900,6 +900,13 @@
     padding:6px 8px;border-top:1px solid var(--panel-edge);background:var(--panel);}
   .bt-ph-foot .mini{font-size:11px;}
   .rz-add{border:1px dashed var(--stone-light);border-radius:6px;background:transparent;color:var(--stone);cursor:pointer;font-size:12px;font-family:'Inter';aspect-ratio:3/2;}
+  .rz-videos{margin-top:18px;}
+  .rz-videos-titre{font-family:'Inter';font-size:13px;font-weight:600;color:var(--stone);margin:0 0 8px;}
+  .rz-videos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
+  .rz-video-tile{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:var(--panel);}
+  .rz-video-tile video{width:100%;aspect-ratio:3/2;object-fit:cover;background:#000;display:block;}
+  .rz-video-nom{font-size:11px;color:var(--stone);padding:4px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-video-del{position:absolute;right:5px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;border-radius:3px;width:24px;height:24px;font-size:13px;cursor:pointer;line-height:1;}
   .rz-selectable{outline:2px solid transparent;}
   .rz-picked{outline:2px solid var(--oxblood);outline-offset:1px;}
   .rz-picked img{opacity:.72;}
@@ -5207,6 +5214,11 @@ try{if(localStorage.getItem('mn_split_view')==='1')applySplitView(true);}catch(e
    Les retouches sont NON DESTRUCTIVES : on ne stocke que des paramètres (`photo.edit`),
    l'original importé n'est jamais réécrit. */
 const REAL_MAX=2560, REAL_Q=0.92, REAL_THUMB=440, REAL_THUMB_Q=0.78, REAL_MAX_FILE=25*1024*1024;
+/* Vidéos : publiées TELLES QUELLES — pas de retouche, pas de recompression (aucun pipeline
+   de transcodage côté serveur). Le plafond est donc plus généreux que pour une photo, mais
+   pas illimité : un fichier de plusieurs Go bloquerait l'envoi depuis un téléphone en 4G
+   pendant de longues minutes sans qu'on puisse savoir si ça avance. */
+const VIDEO_MAX_FILE=300*1024*1024;
 const REAL_RATIOS=[
   /* « Libre » laissait croire à un rognage libre : c'est l'inverse — aucun format n'est
      imposé, le cadre garde la proportion de la photo. Le mot le dit maintenant. */
@@ -5436,11 +5448,17 @@ function realisationPublishPlan(r){
   /* La couverture choisie peut avoir été écartée : le site prendrait alors la première
      photo publiée sans que personne l'ait décidé. On le dit, et on la désigne. */
   const couvEcartee=!!(r.cover&&(r.photos||[]).some(p=>p.id===r.cover&&p.horsSite)&&photos.length);
+  /* Vidéos : pas de retouche donc pas d'état « modifiée », seulement présente/absente. */
+  const vidsAvant=(r.published&&r.pub&&Array.isArray(r.pub.vids))?r.pub.vids:[];
+  const vidsApres=(r.videos||[]).map(v=>v.id);
+  const videosNouvelles=vidsApres.filter(id=>vidsAvant.indexOf(id)<0).length;
+  const videosRetirees=vidsAvant.filter(id=>vidsApres.indexOf(id)<0).length;
   return {photos,nouvelles,changees,retirees,ecartees,couvEcartee,ordre,fiche,
     coverId:couvertureEffective(r),
     inchangees:photos.filter(x=>x.etat==='inchangee').length,
+    videosNouvelles,videosRetirees,
     change:nouvelles+changees,
-    rien:!(nouvelles||changees||retirees||ordre||fiche)};
+    rien:!(nouvelles||changees||retirees||ordre||fiche||videosNouvelles||videosRetirees)};
 }
 /* Les champs du projet qui partent dans le manifeste. Le titre de la photo n'y est pas :
    il ne quitte jamais le CRM. */
@@ -5464,12 +5482,14 @@ const HIST_LABEL={horssite:'Écartée du site',sursite:'Remise sur le site',couv
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
      et un portfolio : ils partent sur le site avec les photos. */
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],published:false,personnelle:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],videos:[],published:false,personnelle:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
   o.photos=(o.photos||[]).map(p=>migratePhotoVersions(
     Object.assign({id:uid(),name:'',caption:'',w:0,h:0,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)})));
+  /* Pas d'`edit` : une vidéo est publiée telle quelle, il n'y a rien à retoucher. */
+  o.videos=(o.videos||[]).map(v=>Object.assign({id:uid(),name:'',contentType:'video/mp4',size:0,createdAt:Date.now()},v));
   return o;
 }
 function ensureRealisations(){if(!Array.isArray(realisations))realisations=[];}
@@ -5752,6 +5772,36 @@ const photoStore={
 };
 function fullKey(pid){return 'rp_'+pid;}
 function thumbKey(pid){return 'rt_'+pid;}
+/* Même seau privé que les photos (DOC_BUCKET), même logique — sauf le type de contenu,
+   qui doit suivre celui du fichier importé (mp4, mov, webm…) et pas être figé en JPEG. */
+const videoStore={
+  async save(key,blob,contentType){
+    if(!(sb&&sbUser&&ownerId))throw new Error('hors ligne');
+    const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+key,blob,{contentType:contentType||'video/mp4',upsert:true});
+    if(error)throw error;
+  },
+  async get(key){
+    if(!(sb&&sbUser&&ownerId))return null;
+    try{
+      const {data,error}=await sb.storage.from(DOC_BUCKET).download(ownerId+'/'+key);
+      if(error||!data)return null;
+      return data;
+    }catch(e){return null;}
+  },
+  async del(key){
+    if(sb&&sbUser&&ownerId){try{await sb.storage.from(DOC_BUCKET).remove([ownerId+'/'+key]);}catch(e){}}
+  },
+};
+function videoKey(vid){return 'rv_'+vid;}
+/* Extension déduite du type MIME (le nom du fichier, lui, peut être trompeur — un iPhone
+   exporte parfois un .mov en video/quicktime). Repli sur .mp4, le plus lisible partout. */
+function videoExt(v){
+  const type=(v.contentType||'').toLowerCase();
+  if(type.includes('quicktime')||type.includes('mov'))return '.mov';
+  if(type.includes('webm'))return '.webm';
+  if(type.includes('ogg'))return '.ogv';
+  return '.mp4';
+}
 
 /* Cache d'images décodées (objets Image prêts pour le rendu). Plafonné : une photo 2560 px
    décodée occupe ~26 Mo en mémoire vive, on ne peut pas toutes les garder. */
@@ -5890,11 +5940,74 @@ async function addPhotosToRealisation(r,files){
 function paintImportProgress(){
   const box=document.getElementById('rz-import');
   if(!box||!_rzImport)return;
-  const {total,done,name}=_rzImport;
+  const {total,done,name,type}=_rzImport;
   const t=box.querySelector('.rz-import-txt');
-  if(t)t.textContent='Import de '+total+' photo(s) — '+Math.min(done+1,total)+' / '+total+' · '+name;
+  if(t)t.textContent='Import de '+total+' '+(type||'photo')+'(s) — '+Math.min(done+1,total)+' / '+total+' · '+name;
   const b=box.querySelector('.rz-bar i');
   if(b)b.style.width=Math.round(done/total*100)+'%';
+}
+/* ---- Vidéos ------------------------------------------------------------------------
+   Publiées TELLES QUELLES : pas de retouche, pas de recompression, pas de vignette
+   générée — le navigateur affiche seul la première image du fichier via <video>. Circuit
+   volontairement plus simple que celui des photos, sur le même principe (privées dans
+   DOC_BUCKET tant que non publiées, un geste explicite « Republier » les envoie). */
+function videoFileRefus(file){
+  const type=(file.type||'').toLowerCase();
+  if(type&&!/^video\//.test(type))return 'ce n’est pas une vidéo (' + type + ')';
+  if(file.size>VIDEO_MAX_FILE)return 'trop lourde : '+moTxt(file.size)+' — maximum '+moTxt(VIDEO_MAX_FILE);
+  return '';
+}
+async function importOneVideo(r,file){
+  const refus=videoFileRefus(file);
+  if(refus)return refus;
+  const vid=uid();
+  try{
+    await videoStore.save(videoKey(vid),file,file.type||'video/mp4');
+    const nouvelle={id:vid,name:file.name||'vidéo',contentType:file.type||'video/mp4',size:file.size,createdAt:Date.now()};
+    r.videos.push(nouvelle);
+    return '';
+  }catch(e){
+    console.error('import vidéo',e);
+    try{await videoStore.del(videoKey(vid));}catch(err){}
+    const msg=(e&&e.message)||'';
+    if(/hors ligne|réseau|network|fetch|failed to fetch/i.test(msg))return 'envoi interrompu : connexion perdue ('+msg+'). Réessayez une fois reconnectée.';
+    return 'fichier illisible'+(msg?' ('+msg+')':'');
+  }
+}
+async function addVideosToRealisation(r,files){
+  const list=Array.from(files||[]);
+  if(!list.length)return;
+  if(!(sb&&sbUser&&ownerId)){
+    _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'vidéo',why:'connexion requise : les vidéos sont enregistrées dans le cloud, pas sur l’appareil'}))};
+    renderRealisations();return;
+  }
+  r.videos=r.videos||[];
+  const refus=[];let n=0;
+  _rzImportReport=null;
+  _rzImport={total:list.length,done:0,name:(list[0].name||''),type:'vidéo'};
+  renderRealisations();
+  for(const file of list){
+    _rzImport.name=file.name||'vidéo';paintImportProgress();
+    const why=await importOneVideo(r,file);
+    if(why)refus.push({name:file.name||'vidéo',why});else n++;
+    _rzImport.done++;paintImportProgress();
+  }
+  _rzImport=null;
+  _rzImportReport=refus.length?{n,refus,type:'vidéo'}:null;
+  r.updatedAt=Date.now();
+  saveRealisations();renderRealisations();
+  if(n)toast(n+' vidéo(s) ajoutée(s)');
+}
+function rzPickVideos(r){
+  choisirFichiers({multiple:true,accept:'video/*'},files=>addVideosToRealisation(r,files));
+}
+async function deleteVideo(r,v){
+  askConfirm('Retirer la vidéo « '+(v.name||'vidéo')+' » ?'+(r.published?' Elle sera retirée du site à la prochaine republication.':''),async()=>{
+    r.videos=(r.videos||[]).filter(x=>x.id!==v.id);
+    r.updatedAt=Date.now();
+    saveRealisations();renderRealisations();
+    try{await videoStore.del(videoKey(v.id));}catch(e){}
+  });
 }
 /* Bandeau de progression, puis bilan des refus. Le bilan reste à l'écran jusqu'à ce qu'on
    le masque : c'est la seule trace de la photo qui n'est PAS entrée. */
@@ -5906,10 +6019,10 @@ function buildImportPanel(){
     return box;
   }
   if(_rzImportReport){
-    const {n,refus}=_rzImportReport;
+    const {n,refus,type}=_rzImportReport;
     const box=document.createElement('div');box.className='ia-erreur';
     const t=document.createElement('p');
-    t.textContent=(n?n+' photo(s) ajoutée(s), ':'')+refus.length+' fichier(s) refusé(s) :';
+    t.textContent=(n?n+' '+(type||'photo')+'(s) ajoutée(s), ':'')+refus.length+' fichier(s) refusé(s) :';
     box.appendChild(t);
     const ul=document.createElement('ul');ul.className='rz-refus';
     refus.forEach(x=>{
@@ -6513,6 +6626,35 @@ function renderRealisationDetail(host,r){
   host.appendChild(grid);
   if(_rzSelMode)host.appendChild(buildSelectionBar(r));
   else if(_rzOrderMode)host.appendChild(buildOrderBar(r));
+  if(!_rzSelMode&&!_rzOrderMode)host.appendChild(buildVideosSection(r));
+}
+/* Section VIDÉOS, sous la galerie photo — jamais mêlée à elle : pas de rognage, pas de
+   retouche, pas de couverture possible pour une vidéo, donc pas la même grille. Publiées
+   après les photos sur la page du site, dans l'ordre d'ajout ici (pas de réordonnancement
+   en V1 — peu de vidéos par chantier en pratique ; à ajouter si le besoin se confirme). */
+function buildVideosSection(r){
+  const box=document.createElement('div');box.className='rz-videos';
+  const titre=document.createElement('h3');titre.className='rz-videos-titre';titre.textContent='Vidéos';
+  box.appendChild(titre);
+  const grid=document.createElement('div');grid.className='rz-videos-grid';
+  (r.videos||[]).forEach(v=>{
+    const tile=document.createElement('div');tile.className='rz-video-tile';
+    tile.innerHTML=`<video muted preload="metadata" playsinline></video>
+      <div class="rz-video-nom">${esc(v.name||'vidéo')}</div>
+      <button type="button" class="rz-video-del" title="Retirer cette vidéo">×</button>`;
+    videoStore.get(videoKey(v.id)).then(blob=>{
+      const vid=tile.querySelector('video');
+      if(blob&&vid)vid.src=URL.createObjectURL(blob);
+    });
+    tile.querySelector('.rz-video-del').addEventListener('click',()=>deleteVideo(r,v));
+    grid.appendChild(tile);
+  });
+  const add=document.createElement('button');add.className='rz-add';add.type='button';
+  add.innerHTML='＋<br>Ajouter des vidéos';
+  add.addEventListener('click',()=>rzPickVideos(r));
+  grid.appendChild(add);
+  box.appendChild(grid);
+  return box;
 }
 
 /* ============ ORDRE DES PHOTOS ============
@@ -7176,6 +7318,7 @@ function delRealisation(id){
       }
     }
     for(const p of (r.photos||[])){for(const k of photoAllKeys(p)){await photoStore.del(k);}}
+    for(const v of (r.videos||[])){await videoStore.del(videoKey(v.id));}
     realisations=realisations.filter(x=>x.id!==id);
     _rzOpenId=null;storageInvalidate();saveRealisations();renderRealisations();
     toast(enLigne?'Réalisation supprimée et retirée du site':'Réalisation supprimée');
@@ -10887,6 +11030,8 @@ async function askPublishRealisation(r){
   if(plan.retirees)chips.push('<span class="pub-chip ret">'+plan.retirees+' retirée(s) du site</span>');
   if(plan.ordre)chips.push('<span class="pub-chip chg">ordre modifié</span>');
   if(plan.fiche)chips.push('<span class="pub-chip chg">fiche du projet modifiée</span>');
+  if(plan.videosNouvelles)chips.push('<span class="pub-chip neuf">'+plan.videosNouvelles+' vidéo(s) nouvelle(s)</span>');
+  if(plan.videosRetirees)chips.push('<span class="pub-chip ret">'+plan.videosRetirees+' vidéo(s) retirée(s)</span>');
   if(plan.inchangees)chips.push('<span class="pub-chip">'+plan.inchangees+' inchangée(s)</span>');
   if(plan.ecartees)chips.push('<span class="pub-chip ret">'+plan.ecartees+' écartée(s), non publiée(s)</span>');
 
@@ -11189,6 +11334,22 @@ async function publishRealisation(r,opts){
     }
     _glTexKey='';
 
+    /* Vidéos : envoyées TELLES QUELLES, une seule fois — pas de « gardée »/« changée » à
+       distinguer (pas de retouche), donc pas de version à comparer : une vidéo déjà connue
+       de `r.pub.vids` n'est simplement pas renvoyée. */
+    const videoEntries=[];
+    const vidsAvant=new Set((r.pub&&Array.isArray(r.pub.vids))?r.pub.vids:[]);
+    for(const v of (r.videos||[])){
+      const name=r.id+'/vid-'+v.id+videoExt(v);
+      if(!vidsAvant.has(v.id)){
+        const blob=await videoStore.get(videoKey(v.id));
+        if(!blob)throw new Error('vidéo illisible pour « '+(v.name||'vidéo sans titre')+' » — vérifiez la connexion, puis réessayez');
+        const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:v.contentType||'video/mp4',upsert:true});
+        if(error)throw error;
+      }
+      videoEntries.push({src:ownerId+'/'+name,name:v.name||''});
+    }
+
     /* Aucune image réécrite — republication de la seule fiche, retour à une publication
        précédente, photos toutes gardées — et l'aperçu de partage n'était alors pas touché :
        un lien partagé pouvait continuer à montrer la couverture d'un AUTRE projet, celui
@@ -11220,6 +11381,9 @@ async function publishRealisation(r,opts){
     /* Champs texte partagés avec `syncRealisationFicheEnLigne` (voir plus bas) : mêmes
        règles de nettoyage et d'omission des champs vides des deux côtés. */
     const fiche=Object.assign({id:r.id,photos:entries,publishedAt:new Date().toISOString()},ficheTexteChamps(r));
+    /* Absent plutôt que tableau vide : un projet sans vidéo ne doit rien ajouter au poids
+       du manifeste, ni faire croire au site qu'il y a une section vidéo à afficher. */
+    if(videoEntries.length)fiche.videos=videoEntries;
     man.realisations.unshift(fiche);
     await writeManifest(man);
 
@@ -11243,16 +11407,20 @@ async function publishRealisation(r,opts){
     }
     r.pub={at:quand,fiche:realisationFicheSig(r),
       order:photosPubliees(r).map(p=>p.id),pids:photosPubliees(r).map(p=>p.id),
-      photos:Object.fromEntries(photosPubliees(r).map(p=>[p.id,p.pub]))};
+      photos:Object.fromEntries(photosPubliees(r).map(p=>[p.id,p.pub])),
+      vids:(r.videos||[]).map(v=>v.id)};
 
     /* Ménage : on retire ce qui n'est plus servi NI par la publication actuelle NI par celle
        à laquelle on peut revenir. Effacer plus large casserait le retour en arrière ;
-       effacer moins laisserait des images publiquement accessibles pour rien. */
+       effacer moins laisserait des images publiquement accessibles pour rien. Les vidéos
+       suivent la même règle — leur fichier n'a jamais de « pas d'avant » puisqu'il n'y a
+       pas de version : `videoEntries` (l'état ACTUEL) suffit à les garder. */
     try{
       const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
       const keep=new Set(entries.flatMap(e=>[e.full.split('/').pop(),e.thumb.split('/').pop()]));
       if(r.pubPrev&&r.pubPrev.fiche&&Array.isArray(r.pubPrev.fiche.photos))
         r.pubPrev.fiche.photos.forEach(e=>{keep.add(String(e.full||'').split('/').pop());keep.add(String(e.thumb||'').split('/').pop());});
+      videoEntries.forEach(v=>keep.add(String(v.src||'').split('/').pop()));
       const stale=(existing||[]).map(f=>f.name).filter(n=>!keep.has(n));
       if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
     }catch(e){}
