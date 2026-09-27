@@ -5178,7 +5178,14 @@ function showTab(w){
 function toggleDevisTab(){showTab(document.body.classList.contains('show-preview')?'editor':'preview');}
 function toggleDevisMenu(e){if(e)e.stopPropagation();const m=$('vn-devis-menu');if(m)m.classList.toggle('open');}
 function closeDevisMenu(){const m=$('vn-devis-menu');if(m)m.classList.remove('open');}
-function gotoComposer(){closeDevisMenu();showView('devis');showTab('editor');}
+/* Demande explicite de Raphaël : "Composer" (menu du haut comme menu mobile) ouvrait
+   jusqu'ici le devis qui se trouvait déjà chargé en mémoire (currentDevisId), pas un
+   devis vierge — au risque de modifier par erreur un devis en cours sans s'en rendre
+   compte. newDevis() vide vraiment l'écran ; le devis quitté reste son brouillon
+   normal dans "Mes devis" (l'édition en cours est déjà sauvegardée en continu par
+   saveDraftDebounced, ~600ms), donc rien n'est perdu, et on ne le rouvre plus jamais
+   tout seul — seul un choix explicite dans "Mes devis" (loadDevis) le fait revenir. */
+function gotoComposer(){closeDevisMenu();newDevis();showView('devis');showTab('editor');}
 function gotoMesDevis(){closeDevisMenu();showView('devis');openDevisPanel();}
 /* L'Estimation du Projet est une sous-catégorie de Devis, pas un onglet à son niveau :
    même écran qu'avant (`chantier-view`), atteint depuis le menu Devis plutôt que depuis

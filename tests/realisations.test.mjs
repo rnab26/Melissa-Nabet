@@ -5022,6 +5022,33 @@ check('Menu téléphone : « Devis » propose Composer, Mes devis et Estimation 
   menus.devis.join(' | '));
 check('Menu téléphone : et le choix ouvre bien la vue devis', menus.vueDevis);
 
+// --- Raphaël, signalé comme gênant : cliquer sur « Devis » → « Composer » (menu du haut
+//     comme menu mobile) rouvrait le devis déjà en mémoire (currentDevisId) au lieu d'un
+//     devis vierge — au risque de modifier par erreur celui en cours sans s'en rendre
+//     compte. gotoComposer() doit désormais toujours repartir d'un devis vide, et le
+//     devis quitté doit rester intact dans « Mes devis » (rien perdu, juste plus jamais
+//     rouvert automatiquement).
+const composerFrais = await page.evaluate(async () => {
+  newDevis();
+  current.raison = 'Client En Cours De Frappe'; current.proj = 'Chantier en cours';
+  await upsertDevis('brouillon');
+  const idEnCours = currentDevisId, numEnCours = current.num;
+  gotoComposer(); // exactement ce que fait le clic « Composer », menu du haut ou mobile
+  return {
+    idDifferent: currentDevisId !== idEnCours,
+    idNul: currentDevisId === null,
+    champsVides: current.raison === '' && current.proj === '',
+    numAvance: current.num !== numEnCours,
+    devisEnCoursIntact: devisList.find(d => d.id === idEnCours) &&
+      devisList.find(d => d.id === idEnCours).snapshot.raison === 'Client En Cours De Frappe',
+  };
+});
+check('« Composer » ouvre toujours un devis vierge, jamais celui déjà en mémoire',
+  composerFrais.idDifferent && composerFrais.idNul && composerFrais.champsVides && composerFrais.numAvance,
+  JSON.stringify(composerFrais));
+check('Le devis quitté sans l’enregistrer explicitement reste intact dans « Mes devis »',
+  composerFrais.devisEnCoursIntact, JSON.stringify(composerFrais));
+
 // L'aperçu d'un devis se lit en entier : sur téléphone, la barre du haut ne doit pas
 // rester collée et manger une bande de document à chaque écran.
 await page.setViewportSize({ width: 390, height: 844 });
