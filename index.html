@@ -5082,7 +5082,7 @@ async function exportData(){
 async function appliquerSauvegarde(data){
   if(data.library&&data.library.sections){library=data.library;await store.set(K_LIB,library);}
   clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
-  devisList=Array.isArray(data.devis)?data.devis:[];await store.set(K_DEVIS,devisList);
+  devisList=objets(data.devis);await store.set(K_DEVIS,devisList);
   if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
   if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
   if(Array.isArray(data.produits)){produits=data.produits.map(normalizeProduit);await store.set(K_PROD,produits);}
@@ -11744,15 +11744,15 @@ async function loadAll(){
       if(r.kind==='devis'&&_pendingDeletedDevisIds.has(r.id))return;
       cloudIds.add(r.id);
       if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
-      else if(r.kind==='devis'){const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
+      else if(r.kind==='devis'){if(!r.data||typeof r.data!=='object')return;const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
       else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
-      else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=r.data;remoteTasksJson=JSON.stringify(tasks);}}
+      else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=objets(r.data);remoteTasksJson=JSON.stringify(tasks);}}
       else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=JSON.stringify(realisations);}}
       else if(r.kind==='produits'){if(Array.isArray(r.data)){produits=r.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
       else if(r.kind==='chantier'){if(Array.isArray(r.data)){chantierList=r.data;remoteChantierJson=JSON.stringify(chantierList);}}
     });
     clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
-    devisList=devisList.filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));
+    devisList=objets(devisList).filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));tasks=objets(tasks);
     Object.keys(remoteClients).forEach(id=>{if(!cloudIds.has(id))delete remoteClients[id];});
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
     store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);store.set(K_CHANTIER,chantierList);
@@ -11906,7 +11906,7 @@ function handleRealtime(payload){
            (remoteDevis pas mis à jour, le prochain cloudPush renverra notre version) ; sinon
            on recharge `current` depuis la donnée distante et on repeint l'écran tout de suite. */
         else if(row.kind==='devis'&&row.id===currentDevisId&&isEditingDevisComposer()){}
-        else if(row.kind==='devis'){
+        else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
           const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
           if(row.id===currentDevisId&&row.data&&row.data.snapshot){
             const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;
@@ -11934,7 +11934,7 @@ function handleRealtime(payload){
            autre appareil mettait bien à jour `tasks` en coulisse mais l'écran restait figé
            jusqu'à un changement de vue ou un rechargement. */
         else if(row.kind==='tasks'&&isEditingTasks()){}
-        else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=row.data;remoteTasksJson=JSON.stringify(tasks);}}
+        else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=objets(row.data);remoteTasksJson=JSON.stringify(tasks);}}
         else if(row.kind==='realisations'&&isEditingRealisations()){
           /* Saisie ou retouche en cours : on ignore la mise à jour distante et on ne marque
              PAS `remoteRealJson`, pour que le prochain cloudPush renvoie notre version. */
@@ -12112,6 +12112,11 @@ function logoutApp(){
   if(sb){if(sbChannel){try{sb.removeChannel(sbChannel);}catch(e){}sbChannel=null;}sb.auth.signOut().then(()=>{loggedIn=false;try{location.reload();}catch(e){}});}
 }
 
+/* Une liste (devis, tâches…) ne doit contenir que des objets : une seule entrée nulle, venue
+   de l'état local d'un appareil, faisait échouer l'affichage de TOUTES les fiches clients
+   (« Cannot read properties of null (reading 'clientId') », constaté le 5 oct. 2026). */
+function objets(a){return Array.isArray(a)?a.filter(x=>x&&typeof x==='object'):[];}
+
 /* ============ INIT ============ */
 async function init(){
   const savedLib=await store.get(K_LIB);if(savedLib&&savedLib.sections&&savedLib.version===LIB_VERSION)library=savedLib;else{library=defaultLibrary();await store.set(K_LIB,library);}
@@ -12119,8 +12124,8 @@ async function init(){
   applyBrandingToUI();
   const cs=await store.get(K_CLIENTS);
   clients=Array.isArray(cs)?cs.map(normalizeClient):[];
-  devisList=(await store.get(K_DEVIS))||[];
-  tasks=(await store.get(K_TASKS))||[];
+  devisList=objets(await store.get(K_DEVIS));
+  tasks=objets(await store.get(K_TASKS));
   realisations=((await store.get(K_REAL))||[]).map(normalizeRealisation);
   produits=((await store.get(K_PROD))||[]).map(normalizeProduit);
   chantierList=(await store.get(K_CHANTIER))||[];
