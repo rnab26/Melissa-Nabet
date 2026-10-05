@@ -3435,7 +3435,7 @@ function normalizeClient(c){
     paiements=c.lignes.filter(l=>(+l.recu||0)>0).map(l=>({id:uid(),categorie:'Architecture',label:l.type||'Paiement',montant:+l.recu||0}));
     commissions=[];
   } else { montantFinal=0;paiements=[];commissions=[]; }
-  return {id:c.id||uid(),name:c.name||c.raison||'Client',statut:c.statut||'en_cours',devise:c.devise||'₪',devisId:c.devisId||null,contact:c.contact||'',phone:c.phone||c.cphone||'',email:c.email||'',ville:c.ville||'',debut:c.debut||'',fin:c.fin||'',commentaire:c.commentaire||'',tva:c.tva!=null?c.tva:18,montantFinal,paiements,commissions,docs:Array.isArray(c.docs)?c.docs.map(d=>({id:d.id,name:d.name||'Document',type:d.type||'',ligneId:d.ligneId||null})):[]};
+  return {id:c.id||uid(),name:String(c.name||c.raison||'Client'),statut:c.statut||'en_cours',devise:c.devise||'₪',devisId:c.devisId||null,contact:c.contact||'',phone:c.phone||c.cphone||'',email:c.email||'',ville:c.ville||'',debut:String(c.debut||''),fin:String(c.fin||''),commentaire:c.commentaire||'',tva:c.tva!=null?c.tva:18,montantFinal,paiements,commissions,docs:Array.isArray(c.docs)?c.docs.map(d=>({id:d.id,name:d.name||'Document',type:d.type||'',ligneId:d.ligneId||null})):[]};
 }
 function clientTotals(c){
   const recu=(c.paiements||[]).reduce((a,p)=>a+(+p.montant||0),0);
@@ -3512,13 +3512,13 @@ function renderClients(){
   tbl.appendChild(head);
   let list=clients.slice();
   const q=clientFilters.q.trim().toLowerCase();
-  if(q)list=list.filter(c=>c.name.toLowerCase().includes(q)||(c.paiements||[]).some(l=>(l.label||'').toLowerCase().includes(q))||(c.commissions||[]).some(l=>(l.label||'').toLowerCase().includes(q)));
+  if(q)list=list.filter(c=>String(c.name||'').toLowerCase().includes(q)||(c.paiements||[]).some(l=>(l.label||'').toLowerCase().includes(q))||(c.commissions||[]).some(l=>(l.label||'').toLowerCase().includes(q)));
   if(clientFilters.statuts.length)list=list.filter(c=>clientFilters.statuts.includes(c.statut||'en_cours'));
   const dir=clientFilters.sortDir==='asc'?1:-1;
   const sk=clientFilters.sortKey;
   list.sort((a,b)=>{
-    if(sk==='name')return a.name.localeCompare(b.name)*dir;
-    if(sk==='debut')return (a.debut||'').localeCompare(b.debut||'',undefined,{numeric:true})*dir;
+    if(sk==='name')return String(a.name||'').localeCompare(String(b.name||''))*dir;
+    if(sk==='debut')return String(a.debut||'').localeCompare(String(b.debut||''),undefined,{numeric:true})*dir;
     if(sk==='statut'){ensureClientStatuses();const rank=x=>{const i=library.clientStatuses.findIndex(s=>s.id===(x.statut||'en_cours'));return i<0?9:i;};return (rank(a)-rank(b))*dir;}
     const ta=clientTotals(a),tb=clientTotals(b);
     const val=k=>k==='montant'?ta.montant:k==='reste'?ta.reste:k==='commissions'?ta.commissions:ta.commissionsReste;
@@ -3531,7 +3531,12 @@ function renderClients(){
      s'applique à l'intérieur de chaque bloc. */
   const actifs=list.filter(c=>!clientArchive(c));
   const archives=list.filter(c=>clientArchive(c));
-  const ligneClient=c=>{
+  const ligneClient=c=>{try{return ligneClientSure(c);}catch(e){
+    /* Une fiche illisible ne doit jamais vider toute la liste : on la signale à sa place. */
+    console.error('Fiche client illisible',c&&c.id,e);
+    const bad=document.createElement('div');bad.className='empty';bad.style.color='var(--danger,#b3261e)';
+    bad.textContent='⚠ Fiche illisible (id '+((c&&c.id)||'?')+') : '+((e&&e.message)||e);return bad;}};
+  const ligneClientSure=c=>{
     const t=clientTotals(c);
     const grp=document.createElement('div');grp.className='cl-group'+(clientOpen[c.id]?' open':'');grp.dataset.cid=c.id;
     const row=document.createElement('div');row.className='cl-row';
@@ -11756,7 +11761,7 @@ async function loadAll(){
        contact est rempli reprennent leur contact comme nom. Avant, on réparerait une copie
        locale qui serait aussitôt écrasée par les données distantes. */
     reparerNomsClients();
-    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();if(!isEditingChantier())renderChantier();if(!isEditingTasks())renderTaskList();}catch(e){}
+    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();if(!isEditingChantier())renderChantier();if(!isEditingTasks())renderTaskList();}catch(e){console.error('Affichage après chargement',e);toast('Erreur d\'affichage : '+((e&&e.message)||e));}
     setSyncStatus('ok');
     clearTimeout(_loadAllRetryT);_loadAllRetryDelay=5000;
     scheduleSyncPush();
