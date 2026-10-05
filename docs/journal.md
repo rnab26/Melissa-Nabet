@@ -3885,3 +3885,23 @@ présents.
 **590/590** (inchangé, confirme qu'aucune régression n'est apparue depuis la suite 20),
 `site.test.mjs` **195/195** (194/1 avant ce correctif), `bout-en-bout.test.mjs`
 **21/21**, `pont-ia.test.mjs` **20/20**. Total : **826 vérifications, 0 échec**.
+
+## 5 octobre 2026 — Onglet Clients vide sur la tablette de Raphaël
+
+**Symptôme** (capture à l'appui) : l'onglet Clients n'affiche que l'en-tête du tableau — ni
+lignes, ni « Aucun client. », ni totaux. Les 19 clients sont pourtant intacts en base
+(vérifié : `app_data`, tous au bon `owner`, règles RLS correctes, lectures API en 200).
+
+**Cause établie** : `renderClients` plante en cours de route si un client a un nom ou une
+date qui n'est pas du texte (`localeCompare is not a function`), et `loadAll` avalait
+l'erreur (`catch(e){}`). Reproduit avec un client à date numérique : un seul enfant dans le
+tableau, l'en-tête. **Non prouvé** : quel client précis, sur son appareil, est mal typé
+(l'état local de la tablette n'est pas lisible depuis ici).
+
+**Correctif** (`50ddd85`, fusionné `fb21627`) : `normalizeClient` force `name`/`debut`/`fin`
+en texte ; tri et recherche tolérants ; une fiche illisible est signalée à sa place sans
+vider les autres ; `loadAll` affiche l'erreur au lieu de l'avaler. Test permanent
+`tests/clients-liste.test.mjs` (échoue sur l'ancien code, passe sur le nouveau).
+
+**Piège SQL** : `scripts/sql.sh` — un `;` final casse l'enveloppe `exec_sql` (renvoie
+« exécuté sans résultat » au lieu des lignes). Ne pas en mettre.
