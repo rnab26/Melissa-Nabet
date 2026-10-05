@@ -3905,3 +3905,12 @@ vider les autres ; `loadAll` affiche l'erreur au lieu de l'avaler. Test permanen
 
 **Piège SQL** : `scripts/sql.sh` — un `;` final casse l'enveloppe `exec_sql` (renvoie
 « exécuté sans résultat » au lieu des lignes). Ne pas en mettre.
+
+**Suite (même soir) — vraie cause, grâce à la capture de Raphaël** : après le premier
+correctif, l'écran a affiché l'erreur : `Cannot read properties of null (reading 'clientId')`
+sur les 19 fiches. Donc ni nom ni date : une entrée **nulle** dans la liste des devis ou des
+tâches *locale à l'appareil* (le serveur est propre : 0 entrée non-objet) fait échouer
+`buildClientDetail` pour tous les clients. Reproduit à l'identique. Correctif : `objets()`
+filtre ces listes au démarrage, au chargement serveur, en temps réel et à l'import. Non
+prouvé : comment ce `null` est entré dans l'appareil (possible lien avec le correctif devis
+du 27 sept., à surveiller). Test : `tests/clients-liste.test.mjs` (cas `loadAll` pollué).

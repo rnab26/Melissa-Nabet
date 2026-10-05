@@ -24,8 +24,24 @@ const r = await p.evaluate(() => {
   out.recherche = document.querySelectorAll('#cl-table .cl-group').length;
   return out;
 });
+// Cas réel du 5 oct. 2026 : une entrée nulle dans les devis/tâches de l'appareil faisait
+// échouer TOUTES les fiches (« reading 'clientId' »). Passe par le vrai chemin loadAll.
+const r2 = await p.evaluate(async () => {
+  const bons = [1, 2, 3].map(i => ({ id: 'c' + i, name: 'Client ' + i, debut: '2026-09-0' + i, statut: 'en_cours' }));
+  const lignes = [...bons.map(c => ({ id: c.id, kind: 'client', data: c })), { id: 'dnull', kind: 'devis', data: null },
+    { id: 'tk', kind: 'tasks', data: [null, { id: 't1', title: 'x', clientId: 'c1' }] }];
+  const chain = res => { const o = { select: () => o, eq: () => o, in: () => o, upsert: async () => ({ error: null }), delete: () => o, then: f => f(res) }; return o; };
+  sb = { from: () => chain({ data: lignes, error: null }), channel: () => ({ on() { return this; }, subscribe() { return this; } }), removeChannel() {}, auth: { getSession: async () => ({ data: {} }), onAuthStateChange() {} } };
+  sbUser = { id: 'u' }; ownerId = 'u'; clients = []; clientFilters.sortKey = 'name'; clientFilters.q = '';
+  devisList = [null]; tasks = [null];            // état local déjà pollué
+  await loadAll(); renderClients();
+  return { groupes: document.querySelectorAll('#cl-table .cl-group').length, erreurs: document.querySelectorAll('#cl-table .empty').length,
+           devisNuls: devisList.filter(x => !x).length, tachesNulles: tasks.filter(x => !x).length, objets: JSON.stringify(objets([null, 1, { a: 1 }, 'x'])) };
+});
+console.log(JSON.stringify(r2));
+const ok2 = r2.groupes === 3 && r2.erreurs === 0 && r2.devisNuls === 0 && r2.tachesNulles === 0 && r2.objets === '[{"a":1}]';
 console.log(JSON.stringify(r));
 const ok = r.typesNormalises === 'string,string,string' && ['name','debut','statut','montant'].every(k => r['tri_' + k] === 4 && r['err_' + k] === 1) && r.recherche >= 3;
-console.log(ok ? 'OK' : 'ECHEC');
+console.log(ok && ok2 ? 'OK' : 'ECHEC');
 await b.close();
-process.exit(ok ? 0 : 1);
+process.exit(ok && ok2 ? 0 : 1);
