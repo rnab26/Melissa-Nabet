@@ -21,7 +21,8 @@
      contourne le service worker (Chrome ne le consulte pas pour ce rechargement, constaté dans
      Chromium 141) : il redemande donc toujours tout au serveur, sans que le service worker n'y touche.
 
-   - Hors ligne, il affiche UNE PAGE SIMPLE « Pas de connexion », PAS une copie du CRM. Raison,
+   - Hors ligne, il affiche UNE PAGE SIMPLE « Pas de connexion » (en anglais si l'interface du CRM est
+     réglée en anglais sur cet appareil), PAS une copie du CRM. Raison,
      constatée par essai dans un vrai navigateur le 14 oct. 2026 : le CRM charge la bibliothèque
      Supabase depuis un autre site ; sans réseau elle manque, et initSupabase() n'affiche alors NI
      l'écran de connexion NI d'erreur : l'appli s'ouvre en mode « local » (pastille « · local »).
@@ -94,11 +95,21 @@ const PAGE_HORS_LIGNE = `<!doctype html>
 <body>
 <main>
   <p class="marque">MELISSA NABET</p>
-  <h1>Pas de connexion internet</h1>
-  <p>Le CRM a besoin d'internet pour s'ouvrir et enregistrer ton travail. Vérifie le Wi-Fi ou les données mobiles, puis réessaie.</p>
+  <h1 id="titre">Pas de connexion internet</h1>
+  <p id="texte">Le CRM a besoin d'internet pour s'ouvrir et enregistrer ton travail. Vérifie le Wi-Fi ou les données mobiles, puis réessaie.</p>
   <button id="reessayer" type="button">Réessayer</button>
 </main>
 <script>
+  // Même langue que l'interface du CRM sur cet appareil (réglage « mn_ui_lang » de index.html).
+  try {
+    if (localStorage.getItem('mn_ui_lang') === 'en') {
+      document.documentElement.lang = 'en';
+      document.title = 'No connection — CRM Melissa Nabet';
+      document.getElementById('titre').textContent = 'No internet connection';
+      document.getElementById('texte').textContent = 'The CRM needs internet to open and to save your work. Check your Wi-Fi or mobile data, then try again.';
+      document.getElementById('reessayer').textContent = 'Try again';
+    }
+  } catch (e) { /* pas de réglage lisible : le français */ }
   document.getElementById('reessayer').addEventListener('click', function () { location.reload(); });
   window.addEventListener('online', function () { location.reload(); });
 </script>

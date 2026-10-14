@@ -210,6 +210,22 @@ const UI_EN={
   /* sauvegarde / divers */
   'Sauvegarde des données':'Data backup','Bibliothèque':'Library','Réglages — Photos & retouche IA':'Settings — Photos & AI retouching',
   'Rédaction IA — ce qu’elle a coûté':'AI writing — what it cost',
+  /* Réglages › Application (installer le CRM comme une application) */
+  'Application':'Application',
+  'Installe le CRM sur cet appareil : il s’ouvre dans sa propre fenêtre, avec son icône, comme une application. Comme dans le navigateur, il faut internet pour s’en servir.':'Install the CRM on this device: it opens in its own window, with its own icon, like an app. As in the browser, you need internet to use it.',
+  'Installer l’application':'Install the app','Installation…':'Installing…',
+  'Application installée ✓':'App installed ✓',
+  'Tu utilises déjà le CRM en mode application.':'You are already using the CRM as an app.',
+  'Ouvre-la depuis son icône « CRM Melissa », sur ton écran d’accueil ou dans tes applications.':'Open it from its “CRM Melissa” icon, on your home screen or in your apps.',
+  'Sur iPhone et iPad, l’installation se fait depuis Safari :':'On iPhone and iPad, install from Safari:',
+  'Touche l’icône Partager (le carré avec une flèche vers le haut).':'Tap the Share icon (the square with an arrow pointing up).',
+  'Choisis « Sur l’écran d’accueil », puis « Ajouter ».':'Choose “Add to Home Screen”, then “Add”.',
+  'Ton navigateur peut installer l’application depuis son menu :':'Your browser can install the app from its menu:',
+  'Ouvre le menu du navigateur (les trois points).':'Open the browser menu (the three dots).',
+  'Choisis « Installer l’application » (ou « Ajouter à l’écran d’accueil »).':'Choose “Install app” (or “Add to Home screen”).',
+  'Sur ordinateur, tu peux aussi cliquer sur l’icône d’installation, à droite de la barre d’adresse. Si l’application est déjà installée ici, ouvre-la depuis son icône.':'On a computer, you can also click the install icon at the right of the address bar. If the app is already installed here, open it from its icon.',
+  'Ce navigateur ne sait pas installer l’application. Ouvre le CRM dans Chrome (Android ou ordinateur) ou dans Safari (iPhone et iPad), puis reviens ici.':'This browser cannot install the app. Open the CRM in Chrome (Android or computer) or in Safari (iPhone and iPad), then come back here.',
+  'Installation annulée.':'Installation cancelled.','Installation annulée':'Installation cancelled','Installation impossible':'Installation failed',
   /* messages */
   'Converti en facture':'Converted to an invoice','Repassé en devis':'Back to a quote','Texte généré':'Text generated','Réponse vide':'Empty reply',
   'Mobile':'Mobile','Bureau':'Desktop'
@@ -219,7 +235,8 @@ const _uiIndex=new Map(Object.keys(UI_EN).map(k=>[norm(k),UI_EN[k]]));
 const UI_PATTERNS=[
   [/^Aperçu ouvert — bouton « Imprimer \/ Enregistrer en PDF »$/,()=>'Preview opened — use the “Print / Save as PDF” button'],
   [/^Réglages remis à zéro$/,()=>'Settings reset'],
-  [/^(\d+) devis$/,(m)=>m[1]+' quotes']
+  [/^(\d+) devis$/,(m)=>m[1]+' quotes'],
+  [/^Installation impossible \((.*)\)\. Essaie par le menu du navigateur\.$/,(m)=>'Installation failed ('+m[1]+'). Try from the browser menu.']
 ];
 /* Traduit un texte d'écran ; renvoie null s'il n'est pas dans le dictionnaire. */
 function uiTr(text){

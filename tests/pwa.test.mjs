@@ -31,7 +31,7 @@ import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, extname } from 'node:path';
+import { join, resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -115,8 +115,15 @@ check('sw.js : ne cite ni Supabase ni aucune adresse d’un autre site', !/supab
    sous un préfixe ('/' en local, '/Melissa-Nabet/' en ligne). Sans le dossier du site vitrine, sans
    .git, sans node_modules : seulement ce que le CRM sert vraiment.
    ------------------------------------------------------------------------------------------------ */
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8', '.png': 'image/png' };
-const SERVIS = (chemin) => ['index.html', 'manifest.webmanifest', 'sw.js', 'favicon.png'].includes(chemin) || /^icons\/[\w.-]+\.png$/.test(chemin);
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.css': 'text/css; charset=utf-8', '.webmanifest': 'application/manifest+json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.wasm': 'application/wasm' };
+/* Comme le workflow de GitHub Pages : tout le dépôt est servi, sauf le site vitrine (retiré de ce qui est publié)
+   et ce qui n'est jamais en ligne (.git, .github, .claude, node_modules). Une liste fermée de fichiers cassait ce
+   test dès que le CRM en réclamait un de plus (i18n.js, le 14 oct. 2026). */
+const JAMAIS_SERVI = /^(\.git|\.github|\.claude|node_modules|site-vitrine)(\/|$)/;
+const SERVIS = (chemin) => {
+  const absolu = resolve(RACINE, chemin);
+  return absolu.startsWith(RACINE + sep) && !JAMAIS_SERVI.test(chemin) && existsSync(absolu) && statSync(absolu).isFile();
+};
 
 function creerServeur(prefixe) {
   const etat = { version: 1, sansBibliotheque: true };    // `version` : marque inscrite dans la page ; `sansBibliotheque` : retire l'adresse du CDN (hermétique : pas d'internet)
@@ -126,7 +133,7 @@ function creerServeur(prefixe) {
     const relatif = chemin.startsWith(prefixe) ? chemin.slice(prefixe.length) || 'index.html' : null;
     const cible = relatif === '' ? 'index.html' : relatif;
     journal.push({ methode: req.method, chemin: cible || chemin, conditionnelle: !!req.headers['if-none-match'] });
-    if (cible === null || !SERVIS(cible) || !existsSync(join(RACINE, cible))) { rep.writeHead(404, { 'content-type': 'text/plain' }); rep.end('introuvable'); return; }
+    if (cible === null || !SERVIS(cible)) { rep.writeHead(404, { 'content-type': 'text/plain' }); rep.end('introuvable'); return; }
     let corps = readFileSync(join(RACINE, cible));
     if (cible === 'index.html') {
       let h = corps.toString('utf8')
@@ -388,6 +395,33 @@ try {
     textes.push(b && b.texte);
     check('CRM ouvert comme application installée (display-mode: standalone) : « Application installée ✓ »', !!b && b.etat === 'installee' && !b.bouton && /Tu utilises déjà/.test(b.texte), b && b.texte);
     await A.page.evaluate(() => { window.matchMedia = window.__mm; });
+
+    // Même chose, interface réglée en ANGLAIS sur l'appareil (moteur de langue de i18n.js) : chaque phrase du bloc a sa traduction.
+    await A.page.evaluate(() => setUiLang('en'));
+    b = await voir(() => { window.mnInstall.installee = false; window.mnInstall.invite = null; });
+    check('En anglais — Chrome sans invite : « Install app », « Add to Home screen », icône d’installation',
+      !!b && b.etat === 'menu' && /Install app/.test(b.texte) && /Add to Home screen/.test(b.texte) && /install icon/.test(b.texte), b && b.texte);
+    b = await voir(() => { Object.defineProperty(navigator, 'standalone', { value: false, configurable: true }); });
+    check('En anglais — Safari sur iPhone/iPad : « Share » puis « Add to Home Screen »', !!b && b.etat === 'ios' && /Share icon/.test(b.texte) && /Add to Home Screen/.test(b.texte), b && b.texte);
+    b = await voir(() => { Object.defineProperty(navigator, 'standalone', { value: true, configurable: true }); });
+    check('En anglais — déjà installé : « App installed ✓ »', !!b && b.etat === 'installee' && /App installed ✓/.test(b.texte) && /You are already using the CRM as an app/.test(b.texte), b && b.texte);
+    await A.page.evaluate(() => { delete navigator.standalone; });
+    await imiterInvite('refuse');
+    await ouvrirReglages();
+    b = await bloc();
+    check('En anglais — avec l’invite : le bouton « Install the app »', !!b && b.etat === 'invite' && /Install the app/.test(b.texte), b && b.texte);
+    await A.page.locator('#inst-bloc button').click();
+    await A.page.waitForFunction(() => !window.mnInstall.enCours, null, { timeout: 4000 }).catch(() => {});
+    b = await bloc();
+    check('En anglais — le refus est visible : « Installation cancelled. »', !!b && /Installation cancelled\./.test(b.texte), b && b.texte);
+    await imiterInvite('echec');
+    await A.page.locator('#inst-bloc button').click();
+    await A.page.waitForFunction(() => !window.mnInstall.enCours, null, { timeout: 4000 }).catch(() => {});
+    b = await bloc();
+    check('En anglais — l’échec est visible, avec le message d’erreur du navigateur au milieu de la phrase', !!b && /Installation failed \(boum\)\. Try from the browser menu\./.test(b.texte), b && b.texte);
+    const restes = await A.page.evaluate(() => { const bt = document.getElementById('inst-bloc').innerText.replace(/\s+/g, ' '); return window.__trManquants().filter((t) => bt.includes(t)); });
+    check('En anglais — aucun texte français ne reste dans le bloc (__trManquants, l’outil de i18n.js)', restes.length === 0, JSON.stringify(restes));
+    await A.page.evaluate(() => { setUiLang('fr'); window.mnInstall.msg = null; window.mnInstall.invite = null; });
     // Navigateur qui ne sait pas installer : on lui retire ce qui prouve qu'il le sait (propriété d'instance).
     const sansInstall = await A.page.evaluate(() => {
       const avait = Object.getOwnPropertyDescriptor(window, 'onbeforeinstallprompt');
@@ -532,6 +566,11 @@ try {
       !!repHors && repHors.status() === 200 && repHors.fromServiceWorker() && /Pas de connexion internet/.test(hors.texte) && hors.bouton && /Réessayer/.test(hors.texte), hors.texte);
     check('Hors ligne : ce n’est PAS le CRM (en mode « local », une modification faite sans connexion serait perdue à la connexion suivante)', hors.crm === false && /^crm-sw-/.test(hors.sw || ''), 'service worker ' + hors.sw);
     check('Hors ligne : toujours aucun cache gardé', (await H.page.evaluate(() => caches.keys())).length === 0);
+    await H.page.evaluate(() => localStorage.setItem('mn_ui_lang', 'en'));   // l'interface du CRM est réglée en anglais sur cet appareil
+    await H.page.goto(racine.url, { waitUntil: 'load' });
+    const horsEn = await H.page.evaluate(() => ({ texte: document.body.innerText.replace(/\s+/g, ' ').trim(), titre: document.title, langue: document.documentElement.lang }));
+    check('Hors ligne, interface en anglais : « No internet connection » et « Try again »', /No internet connection/.test(horsEn.texte) && /Try again/.test(horsEn.texte) && horsEn.langue === 'en' && /No connection/.test(horsEn.titre), horsEn.texte);
+    await H.page.evaluate(() => localStorage.removeItem('mn_ui_lang'));
     await racine.demarrer();                                               // le réseau revient (même adresse)
     await H.page.locator('#reessayer').click();
     await H.page.waitForFunction(() => typeof openSettingsPanel === 'function', null, { timeout: 8000 }).catch(() => {});

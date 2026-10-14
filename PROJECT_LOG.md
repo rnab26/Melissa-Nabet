@@ -1443,6 +1443,9 @@ Chrome et ajoute `in-incognito` : le test et les mesures utilisent un profil non
   refus « Installation annulée. » et échec visibles, avec un message à l'écran), iPhone (mode d'emploi Partager), menu du navigateur
   (Chrome sans invite), navigateur qui ne sait pas installer. Détection par présence des fonctions du navigateur, jamais par son
   nom. Si le bloc plante, les Réglages s'ouvrent quand même (`blocInstallationHtml` l'attrape).
+- Traduction anglaise (fusionnée depuis `main` pendant ce chantier, PR #7) : le bloc « Application » a ses lignes dans `UI_EN` de
+  `i18n.js` (une phrase = une ligne, plus un motif pour « Installation impossible (…) ») ; la page « Pas de connexion » lit le
+  réglage `mn_ui_lang` du CRM (même origine) et passe en anglais comme lui. `__trManquants()` ne liste plus rien dans le bloc.
 - `tests/pwa.test.mjs`, `tests/README.md`, `scripts/generer-icones-pwa.py`.
 
 **Hors ligne : page « Pas de connexion internet », pas la dernière page du CRM (décision à confirmer par Raphaël).** La consigne
@@ -1463,6 +1466,7 @@ un cache à soi ; ce n'est pas fait.
   HEAD de `checkForUpdate()`. Modifier `sw.js` = changer `VERSION`.
 - Le script du `<head>` reste AVANT `<script src="…supabase-js@2">` : sinon l'invite d'installation peut être perdue.
 - Une nouvelle donnée ou un nouvel écran n'a rien à faire dans le service worker : tout le CRM passe par Supabase.
+- Tout nouveau texte du bloc « Application » reçoit sa ligne dans `UI_EN` (`i18n.js`) ; le test rougit si un texte français reste en anglais.
 - Retour arrière : ne pas se contenter de supprimer `sw.js` (les appareils garderaient l'ancien). Publier un `sw.js` qui se
   désenregistre (`self.registration.unregister()` à l'activation), le laisser quelques semaines, puis seulement retirer
   l'enregistrement de `index.html`.
@@ -1472,7 +1476,7 @@ un cache à soi ; ce n'est pas fait.
   deux service workers ont des périmètres distincts (`/Melissa-Nabet/`, `/Cockpit-General/`), mais pas leurs caches.
 
 **Comment tester**
-- `node tests/pwa.test.mjs` (74 vérifications, ≈ 6 s) : démarre ses serveurs et un Chromium jetable, rien d'autre à lancer.
+- `node tests/pwa.test.mjs` (82 vérifications, ≈ 7 s) : démarre ses serveurs et un Chromium jetable, rien d'autre à lancer.
 - À la main, après fusion (Chrome Android ou ordinateur) : ouvrir https://rnab26.github.io/Melissa-Nabet/, se connecter, ⚙ Réglages
   (téléphone : `⋯` › Réglages), bas du panneau « Application » › « Installer l'application ». Ou le menu de Chrome › « Installer
   l'application ». iPhone : Safari › Partager › « Sur l'écran d'accueil ».

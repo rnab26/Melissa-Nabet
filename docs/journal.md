@@ -3965,8 +3965,9 @@ raccourci ».
   mode d'emploi pour iPhone (Partager › Sur l'écran d'accueil), phrase claire pour un navigateur qui ne sait pas installer.
 - Icônes tirées du logo par défaut déjà embarqué dans `index.html` (620 px), pas de `favicon.png` (256 px :
   flou une fois agrandi). `python3 scripts/generer-icones-pwa.py` les régénère, octet pour octet.
-- `index.html` : 137 lignes ajoutées, aucune retirée.
-- `tests/pwa.test.mjs` (74 vérifications, ≈ 6 s, se lance seul) : Chromium lui-même dit `[]` à la racine ET sous
+- `index.html` : 137 lignes ajoutées, aucune retirée. Fusion de `main` (traduction anglaise, PR #7) faite dans la branche :
+  le bloc « Application » et la page « Pas de connexion » existent aussi en anglais (`i18n.js`, ligne par texte).
+- `tests/pwa.test.mjs` (82 vérifications, ≈ 7 s, se lance seul) : Chromium lui-même dit `[]` à la racine ET sous
   `/Melissa-Nabet/` ; le service worker ne touche à rien d'autre qu'à l'ouverture d'une page ; la détection de
   nouvelle version du CRM marche toujours ; une nouvelle version s'affiche dès la réouverture malgré le
   `max-age=600` de GitHub Pages. 13 pannes provoquées exprès (manifeste retiré, chemin absolu, cache ajouté,
