@@ -5,6 +5,34 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Générateur de devis — Melissa Nabet</title>
 <link rel="icon" type="image/png" href="favicon.png">
+<!-- Application installable (PWA) : fiche de l'application, couleur de la barre du système, icônes
+     et réglages iPhone. Chemins RELATIFS : le CRM est servi sous /Melissa-Nabet/ en ligne et à la racine
+     en local. Voir manifest.webmanifest, sw.js, icons/ et « Application » dans les Réglages. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#3d3934">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CRM Melissa">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<script>
+/* Placé AVANT les autres scripts : Chrome n'envoie l'invite d'installation (« beforeinstallprompt »)
+   qu'une fois ; si la page n'écoute pas encore à ce moment-là, elle est perdue et le bouton
+   « Installer l'application » des Réglages ne marcherait jamais. On la garde donc ici ; le gros script
+   du CRM la lit ensuite (bloc « APPLICATION INSTALLABLE »). */
+window.mnInstall={invite:null,installee:false};
+window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.mnInstall.invite=e;if(window.majBlocInstallation)window.majBlocInstallation();});
+window.addEventListener('appinstalled',function(){window.mnInstall.invite=null;window.mnInstall.installee=true;if(window.majBlocInstallation)window.majBlocInstallation();});
+/* Service worker (sw.js) : enregistré une fois la page chargée, pour ne jamais ralentir son ouverture.
+   Un échec — navigateur sans service worker, page ni en https ni en localhost, fichier absent — ne doit
+   rien casser : le CRM marche alors exactement comme avant, il n'est simplement pas installable. */
+window.addEventListener('load',function(){
+  try{
+    if(!('serviceWorker' in navigator)||!window.isSecureContext)return;
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(function(e){console.warn('Service worker non enregistré :',(e&&e.message)||e);});
+  }catch(e){}
+});
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -203,6 +231,16 @@
   .sync-error-bar{position:fixed;left:0;right:0;top:0;z-index:9998;background:#7a2e2e;color:#fff;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:center;gap:12px;font-family:'Inter',sans-serif;font-size:12.5px;box-shadow:0 2px 14px rgba(0,0,0,.2);transform:translateY(-120%);transition:transform .25s ease;flex-wrap:wrap;text-align:center;}
   .sync-error-bar.show{transform:translateY(0);}
   .sync-error-bar button{font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;white-space:nowrap;}
+  /* Réglages › Application : installer le CRM comme une application. */
+  .inst-box{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.55;color:var(--stone-deep);}
+  .inst-box p{margin:0 0 8px;}
+  .inst-box p:last-child{margin-bottom:0;}
+  .inst-box ol{margin:0 0 8px;padding-left:20px;}
+  .inst-box .btn{margin-top:4px;}
+  .inst-box .btn[disabled]{opacity:.55;cursor:default;}
+  .inst-etat{font-weight:600;color:#3f5a3a;}
+  .inst-msg{font-size:12.5px;}
+  .inst-msg.err{color:#b6543f;}
   .sync-badge{font-size:10.5px;color:var(--stone-light);letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
   #login-overlay{display:none;position:fixed;inset:0;z-index:110;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
   .login-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:10px;padding:30px 26px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(60,50,35,.2);text-align:center;}
@@ -2789,6 +2827,8 @@ function openSettingsPanel(){
       <button class="mini" onclick="closeModal();openIaSettingsPanel();">Photos & retouche IA</button>
       <button class="mini" onclick="closeModal();openTxtUsagePanel();">Rédaction IA — consommation</button>
     </div>
+
+    ${blocInstallationHtml(true)}
 
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
       <button class="mini" onclick="settingsReset()">↺ Tout réinitialiser</button>
@@ -12116,6 +12156,103 @@ function logoutApp(){
    de l'état local d'un appareil, faisait échouer l'affichage de TOUTES les fiches clients
    (« Cannot read properties of null (reading 'clientId') », constaté le 5 oct. 2026). */
 function objets(a){return Array.isArray(a)?a.filter(x=>x&&typeof x==='object'):[];}
+
+/* ============ APPLICATION INSTALLABLE ============
+   Le bloc « Application » des Réglages : installer le CRM comme une application (icône sur l'écran
+   d'accueil, fenêtre à part, sans barre d'adresse). Le manifeste, les icônes et le service worker sont
+   dans manifest.webmanifest, icons/ et sw.js ; le petit script du <head> garde l'invite d'installation
+   de Chrome dans window.mnInstall (elle n'est envoyée qu'une fois). Rien n'est enregistré : l'état se
+   lit sur le navigateur chaque fois que le panneau s'ouvre. Les navigateurs ne s'installent pas tous
+   de la même façon, d'où cinq cas :
+   - installee     : le CRM tourne déjà comme application, ou vient d'être installé ;
+   - invite        : Chrome/Edge a donné son invite → bouton « Installer l'application » ;
+   - ios           : Safari (iPhone, iPad) n'a pas d'invite → mode d'emploi Partager › Sur l'écran d'accueil ;
+   - menu          : Chrome/Edge sans invite (pas encore envoyée, déjà refusée, déjà installée) : c'est son
+                     menu qui installe ;
+   - indisponible  : le navigateur ne sait pas installer (Firefox sur ordinateur…).
+   Détection par présence des fonctions du navigateur, jamais par son nom : `navigator.standalone` n'existe
+   que sur iPhone/iPad, `onbeforeinstallprompt` que sur les navigateurs Chrome/Edge. */
+function lireEnvInstallation(){
+  const mn=window.mnInstall||{};
+  let application=false;
+  try{
+    application=navigator.standalone===true||['standalone','fullscreen','minimal-ui','window-controls-overlay'].some(m=>window.matchMedia('(display-mode: '+m+')').matches);
+  }catch(e){}
+  return {application,installee:!!mn.installee,invite:!!(mn.invite||mn.enCours),ios:'standalone' in navigator,chrome:'onbeforeinstallprompt' in window};
+}
+function etatInstallation(env){
+  env=env||lireEnvInstallation();
+  if(env.application||env.installee)return 'installee';
+  if(env.invite)return 'invite';
+  if(env.ios)return 'ios';
+  if(env.chrome)return 'menu';
+  return 'indisponible';
+}
+function blocInstallationHtml(ouverture){
+  /* `ouverture` : les Réglages viennent de s'ouvrir — l'ancienne réponse (« Installation annulée. ») n'a plus
+     de raison d'être affichée. Un défaut dans ce bloc ne doit JAMAIS empêcher d'ouvrir les Réglages : sans lui,
+     ils s'ouvrent. */
+  try{
+    if(ouverture&&window.mnInstall&&!window.mnInstall.enCours)window.mnInstall.msg=null;
+    return blocInstallationHtmlBrut();
+  }catch(e){console.error('Bloc Application :',e);return '';}
+}
+function blocInstallationHtmlBrut(){
+  const mn=window.mnInstall||{};
+  const env=lireEnvInstallation();
+  const etat=etatInstallation(env);
+  const note=(mn.msg&&etat!=='installee')?`<p class="inst-msg${mn.msg.erreur?' err':''}" role="status">${esc(mn.msg.texte)}</p>`:'';
+  let corps;
+  if(etat==='installee'){
+    corps=`<p class="inst-etat">Application installée ✓</p>
+      <p>${env.application?'Tu utilises déjà le CRM en mode application.':'Ouvre-la depuis son icône « CRM Melissa », sur ton écran d’accueil ou dans tes applications.'}</p>`;
+  }else if(etat==='invite'){
+    corps=`<p>Installe le CRM sur cet appareil : il s’ouvre dans sa propre fenêtre, avec son icône, comme une application. Comme dans le navigateur, il faut internet pour s’en servir.</p>
+      <button class="btn btn-primary" onclick="installerApplication()"${mn.enCours?' disabled':''}>${mn.enCours?'Installation…':'Installer l’application'}</button>`;
+  }else if(etat==='ios'){
+    corps=`<p>Sur iPhone et iPad, l’installation se fait depuis Safari :</p>
+      <ol><li>Touche l’icône Partager (le carré avec une flèche vers le haut).</li>
+      <li>Choisis « Sur l’écran d’accueil », puis « Ajouter ».</li></ol>`;
+  }else if(etat==='menu'){
+    corps=`<p>Ton navigateur peut installer l’application depuis son menu :</p>
+      <ol><li>Ouvre le menu du navigateur (les trois points).</li>
+      <li>Choisis « Installer l’application » (ou « Ajouter à l’écran d’accueil »).</li></ol>
+      <p>Sur ordinateur, tu peux aussi cliquer sur l’icône d’installation, à droite de la barre d’adresse. Si l’application est déjà installée ici, ouvre-la depuis son icône.</p>`;
+  }else{
+    corps=`<p>Ce navigateur ne sait pas installer l’application. Ouvre le CRM dans Chrome (Android ou ordinateur) ou dans Safari (iPhone et iPad), puis reviens ici.</p>`;
+  }
+  return `<div id="inst-bloc" data-etat="${etat}">
+    <div class="ed-eyebrow">Application</div>
+    <div class="inst-box">${corps}${note}</div>
+  </div>`;
+}
+/* Le bloc se redessine tout seul quand l'invite arrive, quand l'installation se termine ou quand le CRM
+   passe en mode application — sans toucher au reste du panneau (une saisie en cours n'est pas perdue). */
+function majBlocInstallation(){
+  const el=document.getElementById('inst-bloc');
+  if(el)el.outerHTML=blocInstallationHtml();
+}
+try{window.matchMedia('(display-mode: standalone)').addEventListener('change',majBlocInstallation);}catch(e){}
+async function installerApplication(){
+  const mn=window.mnInstall;
+  const invite=mn&&mn.invite;
+  if(!invite){majBlocInstallation();return;}
+  /* Une invite ne sert qu'une fois : on la range tout de suite. Si le navigateur en renvoie une autre
+     (c'est ce qu'il fait en général après un refus), le bouton revient tout seul. */
+  mn.invite=null;mn.enCours=true;mn.msg=null;
+  majBlocInstallation();
+  try{
+    await invite.prompt();
+    const choix=await invite.userChoice;
+    if(choix&&choix.outcome==='accepted'){mn.installee=true;toast('Application installée ✓');}
+    else{mn.msg={texte:'Installation annulée.'};toast('Installation annulée');}
+  }catch(e){
+    mn.msg={texte:'Installation impossible ('+((e&&e.message)||'erreur')+'). Essaie par le menu du navigateur.',erreur:true};
+    toast('Installation impossible');
+  }
+  mn.enCours=false;
+  majBlocInstallation();
+}
 
 /* ============ INIT ============ */
 async function init(){
