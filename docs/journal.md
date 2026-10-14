@@ -3916,3 +3916,31 @@ tâches *locale à l'appareil* (le serveur est propre : 0 entrée non-objet) fai
 filtre ces listes au démarrage, au chargement serveur, en temps réel et à l'import. Non
 prouvé : comment ce `null` est entré dans l'appareil (possible lien avec le correctif devis
 du 27 sept., à surveiller). Test : `tests/clients-liste.test.mjs` (cas `loadAll` pollué).
+
+---
+
+## 14 octobre 2026 — Traduction anglaise (interface et devis, deux langues indépendantes)
+
+Chantier « Traduction anglaise » (cockpit, repris de l'ancien tableau).
+
+**Livré**
+- **Langue du devis**, devis par devis : sélecteur « Langue du devis » dans l'éditeur, enregistrée
+  dans le devis (`current.lang`, donc dans le `snapshot`) ; un ancien devis sans langue s'ouvre en
+  français. Réglage « Langue par défaut des nouveaux devis » (`branding.defaultDevisLang`).
+  Traduits : tous les libellés fixes du devis imprimé, le séparateur de milliers, la fenêtre
+  d'aperçu/PDF, le texte du mail et du message WhatsApp, et le contenu standard livré d'origine
+  (catégories, prestations, « hors prestation », conditions générales).
+- **Langue de l'interface**, par appareil (`localStorage mn_ui_lang`) : bouton « 🌐 EN / FR » dans
+  la barre du haut et choix dans ⚙ Réglages. Moteur dans `index.html` (bloc « LANGUE DE
+  L'INTERFACE »), dictionnaire dans `i18n.js`.
+- Test permanent : `tests/langues.test.mjs` (27 vérifications).
+
+**Limites connues (à dire à Raphaël)**
+- L'interface est traduite **par dictionnaire** (`UI_EN` dans `i18n.js`) : navigation, éditeur de
+  devis, réglages, tableau de bord, clients, en-têtes d'écrans. Les écrans longs (retouche IA,
+  site public, boutique, sauvegarde…) restent **en français** tant que leurs textes ne sont pas
+  ajoutés : une ligne « français : anglais » par texte. `__trManquants()` (console du navigateur)
+  liste les textes français encore à l'écran.
+- Ce que Melissa a tapé elle-même (une prestation personnalisée, l'introduction du devis, ses
+  propres conditions générales) n'est **pas traduit** : il reste tel quel dans un devis anglais.
+- Le rappel de paiement (écran Clients) reste en français.
