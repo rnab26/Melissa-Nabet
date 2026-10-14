@@ -29,8 +29,9 @@ echo "  - CLAUDE.md          : les consignes de travail (à lire, elles priment)
 echo "  - docs/journal.md    : où en est le travail, ce qu'il ne faut pas casser"
 echo "  - PROJECT_LOG.md     : le détail technique, chantier par chantier"
 echo ""
-echo "Tableau des chantiers (source de vérité de ce qui reste à faire) :"
-echo "  https://claude.ai/code/artifact/c7ead2fa-509a-4bf4-a2c5-ac18a5063d84"
+echo "Chantiers (source de vérité de ce qui reste à faire) : le cockpit central, projet melissa-nabet."
+echo "  L'état est injecté juste après ce bloc (hook cockpit-session-start.sh) ; app : https://rnab26.github.io/Cockpit-General/"
+echo "  L'ancien tableau (artefact) est repris depuis le 14 oct. 2026 : historique en lecture seule, ne plus y écrire."
 echo ""
 
 if [ -f docs/journal.md ]; then

@@ -4,8 +4,10 @@ Ce fichier est tenu par les sessions Claude qui travaillent seules sur le dépô
 **où en est le travail**, pas comment travailler (ça, c'est `CLAUDE.md`). Le détail
 technique de chaque chantier reste dans `PROJECT_LOG.md` ; ici, on tient le fil.
 
-Source de vérité de ce qui reste à faire : le **tableau des chantiers**
-<https://claude.ai/code/artifact/c7ead2fa-509a-4bf4-a2c5-ac18a5063d84>
+Source de vérité de ce qui reste à faire : le **cockpit central** (projet `melissa-nabet`,
+<https://rnab26.github.io/Cockpit-General/>) depuis le 14 octobre 2026. L'ancien **tableau des
+chantiers** <https://claude.ai/code/artifact/c7ead2fa-509a-4bf4-a2c5-ac18a5063d84> est gardé en
+lecture seule pour l'historique : ses 18 chantiers ouverts ont été repris dans le cockpit.
 
 ---
 
