@@ -3916,3 +3916,54 @@ tâches *locale à l'appareil* (le serveur est propre : 0 entrée non-objet) fai
 filtre ces listes au démarrage, au chargement serveur, en temps réel et à l'import. Non
 prouvé : comment ce `null` est entré dans l'appareil (possible lien avec le correctif devis
 du 27 sept., à surveiller). Test : `tests/clients-liste.test.mjs` (cas `loadAll` pollué).
+
+## 14 octobre 2026 — Le CRM s'installe comme une application
+
+Raphaël : « rendre le site du CRM comme une application Chrome installable, car ça ne fonctionne
+pas actuellement ». Chantier du cockpit « Rendre le CRM installable comme une application Chrome »
+(`3e78b41f`). **Livré sur la branche `claude/crm-pwa`** : Raphaël vérifie sur le vrai site, puis fusionne
+(un agent ne fusionne pas ce chantier).
+
+**Cause, mesurée et non supposée** : sur `main` (`7158b96`), Chromium 141 répond
+`Page.getInstallabilityErrors = [no-manifest]`. Le CRM n'avait ni manifeste, ni icônes
+d'application, ni service worker, ni couleur de thème : Chrome ne pouvait proposer que « Ajouter un
+raccourci ».
+
+**Fait** :
+- `manifest.webmanifest` (nom « CRM Melissa Nabet », `standalone`, chemins RELATIFS, couleurs relevées
+  dans le CSS : barre du haut `#3d3934`, fond de page `#e9e4db`), `icons/` (192, 512, maskable 512,
+  iPhone 180), `sw.js`, balises du `<head>`, et un bloc **« Application »** dans ⚙ Réglages : bouton
+  « Installer l'application » (l'invite RÉELLE de Chrome), refus et échec visibles, « Application installée ✓ »,
+  mode d'emploi pour iPhone (Partager › Sur l'écran d'accueil), phrase claire pour un navigateur qui ne sait pas installer.
+- Icônes tirées du logo par défaut déjà embarqué dans `index.html` (620 px), pas de `favicon.png` (256 px :
+  flou une fois agrandi). `python3 scripts/generer-icones-pwa.py` les régénère, octet pour octet.
+- `index.html` : 137 lignes ajoutées, aucune retirée.
+- `tests/pwa.test.mjs` (74 vérifications, ≈ 6 s, se lance seul) : Chromium lui-même dit `[]` à la racine ET sous
+  `/Melissa-Nabet/` ; le service worker ne touche à rien d'autre qu'à l'ouverture d'une page ; la détection de
+  nouvelle version du CRM marche toujours ; une nouvelle version s'affiche dès la réouverture malgré le
+  `max-age=600` de GitHub Pages. 13 pannes provoquées exprès (manifeste retiré, chemin absolu, cache ajouté,
+  revalidation retirée, service worker trop gourmand…) : le test les voit toutes.
+
+**Décision prise sans Raphaël, à lui de la confirmer** : hors ligne, le service worker affiche une page
+« Pas de connexion internet », et NON la dernière page du CRM (la consigne le demandait). Raison, **vérifiée par
+une expérience** (vrai navigateur, vrai `index.html`, faux Supabase) : sans la bibliothèque Supabase (chargée
+depuis un autre site), le CRM s'ouvre sans écran de connexion, en mode « local » (`· local`), `cloudReady`
+reste faux ; une modification faite là n'est jamais envoyée, et à la connexion suivante `loadAll()` remet la fiche
+du serveur par-dessus (« Dupont MODIFIE HORS LIGNE » est redevenu « Dupont »). C'est la perte de données du
+20/08/2026. En plus, le service worker du cockpit (même domaine `rnab26.github.io`) supprime à chaque mise à
+jour tous les caches qu'il ne connaît pas : une copie gardée n'aurait pas tenu.
+
+**Vérifié** : installabilité (Chromium 141, profil non privé), invite réelle captée et bouton testé en vrai
+(Chrome sans écran répond « refusé »), fenêtre « application » réelle (`--app`, écran virtuel) : le CRM s'y
+reconnaît (`display-mode: standalone` → « Application installée ✓ »), anciennes suites : 968 vérifications
+avant, 968 après, 0 échec (realisations 615, site 195, bout-en-bout 22, boutique 34, catégories 18, estimation 14,
+onglet 6, langues 37, sections 7, pont IA 20, + clients-liste qui n'a pas de compteur).
+**Déduit** : GitHub Pages servira `.webmanifest` en `application/manifest+json` (c'est ce qu'il fait pour le
+cockpit, même hébergeur) ; Chrome sur Android peut exiger le service worker pour son invite automatique
+(doc developer.chrome.com, mise à jour le 5/12/2023) alors que Chromium 141 de test n'en a pas besoin.
+**Inconnu** : l'installation sur un vrai Android et un vrai iPhone ; l'ouverture hors ligne avec une vraie session.
+
+**Ne pas casser** : chemins RELATIFS partout (manifeste, icônes, `register('sw.js')`) ; `sw.js` ne garde AUCUN
+cache et ne traite que les ouvertures de page ; le petit script du `<head>` reste AVANT la bibliothèque Supabase ;
+le bloc « Application » ne doit jamais empêcher d'ouvrir les Réglages. Changer `sw.js` : changer `VERSION`.
+Détail et marche à suivre : `PROJECT_LOG.md`, « Application installable ».

@@ -1406,3 +1406,96 @@ il est en lecture seule. Le questionnaire « où le cockpit apparaît » est pos
 **Notes / À faire**
 - [ ] Réponses de Raphaël aux deux cartes d'emplacement, puis pose de la balise dans `index.html` (le CRM, comptes connectés seulement).
 - [ ] « Réveil immédiat » : facultatif, non en place (demande une routine et un jeton ; chaque réveil recharge ~290 000 jetons).
+
+## Application installable (PWA, octobre 2026)
+
+**État** : le CRM s'installe comme une application — Chrome (Android, ordinateur), Edge, Samsung Internet ; sur iPhone/iPad,
+Safari › Partager › « Sur l'écran d'accueil ». Chantier du cockpit « Rendre le CRM installable comme une application Chrome »
+(`3e78b41f`), branche `claude/crm-pwa`, **à fusionner par Raphaël après vérification sur le vrai site**. Demande : « rendre le
+site du CRM comme une application Chrome installable, car ça ne fonctionne pas actuellement ».
+
+**Cause, mesurée** (Chromium 141.0.7390.37, `Page.getInstallabilityErrors`) : sur `main` `7158b96`, `[no-manifest]` — pas de
+manifeste, pas d'icônes d'application, pas de service worker, pas de couleur de thème ; Chrome ne proposait que « Ajouter un
+raccourci ». Après : `[]`, à la racine et sous `/Melissa-Nabet/`. (Un contexte ordinaire de Playwright est « navigation privée » pour
+Chrome et ajoute `in-incognito` : le test et les mesures utilisent un profil non privé, `launchPersistentContext`.)
+
+**Ce qui a été ajouté**
+- `manifest.webmanifest` : nom « CRM Melissa Nabet », nom court « CRM Melissa » (12 caractères au plus : c'est le libellé sous
+  l'icône), `display: standalone`, `lang: fr`, `start_url` et `scope` `"./"` (RELATIFS : en ligne le CRM vit sous `/Melissa-Nabet/`,
+  en local à la racine), `theme_color` `#3d3934` (la barre du haut du CRM, qui est aussi sa barre du bas), `background_color`
+  `#e9e4db` (le fond de page tel que `applySiteTheme()` l'applique — Chromium l'a mesuré — et non le `#e8e2d7` écrit dans le
+  `:root`, remplacé au chargement). `id` `melissa-nabet-crm` : il se résout sur l'ORIGINE (spec W3C) ; un `id` `"./"` serait devenu la
+  racine de `rnab26.github.io`, que partagent le cockpit et les autres sites, et les aurait confondus.
+- `icons/` : `icon-192.png` et `icon-512.png` (purpose `any`), `icon-maskable-512.png` (Android découpe l'icône en rond, goutte…),
+  `apple-touch-icon.png` (180, iPhone). Opaques, fond `#e9e4db`, monogramme MN noir. Source : le logo par défaut déjà embarqué
+  dans `index.html` (`DEFAULT_LOGO_DATAURI`, 620 px) ; `favicon.png` (256 px) aurait été flou à 512. Pour la maskable, tout le dessin
+  tient dans le cercle de 38 % de la largeur (zone sûre de web.dev : 40 %), centré sur la boîte du monogramme (centré sur le plus
+  petit cercle englobant il gagnait 7 % mais paraissait trop haut : comparé à l'œil). Régénérer, octet pour octet :
+  `python3 scripts/generer-icones-pwa.py` (demande Pillow ; relire les icônes avant de les valider).
+- `sw.js` : voir « Hors ligne » plus bas. Il ne traite que les ouvertures de page (`mode === 'navigate'`), réseau d'abord en
+  REVALIDANT (`cache: 'no-cache'` : GitHub Pages sert `index.html` en `max-age=600`, une page inchangée coûte un « 304 » ; un
+  Ctrl+Maj+R contourne le service worker : constaté, la page n'est alors plus contrôlée), ne garde AUCUN cache, ne cite aucun autre site.
+- `index.html` (137 lignes ajoutées, aucune retirée) : balises du `<head>` (manifeste, `theme-color`, `apple-touch-icon`,
+  `mobile-web-app-capable`, `apple-mobile-web-app-*`), un petit script AVANT la bibliothèque Supabase (il garde l'invite
+  d'installation de Chrome, qui n'est envoyée qu'une fois, et enregistre `sw.js` à `load`, en `try/catch`, seulement si
+  `isSecureContext`), et le bloc **« Application »** de ⚙ Réglages (sur téléphone : `⋯` › Réglages). Cinq états décidés par une
+  fonction pure (`etatInstallation`) : installée (« Application installée ✓ »), invite de Chrome (bouton « Installer l'application »,
+  refus « Installation annulée. » et échec visibles, avec un message à l'écran), iPhone (mode d'emploi Partager), menu du navigateur
+  (Chrome sans invite), navigateur qui ne sait pas installer. Détection par présence des fonctions du navigateur, jamais par son
+  nom. Si le bloc plante, les Réglages s'ouvrent quand même (`blocInstallationHtml` l'attrape).
+- `tests/pwa.test.mjs`, `tests/README.md`, `scripts/generer-icones-pwa.py`.
+
+**Hors ligne : page « Pas de connexion internet », pas la dernière page du CRM (décision à confirmer par Raphaël).** La consigne
+demandait la page gardée. Expérience du 14 oct. 2026 (vrai Chromium, vrai `index.html`, fausse bibliothèque Supabase) : sans la
+bibliothèque (chargée depuis jsdelivr), `initSupabase()` n'affiche NI l'écran de connexion NI d'erreur : le CRM s'ouvre en mode
+« local » (`· local`, `cloudReady` faux). Une modification faite là est écrite dans le `localStorage` et jamais envoyée ; à la
+connexion suivante `loadAll()` remet la fiche du serveur par-dessus : « Dupont MODIFIE HORS LIGNE » est redevenu « Dupont ». C'est la
+perte de données du 20/08/2026 (voir « Authentification & synchronisation cloud »). De plus le service worker du cockpit
+(`Cockpit-General/app/public/sw.js`, même domaine) supprime à chaque activation tous les caches qui ne sont pas les siens : une copie
+gardée aurait disparu à chaque mise à jour du cockpit. Pour revenir à « la dernière page gardée » il faudrait d'abord que le CRM
+sache qu'il est hors connexion (écran de connexion ou lecture seule quand la bibliothèque Supabase manque), et garder la page dans
+un cache à soi ; ce n'est pas fait.
+
+**Ne pas casser**
+- Chemins RELATIFS partout (manifeste, icônes, `register('sw.js')`) : `tests/pwa.test.mjs` sert le dépôt à la racine ET sous
+  `/Melissa-Nabet/` et rougit si un chemin devient absolu.
+- `sw.js` : jamais de `caches.*`, jamais de `respondWith` hors `navigate`. Sinon il toucherait Supabase, le temps réel ou la requête
+  HEAD de `checkForUpdate()`. Modifier `sw.js` = changer `VERSION`.
+- Le script du `<head>` reste AVANT `<script src="…supabase-js@2">` : sinon l'invite d'installation peut être perdue.
+- Une nouvelle donnée ou un nouvel écran n'a rien à faire dans le service worker : tout le CRM passe par Supabase.
+- Retour arrière : ne pas se contenter de supprimer `sw.js` (les appareils garderaient l'ancien). Publier un `sw.js` qui se
+  désenregistre (`self.registration.unregister()` à l'activation), le laisser quelques semaines, puis seulement retirer
+  l'enregistrement de `index.html`.
+- Les icônes viennent de `scripts/generer-icones-pwa.py` ; si le logo par défaut change, le relancer (le test vérifie fond, tailles
+  et zone sûre de la maskable).
+- Le domaine `rnab26.github.io` est partagé avec le cockpit : `localStorage` et `CacheStorage` sont par ORIGINE, pas par dossier. Les
+  deux service workers ont des périmètres distincts (`/Melissa-Nabet/`, `/Cockpit-General/`), mais pas leurs caches.
+
+**Comment tester**
+- `node tests/pwa.test.mjs` (74 vérifications, ≈ 6 s) : démarre ses serveurs et un Chromium jetable, rien d'autre à lancer.
+- À la main, après fusion (Chrome Android ou ordinateur) : ouvrir https://rnab26.github.io/Melissa-Nabet/, se connecter, ⚙ Réglages
+  (téléphone : `⋯` › Réglages), bas du panneau « Application » › « Installer l'application ». Ou le menu de Chrome › « Installer
+  l'application ». iPhone : Safari › Partager › « Sur l'écran d'accueil ».
+- Après la mise en ligne : `https://rnab26.github.io/Melissa-Nabet/manifest.webmanifest` et `…/sw.js` doivent répondre 200
+  (le 14 oct. avant fusion : 404, normal).
+
+**Mesures qui ont orienté les choix**
+- Chromium 141 (celui de test) ne demande pas de service worker pour `getInstallabilityErrors` (sans `sw.js` : `[]` aussi) et
+  envoie l'invite réelle `beforeinstallprompt` en environ 2 s, avec ou sans service worker. La doc de Chrome
+  (developer.chrome.com/blog/update-install-criteria, mise à jour le 5/12/2023) dit pourtant que l'invite automatique exige encore un
+  gestionnaire `fetch` : le service worker reste donc, avec un vrai `fetch` (pas un gestionnaire vide).
+- Avec la seule icône 192 (la 512 retirée du manifeste), `getInstallabilityErrors` rend `[]` aussi ; web.dev et MDN demandent 192 ET 512 : le test vérifie les deux.
+- Fenêtre « application » réelle (`chromium --app=http://…/` sous Xvfb) : `display-mode: standalone` est vrai et le bloc « Application »
+  affiche « Application installée ✓ ». L'installation elle-même (`PWA.install` du protocole DevTools) n'existe pas dans ce Chromium.
+
+**Notes / À faire**
+- [x] Manifeste, icônes (192, 512, maskable, iPhone), service worker, balises du `<head>`, bloc « Application » des Réglages.
+- [x] Test permanent `tests/pwa.test.mjs` (installabilité mesurée par Chromium, à la racine et sous un sous-chemin).
+- [ ] Raphaël : vérifier sur le vrai site après fusion (voir « Comment tester »), puis fermer le chantier dans le cockpit.
+- [ ] Raphaël : confirmer « hors ligne = page Pas de connexion » (choix actuel) ou demander la dernière page gardée (demande d'abord un CRM
+  sûr hors connexion, voir plus haut).
+- [ ] Jamais essayé : installation sur un vrai Android et un vrai iPhone ; ouverture hors ligne avec une vraie session.
+- [ ] `.claude/hooks/session-start.sh` liste les commandes de vérification : y ajouter `node tests/pwa.test.mjs` (non fait : `.claude/` était hors
+  du périmètre de ce chantier).
+- [ ] La couleur de la barre du système reste celle de la palette par défaut (`#3d3934`) si Melissa choisit une autre palette
+  (« Couleurs de l'application ») : `theme-color` n'est pas suivi dynamiquement.
