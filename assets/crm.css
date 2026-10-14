@@ -1,0 +1,1252 @@
+  :root{--ink:#3d3934;--stone:#8a8074;--stone-light:#b4aa9b;--stone-deep:#6f665b;--travertine:#e8e2d7;--paper:#f4efe6;--hair:#d3cabb;--oxblood:#9a8574;--panel:#fbf9f5;--panel-edge:#e5ded2;--devis-heading-font:'Cormorant Garamond',serif;--devis-body-font:'EB Garamond',serif;}
+  *{box-sizing:border-box;}
+  /* Filet de sécurité pour les zones de texte libre : un mot ou une URL sans espace (ex. lien
+     collé dans un champ Détail) ne doit jamais pousser la mise en page hors de l'écran sur
+     mobile. Volontairement PAS sur tout le body — ça casse les mots des libellés courts
+     (boutons, onglets) au moindre manque de place, alors que ceux-là doivent juste passer à
+     la ligne normalement entre mots, jamais en plein milieu d'un mot. */
+  textarea{overflow-wrap:break-word;word-break:break-word;}
+  img,video{max-width:100%;height:auto;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Inter',sans-serif;color:var(--ink);background:var(--travertine);-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+  .toolbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 18px;background:var(--ink);color:var(--paper);}
+  .toolbar .brand{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .toolbar .sub{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone-light);}
+  .toolbar .spacer{flex:1;}
+  .btn{font-family:'Inter';font-size:12.5px;font-weight:500;border:1px solid var(--stone-light);background:transparent;color:var(--paper);padding:8px 13px;border-radius:2px;cursor:pointer;transition:.15s;white-space:nowrap;}
+  .btn:hover{background:var(--paper);color:var(--ink);}
+  .btn-onlight{color:var(--ink);border-color:var(--stone);}
+  .btn-onlight:hover{background:var(--ink);color:var(--paper);}
+  .btn-primary{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
+  .btn-primary:hover{filter:brightness(.88);}
+  /* Interrupteur Mobile/Bureau à deux positions : l'ancien bouton unique ("🖥 Vue bureau" /
+     "📱 Vue mobile" selon l'état) obligeait à lire le texte pour savoir où on était — signalé
+     comme confus. Les deux options restent affichées en permanence, celle active surlignée :
+     l'état se voit d'un coup d'œil, pas besoin de cliquer pour le découvrir. */
+  .view-switch{display:inline-flex;border:1px solid var(--stone-light);border-radius:20px;overflow:hidden;flex-shrink:0;}
+  .view-switch button{background:transparent;border:none;color:var(--stone-light);font-family:'Inter';font-size:12px;font-weight:600;padding:7px 13px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s;}
+  .view-switch button.active{background:var(--oxblood);color:#fff;}
+  .view-switch.onlight{border-color:var(--stone);}
+  .view-switch.onlight button{color:var(--stone);}
+  .view-switch.onlight button.active{background:var(--ink);color:var(--paper);}
+  #split-toggle{display:none;}
+  /* Bouton flottant Composer/Aperçu (mobile étroit uniquement) : remplace les anciens onglets
+     dans la barre du haut, trop chargée. Toujours accessible en bas de l'écran, peu importe où
+     on a défilé. Restait auparavant masqué en Vue bureau forcée (le raisonnement : les deux
+     volets sont déjà côte à côte, pas besoin de bouton) — mais sur un écran de téléphone
+     réel, "Vue bureau" les serre l'un à côté de l'autre en deux colonnes étroites, illisibles ;
+     demande explicite de Raphaël pour retrouver un aperçu plein écran d'un geste, même en
+     Vue bureau forcée sur mobile. */
+  /* bottom via calc() + env() : même raison que .toast plus bas — évite d'empiéter sur la
+     zone de geste du bas sur iPhone à encoche, repli sans risque si env() n'est pas compris. */
+  #devis-tab-fab{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:45;border-radius:30px;padding:15px 30px;box-shadow:0 6px 22px rgba(0,0,0,.32);background:var(--oxblood);color:#fff;border:none;font-family:'Inter';font-size:14.5px;font-weight:700;letter-spacing:.03em;cursor:pointer;}
+  @media (max-width:900px){
+    body.devis-active #devis-tab-fab{display:block;}
+  }
+  /* Téléphone tourné en mode paysage : sa largeur peut dépasser les 900px ci-dessus (un
+     téléphone récent tourné peut faire plus large que ça) alors que c'est toujours un
+     petit écran de poche, pas une tablette ni un bureau — sans ça le bouton disparaissait
+     en tournant l'écran. Repéré via un écran tactile sans souris (`hover:none`/
+     `pointer:coarse`, vrai sur téléphone ET tablette, jamais sur un bureau à souris) —
+     seule la visibilité du bouton dépend de ça ici, voir plus bas pour le basculement
+     plein écran (qui, lui, doit rester réservé aux téléphones, jamais aux tablettes). */
+  @media (hover:none) and (pointer:coarse) and (min-width:901px) and (max-width:1024px){
+    body.devis-active #devis-tab-fab{display:block;}
+  }
+  /* Basculement plein écran (un seul volet affiché, l'autre caché) de Vue bureau forcée :
+     réservé aux TÉLÉPHONES, jamais aux tablettes — signalé par Raphaël, capture à l'appui,
+     sur sa tablette en Vue bureau : l'aperçu de base à droite avait disparu (cette règle,
+     ajoutée pour corriger le cas du téléphone en paysage, était trop large et attrapait
+     aussi sa tablette dans les largeurs 900-1024px, un chevauchement réel entre "grand
+     téléphone en paysage" et "petite tablette"). Repéré par la hauteur — PAS la largeur,
+     qui se recoupe entre téléphone et tablette — puisqu'un téléphone, dans N'IMPORTE
+     QUELLE orientation, a toujours son petit côté sous 500px (portrait : sa largeur ;
+     paysage : sa hauteur, qui est la même mesure physique), alors qu'une tablette, même la
+     plus petite, dépasse 650px sur son petit côté quelle que soit l'orientation. Les deux
+     branches de la requête (largeur OU hauteur) couvrent donc les deux orientations d'un
+     téléphone sans jamais attraper de tablette. */
+  @media (max-width:500px),(max-height:500px){
+    body.force-split.devis-active.show-preview .editor{display:none;}
+    body.force-split.devis-active.show-editor .preview-wrap{display:none;}
+  }
+  /* Dropdown "Devis" dans la nav du haut : regroupe Composer / Mes devis, au lieu de deux
+     boutons permanents qui encombrent la barre. */
+  .vnav-dropdown{position:relative;}
+  .vnav-caret{font-size:9px;margin-left:3px;opacity:.75;}
+  .vnav-menu{display:none;flex-direction:column;position:absolute;top:100%;left:0;margin-top:4px;background:var(--ink);border:1px solid var(--stone);border-radius:3px;min-width:150px;z-index:50;overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,.3);}
+  .vnav-menu.open{display:flex;}
+  .vnav-menu button{background:transparent;border:none;color:var(--stone-light);text-align:left;padding:10px 14px;font-size:12.5px;font-family:'Inter';cursor:pointer;}
+  .vnav-menu button:hover{background:rgba(255,255,255,.08);color:var(--paper);}
+
+  .stage{display:flex;align-items:flex-start;}
+  .editor{width:44%;max-width:600px;min-width:360px;padding:24px 24px 120px;background:var(--travertine);border-right:1px solid var(--panel-edge);min-height:100vh;}
+  .preview-wrap{flex:1;padding:32px 32px 120px;display:flex;justify-content:center;background:var(--travertine);min-height:100vh;}
+
+  .ed-section{margin-bottom:22px;}
+  .ed-eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--stone);margin:0 0 12px;font-weight:600;display:flex;align-items:center;gap:10px;}
+  .ed-eyebrow::after{content:"";flex:1;height:1px;background:var(--hair);}
+  .brand-media-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+  .brand-media-card{flex:1 1 220px;padding:12px;border:1px solid var(--panel-edge);border-radius:6px;background:var(--panel);}
+  .brand-media-lbl{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);font-weight:600;margin-bottom:9px;}
+  .brand-media-body{display:flex;align-items:center;gap:12px;}
+  .brand-media-actions{display:flex;flex-direction:column;gap:6px;align-items:flex-start;}
+  .brand-media-hint{font-size:11px;color:var(--stone);margin:8px 0 0;}
+  .logo-thumb{flex:0 0 auto;width:56px;height:56px;border:1px solid var(--panel-edge);border-radius:5px;display:flex;align-items:center;justify-content:center;background:var(--paper);overflow:hidden;}
+  .bg-lib-grid{display:flex;gap:10px;flex-wrap:wrap;}
+  .bg-lib-tile{position:relative;width:56px;height:56px;}
+  .bg-lib-tile img{width:100%;height:100%;object-fit:cover;border-radius:4px;border:1px solid var(--panel-edge);cursor:pointer;}
+  .bg-lib-del{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#b6543f;color:#fff;border:none;font-size:12px;line-height:1;cursor:pointer;padding:0;}
+  .logo-thumb img{max-width:100%;max-height:100%;}
+  .logo-thumb-empty{font-size:9.5px;color:var(--stone);text-align:center;line-height:1.3;}
+  label.fld{display:block;margin-bottom:11px;}
+  label.fld .lbl{display:block;font-size:11px;color:var(--stone);margin-bottom:4px;}
+  input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],textarea,select{width:100%;max-width:100%;font-family:'Inter';font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--panel-edge);border-radius:2px;padding:9px 10px;outline:none;transition:border-color .15s;}
+  input:focus,textarea:focus,select:focus{border-color:var(--stone-light);}
+  textarea{resize:vertical;line-height:1.5;}
+  .row2{display:flex;gap:10px;}.row2>*{flex:1;}
+  .two-col{display:flex;gap:16px;}.two-col>.col{flex:1;min-width:0;}
+  .row3{display:flex;gap:10px;}.row3>*{flex:1;}.devis-action-block{margin-top:10px;display:flex;gap:16px;}.devis-action-col{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}.devis-action-heading{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone-light);margin-bottom:2px;}.devis-action-col .btn{white-space:nowrap;background:var(--oxblood);border-color:var(--oxblood);color:#fff;text-align:left;}.devis-action-col .btn:hover{filter:brightness(.88);}
+  /* En dessous de 900px, on GARDE les deux colonnes côte à côte (plus compact) au lieu de tout
+     empiler en une seule colonne verticale de 8 boutons — le texte passe juste à la ligne. */
+  @media (max-width:900px){.devis-action-block{gap:8px;}.devis-action-col{gap:5px;}.devis-action-col .btn{white-space:normal;line-height:1.25;font-size:12.5px;padding:8px 9px;}}
+  @media (max-width:420px){.devis-action-col .btn{font-size:11.5px;padding:7px 7px;}}
+  .seg{display:flex;border:1px solid var(--panel-edge);border-radius:3px;overflow:hidden;width:fit-content;margin-bottom:12px;}
+  .seg-btn{border:none;background:var(--panel);color:var(--stone);padding:9px 18px;font-size:12.5px;cursor:pointer;font-family:'Inter';}
+  .seg-btn.active{background:var(--oxblood);color:#fff;}
+
+  .acc{border:1px solid var(--panel-edge);border-radius:3px;margin-bottom:8px;background:var(--panel);overflow:hidden;}
+  .acc-head{width:100%;display:flex;align-items:center;gap:10px;background:transparent;border:none;padding:11px 12px;cursor:pointer;font-family:'Inter';font-size:13.5px;font-weight:600;color:var(--ink);text-align:left;}
+  .acc-name{flex:1;}
+  .acc-count{font-size:11px;color:#fff;background:var(--oxblood);border-radius:10px;padding:1px 8px;min-width:22px;text-align:center;}
+  .acc-count.zero{background:var(--panel-edge);color:var(--stone);}
+  .acc-chev{color:var(--stone-light);transition:transform .15s;font-size:11px;}
+  .acc.open .acc-chev{transform:rotate(90deg);}
+  .acc-body{display:none;padding:2px 12px 12px;border-top:1px solid var(--panel-edge);}
+  .acc.open .acc-body{display:block;}
+  .it{padding:9px 0;border-bottom:1px solid #f1ece2;}
+  .it:last-of-type{border-bottom:none;}
+  .it-head{display:flex;align-items:center;gap:9px;}
+  .it-head input[type=checkbox]{width:17px;height:17px;accent-color:var(--oxblood);cursor:pointer;flex:0 0 auto;}
+  .it-title{flex:1;border:none;background:transparent;font-size:13px;font-family:'Inter';color:var(--ink);padding:3px 0;}
+  .it-title:focus{border-bottom:1px solid var(--hair);}
+  .it-rm{border:none;background:none;color:var(--stone-light);cursor:pointer;font-size:15px;padding:0 4px;}
+  .it-rm:hover{color:var(--oxblood);}
+  .it-sub{margin:7px 0 0 26px;display:none;}
+  .it.on .it-sub{display:block;}
+  .it-descrow{display:flex;gap:6px;align-items:flex-start;margin-bottom:6px;}
+  .it-desc{flex:1;font-size:12px;min-height:38px;color:#4a453d;}
+  .ai-btn{flex:0 0 auto;border:1px solid var(--stone-light);background:transparent;color:var(--oxblood);border-radius:3px;cursor:pointer;font-size:14px;padding:4px 8px;align-self:stretch;}
+  .ai-btn:hover{background:var(--oxblood);color:#fff;}
+  .ai-btn:disabled{opacity:.4;cursor:wait;}
+  .it-opt-toggle{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--stone);cursor:pointer;margin:0 0 6px;}
+  .it-opt-toggle input{width:14px;height:14px;accent-color:var(--oxblood);flex:0 0 auto;}
+  .it-price{display:flex;gap:8px;align-items:center;}
+  #prest.mode-global .it-price{display:none;}
+  .it-price select{flex:0 0 140px;font-size:12px;padding:6px 8px;}
+  .it-price input{flex:1;font-size:12.5px;padding:6px 8px;}
+  .add-btn{width:100%;border:1px dashed var(--stone-light);background:transparent;color:var(--stone);padding:8px;border-radius:3px;cursor:pointer;font-size:12px;font-family:'Inter';margin-top:8px;}
+  .add-btn:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .toggle-line{display:flex;align-items:center;gap:9px;font-size:13px;color:#4a453d;margin-bottom:9px;}
+  .toggle-line input{width:16px;height:16px;accent-color:var(--oxblood);}
+  .hint{font-size:11px;color:var(--stone);font-style:italic;margin:0 0 10px;}
+
+  /* modals */
+  /* Au-dessus de l'éditeur photo (z-index 80) : sinon toute fenêtre ouverte depuis
+     l'éditeur — confirmation d'envoi au modèle, panneau des modèles — s'affiche derrière
+     lui et le bouton paraît mort. Ne pas redescendre cette valeur sous 80. */
+  .overlay{position:fixed;inset:0;background:rgba(35,32,28,.55);z-index:90;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--travertine);border-radius:6px;width:100%;max-width:560px;padding:22px 22px 26px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .modal h3{font-family:'Cormorant Garamond',serif;font-size:23px;margin:0 0 4px;color:var(--ink);}
+  .modal .msub{font-size:12px;color:var(--stone);margin:0 0 16px;}
+  .modal-x{float:right;border:none;background:none;font-size:22px;color:var(--stone);cursor:pointer;line-height:1;}
+  .list-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:3px;padding:9px 11px;margin-bottom:7px;}
+  .list-row .lr-main{flex:1 1 100%;min-width:0;}
+  .list-row .lr-t{font-size:13.5px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .list-row .lr-s{font-size:11px;color:var(--stone);}
+  .mini{border:1px solid var(--panel-edge);background:var(--panel);color:var(--stone);border-radius:3px;padding:5px 9px;font-size:11.5px;cursor:pointer;font-family:'Inter';white-space:nowrap;}
+  .mini:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .mini.danger:hover{border-color:#b23;color:#b23;}
+  .client-group{margin-bottom:14px;}
+  .client-group .cg-h{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone-light);margin:0 0 6px;font-weight:600;}
+  .lib-sec{border:1px solid var(--panel-edge);border-radius:4px;margin-bottom:10px;background:var(--panel);}
+  .lib-sec-h{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--panel-edge);}
+  .lib-sec-h input{font-weight:600;font-size:13.5px;}
+  .lib-item{display:flex;gap:6px;align-items:center;padding:7px 11px;border-bottom:1px solid #f1ece2;background:var(--panel);}
+  .drag-handle{flex:0 0 auto;cursor:grab;touch-action:none;color:var(--stone);font-size:15px;padding:2px 4px;user-select:none;-webkit-user-select:none;}
+  .drag-handle:active{cursor:grabbing;}
+  .dragging-row{box-shadow:0 6px 16px rgba(0,0,0,.18);border-radius:4px;}
+  .cgv-body{display:block;width:calc(100% - 22px);margin:0 11px 11px;min-height:60px;font-size:12.5px;padding:7px 9px;border:1px solid var(--panel-edge);border-radius:3px;font-family:'Inter';resize:vertical;}
+  .lib-item input{font-size:12.5px;padding:6px 8px;}
+  .lib-item-move{width:auto;flex:0 0 auto;font-size:11px;padding:5px 6px;color:var(--stone);}
+  .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
+  /* bottom via calc() + env() : sur iPhone à encoche/barre de gestes, un élément flottant
+     ancré à 20px du bas plein peut empiéter sur la zone de geste du système — un appareil
+     sans cette info (env() non supporté) ignore juste l'ajout, revient au 20px d'origine. */
+  .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:11px 20px;border-radius:4px;font-size:13px;z-index:100;opacity:0;transition:opacity .2s;pointer-events:none;}
+  .toast.show{opacity:1;}
+  .update-bar{position:fixed;left:0;right:0;bottom:0;z-index:9999;background:var(--ink);color:var(--paper);padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;justify-content:center;gap:14px;font-family:'Inter',sans-serif;font-size:13.5px;box-shadow:0 -2px 14px rgba(0,0,0,.2);transform:translateY(120%);transition:transform .25s ease;flex-wrap:wrap;}
+  .update-bar.show{transform:translateY(0);}
+  .update-bar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;border:none;background:var(--oxblood);color:#fff;padding:9px 16px;border-radius:4px;cursor:pointer;white-space:nowrap;}
+  .sync-error-bar{position:fixed;left:0;right:0;top:0;z-index:9998;background:#7a2e2e;color:#fff;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:center;gap:12px;font-family:'Inter',sans-serif;font-size:12.5px;box-shadow:0 2px 14px rgba(0,0,0,.2);transform:translateY(-120%);transition:transform .25s ease;flex-wrap:wrap;text-align:center;}
+  .sync-error-bar.show{transform:translateY(0);}
+  .sync-error-bar button{font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;white-space:nowrap;}
+  .sync-badge{font-size:10.5px;color:var(--stone-light);letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
+  #login-overlay{display:none;position:fixed;inset:0;z-index:110;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
+  .login-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:10px;padding:30px 26px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(60,50,35,.2);text-align:center;}
+  .login-title{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:600;letter-spacing:.14em;color:var(--ink);padding-left:.14em;}
+  .login-sub{font-size:11px;color:var(--stone);margin:2px 0 20px;letter-spacing:.08em;text-transform:uppercase;}
+  .login-card input{width:100%;margin-bottom:10px;padding:12px;font-size:15px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:4px;}
+  .login-card .btn-primary{width:100%;margin-top:4px;padding:12px;font-size:14px;}
+  .login-err{color:#b23;font-size:12.5px;min-height:16px;margin-top:10px;}
+  #login-offline{display:inline-block;margin-top:16px;font-size:12px;color:var(--stone);text-decoration:underline;cursor:pointer;}
+
+  .viewnav{display:flex;gap:4px;margin-left:6px;flex-wrap:wrap;min-width:0;}
+  .vnav{font-size:12px;letter-spacing:.06em;padding:8px 14px;border:1px solid var(--stone);color:var(--stone-light);background:transparent;cursor:pointer;border-radius:2px;}
+  .vnav.active{background:var(--paper);color:var(--ink);border-color:var(--paper);}
+  /* --- Barre d'onglets du bas (téléphone) --- */
+  .navbas{display:none;position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:var(--ink);border-top:1px solid rgba(255,255,255,.09);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    box-shadow:0 -4px 18px rgba(0,0,0,.22);}
+  .navbas button{
+    flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:transparent;border:none;cursor:pointer;padding:8px 2px 9px;
+    font-family:'Inter';font-size:9.5px;letter-spacing:.02em;color:var(--stone-light);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .navbas button span{font-size:17px;line-height:1;}
+  .navbas button.active{color:var(--paper);}
+  .navbas button.active span{transform:translateY(-1px);}
+  .navbas button.active::after{content:'';position:absolute;bottom:0;width:22px;height:2px;background:var(--oxblood);border-radius:2px;}
+  .navbas button{position:relative;}
+  .toolbar-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  #toolbar-search{padding:8px 12px;}
+  /* Recherche globale : une seule liste, groupée par nature, du plus probable au moins. */
+  .rch-input{width:100%;font-size:16px;padding:11px 12px;}
+  .rch-res{max-height:52vh;overflow-y:auto;margin-top:12px;}
+  .rch-grp{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--stone-light);
+    font-weight:700;margin:12px 0 5px;}
+  .rch-grp:first-child{margin-top:2px;}
+  .rch-row{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--panel-edge);
+    border-radius:6px;padding:9px 11px;margin-bottom:6px;cursor:pointer;font-family:'Inter';}
+  .rch-row:hover,.rch-row:focus-visible{border-color:var(--oxblood);}
+  .rch-t{font-size:13.5px;color:var(--ink);}
+  .rch-s{font-size:11.5px;color:var(--stone);margin-top:2px;}
+  .rch-vide{font-size:12.5px;color:var(--stone);padding:14px 2px;line-height:1.6;}
+  #toolbar-plus{display:none;}
+  /* 820 px : au-dessous, la barre du haut passait de toute façon sur deux lignes (mesuré
+     à 768 px : 106 px de haut au lieu de 56). Une tablette en portrait est un téléphone
+     large, elle gagne aussi la barre du bas. */
+  @media (max-width:820px){
+    .navbas{display:flex;}
+    .viewnav{display:none;}
+    #toolbar-plus{display:inline-block;padding:8px 14px;}
+    /* Aperçu d'un devis sur téléphone : la barre du haut cesse d'être collée. Un devis est
+       un document qu'on lit en entier — chaque bande gardée en haut est une bande de moins
+       pour le lire, et la navigation reste de toute façon en bas. Elle revient dès qu'on
+       remonte. */
+    body.devis-active.show-preview .toolbar{position:static;}
+    /* Ces sélecteurs sont volontairement plus « forts » que ceux d'origine
+       (`#split-toggle` seul, plus bas dans la feuille) : sans ça, la règle de la
+       requête média à 900 px, écrite après, les réafficherait. Même raison pour
+       `#rz-body .rz-selbar` : `.rz-selbar{bottom:0}` est déclarée plus bas. */
+    .toolbar #split-toggle,.toolbar .toolbar-actions{display:none;}
+    #rz-body .rz-selbar{bottom:calc(56px + env(safe-area-inset-bottom,0px));}
+    /* À 375 px, « MELISSA NABET · local » passait sur deux lignes et rendait 30 px de
+       barre du haut. Le nom se réduit plutôt que de pousser le reste à la ligne. */
+    /* Une seule ligne, quoi qu'il arrive : c'est le nom qui se raccourcit, pas la barre qui
+       s'épaissit. Sans `nowrap`, un libellé un peu plus long (état de synchro, nom d'atelier
+       plus long) suffisait à faire passer un bouton à la ligne. */
+    .toolbar{flex-wrap:nowrap;}
+    .toolbar .brand{font-size:18px;letter-spacing:.10em!important;min-width:0;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap;}
+    .toolbar .sync-badge{flex-shrink:0;}
+    #toolbar-plus,#toolbar-search{flex-shrink:0;}
+    /* La barre du bas recouvre 56 px : tout ce qui vivait au ras du bas remonte. */
+    body{padding-bottom:calc(56px + env(safe-area-inset-bottom,0px));}
+    #devis-tab-fab{bottom:calc(70px + env(safe-area-inset-bottom,0px));}
+  }
+  #clients-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
+  .cl-wrap{max-width:1040px;margin:0 auto;}
+  #dashboard-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
+  .dash-wrap{max-width:820px;margin:0 auto;}
+  .dash-wrap h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0 0 18px;color:var(--ink);font-weight:600;letter-spacing:.02em;}
+  .dash-kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+  .dash-kpi-item{background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:14px 16px;}
+  .dash-kpi-val{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:var(--ink);}
+  .dash-kpi-val.due{color:#b6543f;}
+  .dash-kpi-val.ok{color:#6a9a5a;}
+  .dash-kpi-lbl{font-size:11px;color:var(--stone);text-transform:uppercase;letter-spacing:.08em;margin-top:3px;}
+  .dash-sec-title{font-size:12.5px;font-weight:600;color:var(--stone-deep);margin:16px 0 6px;}
+  .dash-todo{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:11px 14px;margin-bottom:7px;cursor:pointer;transition:.15s;}
+  .dash-todo:hover{border-color:var(--stone-light);}
+  .dash-todo-main{font-size:13.5px;color:var(--ink);}
+  .dash-todo-amt{font-size:13px;font-weight:600;white-space:nowrap;}
+  .dash-todo-amt.due{color:#b6543f;}
+  .task-row{background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;padding:11px 14px;margin-bottom:7px;}
+  .task-row.done{opacity:.55;}
+  .task-head{display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
+  .task-icon{flex:0 0 auto;font-size:16px;line-height:1.5;cursor:pointer;}
+  .task-main{flex:1;min-width:0;cursor:pointer;}
+  .task-title{font-size:13.5px;color:var(--ink);font-weight:500;}
+  .task-row.done .task-title{text-decoration:line-through;}
+  .task-detail-preview{font-size:12px;color:var(--stone);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .task-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;}
+  .task-tag{font-size:10.5px;letter-spacing:.03em;padding:2px 7px;border-radius:9px;background:var(--travertine);color:var(--stone-deep);}
+  .task-tag.overdue{background:#f0e2d8;color:#9a5a3a;}
+  .task-tag.important{background:#faecd9;color:#b3711a;}
+  .task-tag.urgent{background:#f7e2df;color:#b6543f;}
+  .task-tag.critique{background:#b6543f;color:#fff;}
+  .task-chevron{flex:0 0 auto;font-size:11px;color:var(--stone);cursor:pointer;padding:3px 4px;}
+  .task-empty{font-size:13px;color:var(--stone);padding:6px 2px 16px;}
+  .task-check{flex:0 0 auto;width:19px;height:19px;margin-top:1px;cursor:pointer;accent-color:var(--oxblood);}
+  .task-archive{margin-top:16px;border:1px solid var(--panel-edge);border-radius:5px;background:var(--panel);overflow:hidden;}
+  .task-archive-head{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone);font-weight:600;}
+  .task-archive-head .chev{margin-left:auto;font-size:11px;transition:transform .15s;}
+  .task-archive.open .task-archive-head .chev{transform:rotate(90deg);}
+  .task-archive-body{display:none;padding:2px 14px 12px;}
+  .task-archive.open .task-archive-body{display:block;}
+  .task-archive .task-row{margin-bottom:7px;}
+  .task-filter-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;margin-left:5px;border-radius:8px;background:var(--oxblood);color:#fff;font-size:10px;font-weight:700;}
+  .task-controls-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;}
+  .task-filter-menu{width:min(94vw,620px);padding:10px;}
+  /* Sur mobile, le menu (quasi pleine largeur, 94vw) s'ouvrait ancré au bord GAUCHE du
+     bouton "Filtrer" (`.vnav-menu{left:0}`, hérité, pensé pour un menu étroit près du
+     bord de l'écran comme le menu "Devis") — mais ce bouton est au milieu d'une rangée
+     de trois, pas au bord : le menu débordait largement hors de l'écran (signalé, capture
+     à l'appui). Un simple centrage CSS sur le bouton ne suffit pas non plus de façon
+     fiable (testé : déborde encore, juste de l'autre côté, selon la position exacte du
+     bouton) — la seule façon de garantir qu'un menu presque pleine largeur reste DANS
+     l'écran quel que soit l'endroit où le bouton se trouve est de le positionner par
+     rapport à l'écran lui-même, pas au bouton. Voir `toggleTaskFilterMenu()` : sur un
+     écran étroit, la position passe en `fixed` avec des marges fixes par rapport au bord
+     de l'écran (calculées en JS à l'ouverture), au lieu de `absolute` ancré au bouton. */
+  /* La largeur ne débordait plus (correctif précédent), mais rien ne limitait la HAUTEUR :
+     le menu pouvait continuer sous la barre de navigation du bas, la coupant net —
+     colonnes Priorité/Client et le bouton Réinitialiser devenus inatteignables (signalé,
+     capture à l'appui : « c'est coupé, ça flotte pas »). `max-height` calculé en JS à
+     l'ouverture (voir `toggleTaskFilterMenu()`, tient compte de la vraie hauteur de la
+     barre du bas mesurée sur l'appareil, pas devinée) + défilement interne si ça ne
+     suffit toujours pas. */
+  .task-filter-menu.mobile-fixed{position:fixed;left:12px;right:12px;width:auto;margin-top:0;overflow-y:auto;}
+  .task-filter-table{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px 4px;}
+  .tf-col{border-right:1px solid rgba(255,255,255,.12);padding:0 8px;}
+  .tf-col:last-child{border-right:none;}
+  .tf-col-h{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--stone);font-weight:700;padding:4px 6px 6px;}
+  .task-filter-menu label{display:flex;align-items:center;gap:6px;padding:5px 6px;font-size:12px;color:var(--stone-light);cursor:pointer;border-radius:3px;}
+  .task-filter-menu label:hover{background:rgba(255,255,255,.08);color:var(--paper);}
+  .task-filter-menu input[type=checkbox]{accent-color:var(--oxblood);flex:0 0 auto;}
+  .task-filter-actions{padding:10px 2px 0;margin-top:6px;border-top:1px solid rgba(255,255,255,.12);}
+  .task-filter-actions .mini{width:100%;}
+  .tf-client-search{width:100%;font-size:11.5px;padding:5px 6px;margin:2px 0 4px;}
+  .tf-client-list{max-height:160px;overflow-y:auto;}
+  .tf-client-item{padding:5px 6px;font-size:12px;color:var(--stone-light);cursor:pointer;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tf-client-item:hover{background:rgba(255,255,255,.08);color:var(--paper);}
+  .tf-client-item.active{background:var(--oxblood);color:#fff;}
+  .task-client-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:10px 14px;margin:4px 0 12px;font-size:12.5px;color:var(--ink);}
+  .task-client-summary .tcs-name{font-weight:600;font-family:'Cormorant Garamond',serif;font-size:15px;}
+  .task-client-summary .tcs-ok{color:#6a9a5a;}
+  .task-client-summary .tcs-overdue{color:#b6543f;font-weight:600;}
+  .task-client-summary .mini{margin-left:auto;}
+  .task-done-log{font-size:10.5px;color:var(--stone);margin-top:3px;}
+  .task-body{margin-top:12px;padding-top:12px;border-top:1px solid var(--panel-edge);}
+  .task-docs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px;}
+  .task-doc-tile{width:64px;text-align:center;}
+  .task-doc-thumb{width:64px;height:64px;border:1px solid var(--panel-edge);border-radius:4px;background:var(--travertine);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font-size:22px;}
+  .task-doc-thumb img{width:100%;height:100%;object-fit:cover;}
+  .task-doc-name{font-size:9.5px;color:var(--stone);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .task-doc-del{font-size:9.5px;color:#b6543f;cursor:pointer;background:none;border:none;padding:0;}
+  .task-doc-add{width:64px;height:64px;border:1px dashed var(--stone-light);border-radius:4px;background:transparent;color:var(--stone);font-size:10px;cursor:pointer;line-height:1.3;}
+  #chantier-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
+  .ch-wrap{max-width:900px;margin:0 auto;}
+  .ch-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+  .ch-top h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0;color:var(--ink);font-weight:600;}
+  .ch-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+  .ch-resume{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:14px 16px;margin-bottom:20px;}
+  .ch-resume-title{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);margin-bottom:8px;font-weight:600;}
+  .ch-resume-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;padding:6px 0;border-bottom:1px solid #f1ece2;font-size:13px;}
+  .ch-resume-row.head{font-size:10.5px;text-transform:uppercase;color:var(--stone);letter-spacing:.06em;font-weight:600;border-bottom:1px solid var(--panel-edge);}
+  .ch-resume-row .num{text-align:right;}
+  .ch-grand{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:10px;border-top:2px solid var(--ink);font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;}
+  .ch-cat-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;margin-bottom:14px;overflow:hidden;}
+  .ch-cat-card-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--panel-edge);background:#f4efe6;}
+  .ch-cat-card-h .ch-cat-name{font-weight:600;font-size:14.5px;flex:1;}
+  .ch-cat-card-h .ch-cat-unit{font-size:11px;color:var(--stone);white-space:nowrap;}
+  .ch-cat-card-total{font-size:13px;font-weight:600;color:var(--oxblood);white-space:nowrap;}
+  .ch-item{display:flex;gap:6px;align-items:center;margin:8px 12px;}
+  .ch-item input[type=text]{flex:2;min-width:80px;}
+  .ch-item input[type=number]{flex:0 0 60px;}
+  .ch-item select{flex:0 0 72px;width:auto;}
+  .ch-item-total{flex:0 0 78px;text-align:right;font-size:12.5px;color:var(--ink);white-space:nowrap;}
+  .ch-addcat{display:flex;gap:6px;align-items:center;margin-top:14px;flex-wrap:wrap;}
+  .ch-addcat select{width:auto;flex:1;min-width:180px;}
+  .cl-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+  .cl-top h2{font-family:'Cormorant Garamond',serif;font-size:30px;margin:0;color:var(--ink);font-weight:600;letter-spacing:.02em;}
+  .cl-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;}
+  .cl-filters input,.cl-filters select{width:auto;min-width:150px;background:var(--panel);}
+  .cl-statut-multi{display:flex;gap:6px;flex-wrap:wrap;}
+  .cl-statut-chip{border:1px solid var(--panel-edge);background:var(--panel);color:var(--stone);font-size:11.5px;padding:6px 11px;border-radius:14px;cursor:pointer;transition:.15s;}
+  .cl-statut-chip:hover{border-color:var(--oxblood);}
+  .cl-statut-chip.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
+  .cl-scroll{overflow-x:auto;border:1px solid var(--panel-edge);border-radius:6px;background:var(--panel);}
+  .cl-table{min-width:680px;}
+  /* width:100% (au lieu de width:auto implicite) : sans ça, un nom de client long pousse la
+     colonne "Client" (minmax) vers son maximum et fait déborder toute la ligne au-delà de
+     .cl-scroll, qui doit alors défiler horizontalement pour tout voir. Avec une largeur figée
+     à 100%, la grille respecte l'espace réellement disponible et le nom déborde en interne
+     (ellipsis) au lieu d'élargir toute la ligne. */
+  .cl-row{display:grid;width:100%;grid-template-columns:48px 44px minmax(0,280px) 104px 104px 104px 104px 22px 16px 1fr;gap:4px;align-items:center;padding:6px 8px;border-bottom:1px solid #f1ece2;cursor:pointer;font-size:12px;}
+  .cl-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* Séparateur visuel entre le bloc « plans » et le bloc « commissions / prestations » */
+  .cl-row .col-sep{border-right:1px solid var(--hair);padding-right:9px;margin-right:1px;}
+  .cl-row .col-after-sep{padding-left:2px;}
+  /* Le séparateur des archives : une vraie coupure dans le tableau, pas une ligne de plus.
+     Il se replie d'un appui — l'important est ce qui est en cours. */
+  .cl-sep{display:flex;align-items:center;gap:10px;width:100%;
+    padding:9px 10px;margin:10px 0 0;border:0;border-top:2px solid var(--hair);
+    background:var(--travertine);cursor:pointer;font-family:inherit;text-align:left;}
+  .cl-sep:hover{background:#e2dbcd;}
+  .cl-sep-chev{color:var(--stone);font-size:9px;transition:transform .18s ease;flex:0 0 auto;}
+  .cl-sep.ouvert .cl-sep-chev{transform:rotate(90deg);}
+  .cl-sep-txt{flex:1;font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+    font-weight:700;color:var(--stone-deep);}
+  .cl-sep-ca{font-size:12px;color:var(--stone);font-variant-numeric:tabular-nums;}
+  .lib-arch{display:flex;align-items:center;gap:5px;flex:0 0 auto;font-size:11px;color:var(--stone);white-space:nowrap;}
+  .lib-arch input{width:auto;margin:0;}
+  .cl-row.head .sortable{cursor:pointer;user-select:none;display:flex;align-items:center;gap:3px;justify-content:inherit;}
+  .cl-row.head .num.sortable{justify-content:flex-end;}
+  .cl-row.head .sortable:hover{color:var(--oxblood);}
+  .cl-sortarrow{font-size:9px;color:var(--oxblood);}
+  .cl-del{border:none;background:none;cursor:pointer;font-size:14px;opacity:.5;padding:0;}
+  .cl-del:hover{opacity:1;}
+  .num.due-txt{color:#b6543f;}
+  .num.ok-txt{color:#6a9a5a;}
+  .cl-recap{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 14px;}
+  .rc-box{flex:1 1 200px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:11px 13px;}
+  .rc-box span{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone);}
+  .rc-box b{display:block;font-family:'Cormorant Garamond',serif;font-size:23px;color:var(--ink);margin:2px 0;}
+  .rc-box small{font-size:11px;color:var(--stone);}
+  .cl-montant{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
+  .cl-montant label{flex:0 0 220px;}
+  .cl-montant label span{display:block;font-size:11px;color:var(--stone);margin-bottom:3px;}
+  .cl-montant .mf-reste{font-family:'EB Garamond',serif;font-size:15px;color:var(--ink);padding-bottom:8px;}
+  .cl-montant .mf-reste b{color:var(--oxblood);font-family:'Cormorant Garamond',serif;font-size:19px;}
+  .cl-relance{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:11px 13px;margin:0 0 14px;}
+  .cl-relance .rl-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+  .cl-relance .rl-head span{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone);}
+  .cl-relance textarea{width:100%;min-height:96px;font-family:'EB Garamond',serif;font-size:13.5px;line-height:1.5;resize:vertical;background:var(--paper,#fff);border:1px solid var(--panel-edge);border-radius:5px;padding:8px 10px;color:var(--ink);}
+  .cl-relance .rl-ok{font-family:'EB Garamond',serif;font-size:14px;color:var(--stone);}
+  .cl-relance .rl-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .sub-h{font-size:11px;color:var(--stone);font-style:italic;margin:6px 0;}
+  .cl-block-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--oxblood);font-weight:600;margin:6px 0 8px;border-top:1px solid var(--hair);padding-top:12px;}
+  .mf-link{color:var(--stone);font-size:11px;font-style:italic;}
+  .sub-line{display:grid;grid-template-columns:2fr 1fr 34px 22px;gap:8px;align-items:center;padding:4px 0;}
+  .sub-line.with-cat{grid-template-columns:1.1fr 1.4fr .9fr 1fr 34px 22px;}
+  .sub-line select[data-cat]{padding:6px 6px;font-size:12px;}
+  .sub-line input{padding:6px 8px;font-size:12.5px;}
+  .sub-line .rm{border:none;background:none;color:var(--stone-light);cursor:pointer;font-size:15px;}
+  .sub-line .rm:hover{color:#b23;}
+  .comm-summary{display:flex;gap:16px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:9px 13px;margin:4px 0 8px;flex-wrap:wrap;}
+  .comm-summary div{display:flex;flex-direction:column;gap:1px;}
+  .comm-summary span{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--stone);}
+  .comm-summary b{font-size:14px;color:var(--ink);}
+  .comm-summary b.due{color:#b6543f;}
+  .comm-summary b.ok{color:#6a9a5a;}
+  .comm-line{display:grid;grid-template-columns:1.4fr 100px 100px 100px 30px 22px;gap:8px;align-items:center;padding:4px 0;}
+  .comm-line.comm-head{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--stone);padding-bottom:4px;border-bottom:1px solid var(--panel-edge);margin-bottom:2px;}
+  .comm-line input{padding:6px 8px;font-size:12.5px;}
+  .comm-line .comm-reste{font-weight:600;text-align:right;font-size:12.5px;}
+  .comm-line .comm-reste.due{color:#b6543f;}
+  .comm-line .comm-reste.paid{color:#6a9a5a;}
+  .comm-line .rm{border:none;background:none;color:var(--stone-light);cursor:pointer;font-size:15px;}
+  .comm-line .rm:hover{color:#b23;}
+  .dot{width:11px;height:11px;border-radius:50%;display:inline-block;}
+  .doc-btn{border:1px solid var(--panel-edge);background:var(--panel);border-radius:4px;cursor:pointer;font-size:12px;padding:4px 5px;}
+  .doc-btn:hover{border-color:var(--oxblood);}
+  .doc-btn .doc-n{font-size:9.5px;color:#fff;background:var(--oxblood);border-radius:8px;padding:0 4px;margin-left:2px;}
+  .doc-section-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone);font-weight:600;margin:16px 0 8px;}
+  .doc-gallery{display:flex;flex-wrap:wrap;gap:10px;}
+  .doc-tile{width:122px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:8px;}
+  .doc-thumb{height:78px;border-radius:4px;background:#efe9df;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;font-size:26px;color:var(--stone);}
+  .doc-thumb img{width:100%;height:100%;object-fit:cover;}
+  .doc-name{width:100%;font-size:11px;padding:4px 5px;margin-top:6px;border:1px solid var(--panel-edge);border-radius:3px;background:var(--panel);}
+  .doc-line{font-size:9.5px;color:var(--stone-light);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .doc-tools{display:flex;gap:4px;margin-top:5px;}
+  .doc-tools button{flex:1;border:1px solid var(--panel-edge);background:var(--panel);border-radius:3px;font-size:10.5px;cursor:pointer;padding:3px;color:var(--stone);}
+  .doc-tools button:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .doc-add{width:122px;min-height:132px;border:1px dashed var(--stone-light);border-radius:6px;background:transparent;color:var(--stone);cursor:pointer;font-size:12px;padding:8px;}
+  .doc-add:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .cl-legend{display:flex;gap:14px;font-size:11px;color:var(--stone);margin:0 2px 12px;align-items:center;flex-wrap:wrap;}
+  .cl-legend span{display:flex;align-items:center;gap:5px;}
+  .cl-row:last-child{border-bottom:none;}
+  .cl-row:hover:not(.head):not(.cl-foot){background:#f6f2ea;}
+  .cl-row.head{background:#f0ebe1;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--stone);cursor:default;font-weight:600;}
+  /* Contour de la fiche client ouverte */
+  .cl-group.open{border:1px solid var(--oxblood);border-radius:7px;margin:6px 0;overflow:hidden;box-shadow:0 3px 14px rgba(60,50,35,.10);}
+  .cl-group.open > .cl-row{background:#f6f0e7;}
+  /* Pied de tableau : totaux alignés sous chaque colonne */
+  .cl-foot{cursor:default;}
+  .cl-foot.sep-top{border-top:2px solid var(--hair);}
+  .cl-foot .ft-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone);font-weight:600;}
+  .cl-foot .ft-val{font-weight:600;font-variant-numeric:tabular-nums;}
+  .cl-foot .ft-sub{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--stone-light);}
+  .cl-foot .ft-val.due-txt{color:#b6543f;}
+  .cl-foot .ft-val.ok-txt{color:#6a9a5a;}
+  .cl-foot.grand{background:#f3ede2;}
+  .cl-foot.grand .ft-label{color:var(--ink);font-size:11px;}
+  .cl-foot.grand .ft-val{font-size:14.5px;color:var(--oxblood);font-family:'Cormorant Garamond',serif;}
+  .cl-name{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .badge{font-size:10px;padding:2px 8px;border-radius:10px;text-align:center;white-space:nowrap;}
+  .badge.ok{background:#e3ebe0;color:#4a6a48;}
+  .badge.due{background:#f0e2d8;color:#9a5a3a;}
+  .badge.na{background:var(--panel-edge);color:var(--stone);}
+  .cl-chev{color:var(--stone-light);font-size:11px;transition:transform .15s;text-align:center;}
+  .cl-group.open .cl-chev{transform:rotate(90deg);}
+  .cl-detail{display:none;padding:8px 14px 16px;background:#faf7f1;border-bottom:1px solid #f1ece2;}
+  .cl-group.open .cl-detail{display:block;}
+  .cl-meta{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 14px;padding:11px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;}
+  .cl-meta input,.cl-meta select{padding:6px 8px;font-size:12.5px;}
+  .cl-meta label{font-size:11px;color:var(--stone);display:block;}
+  .cl-meta label span{font-size:10px;letter-spacing:.03em;display:block;margin-bottom:3px;}
+  .cl-meta input{background:var(--panel);}
+  .cl-detail-actions{display:flex;justify-content:flex-end;margin-top:10px;gap:8px;flex-wrap:wrap;}
+  /* Fiche client — Modèle "deux colonnes" : identité fixe à gauche, blocs à bandeau à droite. */
+  .cl-two-col{display:flex;gap:14px;align-items:flex-start;}
+  .cl-side{flex:0 0 220px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;align-self:flex-start;}
+  .cl-side-head{background:var(--ink);padding:18px 14px;text-align:center;}
+  .cl-side-avatar{width:46px;height:46px;border-radius:50%;background:var(--oxblood);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:18px;margin:0 auto 10px;}
+  .cl-side-head input.cl-side-name{background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,.3);color:#fff;text-align:center;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;padding:2px 4px 6px;margin-bottom:8px;}
+  .cl-side-head input.cl-side-name:focus{border-bottom-color:#fff;background:rgba(255,255,255,.07);}
+  /* Sans étiquette, le nom du client ressemblait à un titre, pas à un champ : on remplissait
+     « Contact » en croyant nommer le client, et la fiche restait « Nouveau client ». */
+  .cl-side-lbl{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(255,255,255,.5);margin-bottom:3px;text-align:center;}
+  /* Un client sans nom ne doit pas ressembler à un client nommé « Nouveau client ». */
+  .cl-side-alerte{display:block;text-align:center;font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:#e0a86a;margin:-1px 0 3px;}
+  .cl-side-head select.cl-side-statut{background:transparent;border:1px solid rgba(255,255,255,.3);color:#d8d2c8;text-align:center;text-align-last:center;font-size:11px;border-radius:3px;padding:4px 6px;}
+  .cl-side-head select.cl-side-statut option{color:#3d3934;}
+  /* Un geste direct pour ranger un client, sans avoir à comprendre d'abord que c'est le
+     statut qui archive. Le sélecteur reste là pour le détail (terminé ? annulé ?). */
+  .cl-side-arch{margin-top:8px;width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);
+    color:#d8d2c8;font-family:'Inter';font-size:11.5px;border-radius:4px;padding:7px 8px;cursor:pointer;transition:.15s;}
+  .cl-side-arch:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.55);color:#fff;}
+  .cl-side-body{padding:14px;display:flex;flex-direction:column;gap:12px;}
+  .cl-side-body .fld .lbl{font-size:10px;color:var(--stone);letter-spacing:.03em;display:block;margin-bottom:3px;}
+  .cl-side-body .fld input{padding:7px 8px;font-size:12.5px;}
+  .cl-side-sep{height:1px;background:var(--panel-edge);margin:2px 0;}
+  .cl-side-more{display:flex;flex-direction:column;gap:12px;}
+  /* Blocs financiers secondaires (devis-montant, commissions) encadrés comme "Tâches liées" —
+     avant, seule la relance client avait une bordure visible, le reste se fondait dans le fond. */
+  .sub-line-head{padding:0 0 4px;}
+  .sub-line-head span{font-size:10px;color:var(--stone);text-transform:uppercase;letter-spacing:.04em;}
+  @media (max-width:600px){.sub-line-head{display:none;}}
+  .cl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;}
+  .cl-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;}
+  .cl-card-bar{background:var(--oxblood);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;}
+  .cl-card-body{padding:14px;}
+  .cl-card-body .cl-meta{background:transparent;border:none;padding:0;margin:0;}
+  @media (max-width:760px){
+    /* align-items:flex-start (règle de base, pensée pour la mise en page en ligne : ne pas
+       étirer les 2 colonnes à la même hauteur) devient un piège une fois empilé en colonne :
+       sans stretch, chaque bloc se dimensionne à la largeur de SON PROPRE contenu au lieu de
+       se caler sur la largeur du conteneur, et un bloc interne un peu trop large (ex. la ligne
+       montant/devise/reste du devis) fait déborder toute la colonne au lieu d'être simplement
+       contenu par elle. */
+    .cl-two-col{flex-direction:column;align-items:stretch;}
+    .cl-side{flex:1 1 auto;width:100%;}
+    /* Fiche client sur mobile : demande explicite de compacter les champs de coordonnées
+       en paires côte à côte (au lieu d'un champ pleine largeur par ligne) pour réduire la
+       hauteur de la carte. Contact+Téléphone (2 champs → 1 rangée pleine), puis
+       Adresse/Ville+Email+Début+Fin (4 champs pairs → 2 rangées), Commentaire seul retombe
+       naturellement à la ligne suivante (5 champs, le dernier n'a personne à côté).
+       Uniquement à cette largeur : le bureau garde l'empilement vertical d'origine, un
+       champ par ligne, inchangé. */
+    .cl-side-body,.cl-side-more{flex-direction:row;flex-wrap:wrap;gap:10px 12px;}
+    .cl-side-body .fld,.cl-side-more .fld{flex:1 1 calc(50% - 6px);min-width:0;}
+  }
+  .cl-totals{display:flex;flex-direction:column;gap:8px;padding:14px 16px;font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);margin-top:14px;border-top:2px solid var(--hair);}
+
+  /* devis */
+  /* align-self:flex-start — .preview-wrap est un flex container ; sans ça, dans les vues où
+     .preview-wrap a une hauteur figée (bureau ≥901px, Vue bureau forcée), .devis (flex item)
+     se voit étiré/plafonné à sa min-height (une page) au lieu de grandir avec son contenu réel.
+     Au-delà d'une page, le fond papier s'arrêtait net et la suite du devis s'affichait sans fond. */
+  .devis{width:100%;max-width:1100px;min-height:297mm;align-self:flex-start;background:var(--paper);box-shadow:0 12px 44px rgba(60,50,35,.22);color:var(--ink);position:relative;background-image:radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,.5), rgba(0,0,0,0) 55%),linear-gradient(180deg,#f4efe6 0%,#e9e3d8 100%);}
+  .devis-page{padding:20mm 18mm;position:relative;overflow:hidden;min-height:297mm;}
+  .devis-page + .devis-page{border-top:1px dashed #ded5c4;}
+  .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
+  .wm span{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:340px;font-weight:500;color:var(--oxblood);opacity:.055;letter-spacing:-.04em;}
+  .dv-inner{position:relative;z-index:1;}
+  .dv-bsd{text-align:right;font-size:13px;color:#3a352d;margin:0 0 2mm;letter-spacing:.02em;}
+  .dv-head{display:flex;justify-content:space-between;gap:20px;padding-top:1mm;}
+  .dv-head .col{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.5px;line-height:1.75;color:#3a352d;}
+  .dv-head .col.right{text-align:right;}
+  .dv-head .col .nm{color:var(--oxblood);font-weight:500;}
+  .dv-brand{text-align:center;margin:4mm 0 5mm;}
+  .dv-logo{width:62mm;max-width:70%;height:auto;}
+  .dv-title{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-weight:600;font-size:27px;margin:6mm 0 2mm;color:var(--oxblood);}
+  .dv-rule{width:64px;height:1px;background:var(--stone-light);margin:0 auto 7mm;}
+  .dv-intro{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:14px;line-height:1.72;text-align:center;color:#3a352d;max-width:150mm;margin:0 auto 8mm;white-space:pre-wrap;}
+  .dv-group{margin-bottom:7mm;}
+  .dv-group-h{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:18px;font-weight:600;margin:0 0 4mm;color:var(--oxblood);}
+  .dv-item{margin:0 0 4mm;}
+  .dv-item .it-t{font-family:var(--devis-body-font,'EB Garamond',serif);font-weight:700;font-size:14px;display:flex;justify-content:space-between;gap:14px;align-items:baseline;}
+  .dv-item .it-t .price{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:16px;color:var(--oxblood);white-space:nowrap;}
+  .dv-item .it-meta{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:var(--stone);font-style:italic;}
+  .dv-item .it-d{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.8px;line-height:1.66;color:#544d43;margin-top:2px;white-space:pre-wrap;}
+  .dv-option-choice{display:flex;align-items:center;gap:6px;margin-top:2mm;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:var(--ink);}
+  .dv-opt-box{display:inline-block;width:10px;height:10px;border:1.2px solid var(--stone);flex:0 0 auto;}
+  /* Repère « OPTION » dans la marge gauche de la page, pas juste dans le texte : demande
+     explicite pour que ça saute aux yeux même sans lire la ligne. .devis-page a 18mm de
+     marge gauche (padding) — le label est positionné dans cette marge, pas hors de la page
+     (qui a overflow:hidden : au-delà, il serait invisible), avec de la place avant le début
+     du texte. */
+  .dv-item-option{position:relative;}
+  .dv-item-option::before{content:"Option";position:absolute;left:-15mm;top:1px;width:13mm;text-align:right;font-family:'Inter',sans-serif;font-size:8px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--oxblood);}
+  .dv-excl{margin:6mm 0;}
+  .dv-excl ul{margin:2mm 0 0;padding-left:5mm;}
+  .dv-excl li{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12.6px;color:#6a6255;line-height:1.6;margin-bottom:1.5mm;}
+  .dv-totals{margin:8mm 0 0;border-top:1px solid var(--hair);padding-top:4mm;}
+  .dv-totals .tr{display:flex;justify-content:flex-end;gap:24px;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13.5px;padding:1.5mm 0;color:#3a352d;}
+  .dv-totals .tr .k{color:var(--stone);}
+  .dv-totals .tr .v{min-width:34mm;text-align:right;}
+  .dv-totals .tr.grand{font-size:17px;font-weight:600;color:var(--ink);border-top:1px solid var(--hair);margin-top:2mm;padding-top:3mm;}
+  .dv-totals .tr.grand .v{color:var(--oxblood);font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:20px;}
+  .dv-tva-note{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11px;color:var(--stone);text-align:right;margin-top:2mm;font-style:italic;}
+  .dv-timeline{margin:7mm 0;}
+  .dv-timeline .tl-h{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:18px;font-weight:600;margin-bottom:3mm;color:var(--oxblood);}
+  .dv-timeline .tl-row{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13px;text-align:center;color:#3a352d;line-height:1.7;}
+  .dv-cond h2{text-align:center;font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:22px;font-weight:600;margin:0 0 6mm;text-decoration:underline;text-underline-offset:4px;color:var(--oxblood);}
+  .dv-cond p{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12px;line-height:1.62;color:#3a352d;margin:0 0 3mm;}
+  .dv-cond p b{color:var(--ink);}
+  .dv-cond ul{margin:1mm 0 3mm;padding-left:6mm;}
+  .dv-cond li{font-family:var(--devis-body-font,'EB Garamond',serif);font-size:12px;color:#3a352d;line-height:1.55;margin-bottom:1mm;}
+  .dv-sign{display:flex;gap:12mm;margin-top:14mm;padding-top:4mm;}
+  .dv-sign .s{flex:1 1 0;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:13px;color:#3a352d;}
+  .dv-sign .s .line{display:block;width:100%;border-bottom:1px solid var(--stone-light);margin-top:12mm;}
+  .dv-license{text-align:center;font-size:10.5px;color:var(--stone);margin-top:5mm;}
+  .dv-foot{text-align:center;font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11px;color:var(--stone);margin-top:6mm;border-top:1px solid var(--hair);padding-top:3mm;}
+  .dv-pricesign{break-inside:avoid;page-break-inside:avoid;}
+
+  @media (max-width:900px){
+    #split-toggle{display:inline-flex;}
+    .stage{flex-direction:column;}
+    .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
+    .preview-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    body.show-preview .editor{display:none;}
+    body.show-editor .preview-wrap{display:none;}
+    /* iOS/Safari zoome automatiquement sur un champ dont la police est < 16px, ce qui décale la
+       mise en page et rend la frappe pénible : on force 16px sur mobile pour l'empêcher. */
+    input[type=text],input[type=number],input[type=date],input[type=email],input[type=password],textarea,select{font-size:16px;}
+    .btn,.vnav,.mini{padding-top:10px;padding-bottom:10px;}
+    .cl-scroll{-webkit-overflow-scrolling:touch;}
+  }
+  @media (max-width:600px){
+    .two-col{flex-direction:column;gap:0;}
+    /* Section Client du composeur de devis, sur mobile : demande explicite de la
+       compacter comme la fiche client (même technique) — les 8 champs empilés un par
+       ligne rendaient l'écran trop long. Chaque colonne d'origine (identité+contact à
+       gauche, adresse à droite) passe de "un champ par ligne" à deux par rangée, sans
+       changer l'ordre ni le regroupement des champs (juste la présentation) : Raison
+       sociale/Contact, Téléphone/Email, Adresse/N° société, Ville/Code postal.
+       `.two-col` seule (juste au-dessus) reste inchangée : ce sont les DEUX colonnes qui
+       se réempilent l'une sous l'autre comme avant, chacune devenant ensuite compacte
+       en interne. Bureau (>600px) intact : .col garde son display block d'origine, un
+       champ par ligne, comme toujours. */
+    .two-col>.col{display:flex;flex-wrap:wrap;gap:0 12px;}
+    .two-col>.col .fld{flex:1 1 calc(50% - 6px);min-width:0;}
+    .row3{flex-direction:column;}
+    .sub-line.with-cat{grid-template-columns:1fr 1fr;grid-template-areas:"cat cat" "label label" "montant date" "doc rm";}
+    .sub-line.with-cat select[data-cat]{grid-area:cat;}
+    .sub-line.with-cat input[data-label]{grid-area:label;}
+    .sub-line.with-cat input[data-montant]{grid-area:montant;}
+    .sub-line.with-cat input[data-date]{grid-area:date;}
+    .sub-line.with-cat .doc-btn{grid-area:doc;}
+    .sub-line.with-cat .rm{grid-area:rm;justify-self:end;}
+  }
+  /* Vue clients sur mobile réel (Chrome/Safari/Samsung Internet, pas le mode « bureau » du
+     navigateur) : .cl-table{min-width:680px} — nécessaire pour empêcher la grille des colonnes
+     de rétrécir sous son contenu sur tablette/bureau — imposait aussi cette largeur de 680px à
+     TOUTE la fiche détaillée d'un client ouvert (elle vit dans le même #cl-table), alors que
+     cette fiche est censée être fluide et tenir sur un écran de téléphone. Résultat : sur un
+     vrai téléphone (<680px), .cl-group.open{overflow:hidden} rognait silencieusement tout ce qui
+     dépassait (nom, statut, montants…) sans aucun moyen de faire défiler pour le voir. En dessous
+     de 680px on annule ce plancher et on transforme la ligne client (grille à colonnes fixes,
+     pensée pour tablette/bureau) en carte empilée qui tient nativement dans la largeur de l'écran. */
+  @media (max-width:680px){
+    .cl-table{min-width:0;}
+    .cl-row.head{display:none;}
+    .cl-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:8px;row-gap:4px;padding:10px 12px;}
+    .cl-row>*{flex:0 0 auto;}
+    .cl-row>*:nth-child(2){order:1;}
+    .cl-row>*:nth-child(3){order:2;flex:1 1 auto;min-width:0;}
+    .cl-row>*:nth-child(8){order:3;}
+    .cl-row>*:nth-child(9){order:4;}
+    .cl-row>*:nth-child(10){order:5;flex-basis:100%;width:0;height:0;margin:0;padding:0;overflow:hidden;}
+    .cl-row>*:nth-child(1){order:6;font-size:11px;color:var(--stone);}
+    .cl-row>*:nth-child(4){order:7;font-size:12px;}
+    .cl-row .col-sep{border-right:none;padding-right:0;margin-right:0;}
+    .cl-row>*:nth-child(5){order:8;font-size:12px;}
+    .cl-row:not(.grand)>*:nth-child(6),.cl-row:not(.grand)>*:nth-child(7){display:none;}
+    .cl-row.grand>*:nth-child(6){order:9;font-size:12px;}
+    .cl-montant{flex-direction:column;align-items:stretch;gap:10px;}
+    .cl-montant label{flex:0 0 auto!important;width:100%;}
+  }
+  /* Vue bureau forcée : bouton manuel dans la barre d'outils, indépendant du "Version
+     ordinateur" du navigateur (peu fiable/absent sur tablette, Samsung Internet, etc.) —
+     annule les règles mobiles ci-dessus quelle que soit la largeur réelle de l'écran.
+     Scopé à .devis-active comme la règle bureau ≥901px : sinon, activer Vue bureau depuis
+     le Tableau de bord (ou Clients/Estimation) fige la page en overflow:hidden sans qu'aucune
+     colonne éditeur/aperçu n'existe pour absorber le scroll — plus moyen de descendre. */
+  /* height:100dvh en repli : sur Safari iOS, la barre d'adresse dynamique (qui apparaît/
+     disparaît au défilement) fait que 100vh ne correspond pas toujours à la hauteur
+     RÉELLEMENT visible — combiné à overflow:hidden ici (aucun scroll pour "rattraper" le
+     décalage), du contenu peut rester caché derrière la barre. dvh mesure la hauteur
+     réellement visible à l'instant présent ; un navigateur qui ne le comprend pas encore
+     ignore simplement cette ligne et garde 100vh (repli sans risque, rien ne change là où
+     ça marchait déjà). */
+  body.force-split.devis-active{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;}
+  body.force-split.devis-active .stage{flex-direction:row;flex:1 1 auto;min-height:0;overflow:hidden;}
+  body.force-split.devis-active .editor{width:44%;max-width:600px;min-width:360px;border-right:1px solid var(--panel-edge);height:100%;min-height:0;overflow-y:auto;}
+  body.force-split.devis-active .preview-wrap{width:auto;overflow-x:visible;height:100%;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:auto;}
+  body.force-split .devis{transform:none !important;margin-top:0;}
+  body.force-split.show-preview .editor{display:block;}
+  body.force-split.show-editor .preview-wrap{display:flex;}
+  @media print{
+    /* AUCUNE marge blanche : la feuille est colorée bord à bord (@page margin:0 + fond papier
+       sur html/body/feuille). L'espacement du texte (16 mm) est géré À L'INTÉRIEUR, et
+       box-decoration-break:clone le répète en haut ET en bas de CHAQUE page. */
+    @page{size:A4;margin:0;}
+    html,body{background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+    .toolbar,.editor,.tabs,.overlay,.toast,#login-overlay{display:none !important;}
+    .preview-wrap{padding:0;margin:0;background:#f4efe6;display:block;}
+    .devis{width:auto;min-height:0;box-shadow:none;transform:none !important;margin:0;background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+    .devis-page{page-break-after:always;box-sizing:border-box;min-height:297mm;padding:16mm 16mm;background:#f4efe6;position:relative;-webkit-box-decoration-break:clone;box-decoration-break:clone;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+    .devis-page:last-child{page-break-after:avoid;}
+    .devis-page.cond{page-break-before:always;}
+    .devis-page + .devis-page{border-top:none;}
+    .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
+    *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
+  }
+  /* Bureau, vue Devis uniquement : éditeur et aperçu défilent chacun dans leur propre colonne
+     (au lieu de partager le défilement de la page), pour que le scroll-sync vers une section du
+     devis n'entraîne pas le champ en cours d'édition hors de vue. Scopé à body.devis-active :
+     appliqué sans condition, ça figeait aussi le Tableau de bord/Clients/Estimation sur les
+     écrans ≥901px (tablette) — plus moyen d'y descendre en scroll. */
+  @media (min-width:901px){
+    html,body{height:100%;}
+    body.devis-active{display:flex;flex-direction:column;overflow:hidden;}
+    body.devis-active .stage{flex:1 1 auto;min-height:0;overflow:hidden;}
+    body.devis-active .editor{height:100%;min-height:0;overflow-y:auto;}
+    body.devis-active .preview-wrap{height:100%;min-height:0;overflow-y:auto;}
+  }
+
+  /* ---- Réalisations (galerie publiable) ---- */
+  .rz-wrap{padding:26px 20px 90px;max-width:1180px;margin:0 auto;}
+  .rz-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+  .rz-top h2{font-family:'Cormorant Garamond',serif;font-size:25px;font-weight:600;}
+  .rz-intro{font-size:12.5px;color:var(--stone);margin:0 0 20px;max-width:70ch;line-height:1.55;}
+  .rz-filtres{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 14px;}
+  .rz-filtre{font-family:'Inter';font-size:11px;letter-spacing:.05em;padding:7px 12px;
+    border:1px solid var(--panel-edge);border-radius:999px;background:var(--panel);
+    color:var(--stone);cursor:pointer;}
+  .rz-filtre:hover{border-color:var(--stone-light);color:var(--ink);}
+  .rz-filtre.actif{background:var(--ink);border-color:var(--ink);color:var(--paper);}
+  .rz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+  .rz-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;overflow:hidden;cursor:pointer;text-align:left;padding:0;font-family:'Inter';}
+  .rz-card:hover{border-color:var(--oxblood);}
+  .rz-cover{aspect-ratio:3/2;background:#efe9df;display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--stone-light);font-size:11px;}
+  .rz-cover img{width:100%;height:100%;object-fit:cover;display:block;}
+  .rz-cbody{padding:10px 12px 12px;}
+  .rz-ctitle{font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-cmeta{font-size:11.5px;color:var(--stone);margin-top:3px;}
+  .rz-new,.bt-new{border:1px dashed var(--stone-light);border-radius:8px;background:transparent;color:var(--stone);cursor:pointer;font-size:13px;font-family:'Inter';min-height:150px;}
+  .rz-new:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .rz-empty{font-size:13px;color:var(--stone);padding:18px 0;}
+  .rz-live{color:#6a9a5a;font-weight:600;}
+  .rz-site{font-size:12px;color:var(--stone);margin:0 0 16px;line-height:1.5;}
+  .rz-site a{color:var(--oxblood);}
+
+  .rz-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  /* Revenir à la liste est le geste le plus fréquent depuis une fiche : c'était un lien
+     gris coincé entre le paragraphe d'explication et le nom de la réalisation, on ne le
+     voyait pas. C'est un bouton, il est en tête, et il est assez grand pour le pouce. */
+  .rz-back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;
+    background:var(--travertine);border:1px solid var(--panel-edge);border-radius:8px;
+    color:var(--stone-deep);font-family:'Inter';font-size:13px;font-weight:600;
+    cursor:pointer;padding:10px 14px;transition:.15s;}
+  .rz-back:hover{background:#e2dbcd;border-color:var(--stone-light);color:var(--ink);}
+  .rz-back:focus-visible{outline:2px solid var(--oxblood);outline-offset:2px;}
+  /* Une fiche ouverte : le paragraphe qui explique LA LISTE n'a plus rien à y faire, et il
+     repoussait le retour de quatre lignes vers le bas. */
+  #realisations-view.rz-ouvert .rz-intro,#boutique-view.rz-ouvert .rz-intro{display:none;}
+  .rz-meta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .rz-liens{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px;}
+  .rz-perso-in{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--stone-deep);line-height:1.45;}
+  .rz-perso-in input{width:auto;flex:0 0 auto;margin-top:2px;}
+  .rz-pres{margin-bottom:16px;}
+  .rz-pres textarea{min-height:74px;}
+  .rz-pres-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:-4px;}
+  .rz-pres-n{font-size:11px;color:var(--stone);}
+  .rz-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
+  .rz-ph{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:var(--panel);cursor:pointer;}
+  /* Le format 3/2 s'applique à la zone image, pas à la tuile : celle-ci porte en plus le
+     titre et la légende, qui doivent rester lisibles au lieu de flotter sur la photo. */
+  .rz-ph-vue{position:relative;aspect-ratio:3/2;overflow:hidden;background:#efe9df;}
+  .rz-ph img{width:100%;height:100%;object-fit:cover;display:block;}
+  .rz-ph-txt{display:block;width:100%;text-align:left;background:var(--panel);border:none;
+    border-top:1px solid var(--panel-edge);padding:6px 8px 7px;cursor:pointer;font-family:'Inter';}
+  .rz-ph-txt:hover{background:var(--travertine);}
+  .rz-ph-name{display:block;font-size:11.5px;font-weight:600;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-ph-cap{display:block;font-size:11px;color:var(--stone);font-style:italic;margin-top:1px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-ph-cap.vide{color:var(--stone-light);font-style:normal;}
+  /* Une photo écartée du site reste lisible, mais on doit voir d'un coup d'œil qu'elle ne
+     part pas : elle est en retrait, pas cachée. */
+  .rz-hors-site .rz-ph-vue{opacity:.5;filter:grayscale(.5);}
+  .rz-tag.t-ecartee{background:rgba(61,57,52,.86);color:#fff;}
+  .ph-menu .mini.on{border-color:var(--oxblood);color:var(--oxblood);font-weight:700;}
+  /* Sous chaque « va partir », le nom de la version retenue : sans lui, deux vignettes qui
+     se ressemblent ne disent pas laquelle est publiée. */
+  .pub-ver{display:block;margin-top:4px;font-size:11px;color:var(--stone);text-align:center;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ias-steps{margin:10px 0 0;padding-left:20px;font-size:13px;color:var(--ink);line-height:1.65;}
+  .ias-steps li{margin-bottom:8px;}
+  .ias-steps code{background:var(--travertine);border:1px solid var(--panel-edge);border-radius:4px;padding:1px 5px;font-size:12px;}
+  .ia-solde.nc b{color:var(--stone-light);font-weight:600;}
+  .rz-ph-menu{position:absolute;right:33px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;
+    border-radius:3px;width:24px;height:24px;font-size:14px;cursor:pointer;line-height:1;}
+  /* Mode « ranger » : le rang est écrit sur la vignette, sinon on ne sait pas ce qu'on
+     déplace ni où l'on en est. */
+  .rz-ph-num{position:absolute;left:6px;top:6px;background:var(--oxblood);color:#fff;font-size:11px;
+    font-weight:700;min-width:21px;height:21px;border-radius:11px;display:flex;align-items:center;
+    justify-content:center;padding:0 6px;}
+  .rz-ph-move{position:absolute;right:5px;top:5px;display:flex;gap:4px;}
+  .rz-ph-move button{background:rgba(61,57,52,.82);color:#fff;border:none;border-radius:3px;
+    width:30px;height:28px;font-size:13px;cursor:pointer;line-height:1;}
+  .rz-ph-move button[disabled]{opacity:.35;cursor:default;}
+  .rz-ordering .rz-ph{cursor:grab;}
+  .rz-ph.rz-dragging{opacity:.45;}
+  .rz-ph.rz-drop-a{box-shadow:inset 4px 0 0 var(--oxblood);}
+  .rz-ph.rz-drop-b{box-shadow:inset -4px 0 0 var(--oxblood);}
+  .rz-selhint{color:var(--stone-light);font-size:11.5px;line-height:1.4;flex:1 1 200px;}
+  /* Import : une barre de progression et, à la fin, la liste de ce qui a été refusé. */
+  .rz-import{margin:0 0 14px;padding:10px 12px;border-radius:7px;background:var(--travertine);
+    border-left:3px solid var(--oxblood);}
+  .rz-import-txt{font-size:12.5px;color:var(--stone-deep);margin-bottom:7px;}
+  .rz-bar{height:6px;border-radius:3px;background:rgba(61,57,52,.14);overflow:hidden;}
+  .rz-bar i{display:block;height:100%;background:var(--oxblood);width:0;transition:width .2s;}
+  .rz-refus{list-style:none;margin:8px 0 10px;padding:0;font-size:12px;line-height:1.5;}
+  .rz-refus li{padding:5px 0;border-top:1px solid rgba(61,57,52,.12);}
+  /* Les styles de `.fld` ne visent que `label.fld` : ce bloc porte des boutons radio,
+     pas un champ, il a donc ses propres règles au lieu d'emprunter une classe qui ne
+     s'applique pas (les libellés se chevauchaient). */
+  /* Alerte de place : visible là où l'on ajoute des photos, et seulement au-delà du seuil. */
+  .rz-quota{background:#fdf4e6;border:1px solid #e6d3b0;border-left:3px solid #b7752f;
+    border-radius:9px;padding:11px 13px;margin:0 0 16px;}
+  .rz-quota.plein{background:#fbeee9;border-color:#e8c9bd;border-left-color:#b6543f;}
+  .rz-quota p{margin:0 0 6px;font-size:12.5px;color:#8a5a1f;line-height:1.5;font-weight:600;}
+  .rz-quota.plein p{color:#8c3f2d;}
+  .rz-quota .rz-quota-sub{font-weight:400;color:var(--stone-deep);font-size:11.5px;}
+  .stor-box{font-size:12.5px;color:var(--stone-deep);line-height:1.55;margin-bottom:10px;}
+  .stor-det{margin:7px 0 0;}
+  .ia-portee-wrap{display:block;margin-bottom:11px;}
+  .ia-portee-wrap>.lbl{display:block;font-size:11px;color:var(--stone);margin-bottom:4px;}
+  .ia-portee{display:flex;flex-direction:column;gap:7px;margin-top:4px;}
+  .ia-portee label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);cursor:pointer;}
+  .ph-menu{display:flex;flex-direction:column;gap:7px;margin-top:14px;}
+  .ph-menu .mini{text-align:left;padding:10px 12px;font-size:13px;}
+  .rz-ph-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--stone);}
+  /* Pastilles d'état sur la vignette : « en ligne », « modifiée depuis », « version IA ».
+     Sans elles, une photo ajoutée après publication est indiscernable d'une photo publiée. */
+  .rz-warn{color:#b7752f;}
+  .hist{list-style:none;margin:12px 0 0;padding:0;max-height:46vh;overflow-y:auto;}
+  .hist li{padding:9px 11px;border:1px solid var(--panel-edge);border-radius:8px;background:var(--panel);margin-bottom:6px;}
+  .hist-t{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone-light);font-weight:700;}
+  .hist-k{display:block;font-size:13px;color:var(--ink);margin-top:2px;}
+  .hist-d{display:block;font-size:11.5px;color:var(--stone);font-style:italic;margin-top:2px;line-height:1.45;}
+  .hist-etat{margin:10px 0 0;padding:9px 11px;border-radius:8px;font-size:12.5px;line-height:1.5;
+    background:var(--travertine);color:var(--stone-deep);border-left:3px solid var(--stone-light);}
+  .hist-etat.t-enligne{border-left-color:#4a7c59;}
+  .hist-etat.t-modifiee{border-left-color:#b7752f;color:#8a5a1f;}
+  .rz-ph-tags{position:absolute;left:5px;bottom:5px;right:5px;display:flex;flex-wrap:wrap;gap:4px;}
+  .rz-tag{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;
+    padding:3px 7px;border-radius:999px;color:#fff;background:rgba(61,57,52,.85);
+    -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);white-space:nowrap;}
+  .rz-tag.t-enligne{background:rgba(74,124,89,.92);}
+  .rz-tag.t-modifiee{background:rgba(183,124,52,.94);}
+  .rz-tag.t-absente{background:rgba(61,57,52,.72);}
+  .rz-tag.t-ia{background:rgba(154,133,116,.94);}
+  .rz-tag.t-reg{background:rgba(61,57,52,.6);}
+  .rz-ph-badge{position:absolute;left:6px;bottom:6px;background:rgba(61,57,52,.82);color:#fff;font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;font-weight:700;padding:2px 6px;border-radius:2px;}
+  .rz-ph-del{position:absolute;right:5px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;border-radius:3px;width:24px;height:24px;font-size:13px;cursor:pointer;line-height:1;}
+  .bt-ph-foot{display:flex;gap:6px;align-items:center;justify-content:space-between;
+    padding:6px 8px;border-top:1px solid var(--panel-edge);background:var(--panel);}
+  .bt-ph-foot .mini{font-size:11px;}
+  .rz-add{border:1px dashed var(--stone-light);border-radius:6px;background:transparent;color:var(--stone);cursor:pointer;font-size:12px;font-family:'Inter';aspect-ratio:3/2;}
+  .rz-videos{margin-top:18px;}
+  .rz-videos-titre{font-family:'Inter';font-size:13px;font-weight:600;color:var(--stone);margin:0 0 8px;}
+  .rz-videos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;}
+  .rz-video-tile{position:relative;border:1px solid var(--panel-edge);border-radius:6px;overflow:hidden;background:var(--panel);}
+  .rz-video-tile video{width:100%;aspect-ratio:3/2;object-fit:cover;background:#000;display:block;}
+  .rz-video-nom{font-size:11px;color:var(--stone);padding:4px 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-video-del{position:absolute;right:5px;top:5px;background:rgba(61,57,52,.78);color:#fff;border:none;border-radius:3px;width:24px;height:24px;font-size:13px;cursor:pointer;line-height:1;}
+  .rz-selectable{outline:2px solid transparent;}
+  .rz-picked{outline:2px solid var(--oxblood);outline-offset:1px;}
+  .rz-picked img{opacity:.72;}
+  .rz-check{position:absolute;right:6px;top:6px;width:26px;height:26px;border-radius:50%;
+    border:2px solid #fff;background:rgba(61,57,52,.45);color:#fff;display:flex;align-items:center;
+    justify-content:center;font-size:14px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+  .rz-picked .rz-check{background:var(--oxblood);}
+  .rz-selbar{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin-top:14px;padding:11px 13px;background:var(--ink);border-radius:7px;
+    box-shadow:0 6px 20px rgba(0,0,0,.25);}
+  .rz-selbar .rz-selcount{color:var(--paper);font-size:12.5px;font-weight:600;margin-right:2px;}
+  .rz-selbar .mini{background:transparent;border:1px solid var(--stone);color:var(--stone-light);}
+  .rz-selbar .mini:hover{color:var(--paper);border-color:var(--paper);}
+  /* La barre est sur fond sombre : `.btn-onlight` y écrirait en foncé sur foncé,
+     c'est-à-dire un bouton illisible (« Supprimer » invisible). */
+  .rz-selbar .btn{background:transparent;border-color:var(--stone);color:var(--paper);}
+  .rz-selbar .btn:hover:not([disabled]){background:var(--paper);color:var(--ink);border-color:var(--paper);}
+  .rz-selbar .btn-primary{background:var(--oxblood);border-color:var(--oxblood);color:#fff;}
+  .rz-selbar .btn-primary:hover:not([disabled]){background:var(--oxblood);color:#fff;}
+  .rz-selbar .btn[disabled]{opacity:.4;cursor:default;}
+  .rz-add:hover{border-color:var(--oxblood);color:var(--oxblood);}
+
+  /* ---- Éditeur photo ---- */
+  .ed-modal{position:fixed;inset:0;z-index:80;background:var(--ink);display:flex;flex-direction:column;}
+  .ed-body{flex:1;min-height:0;display:flex;flex-direction:column;}
+  .ed-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#2f2c28;color:var(--paper);flex-wrap:nowrap;}
+  .ed-bar .ed-title{font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ed-bar .btn{flex:0 0 auto;}
+  .ed-stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:12px;background:#242220;position:relative;}
+  .ed-stage canvas{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 4px 24px rgba(0,0,0,.5);}
+  /* Le CADRE DE ROGNAGE : un rectangle posé sur la photo, qu'on trace et qu'on tire à la
+     main. Il est placé exactement sur le canevas, en pixels d'écran, mais ce qu'il retient
+     est stocké en fractions de la photo — l'aperçu change de taille, le rognage non. */
+  .ed-crop{position:absolute;touch-action:none;overflow:hidden;cursor:crosshair;}
+  .ed-crop-box{position:absolute;cursor:move;outline:1px solid rgba(255,255,255,.92);
+    box-shadow:0 0 0 9999px rgba(0,0,0,.55);}
+  /* Les tiers : le repère que tout le monde utilise pour placer un sujet. */
+  .ed-crop-grid{position:absolute;inset:0;pointer-events:none;
+    background-image:linear-gradient(to right,transparent calc(33.333% - .5px),rgba(255,255,255,.3) calc(33.333% - .5px),rgba(255,255,255,.3) calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),rgba(255,255,255,.3) calc(66.666% - .5px),rgba(255,255,255,.3) calc(66.666% + .5px),transparent calc(66.666% + .5px)),
+      linear-gradient(to bottom,transparent calc(33.333% - .5px),rgba(255,255,255,.3) calc(33.333% - .5px),rgba(255,255,255,.3) calc(33.333% + .5px),transparent calc(33.333% + .5px),transparent calc(66.666% - .5px),rgba(255,255,255,.3) calc(66.666% - .5px),rgba(255,255,255,.3) calc(66.666% + .5px),transparent calc(66.666% + .5px));}
+  /* 14 px visibles, 40 px touchables : au doigt, une poignée de 14 px se rate. */
+  .ed-crop-h{position:absolute;width:14px;height:14px;background:#fff;border-radius:2px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.4);}
+  .ed-crop-h::after{content:'';position:absolute;inset:-13px;}
+  .ed-crop-h[data-h="nw"]{left:-7px;top:-7px;cursor:nwse-resize;}
+  .ed-crop-h[data-h="ne"]{right:-7px;top:-7px;cursor:nesw-resize;}
+  .ed-crop-h[data-h="sw"]{left:-7px;bottom:-7px;cursor:nesw-resize;}
+  .ed-crop-h[data-h="se"]{right:-7px;bottom:-7px;cursor:nwse-resize;}
+  .ed-crop-h[data-h="n"]{left:50%;top:-7px;margin-left:-7px;cursor:ns-resize;}
+  .ed-crop-h[data-h="s"]{left:50%;bottom:-7px;margin-left:-7px;cursor:ns-resize;}
+  .ed-crop-h[data-h="w"]{top:50%;left:-7px;margin-top:-7px;cursor:ew-resize;}
+  .ed-crop-h[data-h="e"]{top:50%;right:-7px;margin-top:-7px;cursor:ew-resize;}
+  /* DANS le cadre, pas dessous : sous le cadre, l'étiquette est coupée dès qu'on rogne le
+     bas de la photo (le calque est en overflow:hidden) — donc invisible quand on en a besoin. */
+  .ed-crop-taille{position:absolute;left:50%;transform:translateX(-50%);bottom:6px;
+    font-size:11px;color:#fff;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:3px;
+    pointer-events:none;white-space:nowrap;}
+  /* PASSER D'UNE PHOTO À L'AUTRE. Les flèches étaient dans la barre du haut, à côté du
+     bouton « Terminer » : loin de la photo, loin du pouce, et voisines d'un bouton qui
+     ferme l'éditeur. Elles sont maintenant POSÉES SUR l'image, à ses bords, centrées en
+     hauteur — là où on les cherche, et là où le pouce arrive. 48 px de cible : en dessous,
+     on vise à côté. */
+  .ed-nav{
+    position:absolute;top:50%;transform:translateY(-50%);
+    width:48px;height:48px;border:none;border-radius:50%;
+    background:rgba(20,18,16,.62);color:#fff;font-size:26px;line-height:1;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    transition:background .18s,opacity .18s;z-index:2;
+  }
+  .ed-nav:hover{background:rgba(20,18,16,.85);}
+  .ed-nav.prev{left:8px;}
+  .ed-nav.next{right:8px;}
+  /* Bout de série : le bouton reste EN PLACE, éteint. Le faire disparaître déplacerait
+     l'autre flèche sous le doigt au moment où l'on appuie. */
+  .ed-nav[disabled]{opacity:.22;cursor:default;pointer-events:none;}
+  .ed-nav:focus-visible{outline:2px solid var(--paper);outline-offset:2px;}
+  /* Cadre de rognage affiché : ses poignées de gauche et de droite occupent exactement la
+     place des flèches. Les deux ne peuvent pas cohabiter — le rognage gagne, c'est le geste
+     en cours. */
+  .ed-stage.rogne .ed-nav,.ed-stage.rogne .ed-pos{display:none;}
+  .ed-pos{
+    position:absolute;left:50%;bottom:10px;transform:translateX(-50%);
+    background:rgba(20,18,16,.62);color:var(--paper);
+    font-size:11.5px;letter-spacing:.06em;padding:4px 11px;border-radius:999px;
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);z-index:2;pointer-events:none;
+  }
+  .ed-panel{background:var(--travertine);border-top:1px solid var(--hair);padding:12px 14px 18px;max-height:44vh;overflow-y:auto;}
+  /* Onglets en « segment » (une piste, une pastille qui glisse) plutôt que quatre boutons
+     séparés : c'est la présentation que tout le monde connaît des applications récentes, et
+     elle dit clairement qu'on choisit UN mode parmi quatre. L'onglet IA garde la couleur de
+     marque quand il est actif : c'est le mode principal, il doit se voir. */
+  .ed-tabs{display:flex;gap:2px;margin:0 0 14px;padding:3px;background:#ded7ca;
+    border:1px solid var(--panel-edge);border-radius:11px;}
+  .ed-tab{flex:1 1 auto;font-family:'Inter';font-size:12.5px;font-weight:600;padding:9px 6px;border:0;
+    white-space:nowrap;background:transparent;color:var(--stone-deep);border-radius:8px;cursor:pointer;transition:.15s;}
+  .ed-tab:hover{color:var(--ink);}
+  .ed-tab.active{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgba(61,57,52,.18);}
+  .ed-tab[data-tab="ia"].active{background:var(--oxblood);color:#fff;}
+  .ed-slider{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+  .ed-slider label{flex:0 0 108px;font-size:12px;color:var(--stone-deep);}
+  /* 32px de haut : au doigt, un curseur natif fait 20px et se rate une fois sur deux.
+     La barre reste fine, c'est la ZONE TOUCHABLE qui grandit. */
+  .ed-slider input[type=range]{flex:1;width:auto;accent-color:var(--oxblood);height:32px;}
+  .ed-slider .val{flex:0 0 42px;text-align:right;font-size:11.5px;color:var(--stone);font-variant-numeric:tabular-nums;}
+  .ed-ratios{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .ed-ratio{font-family:'Inter';font-size:12px;padding:7px 11px;border:1px solid var(--panel-edge);background:var(--panel);color:var(--stone-deep);border-radius:3px;cursor:pointer;}
+  .ed-ratio.active{background:var(--oxblood);border-color:var(--oxblood);color:#fff;font-weight:600;}
+  .ed-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .ed-hint{font-size:11.5px;color:var(--stone);margin:2px 0 10px;line-height:1.5;}
+  /* Le panneau IA est découpé en cartes : « ce que je veux » d'abord, « avec quel modèle »
+     ensuite, « ce qui existe déjà » à la fin. Une carte = une question, dans l'ordre où on
+     se la pose. C'est ce découpage, plus que la couleur, qui fait la différence entre un
+     formulaire et un outil. */
+  .ia-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:12px;
+    padding:13px 14px 14px;margin-bottom:11px;box-shadow:0 1px 2px rgba(61,57,52,.055);}
+  .ia-card-h{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+    margin:0 0 9px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--stone);font-weight:700;}
+  .ia-card-h .ttl{flex:1 1 auto;}
+  .ia-card-h .ttl{display:flex;align-items:center;gap:6px;}
+  .ia-prompt{display:block;width:100%;margin:0;font-family:'Inter';font-size:14px;
+    padding:11px 12px;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);
+    color:var(--ink);line-height:1.5;resize:vertical;transition:.15s;}
+  .ia-prompt:focus{outline:0;border-color:var(--oxblood);box-shadow:0 0 0 3px rgba(154,133,116,.18);background:#fff;}
+  .ia-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;}
+  .ia-chip{font-family:'Inter';font-size:11.5px;padding:6px 11px;border-radius:999px;
+    border:1px solid var(--panel-edge);background:var(--paper);color:var(--stone-deep);
+    cursor:pointer;transition:.15s;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}
+  .ia-chip:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .ia-chip.recent{background:transparent;font-style:italic;}
+  .ia-chips-lbl{margin:11px 0 0;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--stone-light);font-weight:700;}
+  /* Un seul geste principal, pleine largeur, en bas de la carte : sur un téléphone on ne
+     cherche pas le bouton, il est là où le pouce tombe. */
+  .ia-go{display:block;width:100%;margin-top:13px;font-family:'Inter';font-size:14px;font-weight:600;
+    padding:13px 14px;border:0;border-radius:9px;background:var(--oxblood);color:#fff;cursor:pointer;
+    box-shadow:0 2px 8px rgba(154,133,116,.35);transition:.15s;}
+  .ia-go:hover:not([disabled]){filter:brightness(.92);}
+  .ia-go[disabled]{opacity:.6;cursor:default;box-shadow:none;}
+  .ia-sub{margin:9px 0 0;font-size:11.5px;color:var(--stone-light);line-height:1.5;text-align:center;}
+  .ia-state p{margin:0;font-size:12.5px;}
+  .ia-prompt-echo{color:var(--stone);font-style:italic;margin-top:4px!important;}
+  /* La pile de versions : des pastilles qui passent à la ligne. Sur un téléphone, une barre
+     qui défile horizontalement cache ce qu'elle contient — on préfère qu'elles s'empilent. */
+  .ia-vers{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px;}
+  .ia-ver{border:1px solid var(--panel-edge);background:var(--travertine);color:var(--stone-deep);
+    border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:.15s;}
+  .ia-ver:hover{border-color:var(--stone-light);}
+  .ia-ver.on{background:var(--oxblood);border-color:var(--oxblood);color:#fff;cursor:default;}
+  .ia-ver[data-enligne]::after{content:' 🌐';font-size:10px;}
+  .ia-ver-meta{color:var(--stone);font-size:11.5px!important;line-height:1.5;}
+  .ia-ver-site{color:var(--stone-deep);font-size:11.5px!important;line-height:1.5;margin:2px 0 0!important;}
+  /* ---- Écran de publication : ce qui est en ligne / ce qui part ---- */
+  .pub-resume{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px;}
+  .pub-chip{font-size:11.5px;padding:5px 10px;border-radius:999px;background:var(--travertine);
+    color:var(--stone-deep);border:1px solid var(--panel-edge);}
+  .pub-chip.chg{background:rgba(183,124,52,.14);border-color:rgba(183,124,52,.45);color:#8a5a18;}
+  .pub-chip.neuf{background:rgba(74,124,89,.14);border-color:rgba(74,124,89,.45);color:#33613f;}
+  .pub-chip.ret{background:#fbeee9;border-color:#e8c9bd;color:#8c3f2d;}
+  .pub-liste{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    border:1px solid var(--panel-edge);border-radius:10px;background:var(--paper);}
+  .pub-ligne{padding:10px 11px;border-bottom:1px solid var(--panel-edge);}
+  .pub-ligne:last-child{border-bottom:0;}
+  .pub-ligne.inch{opacity:.62;}
+  .pub-h{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin-bottom:7px;}
+  .pub-h b{font-size:12.5px;color:var(--ink);word-break:break-word;min-width:0;}
+  .pub-why{font-size:11px;color:#8a5a18;line-height:1.45;}
+  .pub-ligne.inch .pub-why{color:var(--stone-light);}
+  .pub-paire{display:grid;grid-template-columns:1fr 18px 1fr;align-items:center;gap:6px;}
+  .pub-cote{min-width:0;}
+  .pub-lbl{display:block;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--stone-light);font-weight:700;margin-bottom:3px;}
+  .pub-vue{position:relative;aspect-ratio:4/3;border-radius:7px;overflow:hidden;
+    background:var(--travertine);border:1px solid var(--panel-edge);
+    display:flex;align-items:center;justify-content:center;}
+  .pub-vue img{width:100%;height:100%;object-fit:cover;display:block;}
+  .pub-vue span{font-size:10.5px;color:var(--stone-light);text-align:center;padding:0 6px;line-height:1.3;}
+  .pub-fleche{text-align:center;color:var(--stone-light);font-size:13px;}
+  .pub-note{margin:9px 0 0;font-size:11.5px;color:var(--stone);line-height:1.5;}
+  .pub-vide{padding:18px 14px;text-align:center;font-size:12.5px;color:var(--stone);line-height:1.55;}
+  .pub-vue.pub-choisissable{cursor:pointer;}
+  .pub-chver{display:block;margin:4px auto 0;font-size:10.5px;color:var(--oxblood);
+    background:none;border:0;padding:2px 4px;text-decoration:underline;cursor:pointer;}
+  .pub-verpick{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;padding-top:9px;
+    border-top:1px dashed var(--panel-edge);}
+  .pub-verb{width:64px;border:0;background:none;padding:0;cursor:pointer;text-align:center;}
+  .pub-verb-im{aspect-ratio:4/3;border-radius:6px;overflow:hidden;background:var(--travertine);
+    border:2px solid var(--panel-edge);}
+  .pub-verb.on .pub-verb-im{border-color:var(--oxblood);}
+  .pub-verb-im img{width:100%;height:100%;object-fit:cover;display:block;}
+  .pub-verb span{display:block;font-size:9.5px;color:var(--stone);margin-top:3px;line-height:1.25;}
+  .pub-verb.on span{color:var(--oxblood);font-weight:600;}
+  @media(max-width:420px){.pub-liste{max-height:40vh;}}
+  .ia-src{margin-top:10px;}
+  .ia-src .lbl{font-size:11px;}
+  /* Solde : une pastille discrète dans l'en-tête de carte, pas un bandeau. L'information est
+     utile, elle n'est pas le sujet. */
+  .ia-solde{display:inline-flex;align-items:center;gap:6px;background:var(--travertine);
+    border:1px solid var(--panel-edge);border-radius:999px;padding:3px 4px 3px 10px;
+    font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--stone-deep);
+    white-space:nowrap;flex:0 0 auto;}
+  .ia-solde b{color:var(--ink);font-variant-numeric:tabular-nums;}
+  .ia-solde.bas b{color:#b6543f;}
+  .ia-solde button{border:0;background:transparent;color:var(--stone);cursor:pointer;
+    font-size:12px;line-height:1;padding:4px 6px;border-radius:999px;}
+  .ia-solde button:hover{background:var(--panel-edge);color:var(--ink);}
+  .ia-warn{margin:9px 0 0;font-size:11px;color:var(--stone);line-height:1.5;
+    background:var(--travertine);border-radius:7px;padding:8px 10px;}
+  .ia-erreur{background:#fbeee9;border:1px solid #e8c9bd;border-left:3px solid #b6543f;
+    border-radius:9px;padding:11px 13px;margin:0 0 11px;}
+  .ia-erreur p{margin:0 0 8px;font-size:12.5px;color:#8c3f2d;line-height:1.5;}
+  /* Même bloc, mais pour une fin de série sans incident : ce n'est pas une alerte. */
+  .ia-erreur.ia-ok{background:#eef3ec;border-color:#c9dcc2;border-left-color:#4a7c59;}
+  .ia-erreur.ia-ok p{color:#33613f;}
+  .ia-pied{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    margin:2px 0 0;font-size:11.5px;color:var(--stone);}
+  .ias-note{margin:0 0 14px;font-size:11.5px;color:var(--stone);line-height:1.5;}
+  .ias-check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--ink);margin:6px 0 4px;}
+  .ias-check input{width:auto;}
+  .ias-msg{margin:10px 0 0;font-size:12.5px;color:#b6543f;line-height:1.5;}
+  .ia-model-id{font-size:11px;color:var(--stone);background:var(--travertine);
+    padding:4px 7px;border-radius:4px;word-break:break-all;}
+  .ia-cat{margin-top:14px;}
+  .ia-cat-t{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);
+    font-weight:700;margin-bottom:6px;}
+  .ia-cat-row{display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:5px;
+    background:var(--panel);border:1px solid var(--panel-edge);border-radius:8px;}
+  .ia-cat-txt{flex:1;min-width:0;font-size:12.5px;}
+  .ia-cat-txt b{display:block;color:var(--ink);}
+  .ia-cat-txt span{display:block;font-size:11px;color:var(--stone);line-height:1.45;margin-top:2px;}
+  .ia-cat-in{font-size:11px;color:var(--stone-light);white-space:nowrap;}
+  /* Choix de l'allure du site : une pastille qui montre vraiment le fond et l'encre du
+     thème, pour ne pas avoir à lire pour comprendre. */
+  .site-themes{display:flex;flex-direction:column;gap:7px;margin-top:8px;}
+  .site-theme{display:flex;gap:11px;align-items:flex-start;text-align:left;width:100%;
+    font-family:'Inter';padding:10px 11px;border:1px solid var(--panel-edge);border-radius:9px;
+    background:var(--paper);color:var(--ink);cursor:pointer;}
+  .site-theme:hover{border-color:var(--stone-light);}
+  .site-theme[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink);}
+  .st-pastille{flex:0 0 auto;width:38px;height:38px;border-radius:7px;border:1px solid var(--panel-edge);
+    display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;font-size:15px;}
+  .st-txt{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .st-txt b{font-size:14px;font-weight:600;}
+  .st-txt i{font-style:normal;font-size:11px;color:var(--stone-light);}
+  .st-txt em{font-style:normal;font-size:12px;color:var(--stone);line-height:1.45;}
+  /* --- Langues et journal du site (greffés sur le panneau existant) --- */
+  .site-sections{font-size:12.5px;line-height:1.55;padding:9px 11px;border-radius:3px;margin:2px 0 8px;}
+  .site-sections.ok{background:#eef3ec;color:#3f5a3a;border:1px solid #cfe0ca;}
+  .site-sections.ko{background:#f6f2e8;color:#6b5b3a;border:1px solid #e2d8c2;}
+  .site-enligne{font-size:12px;line-height:1.5;color:var(--stone);margin:10px 0 0;padding:8px 10px;
+    border-radius:3px;background:var(--panel);border:1px solid var(--panel-edge);}
+  .site-enligne.ok{background:#eef3ec;color:#3f5a3a;border-color:#cfe0ca;}
+  .site-enligne.ko{background:#f8eeec;color:#7d3a30;border-color:#e6cdc8;}
+  .site-cat-n{flex:0 0 auto;min-width:20px;text-align:center;font-size:11px;color:var(--stone);
+    background:var(--travertine);border-radius:9px;padding:2px 7px;}
+  .site-rang{flex:0 0 auto;min-width:20px;text-align:center;font-size:11px;font-weight:700;
+    color:var(--stone);background:var(--travertine);border-radius:9px;padding:2px 7px;}
+  .site-ordre-nom{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;
+    font-size:12.5px;color:var(--ink);overflow:hidden;}
+  .site-ordre-nom i{font-style:normal;font-size:11px;color:var(--stone);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .txt-total{padding:11px 13px;border-radius:8px;font-size:13px;font-weight:600;
+    background:#eef3ec;color:#3f5a3a;border:1px solid #cfe0ca;}
+  .txt-total.ko{background:#f8eeec;color:#7d3a30;border-color:#e6cdc8;}
+  .anth-pas{margin:10px 0 12px;padding-left:20px;font-size:12.5px;color:var(--ink);line-height:1.65;}
+  .anth-pas li{margin-bottom:6px;}
+  .anth-pas code{font-size:11.5px;background:var(--travertine);padding:1px 5px;border-radius:4px;}
+  .txt-mois{flex:1;min-width:0;font-size:12.5px;color:var(--ink);text-transform:capitalize;}
+  .txt-cout{flex:0 0 auto;font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .pub-envoi{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--ink);cursor:pointer;}
+  .pub-envoi.off{color:var(--stone);font-style:italic;cursor:default;}
+  .pub-envoi input{margin:0;}
+  /* « Retirer du site » : le geste manquant. Il doit être là, sur la ligne de la photo, au
+     moment où l'on décide ce qui part — pas au fond du menu ⋯ d'une vignette. */
+  .pub-actes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:9px;}
+  .pub-hors{background:transparent;border:1px solid var(--panel-edge);border-radius:4px;
+    padding:6px 10px;font-size:12px;color:var(--stone-deep);cursor:pointer;min-height:34px;}
+  .pub-hors:hover{border-color:var(--oxblood);color:var(--oxblood);}
+  .pub-bloc{border-top:1px solid var(--panel-edge);}
+  .pub-bloc>summary{padding:10px 11px;font-size:12.5px;color:var(--stone-deep);cursor:pointer;
+    list-style:none;min-height:38px;display:flex;align-items:center;}
+  .pub-bloc>summary::-webkit-details-marker{display:none}
+  .pub-bloc>summary::before{content:'▸ ';margin-right:4px;}
+  .pub-bloc[open]>summary::before{content:'▾ ';}
+  .pub-mini{display:flex;align-items:center;gap:10px;padding:8px 11px;border-top:1px solid var(--panel-edge);
+    font-size:12.5px;color:var(--ink);}
+  .pub-mini b{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pub-choix{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
+    margin:10px 0 4px;padding:10px 12px;border:1px solid var(--panel-edge);border-radius:8px;
+    background:var(--travertine);font-size:12px;color:var(--stone);}
+  .pub-choix span{flex:1;min-width:180px;}
+  .pub-choix div{display:flex;gap:6px;}
+  .site-langues{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0 4px;}
+  .site-chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);}
+  .site-onglets{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:10px 0 0;
+    padding-bottom:8px;border-bottom:1px solid var(--panel-edge);}
+  .site-onglet{background:none;border:1px solid var(--panel-edge);border-radius:3px;padding:6px 12px;
+    cursor:pointer;font-family:'Inter';font-size:12px;color:var(--stone);}
+  .site-onglet.on{background:var(--ink);border-color:var(--ink);color:var(--paper);}
+  .site-onglets-note{font-size:10.5px;color:var(--stone-light);margin-left:auto;letter-spacing:.05em;}
+  .site-repli{font-size:11px;color:var(--stone-light);font-style:italic;margin:-7px 0 11px;}
+  .site-entree{border:1px solid var(--panel-edge);border-radius:4px;padding:10px;margin-bottom:10px;background:var(--panel);}
+  /* Un espace vide se repère d'un coup d'oeil dans la liste : trait pointillé, fond
+     absent. Sinon on le confond avec une carte qu'on aurait oublié de remplir. */
+  .site-entree-vide{border-style:dashed;background:transparent;}
+  .site-entree input,.site-entree textarea{font-size:12.5px;padding:6px 8px;min-width:0;}
+  .site-entree input[disabled]{opacity:.55;}
+  .site-mvt{display:flex;flex-wrap:wrap;gap:7px;margin-top:6px;}
+  .site-mvt .mini[aria-pressed="true"]{border-color:var(--ink);color:var(--ink);font-weight:600;}
+  .ia-params{margin-top:11px;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);}
+  .ia-params>summary{cursor:pointer;padding:10px 12px;font-size:12.5px;font-weight:600;color:var(--stone-deep);}
+  .ia-params-body{padding:4px 12px 12px;font-size:12.5px;color:var(--stone);}
+  .ia-field{margin-bottom:11px;}
+  .ia-model-row{display:flex;align-items:center;gap:9px;}
+  .ia-model-row select{flex:1;min-width:0;font-family:'Inter';font-size:13px;padding:9px 10px;
+    border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);color:var(--ink);}
+  .ia-model-fav{flex:0 0 auto;border:1px solid var(--panel-edge);border-radius:9px;background:var(--paper);
+    color:var(--stone-light);cursor:pointer;font-size:16px;line-height:1;padding:9px 11px;}
+  .ia-model-fav:hover{color:var(--stone-deep);border-color:var(--stone-light);}
+  .ia-model-fav[aria-pressed="true"]{color:#c79a3e;border-color:#c79a3e;}
+  .ia-model-note{margin:8px 0 0;font-size:11.5px;color:var(--stone);line-height:1.5;}
+  .ia-field>label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--stone);font-weight:600;margin-bottom:4px;}
+  .ia-input{width:100%;font-family:'Inter';font-size:13px;padding:7px 9px;border:1px solid var(--panel-edge);
+    border-radius:3px;background:var(--paper);color:var(--ink);}
+  input.ia-input[type=checkbox]{width:auto;}
+  .ia-field-desc{margin:4px 0 0;font-size:11px;color:var(--stone-light);line-height:1.45;}
+  .ia-field-skip{margin:0;font-size:11px;color:var(--stone-light);font-style:italic;}
+  /* La ligne « ce qu'on regarde » : elle vit dans le panneau, pas dans la barre du haut —
+     la barre doit tenir sur une ligne sur téléphone, et l'indice y était donc masqué,
+     c'est-à-dire invisible exactement là où il sert. */
+  .ed-etat{background:var(--travertine);border:1px solid var(--panel-edge);border-radius:10px;
+    padding:9px 11px;margin-bottom:11px;}
+  .ed-etat-l{margin:0;font-size:12.5px;color:var(--ink);line-height:1.5;}
+  .ed-etat-l b{color:var(--oxblood);}
+  .ed-cmp{margin:3px 0 0;font-size:11.5px;color:var(--stone-light);line-height:1.5;}
+  .ed-raz{margin-top:8px;}
+  .ed-bar .btn[disabled]{opacity:.35;cursor:default;}
+  #ed-photo-meta{margin-top:10px;}
+  /* La condition d'aspect compte autant que la largeur : un téléphone en « site pour
+     ordinateur » fait ~980 px de large tout en restant en portrait. En deux colonnes, la
+     photo n'y occupait que 13 % de l'écran (mesuré à 980×2175), le reste étant du noir. */
+  @media(min-width:900px) and (min-aspect-ratio:1/1){
+    .ed-body{flex-direction:row;}
+    .ed-panel{width:340px;flex:0 0 340px;max-height:none;border-top:none;border-left:1px solid var(--hair);}
+  }
+  /* Écran haut et étroit : la photo prend toute la largeur, et c'est le PANNEAU qui absorbe
+     la hauteur restante. Laisser la scène s'étirer donnait une photo perdue au milieu de
+     1145 px de noir (mesuré à 980×2175) ; le vide résiduel est maintenant du panneau clair,
+     à sa place, au lieu d'un trou noir. */
+  @media(max-aspect-ratio:1/1){
+    .ed-stage{flex:0 0 auto;max-height:56vh;}
+    .ed-panel{flex:1 1 auto;max-height:none;}
+  }

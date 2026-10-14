@@ -1,0 +1,10619 @@
+/* ============ PURE (sans DOM) — testable ============ */
+function esc(t){return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function cgvClauseHtml(c){
+  const lines=(c.body||'').split('\n').map(l=>l.trim()).filter(l=>l);
+  const first=lines[0]||'';
+  let html=`<p><b>${esc(c.title)}</b> ${esc(first)}</p>`;
+  let listBuf=[];
+  const flush=()=>{if(listBuf.length){html+='<ul>'+listBuf.map(l=>`<li>${esc(l)}</li>`).join('')+'</ul>';listBuf=[];}};
+  lines.slice(1).forEach(line=>{
+    if(line.startsWith('- ')){listBuf.push(line.slice(2).trim());}
+    else{flush();html+=`<p>${esc(line)}</p>`;}
+  });
+  flush();
+  return html;
+}
+function fmt(n){return Math.round(n).toLocaleString('fr-FR');}
+/* Dates : on stocke en ISO (aaaa-mm-jj, ce que renvoie le calendrier natif) et on affiche en jj/mm/aa. */
+function isoDate(v){return (v&&/^\d{4}-\d{2}-\d{2}$/.test(v))?v:'';}
+function fmtDate(v){if(!v)return '—';const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v);return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:v;}
+function lineTotal(S,sv){
+  if(!sv.on)return 0;
+  if(sv.mode==='fixed')return sv.price||0;
+  if(sv.mode==='perM2')return (sv.price||0)*(S.surf||0);
+  if(sv.mode==='qtePU')return (sv.qty||0)*(sv.pu||0);
+  return 0;
+}
+function priceLabel(S,sv){const c=S.cur,t=lineTotal(S,sv);
+  if((sv.mode==='fixed'||sv.mode==='perM2'||sv.mode==='qtePU')&&t)return fmt(t)+' '+c;
+  if(sv.mode==='quote')return 'sur devis';return '';}
+function metaLabel(S,sv){const c=S.cur;
+  if(sv.mode==='perM2'&&sv.price)return `${S.surf} m² × ${fmt(sv.price)} ${c}/m²`;
+  if(sv.mode==='qtePU'&&lineTotal(S,sv))return `${sv.qty} × ${fmt(sv.pu)} ${c}`;return '';}
+function computeTotals(S,inc){
+  const rate=S.tvaOff?0:(S.tva||0);
+  if(S.pricingMode==='global'){
+    let ht,tva,ttc;
+    if(S.gIsTTC){ttc=S.gAmount||0;ht=rate?ttc/(1+rate/100):ttc;tva=ttc-ht;}
+    else{ht=S.gAmount||0;tva=ht*rate/100;ttc=ht+tva;}
+    return {ht,tva,ttc,rate,show:(S.gAmount||0)>0};
+  }
+  const ht=inc.reduce((a,v)=>a+lineTotal(S,v),0);const tva=ht*rate/100;
+  return {ht,tva,ttc:ht+tva,rate,show:inc.some(v=>lineTotal(S,v)>0)};
+}
+function buildDevisHTML(S){
+  const B=(S.branding&&S.branding.companyName)?S.branding:DEFAULT_BRANDING;
+  const pal=B.palette==='custom'?buildCustomPalette(B.customAccent):(DEFAULT_PALETTES[B.palette]||DEFAULT_PALETTES.actuel);
+  const fonts=FONT_THEMES[B.fontTheme]||FONT_THEMES.actuel;
+  ensureFontThemeLoaded(B.fontTheme);
+  /* Le fond photo est peint directement en background réel de .devis-page (pas un pseudo-élément
+     absolute superposé) : plus fiable pour la pagination à l'impression/export PDF (une couche
+     séparée a déjà provoqué une page blanche en trop). Le flip est cuit dans l'image elle-même
+     (voir renderDevisBgFromBase) au lieu d'un transform CSS, pour la même raison. */
+  let bgPageCss='';
+  if(B.devisBgImage){
+    const opacityFrac=(B.devisBgOpacity!=null?B.devisBgOpacity:25)/100;
+    const pr=hexToRgb(pal.paper);
+    const tint=`rgba(${pr.r},${pr.g},${pr.b},${(1-opacityFrac).toFixed(3)})`;
+    bgPageCss=`.devis-page{background-image:linear-gradient(${tint},${tint}),url("${B.devisBgImage}");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}`;
+  }
+  const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};}${bgPageCss}</style>`;
+  const detail=S.pricingMode==='detail';
+  const inc=(S.services||[]).filter(v=>v.on);
+  const exc=(S.exclus||[]).filter(v=>v.on&&(v.title||'').trim());
+  const order=[...new Set(inc.map(v=>v.cat))];
+  const groupsHtml=order.map(cat=>{
+    const items=inc.filter(v=>v.cat===cat).map(v=>{
+      const pl=detail?priceLabel(S,v):'',ml=detail?metaLabel(S,v):'';
+      const optHtml=v.optionClient?'<div class="dv-option-choice"><span class="dv-opt-box"></span> Oui, je valide cette option &nbsp;&nbsp; <span class="dv-opt-box"></span> Non</div>':'';
+      return `<div class="dv-item${v.optionClient?' dv-item-option':''}"><div class="it-t"><span>${esc(v.title)}</span>${pl?`<span class="price">${pl}</span>`:''}</div>${ml?`<div class="it-meta">${ml}</div>`:''}${v.desc?`<div class="it-d">${esc(v.desc)}</div>`:''}${optHtml}</div>`;
+    }).join('');
+    return `<div class="dv-group" data-cat="${esc(cat)}"><div class="dv-group-h">${esc(cat)}</div>${items}</div>`;
+  }).join('');
+  const exclHtml=exc.length?`<div class="dv-excl"><div class="dv-group-h">Hors prestation</div><ul>${exc.map(v=>`<li>${esc(v.title)}</li>`).join('')}</ul><p style="font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:#8c7b63;text-align:center;font-style:italic;margin-top:2mm;">Des partenaires spécialisés peuvent être recommandés selon les besoins du projet.</p></div>`:'';
+  const T=computeTotals(S,inc);
+  let totalsHtml='';
+  if(T.show){
+    const htLabel=(S.pricingMode==='global')?'Honoraires — forfait global (H.T.)':'Montant total H.T.';
+    totalsHtml=`<div class="dv-totals"><div class="tr"><span class="k">${htLabel}</span><span class="v">${fmt(T.ht)} ${S.cur}</span></div>${S.tvaOff?`<div class="tr"><span class="k">TVA (non applicable)</span><span class="v">0 ${S.cur}</span></div>`:`<div class="tr"><span class="k">TVA ${T.rate}%</span><span class="v">${fmt(T.tva)} ${S.cur}</span></div>`}<div class="tr grand"><span class="k">Total T.T.C.</span><span class="v">${fmt(T.ttc)} ${S.cur}</span></div>${S.tvaOff?`<div class="dv-tva-note">TVA non applicable — à confirmer avec le comptable.</div>`:''}</div>`;
+  }
+  const tlHtml=S.tlOn?`<div class="dv-timeline"><div class="tl-h">Déroulement</div>${(S.tl||'').split('\n').filter(x=>x.trim()).map(x=>`<div class="tl-row">${esc(x)}</div>`).join('')}</div>`:'';
+  const cAddr=[S.caddr,[S.cp,S.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  const clientBlock=`Destiné à : <span class="nm">${esc(S.raison)}</span><br>${S.contact?esc(S.contact)+'<br>':''}${S.cphone?'Tél : '+esc(S.cphone)+'<br>':''}${S.cemail?esc(S.cemail)+'<br>':''}${cAddr?esc(cAddr)+'<br>':''}${S.siret?'N° société : '+esc(S.siret)+'<br>':''}Projet : ${esc(S.proj)}<br>Adresse : ${esc(S.paddr)}`;
+  const clientSigHtml=S.clientSignature?`<img src="${S.clientSignature}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
+  const ownerSigHtml=B.signatureImage?`<img src="${B.signatureImage}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
+  const signerName=(S.sigOverride&&S.sigName)?S.sigName:S.raison;
+  const signOnly=`<div class="dv-sign"><div class="s">Signature : ${esc(B.signatureName)}<br>${ownerSigHtml}</div><div class="s">Signature client : ${esc(signerName)}<br>${clientSigHtml}</div></div>`;
+  const footOnly=`${B.licenseNumber?`<div class="dv-license" dir="rtl">${esc(B.licenseLabel)} : ${esc(B.licenseNumber)}</div>`:''}<div class="dv-foot">${esc(B.email)} · ${esc(B.phone)} · ${esc(B.social)}</div>`;
+  const signOnDevis=B.signOnDevis!==false;
+  const signBlock=(signOnDevis?signOnly:'')+footOnly;
+  const docLabel=S.docType==='facture'?'Facture':'Devis';
+  const page1=`<div class="devis-page"><div class="wm"><span>${esc(B.watermarkText)}</span></div><div class="dv-inner">${B.showBsd?`<div class="dv-bsd" dir="rtl">בס״ד</div>`:''}<div class="dv-head"><div class="col">${docLabel} N° : ${esc(S.num)}<br>Date : ${esc(S.date)}<br>${esc(B.address)}<br>Tél : ${esc(B.phone)}<br>${esc(B.email)}</div><div class="col right">${clientBlock}</div></div><div class="dv-brand"><img class="dv-logo" src="${B.logoDataUri}" alt="${esc(B.companyName)}"></div><div class="dv-title">${esc(S.proj)}${S.surf?` — ${S.surf} m²`:''}</div><div class="dv-rule"></div>${S.intro?`<div class="dv-intro">${esc(S.intro)}</div>`:''}${groupsHtml}${exclHtml}${tlHtml}<div class="dv-pricesign">${totalsHtml}${signBlock}</div></div></div>`;
+  const condSignHtml=B.signOnCgv?signOnly:'';
+  const condPage=S.condOn?`<div class="devis-page cond"><div class="wm"><span>${esc(B.watermarkText)}</span></div><div class="dv-inner dv-cond"><h2>Conditions générales</h2>${(S.cgv&&S.cgv.length?S.cgv:DEFAULT_CGV).map(cgvClauseHtml).join('')}${condSignHtml}</div></div>`:'';
+  return paletteStyle+page1+condPage;
+}
+
+/* ============ DÉFAUTS BIBLIOTHÈQUE ============ */
+function uid(){return 'id'+Math.random().toString(36).slice(2,9);}
+const LIB_VERSION='sheet-2026-08-02c';
+function defaultLibrary(){
+  const mk=(title,desc,extra)=>Object.assign({id:uid(),title,desc:desc||'',mode:'none',price:0,qty:1,pu:0,defaultOn:false},extra||{});
+  return {version:LIB_VERSION,sections:[
+    {id:uid(),name:'Conseil',items:[
+      mk("1er rdv explication du projet","",{defaultOn:true}),
+      mk("Visite sur site","",{defaultOn:true}),
+      mk("Analyse des besoins","Étude et organisation des espaces : bar, assises, zone d'accueil, circulation.",{defaultOn:true}),
+      mk("Étude de faisabilité","Conception du concept décoratif et de l'ambiance générale."),
+    ]},
+    {id:uid(),name:'Conception',items:[
+      mk("Relevé de l'existant",""),
+      mk("Esquisse / croquis",""),
+      mk("Plans 2D","",{defaultOn:true}),
+      mk("Coupes / façades",""),
+      mk("Projet détaillé",""),
+      mk("Plan d'aménagement intérieur","",{defaultOn:true}),
+    ]},
+    {id:uid(),name:'3D',items:[
+      mk("Modélisation 3D",""),
+      mk("Vues 3D",""),
+      mk("Rendus photoréalistes","Création de 3 à 4 rendus 3D photoréalistes pour visualiser le projet.",{defaultOn:true}),
+    ]},
+    {id:uid(),name:'Technique',items:[
+      mk("Plans techniques d'exécution","Réalisation des plans techniques destinés à l'entrepreneur : côtes, agencement, électricité, éclairage, plans détaillés, plomberie.",{defaultOn:true}),
+      mk("Plans électriques",""),
+      mk("Plans plomberie",""),
+      mk("Détails de menuiserie / mobilier",""),
+    ]},
+    {id:uid(),name:'Administratif',items:[
+      mk("Dossier permis construction / entreprise",""),
+      mk("Déclaration préalable",""),
+      mk("Dépôt du dossier",""),
+      mk("Autorisation de travaux",""),
+    ]},
+    {id:uid(),name:'Chiffrage',items:[
+      mk("Devis quantitatif et estimatif",""),
+      mk("Demandes de 2 devis min. par corps de métier",""),
+      mk("Analyse des devis",""),
+    ]},
+    {id:uid(),name:'Chantier',items:[
+      mk("Coordination de projet (par semaine)","",{mode:'qtePU',qty:1,pu:750}),
+      mk("Réunions de chantier",""),
+      mk("Visites de chantier (par semaine)","",{mode:'qtePU',qty:1,pu:0}),
+      mk("Compte rendu de chantier (par semaine)",""),
+      mk("Suivi des travaux","Le suivi de chantier consiste à vérifier la bonne mise en œuvre du projet et à accompagner le client pendant la phase de travaux. Des ajustements mineurs peuvent être pris en compte en cours de réalisation, tant qu'ils ne modifient pas la conception initiale. Ce suivi ne comprend pas la gestion complète des prestataires ni la coordination quotidienne, qui restent sous la responsabilité du client."),
+    ]},
+    {id:uid(),name:'Compléments',items:[
+      mk("Estimation budgétaire","Une estimation budgétaire détaillée des travaux, menuiseries, matériaux et mobilier est fournie pour planifier le projet avec précision."),
+      mk("Sélection matériaux (2 jours)","Sélection des matériaux, couleurs et revêtements."),
+      mk("Sélection mobilier & luminaires","Accompagnement dans les choix, jusqu'à deux visites incluses."),
+      mk("Décoration",""),
+      mk("Commandes chez prestataires","Détails des prestataires : "),
+      mk("Réception / vérification de la marchandise","Détails de la marchandise : "),
+      mk("Gestion du projet de A à Z",""),
+      mk("Travail express",""),
+    ]},
+  ],exclus:DEFAULT_EXCLUS.slice(),cgv:DEFAULT_CGV.map(c=>({...c})),chantierCats:DEFAULT_CHANTIER_CATS.map(c=>({...c})),branding:{...DEFAULT_BRANDING},bgLibrary:[],taskCategories:DEFAULT_TASK_CATEGORIES.map(c=>({...c})),clientStatuses:DEFAULT_CLIENT_STATUSES.map(c=>({...c}))};
+}
+const DEFAULT_EXCLUS=[
+  "Honoraires des prestataires et corps de métier (facturés séparément)",
+  "Consultants externes / bureaux d'études / ingénieurs",
+  "Coordination quotidienne des prestataires (reste sous la responsabilité du client)",
+];
+const DEFAULT_CGV=[
+  {title:"1. Objet du contrat.",body:"Les présentes conditions générales de vente régissent les relations contractuelles entre l'architecte et le client, définissant les droits et obligations de chaque partie."},
+  {title:"2. Prestations de l'architecte.",body:"L'architecte s'engage à fournir des services de conception, de planification et de supervision des travaux conformément aux normes professionnelles en vigueur."},
+  {title:"3. Honoraires et modalités de paiement.",body:"Les honoraires sont fixés selon une prestation globale. Les paiements s'effectuent selon les modalités suivantes :\n- 30 % à la signature du contrat\n- 40 % à la remise des plans définitifs (après validation de la liste des quantités des matériaux)\n- 30 % à la fin des travaux si la prestation de suivi de chantier est prise"},
+  {title:"4. Obligations des parties.",body:"Le client fournit toutes les informations nécessaires et respecte les délais de paiement. L'architecte respecte les délais de réalisation. Les plans sont validés en commun avant transmission au maître d'œuvre et aux prestataires."},
+  {title:"5. Modifications et révisions.",body:"Toute modification du projet initial validé pourra faire l'objet d'un avenant précisant les nouvelles conditions financières et les délais supplémentaires éventuels."},
+  {title:"6. Responsabilité et assurance.",body:"L'architecte met en œuvre tous les moyens nécessaires à la bonne exécution des prestations. Les prestataires doivent disposer d'une assurance responsabilité civile professionnelle."},
+  {title:"7. Résiliation.",body:"En cas de résiliation par l'une des parties, un préavis de 30 jours est requis. Les honoraires dus pour les prestations réalisées restent exigibles."},
+  {title:"8. Clause de non-responsabilité.",body:"L'architecte ne pourra être tenu responsable d'un arrêt des travaux pour des raisons indépendantes de sa volonté (météo, décisions administratives, situation de guerre, financement du client ou défaillance d'un entrepreneur)."},
+  {title:"9. Frais administratifs et prestataires externes.",body:"Les frais administratifs et les coûts des prestataires externes (ingénieurs, consultants, etc.) ne sont pas inclus dans les honoraires et sont facturés séparément."},
+  {title:"10. Litiges et juridiction.",body:"En cas de litige, les parties recherchent une solution amiable. À défaut, le tribunal compétent sera celui du lieu de résidence de l'architecte."},
+];
+const DEFAULT_LOGO_DATAURI='data:image/png;base64,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';
+const DEFAULT_PALETTES={
+  actuel:{name:'Actuel',paper:'#f4efe6',ink:'#3d3934',oxblood:'#9a8574',stone:'#8a8074',stoneDeep:'#6f665b',stoneLight:'#b4aa9b',hair:'#d3cabb'},
+  ardoise:{name:'Ardoise',paper:'#f1f1ee',ink:'#2c2f33',oxblood:'#48586e',stone:'#7c8794',stoneDeep:'#59636f',stoneLight:'#a9b2ba',hair:'#cdd2d6'},
+  sauge:{name:'Sauge',paper:'#f3f1e8',ink:'#3a3d33',oxblood:'#6b7d5e',stone:'#8b9179',stoneDeep:'#5f6a51',stoneLight:'#b3b6a2',hair:'#d3d6c2'},
+  terracotta:{name:'Terracotta',paper:'#f6efe4',ink:'#3a2f28',oxblood:'#b1603f',stone:'#9c8570',stoneDeep:'#7a6552',stoneLight:'#c7ac95',hair:'#e2cdb8'},
+  laiton:{name:'Laiton',paper:'#f3f1ea',ink:'#242019',oxblood:'#a8843f',stone:'#8f8570',stoneDeep:'#6b6252',stoneLight:'#c2b89f',hair:'#ddd4bd'},
+  noirblanc:{name:'Noir & blanc',paper:'#ffffff',ink:'#111111',oxblood:'#000000',stone:'#6b6b6b',stoneDeep:'#333333',stoneLight:'#999999',hair:'#cccccc'},
+};
+function hexToRgb(hex){const h=(hex||'#9a8574').replace('#','');const n=h.length===3?h.split('').map(c=>c+c).join(''):h;const i=parseInt(n,16);return {r:(i>>16)&255,g:(i>>8)&255,b:i&255};}
+function rgbToHex(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');}
+function mixHex(hexA,hexB,t){const a=hexToRgb(hexA),b=hexToRgb(hexB);return rgbToHex(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t);}
+function hexToHsl(hex){
+  const {r,g,b}=hexToRgb(hex);
+  const rn=r/255,gn=g/255,bn=b/255;
+  const max=Math.max(rn,gn,bn),min=Math.min(rn,gn,bn);
+  let h=0,s=0;const l=(max+min)/2;
+  const d=max-min;
+  if(d!==0){
+    s=l>0.5?d/(2-max-min):d/(max+min);
+    if(max===rn)h=(gn-bn)/d+(gn<bn?6:0);
+    else if(max===gn)h=(bn-rn)/d+2;
+    else h=(rn-gn)/d+4;
+    h/=6;
+  }
+  return {h:h*360,s:s*100,l:l*100};
+}
+function hslToHex(h,s,l){
+  h=((h%360)+360)%360;s=Math.max(0,Math.min(100,s))/100;l=Math.max(0,Math.min(100,l))/100;
+  const c=(1-Math.abs(2*l-1))*s;
+  const x=c*(1-Math.abs((h/60)%2-1));
+  const m=l-c/2;
+  let r=0,g=0,b=0;
+  if(h<60){r=c;g=x;b=0;}else if(h<120){r=x;g=c;b=0;}else if(h<180){r=0;g=c;b=x;}
+  else if(h<240){r=0;g=x;b=c;}else if(h<300){r=x;g=0;b=c;}else{r=c;g=0;b=x;}
+  return rgbToHex((r+m)*255,(g+m)*255,(b+m)*255);
+}
+function buildCustomPalette(accent){
+  const a=accent||'#9a8574';
+  const hsl=hexToHsl(a);
+  const h=hsl.h;
+  const accentClamped=hslToHex(h,Math.min(hsl.s,55),Math.max(30,Math.min(hsl.l,55)));
+  return {name:'Photo',
+    paper:hslToHex(h,10,95),ink:hslToHex(h,14,22),oxblood:accentClamped,
+    stone:hslToHex(h,22,54),stoneDeep:hslToHex(h,26,40),
+    stoneLight:hslToHex(h,16,68),hair:hslToHex(h,14,80)};
+}
+function deriveSiteVars(pal){
+  return {
+    travertine:mixHex(pal.paper,pal.ink,.06),
+    panel:mixHex(pal.paper,'#ffffff',.55),
+    panelEdge:mixHex(pal.paper,pal.ink,.12),
+  };
+}
+function applySiteTheme(){
+  const b=(library&&library.branding)?library.branding:DEFAULT_BRANDING;
+  const key=b.sitePalette||'actuel';
+  const pal=key==='custom'?buildCustomPalette(b.siteCustomAccent):(DEFAULT_PALETTES[key]||DEFAULT_PALETTES.actuel);
+  const extra=deriveSiteVars(pal);
+  let style=document.getElementById('site-theme-style');
+  if(!style){style=document.createElement('style');style.id='site-theme-style';document.head.appendChild(style);}
+  style.textContent=`:root{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--travertine:${extra.travertine};--panel:${extra.panel};--panel-edge:${extra.panelEdge};}`;
+}
+const FONT_THEMES={
+  actuel:{name:'Actuel',sample:'Cormorant × EB Garamond',heading:"'Cormorant Garamond',serif",body:"'EB Garamond',serif"},
+  editorial:{name:'Éditorial',sample:'Playfair × Lora',heading:"'Playfair Display',serif",body:"'Lora',serif",
+    gfam:'family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Lora:ital,wght@0,400;0,500;1,400'},
+  contemporain:{name:'Contemporain',sample:'DM Serif × DM Sans',heading:"'DM Serif Display',serif",body:"'DM Sans',sans-serif",
+    gfam:'family=DM+Serif+Display:ital,wght@0,400;1,400&family=DM+Sans:wght@400;500;700'},
+  minimal:{name:'Minimal',sample:'Poppins × Inter',heading:"'Poppins',sans-serif",body:"'Inter',sans-serif",
+    gfam:'family=Poppins:wght@500;600;700'},
+  classique:{name:'Classique',sample:'Libre Baskerville × Source Serif',heading:"'Libre Baskerville',serif",body:"'Source Serif 4',serif",
+    gfam:'family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Serif+4:ital,wght@0,400;0,500;1,400'},
+};
+const _loadedFontThemes=new Set(['actuel']);
+function ensureFontThemeLoaded(key){
+  const t=FONT_THEMES[key];
+  if(!t||!t.gfam||_loadedFontThemes.has(key))return;
+  _loadedFontThemes.add(key);
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='https://fonts.googleapis.com/css2?'+t.gfam+'&display=swap';
+  document.head.appendChild(link);
+}
+const DEFAULT_BRANDING={
+  companyName:'Melissa Nabet',
+  logoDataUri:DEFAULT_LOGO_DATAURI,
+  watermarkText:'MN',
+  phone:'053-717 3080',
+  email:'melnj.arch@gmail.com',
+  address:'rabi Akiva 46, Natanya',
+  social:'@Melissa_interiordesign',
+  licenseLabel:'מס׳ רישיון',
+  licenseNumber:'57620133',
+  signatureName:'Melissa Nabet',
+  showBsd:true,
+  signatureImage:null,
+  signOnDevis:true,
+  signOnCgv:false,
+  palette:'actuel',
+  customAccent:'#9a8574',
+  fontTheme:'actuel',
+  sitePalette:'actuel',
+  siteCustomAccent:'#9a8574',
+  toolbarBrandType:'text',
+  toolbarBrandImage:null,
+  devisBgImageBase:null,
+  devisBgImage:null,
+  devisBgFlipX:false,
+  devisBgFlipY:false,
+  devisBgOpacity:25,
+  defaultCurrency:'₪',
+  defaultTva:18,
+  numPrefix:'',
+  numStart:77,
+};
+const DEFAULT_CHANTIER_CATS=[
+  {id:uid(),name:'Démolition',unit:'m²',price:60},
+  {id:uid(),name:'Maçonnerie / Cloisons',unit:'m²',price:120},
+  {id:uid(),name:'Plomberie',unit:'point',price:350},
+  {id:uid(),name:'Électricité',unit:'point',price:200},
+  {id:uid(),name:'Chape / Sol',unit:'m²',price:90},
+  {id:uid(),name:'Carrelage',unit:'m²',price:150},
+  {id:uid(),name:'Peinture',unit:'m²',price:80},
+  {id:uid(),name:'Plâtrerie / Faux plafond',unit:'m²',price:110},
+  {id:uid(),name:'Menuiserie',unit:'ml',price:300},
+  {id:uid(),name:'Climatisation',unit:'point',price:1200},
+  {id:uid(),name:'Meubles',unit:'unité',price:0},
+  {id:uid(),name:'Luminaires',unit:'unité',price:0},
+];
+const DEFAULT_TASK_CATEGORIES=[
+  {id:uid(),label:'Administratif',icon:'📁'},
+  {id:uid(),label:'Marketing',icon:'📣'},
+  {id:uid(),label:'Commercial',icon:'🤝'},
+  {id:uid(),label:'Conception',icon:'✏️'},
+  {id:uid(),label:'Chantier',icon:'🏗️'},
+  {id:uid(),label:'Fournisseurs',icon:'📦'},
+  {id:uid(),label:'Comptabilité',icon:'💶'},
+  {id:uid(),label:'Relation client',icon:'👥'},
+];
+/* id fixes volontairement (pas uid()) : 'annule' est référencé ailleurs dans le code
+   (ex. exclusion des relances de paiement) — un statut par défaut doit garder son id
+   stable même après un ↺ Réinitialiser, sinon ces liens silencieux se cassent. */
+/* `archive` : ce statut range le client sous le séparateur du tableau. Ce n'est pas la même
+   chose que « supprimé » — le client reste là, ses montants comptent toujours dans les
+   totaux. C'est un rangement, pas une mise à l'écart. Les statuts étant modulables, ce
+   drapeau l'est aussi : un statut ajouté peut être déclaré archivant. */
+const DEFAULT_CLIENT_STATUSES=[
+  {id:'en_cours',label:'En cours',color:'#d59a4a'},
+  {id:'devis',label:'Devis envoyé',color:'#6aa6cf'},
+  {id:'termine',label:'Terminé',color:'#6a9a5a',archive:true},
+  {id:'annule',label:'Annulé',color:'#b6543f',archive:true},
+];
+
+/* ============ STOCKAGE PERSISTANT (avec repli mémoire) ============ */
+const store={
+  mem:{},
+  async get(k){
+    try{if(typeof window!=='undefined'&&window.storage){const r=await window.storage.get(k,false);return r?JSON.parse(r.value):null;}}catch(e){}
+    try{if(typeof window!=='undefined'&&window.localStorage){const v=localStorage.getItem(k);if(v!=null)return JSON.parse(v);}}catch(e){}
+    return (k in this.mem)?this.mem[k]:null;},
+  async set(k,v){this.mem[k]=v;
+    if(typeof sbUser!=='undefined'&&sbUser&&!applyingRemote&&typeof SYNC_KEYS!=='undefined'&&SYNC_KEYS.has(k))scheduleSyncPush();
+    try{if(typeof window!=='undefined'&&window.storage){await window.storage.set(k,JSON.stringify(v),false);return;}}catch(e){}
+    try{if(typeof window!=='undefined'&&window.localStorage){localStorage.setItem(k,JSON.stringify(v));return;}}catch(e){}},
+  async del(k){delete this.mem[k];
+    try{if(typeof window!=='undefined'&&window.storage){await window.storage.delete(k,false);return;}}catch(e){}
+    try{if(typeof window!=='undefined'&&window.localStorage){localStorage.removeItem(k);return;}}catch(e){}},
+};
+const K_LIB='mn_library',K_CLIENTS='mn_clients',K_DEVIS='mn_devis',K_DRAFT='mn_draft',K_CHANTIER='mn_chantier',K_TASKS='mn_tasks',K_REAL='mn_realisations',K_PROD='mn_produits';
+let tasks=[];
+let realisations=[];
+
+/* ============ ÉTAT APPLI ============ */
+let library=defaultLibrary(), clients=[], devisList=[], currentDevisId=null;
+let chantierList=[], currentChantierId=null;
+function blankChantier(){return {id:uid(),num:'',title:'',client:'',date:new Date().toLocaleDateString('fr-FR'),updatedAt:Date.now(),cats:[]};}
+let chantier=blankChantier();
+let pendingClientId=null; /* client cible quand on crée un devis depuis une fiche client */
+/* Sauvegarde automatique de tout ce qui touche `library` (services, CGV, catégories, réglages…) :
+   les panneaux ont un bouton "Enregistrer" explicite pour la confirmation visuelle, mais chaque
+   modification doit déjà être persistée toute seule — fermer un panneau sans cliquer ce bouton
+   ne doit jamais faire perdre une saisie. */
+let _libSaveT=null;
+function saveLibraryDebounced(){clearTimeout(_libSaveT);_libSaveT=setTimeout(()=>store.set(K_LIB,library),500);}
+/* Enregistrement immédiat : après un « Enregistrer » explicite, la valeur doit être posée
+   avant que la fenêtre ne se referme, pas 500 ms plus tard. */
+function saveLibrary(){clearTimeout(_libSaveT);return store.set(K_LIB,library);}
+const current={
+  num:'0077',date:new Date().toLocaleDateString('fr-FR'),
+  raison:'',contact:'',cphone:'',cemail:'',caddr:'',ville:'',cp:'',siret:'',
+  proj:'',surf:'',paddr:'',
+  intro:'',
+  pricingMode:'global',gAmount:0,gIsTTC:false,
+  tva:18,cur:'₪',tvaOff:false,condOn:true,tlOn:false,
+  tl:'',
+  services:[],exclus:[],cgv:[],branding:{},clientSignature:null,docType:'devis',open:{},
+  sigOverride:false,sigName:'',
+};
+function seedComposerFromLibrary(){
+  current.services=[];current.open={};
+  library.sections.forEach((sec,i)=>{
+    current.open[sec.name]=false;
+    sec.items.forEach(it=>current.services.push({id:uid(),cat:sec.name,on:!!it.defaultOn,title:it.title,desc:it.desc||'',mode:it.mode||'none',price:it.price||0,qty:it.qty||1,pu:it.pu||0,custom:false}));
+  });
+  current.exclus=(library.exclus||DEFAULT_EXCLUS).map(t=>({id:uid(),on:true,title:t,custom:false}));
+  current.cgv=(library.cgv||DEFAULT_CGV).map(c=>({...c}));
+  ensureBranding();
+  current.branding={...library.branding};
+}
+
+/* ============ DOM: helpers ============ */
+const $=id=>document.getElementById(id);
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+function render(){$('devis').innerHTML=buildDevisHTML(current);saveDraftDebounced();updateSigStatus();updateDocTypeUI();}
+function updateSigStatus(){
+  const el=$('sig-status');if(!el)return;
+  el.textContent=current.clientSignature?'✓ Signature enregistrée':'Pas encore signé';
+}
+function toggleDocType(){
+  current.docType=current.docType==='facture'?'devis':'facture';
+  render();toast(current.docType==='facture'?'Converti en facture':'Repassé en devis');
+}
+function updateDocTypeUI(){
+  const btn=$('doctype-toggle');if(!btn)return;
+  btn.textContent=current.docType==='facture'?'↺ Repasser en devis':'🧾 Convertir en facture';
+}
+let _sigPadOnSave=null;
+function openSignaturePad(title,sub,onSave){
+  _sigPadOnSave=onSave;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>${esc(title)}</h3>
+    <p class="msub">${esc(sub)}</p>
+    <canvas id="sig-canvas" width="500" height="200" style="width:100%;max-width:500px;height:200px;border:1px solid var(--panel-edge);border-radius:5px;background:#fff;touch-action:none;cursor:crosshair;"></canvas>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;">
+      <button class="mini" onclick="clearSigCanvas()">Effacer</button>
+      <button class="btn btn-primary" onclick="saveSignaturePad()">Valider la signature</button>
+    </div>`);
+  const cv=$('sig-canvas');
+  const ctx=cv.getContext('2d');
+  ctx.lineWidth=2.2;ctx.lineCap='round';ctx.strokeStyle='#2a2620';
+  let drawing=false,last=null;
+  function scaledPoint(e){
+    const r=cv.getBoundingClientRect();
+    const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left;
+    const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
+    return {x:cx*(cv.width/r.width),y:cy*(cv.height/r.height)};
+  }
+  function start(e){drawing=true;last=scaledPoint(e);e.preventDefault();}
+  function move(e){
+    if(!drawing)return;
+    const p=scaledPoint(e);
+    ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();
+    last=p;e.preventDefault();
+  }
+  function end(){drawing=false;}
+  cv.addEventListener('mousedown',start);cv.addEventListener('mousemove',move);window.addEventListener('mouseup',end);
+  cv.addEventListener('touchstart',start);cv.addEventListener('touchmove',move);cv.addEventListener('touchend',end);
+}
+function clearSigCanvas(){
+  const cv=$('sig-canvas');if(!cv)return;
+  cv.getContext('2d').clearRect(0,0,cv.width,cv.height);
+}
+function saveSignaturePad(){
+  const cv=$('sig-canvas');if(!cv)return;
+  /* Le canvas démarre entièrement TRANSPARENT (le fond blanc vient du CSS, pas d'un vrai
+     pixel peint) : valider sans avoir tracé un seul trait (mobile, un tap raté, une pression
+     trop légère…) enregistrait silencieusement une image invisible, mais bien présente et
+     "configurée" — indiscernable d'une vraie signature côté données, jusqu'à ce que le devis
+     s'affiche sans rien montrer. Refuser ce cas précisément plutôt que de le laisser passer. */
+  const ctx=cv.getContext('2d');
+  const px=ctx.getImageData(0,0,cv.width,cv.height).data;
+  let hasInk=false;
+  for(let i=3;i<px.length;i+=4){if(px[i]>0){hasInk=true;break;}}
+  if(!hasInk){toast('Rien n\'est dessiné — tracez votre signature avant de valider.');return;}
+  const uri=cv.toDataURL('image/png');
+  closeModal();
+  if(_sigPadOnSave)_sigPadOnSave(uri);
+}
+function openClientSignaturePad(){
+  openSignaturePad('Signature du client',"Faites signer avec le doigt ou la souris directement à l'écran.",uri=>{
+    current.clientSignature=uri;render();toast('Signature enregistrée');
+  });
+}
+function clearSignature(){
+  if(!current.clientSignature)return;
+  askConfirm('Effacer la signature du client ?',()=>{current.clientSignature=null;render();toast('Signature effacée');});
+}
+function openOwnerSignaturePad(){
+  openSignaturePad('Ma signature','Dessinez votre signature avec le doigt ou la souris.',uri=>{
+    library.branding.signatureImage=uri;applyBrandingLive();openSettingsPanel();toast('Signature enregistrée');
+  });
+}
+let _renderT;
+function renderDebounced(){clearTimeout(_renderT);_renderT=setTimeout(render,120);}
+let _draftT;
+function saveDraftDebounced(){clearTimeout(_draftT);_draftT=setTimeout(saveDraft,600);}
+/* L'autosave local (K_DRAFT) protège contre une fermeture d'onglet, mais ne synchronise
+   PAS entre appareils : sans le upsertDevis ci-dessous, un brouillon travaillé sur un
+   appareil sans jamais cliquer sur « Enregistrer brouillon » restait invisible sur les
+   autres (raison du ticket : « je le travaille sur la tablette, je ne le retrouve pas sur
+   le téléphone »).
+   MAIS ne pousse jamais la toute PREMIÈRE création automatiquement (currentDevisId encore
+   vide) : un premier essai avait poussé dès qu'un nom de client existait, pour éviter les
+   devis fantômes vides — sauf que ÇA en créait d'autres, bien pires : chaque « + Nouveau
+   devis » ouvert, essayé, puis abandonné (sans jamais cliquer Enregistrer) devenait quand
+   même un brouillon permanent dans « Mes devis », plusieurs par jour, tous avec le même
+   numéro puisque aucun n'avait vraiment compté pour le calcul du suivant. C'était la vraie
+   source des doublons signalés. Une fois le devis déjà enregistré une première fois
+   (manuellement, ou en le rouvrant), currentDevisId est posé et la synchro continue de
+   suivre chaque frappe automatiquement — c'est le scénario tablette/téléphone d'origine. */
+function saveDraft(){const snap=JSON.parse(JSON.stringify(current));snap._draftDevisId=currentDevisId;store.set(K_DRAFT,snap);if(currentDevisId&&current.raison&&current.raison.trim())upsertDevis('brouillon');}
+function clearDraft(){store.del(K_DRAFT);}
+async function saveDraftManual(){
+  saveDraft(); /* garde aussi la reprise auto */
+  const rec=await upsertDevis('brouillon');
+  renderClients();
+  toast('Brouillon enregistré dans « Mes devis »'+(rec.clientId?' (client lié)':''));
+}
+
+/* --- charger l'état dans les champs --- */
+function fillFields(){
+  const map={num:'f-num',date:'f-date',raison:'f-raison',contact:'f-contact',cphone:'f-cphone',cemail:'f-cemail',caddr:'f-caddr',ville:'f-ville',cp:'f-cp',siret:'f-siret',proj:'f-proj',surf:'f-surf',paddr:'f-paddr',intro:'f-intro',gAmount:'f-gamount',tva:'f-tva',cur:'f-cur',tl:'f-tl',sigName:'f-sig-name'};
+  Object.entries(map).forEach(([k,id])=>{const el=$(id);if(el)el.value=current[k];});
+  $('f-gttc').value=current.gIsTTC?'ttc':'ht';
+  $('f-tva-off').checked=current.tvaOff;$('f-cond-on').checked=current.condOn;$('f-tl-on').checked=current.tlOn;
+  $('f-sig-override').checked=current.sigOverride;
+  $('sig-name-fld').style.display=current.sigOverride?'block':'none';
+  setPricing(current.pricingMode);
+}
+function toggleSigOverride(on){current.sigOverride=on;$('sig-name-fld').style.display=on?'block':'none';render();}
+
+/* --- bindings --- */
+function wireBindings(){
+  const bind=(id,key,num)=>{const el=$(id);if(!el)return;el.addEventListener('input',()=>{current[key]=num?parseFloat(el.value)||0:el.value;renderDebounced();});};
+  bind('f-num','num');bind('f-date','date');bind('f-raison','raison');bind('f-contact','contact');
+  bind('f-cphone','cphone');bind('f-cemail','cemail');bind('f-caddr','caddr');bind('f-ville','ville');bind('f-cp','cp');bind('f-siret','siret');
+  bind('f-proj','proj');bind('f-surf','surf',true);bind('f-paddr','paddr');bind('f-intro','intro');
+  bind('f-gamount','gAmount',true);bind('f-tva','tva',true);bind('f-tl','tl');bind('f-sig-name','sigName');
+  $('f-cur').addEventListener('change',e=>{current.cur=e.target.value;buildPrest();render();});
+  $('f-gttc').addEventListener('change',e=>{current.gIsTTC=e.target.value==='ttc';render();});
+  const bc=(id,key)=>$(id).addEventListener('change',e=>{current[key]=e.target.checked;render();});
+  bc('f-tva-off','tvaOff');bc('f-cond-on','condOn');bc('f-tl-on','tlOn');
+  $('prest').addEventListener('focusin',e=>{const acc=e.target.closest('.acc');if(acc&&acc.dataset.cat)scrollDevisToCat(acc.dataset.cat);});
+}
+function setPricing(m){
+  current.pricingMode=m;
+  $('pm-global').classList.toggle('active',m==='global');
+  $('pm-detail').classList.toggle('active',m==='detail');
+  $('prest').classList.toggle('mode-global',m==='global');
+  $('prest').classList.toggle('mode-detail',m==='detail');
+  $('global-box').style.display=m==='global'?'block':'none';
+  render();
+}
+
+/* --- composer accordéons --- */
+const MODES=[['none','Inclus (sans prix)'],['fixed','Prix fixe'],['qtePU','Quantité × P.U.'],['perM2','Prix / m²'],['quote','Sur devis']];
+function priceInputs(sv){
+  const opts=MODES.map(m=>`<option value="${m[0]}" ${sv.mode===m[0]?'selected':''}>${m[1]}</option>`).join('');
+  let inp='';
+  if(sv.mode==='fixed')inp=`<input type="number" data-k="price" value="${sv.price||''}" placeholder="Montant ${current.cur}">`;
+  else if(sv.mode==='perM2')inp=`<input type="number" data-k="price" value="${sv.price||''}" placeholder="${current.cur} / m²">`;
+  else if(sv.mode==='qtePU')inp=`<input type="number" data-k="qty" value="${sv.qty||''}" placeholder="Qté" style="flex:0 0 66px"><input type="number" data-k="pu" value="${sv.pu||''}" placeholder="P.U. ${current.cur}">`;
+  else inp=`<span style="flex:1;font-size:11.5px;color:var(--stone);font-style:italic;">${sv.mode==='quote'?'« sur devis »':'inclus, sans montant'}</span>`;
+  return `<select data-k="mode">${opts}</select>${inp}`;
+}
+function sectionCount(name){return current.services.filter(s=>s.cat===name&&s.on).length;}
+let _scrollCatT=null;
+function scrollDevisToCat(name){
+  clearTimeout(_scrollCatT);
+  _scrollCatT=setTimeout(()=>{
+    const pw=document.querySelector('.preview-wrap');
+    if(!pw||pw.offsetParent===null)return;
+    const g=document.querySelector(`#devis .dv-group[data-cat="${(window.CSS&&CSS.escape)?CSS.escape(name):name}"]`);
+    if(g)g.scrollIntoView({behavior:'smooth',block:'start'});
+  },80);
+}
+function buildPrest(){
+  const root=$('prest');root.innerHTML='';
+  const order=[...new Set(current.services.map(s=>s.cat))];
+  order.forEach(name=>{
+    const items=current.services.filter(s=>s.cat===name);
+    if(!items.length)return;
+    const acc=document.createElement('div');acc.className='acc'+(current.open[name]?' open':'');acc.dataset.cat=name;
+    const cnt=sectionCount(name);
+    acc.innerHTML=`<button class="acc-head"><span class="acc-name">${esc(name)}</span><span class="acc-count ${cnt?'':'zero'}">${cnt}</span><span class="acc-chev">▶</span></button><div class="acc-body"></div>`;
+    acc.querySelector('.acc-head').addEventListener('click',()=>{current.open[name]=!current.open[name];acc.classList.toggle('open',current.open[name]);if(current.open[name])scrollDevisToCat(name);});
+    const body=acc.querySelector('.acc-body');
+    items.forEach(sv=>{
+      const row=document.createElement('div');row.className='it'+(sv.on?' on':'');
+      row.innerHTML=`<div class="it-head"><input type="checkbox" ${sv.on?'checked':''}><input class="it-title" type="text" value="${esc(sv.title)}" placeholder="Intitulé">${sv.custom?'<button class="it-rm" title="Supprimer">×</button>':''}</div><div class="it-sub"><div class="it-descrow"><textarea class="it-desc" placeholder="Texte qui embellit et raconte…">${esc(sv.desc)}</textarea><button class="ai-btn" title="Embellir avec l'IA">✨</button></div><label class="it-opt-toggle" title="Affiche deux cases « Oui / Non » sur le devis, pour que le client coche s'il accepte cette option."><input type="checkbox" class="it-opt-cb" ${sv.optionClient?'checked':''}> Option à valider par le client</label><div class="it-price">${priceInputs(sv)}</div></div>`;
+      const cb=row.querySelector('.it-head input[type=checkbox]');
+      cb.addEventListener('change',()=>{sv.on=cb.checked;row.classList.toggle('on',sv.on);const c=sectionCount(name);const b=acc.querySelector('.acc-count');b.textContent=c;b.classList.toggle('zero',!c);render();});
+      row.querySelector('.it-title').addEventListener('input',e=>{sv.title=e.target.value;renderDebounced();});
+      row.querySelector('.it-desc').addEventListener('input',e=>{sv.desc=e.target.value;renderDebounced();});
+      row.querySelector('.ai-btn').addEventListener('click',e=>embellish(sv,e.target,row.querySelector('.it-desc')));
+      row.querySelector('.it-opt-cb').addEventListener('change',e=>{sv.optionClient=e.target.checked;render();});
+      const rm=row.querySelector('.it-rm');if(rm)rm.addEventListener('click',()=>{current.services=current.services.filter(x=>x.id!==sv.id);buildPrest();render();});
+      const pr=row.querySelector('.it-price');
+      bindPriceRow(pr,sv);
+      body.appendChild(row);
+    });
+    const add=document.createElement('button');add.className='add-btn';add.textContent='+ Ajouter une ligne';
+    add.addEventListener('click',()=>{current.services.push({id:uid(),cat:name,on:true,title:'',desc:'',mode:'fixed',price:0,qty:1,pu:0,custom:true});current.open[name]=true;buildPrest();render();});
+    body.appendChild(add);
+    root.appendChild(acc);
+  });
+}
+function bindPriceRow(pr,sv){
+  const sel=pr.querySelector('[data-k=mode]');
+  if(sel)sel.addEventListener('change',e=>{sv.mode=e.target.value;pr.innerHTML=priceInputs(sv);bindPriceRow(pr,sv);render();});
+  pr.querySelectorAll('input[data-k]').forEach(inp=>inp.addEventListener('input',()=>{sv[inp.dataset.k]=parseFloat(inp.value)||0;render();}));
+}
+function buildExclu(){
+  const root=$('excl');root.innerHTML='';
+  const key='__hors__';
+  const cnt=current.exclus.filter(e=>e.on).length;
+  const acc=document.createElement('div');acc.className='acc'+(current.open[key]?' open':'');
+  acc.innerHTML=`<button class="acc-head"><span class="acc-name">Hors prestation · non compris</span><span class="acc-count ${cnt?'':'zero'}">${cnt}</span><span class="acc-chev">▶</span></button><div class="acc-body"></div>`;
+  acc.querySelector('.acc-head').addEventListener('click',()=>{current.open[key]=!current.open[key];acc.classList.toggle('open',current.open[key]);});
+  const body=acc.querySelector('.acc-body');
+  current.exclus.forEach(ex=>{
+    const row=document.createElement('div');row.className='it'+(ex.on?' on':'');
+    row.innerHTML=`<div class="it-head"><input type="checkbox" ${ex.on?'checked':''}><input class="it-title" type="text" value="${esc(ex.title)}" placeholder="Élément non compris">${ex.custom?'<button class="it-rm">×</button>':''}</div>`;
+    row.querySelector('input[type=checkbox]').addEventListener('change',e=>{ex.on=e.target.checked;row.classList.toggle('on',ex.on);const c=current.exclus.filter(x=>x.on).length;const b=acc.querySelector('.acc-count');b.textContent=c;b.classList.toggle('zero',!c);render();});
+    row.querySelector('.it-title').addEventListener('input',e=>{ex.title=e.target.value;renderDebounced();});
+    const rm=row.querySelector('.it-rm');if(rm)rm.addEventListener('click',()=>{current.exclus=current.exclus.filter(x=>x.id!==ex.id);buildExclu();render();});
+    body.appendChild(row);
+  });
+  const add=document.createElement('button');add.className='add-btn';add.textContent='+ Ajouter un élément';
+  add.addEventListener('click',()=>{current.exclus.push({id:uid(),on:true,title:'',custom:true});current.open[key]=true;buildExclu();render();});
+  body.appendChild(add);root.appendChild(acc);
+}
+
+/* ============ ESTIMATION CHANTIER ============ */
+function ensureChantierCats(){if(!library.chantierCats||!library.chantierCats.length)library.chantierCats=DEFAULT_CHANTIER_CATS.map(c=>({...c}));}
+function ensureBranding(){if(!library.branding)library.branding={...DEFAULT_BRANDING};else library.branding={...DEFAULT_BRANDING,...library.branding};}
+function chLineTotal(it){return (+it.qty||0)*(+it.price||0);}
+function chCatTotal(cat){return cat.items.reduce((a,it)=>a+chLineTotal(it),0);}
+function chGrandTotal(){return chantier.cats.reduce((a,c)=>a+chCatTotal(c),0);}
+function chRollup(){
+  const map={};
+  chantier.cats.forEach(cat=>{
+    const key=cat.name+'||'+cat.unit;
+    if(!map[key])map[key]={name:cat.name,unit:cat.unit,qty:0,total:0};
+    cat.items.forEach(it=>{map[key].qty+=(+it.qty||0);map[key].total+=chLineTotal(it);});
+  });
+  return Object.values(map).sort((a,b)=>b.total-a.total);
+}
+function chResumeHtml(){
+  const rows=chRollup();
+  if(!rows.length)return '<p class="empty">Ajoutez des catégories pour voir le résumé.</p>';
+  return `<div class="ch-resume-row head"><div>Catégorie</div><div class="num">Quantité</div><div class="num">Total</div></div>`+
+    rows.map(r=>`<div class="ch-resume-row"><div>${esc(r.name)}</div><div class="num">${fmt(r.qty)} ${esc(r.unit)}</div><div class="num">${fmt(r.total)} ₪</div></div>`).join('');
+}
+function updateChantierTotals(){
+  chantier.cats.forEach(cat=>{
+    cat.items.forEach(it=>{const el=document.getElementById('itt-'+it.id);if(el)el.textContent=fmt(chLineTotal(it))+' ₪';});
+    const ce=document.getElementById('ctt-'+cat.id);if(ce)ce.textContent=fmt(chCatTotal(cat))+' ₪';
+  });
+  const resumeEl=$('ch-resume');if(resumeEl)resumeEl.innerHTML=chResumeHtml();
+  const gt=$('ch-grand-total');if(gt)gt.textContent=fmt(chGrandTotal())+' ₪';
+  saveChantierDraftDebounced();
+}
+function chMetaEdit(key,val){chantier[key]=val;saveChantierDraftDebounced();}
+const CH_UNITS=['m²','ml','point','unité','forfait'];
+function chUnitOptions(sel){return CH_UNITS.map(u=>`<option value="${u}" ${u===sel?'selected':''}>${u}</option>`).join('');}
+function chItemRowHtml(cid,it){
+  return `<div class="ch-item" data-iid="${it.id}">
+    <input type="text" value="${esc(it.desc)}" placeholder="Pièce (ex. Salon, Couloir…)" oninput="chItemEdit('${cid}','${it.id}','desc',this.value)">
+    <input type="number" value="${it.qty||''}" placeholder="Qté" oninput="chItemEdit('${cid}','${it.id}','qty',this.value)">
+    <select onchange="chItemEdit('${cid}','${it.id}','unit',this.value)">${chUnitOptions(it.unit)}</select>
+    <input type="number" value="${it.price||''}" placeholder="P.U." oninput="chItemEdit('${cid}','${it.id}','price',this.value)">
+    <span class="ch-item-total" id="itt-${it.id}">${fmt(chLineTotal(it))} ₪</span>
+    <button class="it-rm" onclick="chItemDel('${cid}','${it.id}')" title="Supprimer">×</button>
+  </div>`;
+}
+function chCatCardHtml(cat){
+  return `<div class="ch-cat-card" data-cid="${cat.id}">
+    <div class="ch-cat-card-h">
+      <input class="ch-cat-name" type="text" value="${esc(cat.name)}" oninput="chCatEdit('${cat.id}','name',this.value)">
+      <span class="ch-cat-unit">${esc(cat.unit)}</span>
+      <span class="ch-cat-card-total" id="ctt-${cat.id}">${fmt(chCatTotal(cat))} ₪</span>
+      <button class="mini danger" onclick="chCatDel('${cat.id}')">×</button>
+    </div>
+    <div>
+      ${cat.items.map(it=>chItemRowHtml(cat.id,it)).join('')}
+      <button class="mini" onclick="chItemAdd('${cat.id}')" style="margin:4px 0 10px 12px">+ ligne</button>
+    </div>
+  </div>`;
+}
+function renderChantierCatSelect(){
+  ensureChantierCats();
+  const sel=$('ch-cat-select');if(!sel)return;
+  sel.innerHTML=library.chantierCats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')+`<option value="__custom__">+ Catégorie personnalisée…</option>`;
+}
+function renderChantierCats(){
+  ensureChantierCats();
+  renderChantierCatSelect();
+  const root=$('ch-cats');if(!root)return;
+  root.innerHTML=chantier.cats.map(chCatCardHtml).join('')||'<p class="empty">Aucune catégorie. Choisissez un matériau/une prestation ci-dessous pour commencer.</p>';
+}
+function renderChantierMeta(){
+  const t=$('ch-title'),c=$('ch-client'),d=$('ch-date');
+  if(t)t.value=chantier.title||'';if(c)c.value=chantier.client||'';if(d)d.value=chantier.date||'';
+}
+function renderChantier(){
+  renderChantierMeta();
+  renderChantierCats();
+  updateChantierTotals();
+}
+function chCatAdd(){
+  const sel=$('ch-cat-select');if(!sel)return;
+  const val=sel.value;
+  let name='Nouvelle catégorie',unit='unité',price=0;
+  if(val!=='__custom__'){const libCat=library.chantierCats.find(c=>c.id===val);if(libCat){name=libCat.name;unit=libCat.unit;price=libCat.price;}}
+  chantier.cats.push({id:uid(),name,unit,items:[{id:uid(),desc:'',qty:0,unit,price}]});
+  renderChantierCats();updateChantierTotals();
+}
+function chCatDel(cid){
+  askConfirm('Supprimer cette catégorie et toutes ses lignes ?',()=>{
+    chantier.cats=chantier.cats.filter(c=>c.id!==cid);renderChantierCats();updateChantierTotals();
+  });
+}
+function chCatEdit(cid,key,val){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
+  cat[key]=val;saveChantierDraftDebounced();
+}
+function chItemAdd(cid){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
+  cat.items.push({id:uid(),desc:'',qty:0,unit:cat.unit,price:0});
+  renderChantierCats();updateChantierTotals();
+}
+function chItemDel(cid,iid){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
+  cat.items=cat.items.filter(i=>i.id!==iid);
+  renderChantierCats();updateChantierTotals();
+}
+function chItemEdit(cid,iid,key,val){
+  const cat=chantier.cats.find(c=>c.id===cid);if(!cat)return;
+  const it=cat.items.find(i=>i.id===iid);if(!it)return;
+  it[key]=(key==='qty'||key==='price')?(parseFloat(val)||0):val;
+  updateChantierTotals();
+}
+let _chDraftT;
+/* Même piège que pour les devis (voir saveDraft) : store.set('mn_chantier_draft',...) est
+   purement local, K_CHANTIER n'existait dans aucune synchro. Ajout de persistChantierSilent
+   pour que l'estimation en cours parte aussi vers le cloud dès qu'un nom de projet existe,
+   sans le toast du bouton manuel (appelé toutes les 500ms pendant la frappe). */
+function saveChantierDraftDebounced(){clearTimeout(_chDraftT);_chDraftT=setTimeout(()=>{store.set('mn_chantier_draft',chantier);if(chantier.title&&chantier.title.trim())persistChantierSilent();},500);}
+function newChantier(){
+  askConfirm('Créer une nouvelle estimation ? Les modifications non enregistrées de celle-ci seront perdues.',()=>{
+    currentChantierId=null;chantier=blankChantier();renderChantier();toast('Nouvelle estimation');
+  });
+}
+async function persistChantierSilent(){
+  if(!chantier.title||!chantier.title.trim())return false;
+  chantier.updatedAt=Date.now();
+  if(!chantier.num)chantier.num=String(Math.max(0,...chantierList.map(c=>parseInt(c.num)||0))+1).padStart(4,'0');
+  const i=chantierList.findIndex(c=>c.id===chantier.id);
+  if(i>=0)chantierList[i]=JSON.parse(JSON.stringify(chantier));else chantierList.push(JSON.parse(JSON.stringify(chantier)));
+  currentChantierId=chantier.id;
+  await store.set(K_CHANTIER,chantierList);
+  return true;
+}
+async function saveChantier(){
+  if(await persistChantierSilent())toast('Estimation enregistrée');else toast('Donnez un nom de projet avant d\'enregistrer');
+}
+function loadChantier(id){
+  const c=chantierList.find(x=>x.id===id);if(!c)return;
+  chantier=JSON.parse(JSON.stringify(c));currentChantierId=id;
+  closeModal();renderChantier();toast('Estimation chargée');
+}
+function deleteChantierRecord(id){
+  askConfirm('Supprimer cette estimation ?',async()=>{
+    chantierList=chantierList.filter(x=>x.id!==id);await store.set(K_CHANTIER,chantierList);
+    if(currentChantierId===id){currentChantierId=null;chantier=blankChantier();renderChantier();}
+    openChantierListPanel();toast('Estimation supprimée');
+  });
+}
+function openChantierListPanel(){
+  const rows=chantierList.slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).map(c=>`
+    <div class="list-row">
+      <div class="lr-main" onclick="loadChantier('${c.id}')" style="cursor:pointer">
+        <div class="lr-t">${esc(c.title||'Sans titre')}</div>
+        <div class="lr-s">N°${esc(c.num||'')} · ${esc(c.client||'')} · ${c.updatedAt?new Date(c.updatedAt).toLocaleDateString('fr-FR'):''}</div>
+      </div>
+      <button class="mini danger" onclick="deleteChantierRecord('${c.id}')">🗑</button>
+    </div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Mes estimations</h3>
+    ${rows||'<p class="empty">Aucune estimation enregistrée.</p>'}`);
+}
+function openChantierCatsPanel(){
+  ensureChantierCats();
+  const rows=library.chantierCats.map((c,i)=>`<div class="lib-item">
+    <input type="text" value="${esc(c.name)}" oninput="chCatLibEdit(${i},'name',this.value)" placeholder="Nom" style="flex:2">
+    <select onchange="chCatLibEdit(${i},'unit',this.value)" style="flex:0 0 74px">${chUnitOptions(c.unit)}</select>
+    <input type="number" value="${c.price||''}" oninput="chCatLibEdit(${i},'price',this.value)" placeholder="Prix par défaut" style="flex:0 0 90px">
+    <button class="mini danger" onclick="chCatLibDel(${i})">×</button></div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Catégories de chantier</h3>
+    <p class="msub">Corps de métier réutilisables (nom, unité, prix par défaut). Modifiables ligne par ligne dans chaque estimation.</p>
+    ${rows}
+    <button class="add-btn" onclick="chCatLibAdd()">+ Ajouter une catégorie</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="chCatLibReset()">↺ Catégories par défaut</button>
+      <button class="btn btn-primary" onclick="chCatLibSave()">Enregistrer</button></div>`);
+}
+function chCatLibEdit(i,key,val){library.chantierCats[i][key]=(key==='price')?(parseFloat(val)||0):val;saveLibraryDebounced();}
+function chCatLibAdd(){library.chantierCats.push({id:uid(),name:'Nouvelle catégorie',unit:'unité',price:0});openChantierCatsPanel();saveLibraryDebounced();}
+function chCatLibDel(i){askConfirm('Supprimer cette catégorie ?',()=>{library.chantierCats.splice(i,1);openChantierCatsPanel();saveLibraryDebounced();});}
+function chCatLibReset(){askConfirm('Réinitialiser les catégories de chantier sur la liste par défaut ?',()=>{library.chantierCats=DEFAULT_CHANTIER_CATS.map(c=>({...c}));openChantierCatsPanel();saveLibraryDebounced();});}
+async function chCatLibSave(){await store.set(K_LIB,library);closeModal();toast('Catégories enregistrées');}
+
+/* ============ RÉGLAGES (identité, coordonnées, apparence) ============ */
+function applyBrandingToUI(){
+  ensureBranding();
+  const b=library.branding;
+  const name=(b.companyName||'Melissa Nabet').toUpperCase();
+  const useImg=b.toolbarBrandType==='image'&&b.toolbarBrandImage;
+  const tb=$('toolbar-brand');
+  if(tb)tb.innerHTML=useImg?`<img src="${b.toolbarBrandImage}" alt="${esc(name)}" style="height:28px;display:block;">`:esc(name);
+  const lb=$('login-brand');
+  if(lb)lb.innerHTML=useImg?`<img src="${b.toolbarBrandImage}" alt="${esc(name)}" style="height:44px;display:block;margin:0 auto;">`:esc(name);
+  try{document.title='Générateur de devis — '+(b.companyName||'Melissa Nabet');}catch(e){}
+  applySiteTheme();
+}
+function readLogoAsDataUri(file){
+  return new Promise((res,rej)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>rej(reader.error);
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=600;let w=img.width,h=img.height;
+        if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}
+        const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        res(cv.toDataURL('image/png'));
+      };
+      img.onerror=()=>rej(new Error('Image illisible'));
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+/* Applique immédiatement library.branding au devis affiché, sans attendre "Enregistrer"
+   (qui ne fait que persister sur disque/cloud) — sinon un choix de thème semble "ne rien faire". */
+function applyBrandingLive(){current.branding={...library.branding};applyBrandingToUI();renderDebounced();saveLibraryDebounced();}
+/* Détourage : recadrage/zoom d'une image importée avant de l'utiliser (logo, marque…). */
+let _cropState=null;
+function openImageCropper(file,onSave,opts){
+  const VPW=(opts&&opts.vpW)||280,VPH=(opts&&opts.vpH)||280;
+  const title=(opts&&opts.title)||'Ajuster l\'image';
+  const reader=new FileReader();
+  reader.onerror=()=>toast('Échec de lecture du fichier');
+  reader.onload=()=>{
+    const img=new Image();
+    img.onerror=()=>toast('Image illisible');
+    img.onload=()=>{
+      const nw=img.naturalWidth,nh=img.naturalHeight;
+      const baseScale=Math.max(VPW/nw,VPH/nh);
+      _cropState={img,nw,nh,baseScale,scale:1,offX:0,offY:0,onSave,VPW,VPH};
+      openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>${esc(title)}</h3>
+        <p class="msub">Glissez pour déplacer, utilisez le curseur pour zoomer, puis validez.</p>
+        <div id="crop-viewport" style="width:${VPW}px;height:${VPH}px;overflow:hidden;position:relative;margin:0 auto 14px;border-radius:8px;border:1px solid var(--panel-edge);background:#00000010;touch-action:none;cursor:grab;">
+          <img id="crop-img" src="${reader.result}" style="position:absolute;left:50%;top:50%;user-select:none;-webkit-user-drag:none;" draggable="false">
+        </div>
+        <label class="fld"><span class="lbl">Zoom</span><input type="range" id="crop-zoom" min="1" max="3" step="0.01" value="1"></label>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+          <button class="mini" onclick="closeModal()">Annuler</button>
+          <button class="btn btn-primary" onclick="applyImageCrop()">Valider</button>
+        </div>`);
+      wireImageCropper();
+    };
+    img.src=reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+function wireImageCropper(){
+  const st=_cropState;if(!st)return;
+  const {VPW,VPH}=st;
+  const vp=$('crop-viewport'),imEl=$('crop-img'),zoomInp=$('crop-zoom');
+  function clamp(){
+    const w=st.nw*st.baseScale*st.scale,h=st.nh*st.baseScale*st.scale;
+    const maxX=Math.max(0,(w-VPW)/2),maxY=Math.max(0,(h-VPH)/2);
+    st.offX=Math.max(-maxX,Math.min(maxX,st.offX));
+    st.offY=Math.max(-maxY,Math.min(maxY,st.offY));
+  }
+  function render(){
+    const w=st.nw*st.baseScale*st.scale,h=st.nh*st.baseScale*st.scale;
+    imEl.style.width=w+'px';imEl.style.height=h+'px';
+    imEl.style.marginLeft=(-w/2)+'px';imEl.style.marginTop=(-h/2)+'px';
+    imEl.style.transform=`translate(${st.offX}px,${st.offY}px)`;
+  }
+  render();
+  let dragging=false,lastX=0,lastY=0;
+  vp.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;try{vp.setPointerCapture(e.pointerId);}catch(err){}vp.style.cursor='grabbing';});
+  vp.addEventListener('pointermove',e=>{
+    if(!dragging)return;
+    st.offX+=e.clientX-lastX;st.offY+=e.clientY-lastY;
+    lastX=e.clientX;lastY=e.clientY;
+    clamp();render();
+  });
+  function endDrag(){dragging=false;vp.style.cursor='grab';}
+  vp.addEventListener('pointerup',endDrag);
+  vp.addEventListener('pointercancel',endDrag);
+  zoomInp.addEventListener('input',()=>{st.scale=parseFloat(zoomInp.value)||1;clamp();render();});
+}
+function applyImageCrop(){
+  const st=_cropState;if(!st)return;
+  const {VPW,VPH}=st;
+  const totalScale=st.baseScale*st.scale;
+  const rw=st.nw*totalScale,rh=st.nh*totalScale;
+  const imgLeft=VPW/2-rw/2+st.offX,imgTop=VPH/2-rh/2+st.offY;
+  let srcW=VPW/totalScale,srcH=VPH/totalScale;
+  let srcX=-imgLeft/totalScale,srcY=-imgTop/totalScale;
+  srcX=Math.max(0,Math.min(st.nw-srcW,srcX));
+  srcY=Math.max(0,Math.min(st.nh-srcH,srcY));
+  const mult=3;
+  const OUTW=Math.round(VPW*mult),OUTH=Math.round(VPH*mult);
+  const cv=document.createElement('canvas');cv.width=OUTW;cv.height=OUTH;
+  cv.getContext('2d').drawImage(st.img,srcX,srcY,srcW,srcH,0,0,OUTW,OUTH);
+  const dataUri=cv.toDataURL('image/png');
+  const onSave=st.onSave;
+  _cropState=null;
+  closeModal();
+  onSave(dataUri);
+}
+/* ---- CHOISIR DES FICHIERS ----
+   UN SEUL chemin pour tous les imports de l'application. Il l'est devenu pour une raison
+   précise : sur iPhone (Safari comme Chrome, qui est le même moteur), un
+   `input[type=file]` créé en mémoire et cliqué SANS avoir été attaché au document
+   n'ouvre pas le sélecteur. Rien ne se passe, et rien ne le dit — c'est exactement ce que
+   Raphaël a constaté en essayant d'ajouter des photos à un chantier depuis son téléphone.
+
+   Trois précautions, et chacune répond à un comportement réel d'iOS :
+   - l'entrée est POSÉE DANS LA PAGE avant d'être cliquée ;
+   - elle est rendue invisible sans `display:none` ni `visibility:hidden` (une entrée
+     ainsi masquée est ignorée par WebKit) : hors écran, transparente, non cliquable ;
+   - elle est retirée APRÈS le choix, ou au retour dans la page si le sélecteur a été
+     annulé — iOS n'émet aucun événement dans ce cas, et une entrée oubliée s'accumule.
+   Le clic doit rester dans le geste de l'utilisateur : n'appelez jamais cette fonction
+   après un `await`, le navigateur refuserait d'ouvrir le sélecteur. */
+function choisirFichiers(opts,onFiles){
+  const o=opts||{};
+  const inp=document.createElement('input');
+  inp.type='file';
+  inp.accept=o.accept||'image/*';
+  if(o.multiple)inp.multiple=true;
+  inp.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1;';
+  let range=false;
+  const ranger=()=>{if(range)return;range=true;window.removeEventListener('focus',plusTard);
+    setTimeout(()=>{if(inp.parentNode)inp.parentNode.removeChild(inp);},0);};
+  /* Annulation : aucun `change` n'arrive. Le retour du focus sur la fenêtre est le seul
+     signal disponible — on laisse un délai, `focus` précédant parfois `change`. */
+  const plusTard=()=>setTimeout(()=>{if(!inp.files||!inp.files.length)ranger();},1200);
+  inp.addEventListener('change',()=>{
+    const f=inp.files;
+    ranger();
+    if(f&&f.length)onFiles(f);
+  });
+  window.addEventListener('focus',plusTard);
+  document.body.appendChild(inp);
+  inp.click();
+}
+/* Boilerplate commun à tous les imports d'image : un fichier, une image. */
+function pickImageFile(onFile){
+  choisirFichiers({accept:'image/*'},files=>{if(files[0])onFile(files[0]);});
+}
+function pickLogo(){
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    library.branding.logoDataUri=dataUri;
+    applyBrandingLive();openSettingsPanel();
+  }));
+}
+function resetLogo(){library.branding.logoDataUri=DEFAULT_LOGO_DATAURI;applyBrandingLive();openSettingsPanel();}
+function pickToolbarBrandImage(){
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    library.branding.toolbarBrandImage=dataUri;
+    library.branding.toolbarBrandType='image';
+    applyBrandingLive();openSettingsPanel();
+  }));
+}
+function clearToolbarBrandImage(){library.branding.toolbarBrandImage=null;library.branding.toolbarBrandType='text';applyBrandingLive();openSettingsPanel();}
+function pickDevisBgImage(){
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    library.branding.devisBgImageBase=dataUri;
+    library.branding.devisBgFlipX=false;
+    library.branding.devisBgFlipY=false;
+    renderDevisBgFromBase();
+  },{vpW:220,vpH:311,title:'Cadrer la texture de fond'}));
+}
+/* Cuit le flip horizontal/vertical dans l'image (au lieu d'un transform CSS sur le fond),
+   pour que l'aperçu, l'impression et l'export PDF montrent toujours exactement la même chose. */
+function renderDevisBgFromBase(){
+  const base=library.branding.devisBgImageBase;
+  if(!base){library.branding.devisBgImage=null;applyBrandingLive();openSettingsPanel();return;}
+  const img=new Image();
+  img.onerror=()=>toast('Image illisible');
+  img.onload=()=>{
+    const w=img.naturalWidth,h=img.naturalHeight;
+    const flipX=library.branding.devisBgFlipX,flipY=library.branding.devisBgFlipY;
+    if(!flipX&&!flipY){library.branding.devisBgImage=base;}
+    else{
+      const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      const ctx=cv.getContext('2d');
+      ctx.translate(flipX?w:0,flipY?h:0);
+      ctx.scale(flipX?-1:1,flipY?-1:1);
+      ctx.drawImage(img,0,0,w,h);
+      library.branding.devisBgImage=cv.toDataURL('image/png');
+    }
+    applyBrandingLive();openSettingsPanel();
+  };
+  img.src=base;
+}
+function clearDevisBgImage(){library.branding.devisBgImageBase=null;library.branding.devisBgImage=null;library.branding.devisBgFlipX=false;library.branding.devisBgFlipY=false;applyBrandingLive();openSettingsPanel();}
+function toggleDevisBgFlipX(){library.branding.devisBgFlipX=!library.branding.devisBgFlipX;renderDevisBgFromBase();}
+function toggleDevisBgFlipY(){library.branding.devisBgFlipY=!library.branding.devisBgFlipY;renderDevisBgFromBase();}
+function ensureBgLibrary(){if(!Array.isArray(library.bgLibrary))library.bgLibrary=[];}
+function pickBgToLibrary(){
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    ensureBgLibrary();
+    library.bgLibrary.push({id:uid(),dataUri,addedAt:Date.now()});
+    store.set(K_LIB,library);
+    openSettingsPanel();
+    toast('Fond ajouté à la bibliothèque');
+  },{vpW:220,vpH:311,title:'Cadrer la texture de fond'}));
+}
+function saveDevisBgToLibrary(){
+  ensureBgLibrary();
+  const base=library.branding.devisBgImageBase;
+  if(!base){toast('Choisis d\'abord une texture');return;}
+  if(library.bgLibrary.some(x=>x.dataUri===base)){toast('Déjà dans la bibliothèque');return;}
+  library.bgLibrary.push({id:uid(),dataUri:base,addedAt:Date.now()});
+  store.set(K_LIB,library);
+  openSettingsPanel();
+  toast('Fond enregistré dans la bibliothèque');
+}
+function applyBgFromLibrary(id){
+  ensureBgLibrary();
+  const entry=library.bgLibrary.find(x=>x.id===id);
+  if(!entry)return;
+  library.branding.devisBgImageBase=entry.dataUri;
+  library.branding.devisBgFlipX=false;
+  library.branding.devisBgFlipY=false;
+  renderDevisBgFromBase();
+}
+function deleteBgFromLibrary(id){
+  askConfirm('Supprimer ce fond de la bibliothèque ?',()=>{
+    ensureBgLibrary();
+    library.bgLibrary=library.bgLibrary.filter(x=>x.id!==id);
+    store.set(K_LIB,library);
+    openSettingsPanel();
+  });
+}
+function setDevisBgOpacity(val){library.branding.devisBgOpacity=parseFloat(val)||0;applyBrandingLive();}
+function pickSignatureImage(){
+  pickImageFile(async file=>{
+    try{
+      const dataUri=await readLogoAsDataUri(file);
+      library.branding.signatureImage=dataUri;
+      applyBrandingLive();openSettingsPanel();
+    }catch(e){toast('Échec import de la signature : '+e.message);}
+  });
+}
+function clearSignatureImage(){library.branding.signatureImage=null;applyBrandingLive();openSettingsPanel();}
+function settingsEdit(key,val){library.branding[key]=val;applyBrandingLive();}
+function settingsEditNum(key,val){library.branding[key]=parseFloat(val)||0;applyBrandingLive();}
+function settingsSetPalette(key){library.branding.palette=key;applyBrandingLive();openSettingsPanel();}
+function settingsSetFontTheme(key){library.branding.fontTheme=key;ensureFontThemeLoaded(key);applyBrandingLive();openSettingsPanel();}
+function settingsToggle(key,val){library.branding[key]=val;applyBrandingLive();}
+function extractDominantColor(img){
+  const w=80,h=Math.max(1,Math.round(80*img.height/img.width));
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const ctx=cv.getContext('2d');ctx.drawImage(img,0,0,w,h);
+  const data=ctx.getImageData(0,0,w,h).data;
+  const bins=new Array(24).fill(0).map(()=>({wsum:0,r:0,g:0,b:0}));
+  for(let i=0;i<data.length;i+=4){
+    const r=data[i],g=data[i+1],b=data[i+2],a=data[i+3];
+    if(a<128)continue;
+    const hsl=hexToHsl(rgbToHex(r,g,b));
+    if(hsl.s<12||hsl.l<8||hsl.l>92)continue;
+    const bin=Math.floor(((hsl.h%360)/360)*24)%24;
+    const weight=hsl.s/100;
+    bins[bin].wsum+=weight;bins[bin].r+=r*weight;bins[bin].g+=g*weight;bins[bin].b+=b*weight;
+  }
+  let best=null;
+  bins.forEach(b=>{if(b.wsum>0&&(!best||b.wsum>best.wsum))best=b;});
+  if(!best||best.wsum===0)return '#9a8574';
+  return rgbToHex(best.r/best.wsum,best.g/best.wsum,best.b/best.wsum);
+}
+function pickThemeFromPhoto(){
+  pickImageFile(file=>{
+    const reader=new FileReader();
+    reader.onerror=()=>toast('Échec de lecture du fichier');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>toast('Image illisible');
+      img.onload=()=>{
+        try{
+          library.branding.customAccent=extractDominantColor(img);
+          library.branding.palette='custom';
+          applyBrandingLive();
+          openSettingsPanel();
+          toast('Thème extrait de la photo');
+        }catch(e){toast('Échec extraction : '+e.message);}
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function settingsSetSitePalette(key){library.branding.sitePalette=key;applyBrandingLive();openSettingsPanel();}
+function pickSiteThemeFromPhoto(){
+  pickImageFile(file=>{
+    const reader=new FileReader();
+    reader.onerror=()=>toast('Échec de lecture du fichier');
+    reader.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>toast('Image illisible');
+      img.onload=()=>{
+        try{
+          library.branding.siteCustomAccent=extractDominantColor(img);
+          library.branding.sitePalette='custom';
+          applyBrandingLive();
+          openSettingsPanel();
+          toast('Thème de l\'application extrait de la photo');
+        }catch(e){toast('Échec extraction : '+e.message);}
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function openSettingsPanel(){
+  ensureBranding();
+  ensureBgLibrary();
+  const b=library.branding;
+  Object.keys(FONT_THEMES).forEach(k=>ensureFontThemeLoaded(k));
+  const paletteRow=Object.entries(DEFAULT_PALETTES).map(([key,p])=>`
+    <button type="button" class="mini ${b.palette===key?'':''}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.palette===key?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.palette===key?'var(--panel)':'transparent'};" onclick="settingsSetPalette('${key}')">
+      <span style="display:flex;"><span style="width:13px;height:13px;border-radius:50%;background:${p.paper};border:1px solid #0002;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.oxblood};border:1px solid #0002;margin-left:-4px;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.ink};border:1px solid #0002;margin-left:-4px;"></span></span>
+      ${esc(p.name)}
+    </button>`).join('');
+  const sitePaletteRow=Object.entries(DEFAULT_PALETTES).map(([key,p])=>`
+    <button type="button" class="mini ${b.sitePalette===key?'':''}" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.sitePalette===key?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.sitePalette===key?'var(--panel)':'transparent'};" onclick="settingsSetSitePalette('${key}')">
+      <span style="display:flex;"><span style="width:13px;height:13px;border-radius:50%;background:${p.paper};border:1px solid #0002;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.oxblood};border:1px solid #0002;margin-left:-4px;"></span><span style="width:13px;height:13px;border-radius:50%;background:${p.ink};border:1px solid #0002;margin-left:-4px;"></span></span>
+      ${esc(p.name)}
+    </button>`).join('');
+  const fontRow=Object.entries(FONT_THEMES).map(([key,t])=>`
+    <button type="button" class="mini" style="display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:9px 13px;min-width:118px;border:1.5px solid ${b.fontTheme===key?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.fontTheme===key?'var(--panel)':'transparent'};" onclick="settingsSetFontTheme('${key}')">
+      <span style="font-family:${t.heading};font-size:18px;color:var(--ink);">Aa</span>
+      <span style="font-size:10px;color:var(--stone);">${esc(t.name)}</span>
+    </button>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Réglages</h3>
+    <p class="msub">Tout ce qui apparaît sur tes devis — modifiable ici, sans toucher au code.</p>
+
+    <div class="ed-eyebrow" style="margin-top:16px">Identité</div>
+    <label class="fld"><span class="lbl">Nom de l'entreprise</span><input type="text" value="${esc(b.companyName)}" oninput="settingsEdit('companyName',this.value)"></label>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Initiales en filigrane du devis</span><input type="text" value="${esc(b.watermarkText)}" oninput="settingsEdit('watermarkText',this.value)" maxlength="4"></label>
+      <label class="fld"><span class="lbl">Nom affiché pour la signature</span><input type="text" value="${esc(b.signatureName)}" oninput="settingsEdit('signatureName',this.value)"></label>
+    </div>
+    <div class="brand-media-row">
+      <div class="brand-media-card">
+        <span class="brand-media-lbl">Logo</span>
+        <div class="brand-media-body">
+          <span class="logo-thumb"><img src="${b.logoDataUri}"></span>
+          <div class="brand-media-actions">
+            <button class="mini" onclick="pickLogo()">Changer le logo…</button>
+            <button class="mini" onclick="resetLogo()">↺ Par défaut</button>
+          </div>
+        </div>
+      </div>
+      <div class="brand-media-card">
+        <span class="brand-media-lbl">Signature</span>
+        <div class="brand-media-body">
+          <span class="logo-thumb">${b.signatureImage?`<img src="${b.signatureImage}">`:`<span class="logo-thumb-empty">Aucune<br>signature</span>`}</span>
+          <div class="brand-media-actions">
+            <button class="mini" onclick="openOwnerSignaturePad()">✎ Dessiner</button>
+            <button class="mini" onclick="pickSignatureImage()">Importer une photo…</button>
+            ${b.signatureImage?`<button class="mini" onclick="clearSignatureImage()">✕ Retirer</button>`:''}
+          </div>
+        </div>
+        <p class="brand-media-hint">Pré-remplie automatiquement sur chaque devis.</p>
+        <label class="toggle-line"><input type="checkbox" ${b.signOnDevis!==false?'checked':''} onchange="settingsToggle('signOnDevis',this.checked)"> Signer à la fin du devis</label>
+        <label class="toggle-line"><input type="checkbox" ${b.signOnCgv?'checked':''} onchange="settingsToggle('signOnCgv',this.checked)"> Signer en bas des conditions générales</label>
+      </div>
+      <div class="brand-media-card">
+        <span class="brand-media-lbl">Marque · barre du haut</span>
+        <div class="brand-media-body">
+          <span class="logo-thumb">${(b.toolbarBrandType==='image'&&b.toolbarBrandImage)?`<img src="${b.toolbarBrandImage}">`:`<span class="logo-thumb-empty">Texte<br>actuel</span>`}</span>
+          <div class="brand-media-actions">
+            <button class="mini" onclick="pickToolbarBrandImage()">Importer une image…</button>
+            ${(b.toolbarBrandType==='image'&&b.toolbarBrandImage)?`<button class="mini" onclick="clearToolbarBrandImage()">✕ Revenir au texte</button>`:''}
+          </div>
+        </div>
+        <p class="brand-media-hint">${(b.toolbarBrandType==='image'&&b.toolbarBrandImage)?'Remplace le nom affiché en haut de l\'app.':'Par défaut, le nom de l\'entreprise s\'affiche en texte en haut de l\'app.'}</p>
+      </div>
+    </div>
+
+    <div class="ed-eyebrow">Coordonnées</div>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Téléphone</span><input type="text" value="${esc(b.phone)}" oninput="settingsEdit('phone',this.value)"></label>
+      <label class="fld"><span class="lbl">Email</span><input type="text" value="${esc(b.email)}" oninput="settingsEdit('email',this.value)"></label>
+    </div>
+    <label class="fld"><span class="lbl">Adresse</span><input type="text" value="${esc(b.address)}" oninput="settingsEdit('address',this.value)"></label>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Réseau social</span><input type="text" value="${esc(b.social)}" oninput="settingsEdit('social',this.value)"></label>
+      <label class="fld"><span class="lbl">Intitulé de la licence</span><input type="text" value="${esc(b.licenseLabel)}" oninput="settingsEdit('licenseLabel',this.value)"></label>
+    </div>
+    <label class="fld"><span class="lbl">Numéro de société / licence</span><input type="text" value="${esc(b.licenseNumber)}" oninput="settingsEdit('licenseNumber',this.value)"></label>
+
+    <div class="ed-eyebrow">Mentions régionales</div>
+    <label class="toggle-line"><input type="checkbox" ${b.showBsd?'checked':''} onchange="settingsToggle('showBsd',this.checked)"> Afficher l'en-tête « בס״ד » sur le devis</label>
+
+    <div class="ed-eyebrow">Devis — valeurs par défaut</div>
+    <div class="row3">
+      <label class="fld"><span class="lbl">Devise par défaut</span><select onchange="settingsEdit('defaultCurrency',this.value)"><option value="₪" ${b.defaultCurrency==='₪'?'selected':''}>₪ (Shekel)</option><option value="€" ${b.defaultCurrency==='€'?'selected':''}>€ (Euro)</option><option value="$" ${b.defaultCurrency==='$'?'selected':''}>$ (Dollar)</option></select></label>
+      <label class="fld"><span class="lbl">TVA par défaut (%)</span><input type="number" value="${b.defaultTva}" oninput="settingsEditNum('defaultTva',this.value)"></label>
+      <label class="fld"><span class="lbl">1er n° de devis</span><input type="number" value="${b.numStart}" oninput="settingsEditNum('numStart',this.value)"></label>
+      <label class="fld"><span class="lbl">Préfixe des n° de devis</span><input type="text" value="${esc(b.numPrefix)}" oninput="settingsEdit('numPrefix',this.value)" placeholder="ex. MN-"></label>
+    </div>
+
+    <div class="ed-eyebrow">Couleurs du devis</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">${paletteRow}
+      <button type="button" class="mini" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.palette==='custom'?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.palette==='custom'?'var(--panel)':'transparent'};" onclick="pickThemeFromPhoto()">
+        ${b.palette==='custom'?`<span style="width:13px;height:13px;border-radius:50%;background:${b.customAccent||'#9a8574'};border:1px solid #0002;"></span>`:'📷'}
+        Depuis une photo…
+      </button>
+    </div>
+    <p class="brand-media-hint" style="margin:0 0 16px;">S'applique uniquement au devis imprimé.</p>
+
+    <div class="ed-eyebrow">Fond du devis — texture (marbre, bois, papier…)</div>
+    <div class="brand-media-row">
+      <div class="brand-media-card" style="flex:1 1 100%;">
+        <div class="brand-media-body" style="align-items:flex-start;">
+          <span class="logo-thumb" style="width:70px;height:99px;">${b.devisBgImage?`<img src="${b.devisBgImage}" style="width:100%;height:100%;object-fit:cover;">`:`<span class="logo-thumb-empty">Aucune<br>texture</span>`}</span>
+          <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:220px;">
+            <div class="brand-media-actions" style="flex-direction:row;flex-wrap:wrap;">
+              <button class="mini" onclick="pickDevisBgImage()">${b.devisBgImage?'Changer…':'Choisir une texture…'}</button>
+              ${b.devisBgImage?`<button class="mini" onclick="toggleDevisBgFlipX()">${b.devisBgFlipX?'✓ ':''}⇋ Inverser</button>
+              <button class="mini" onclick="toggleDevisBgFlipY()">${b.devisBgFlipY?'✓ ':''}⇅ Retourner</button>
+              <button class="mini" onclick="clearDevisBgImage()">✕ Retirer</button>`:''}
+            </div>
+            ${b.devisBgImage?`<label class="fld" style="margin-bottom:0;"><span class="lbl">Intensité</span><input type="range" min="5" max="70" value="${b.devisBgOpacity!=null?b.devisBgOpacity:25}" oninput="setDevisBgOpacity(this.value)"></label>`:''}
+          </div>
+        </div>
+        <p class="brand-media-hint">S'adapte automatiquement à chaque page A4, quelle que soit la longueur du devis.</p>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--panel-edge);">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+            <span class="lbl" style="margin:0;">Bibliothèque de fonds</span>
+            <button class="mini" onclick="pickBgToLibrary()">+ Ajouter un fond</button>
+            ${b.devisBgImageBase?`<button class="mini" onclick="saveDevisBgToLibrary()">+ Enregistrer le fond actuel</button>`:''}
+          </div>
+          ${library.bgLibrary.length?`<div class="bg-lib-grid">${library.bgLibrary.map(x=>`<div class="bg-lib-tile">
+            <img src="${x.dataUri}" onclick="applyBgFromLibrary('${x.id}')" title="Appliquer ce fond">
+            <button class="bg-lib-del" onclick="deleteBgFromLibrary('${x.id}')" title="Supprimer">×</button>
+          </div>`).join('')}</div>`:`<p class="brand-media-hint" style="margin:0;">Aucun fond enregistré pour l'instant.</p>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="ed-eyebrow">Couleurs de l'application</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">${sitePaletteRow}
+      <button type="button" class="mini" style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid ${b.sitePalette==='custom'?'var(--ink)':'var(--panel-edge)'};border-radius:5px;background:${b.sitePalette==='custom'?'var(--panel)':'transparent'};" onclick="pickSiteThemeFromPhoto()">
+        ${b.sitePalette==='custom'?`<span style="width:13px;height:13px;border-radius:50%;background:${b.siteCustomAccent||'#9a8574'};border:1px solid #0002;"></span>`:'📷'}
+        Depuis une photo…
+      </button>
+    </div>
+    <p class="brand-media-hint" style="margin:0 0 16px;">S'applique à l'interface de l'application (barre du haut, boutons, tableau de bord…), indépendamment du devis.</p>
+
+    <div class="ed-eyebrow">Typographie du devis</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">${fontRow}</div>
+
+    <div class="ed-eyebrow">Raccourcis</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <button class="mini" onclick="closeModal();openLibraryPanel();">Bibliothèque & Hors prestation</button>
+      <button class="mini" onclick="closeModal();openCgvPanel();">Conditions générales</button>
+      <button class="mini" onclick="closeModal();openChantierCatsPanel();">Catégories de chantier</button>
+      <button class="mini" onclick="closeModal();openIaSettingsPanel();">Photos & retouche IA</button>
+      <button class="mini" onclick="closeModal();openTxtUsagePanel();">Rédaction IA — consommation</button>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="settingsReset()">↺ Tout réinitialiser</button>
+      <button class="btn btn-primary" onclick="settingsSave()">Enregistrer</button></div>`);
+  $('modal').dataset.editing='library';
+}
+function settingsReset(){
+  askConfirm('Réinitialiser tous les réglages (identité, coordonnées, apparence) sur les valeurs par défaut ?',()=>{
+    library.branding={...DEFAULT_BRANDING};applyBrandingLive();openSettingsPanel();
+  });
+}
+async function settingsSave(){
+  await store.set(K_LIB,library);
+  current.branding={...library.branding};
+  applyBrandingToUI();
+  render();
+  closeModal();
+  toast('Réglages enregistrés');
+}
+
+/* ============ EXPORT PDF ============ */
+function openDevisWindowHTML(devisHTML,num,companyName,docType){
+  const styles=Array.from(document.querySelectorAll('style,link[rel=stylesheet]')).map(n=>n.tagName==='LINK'?`<link rel="stylesheet" href="${n.href}">`:n.outerHTML).join('');
+  const docLabel=docType==='facture'?'Facture':'Devis';
+  const doc=`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${docLabel} ${esc(num||'')} — ${esc(companyName||'Melissa Nabet')}</title>${styles}
+    <style>body{background:#e8e2d7;margin:0;padding:64px 0 20px;} .devis{box-shadow:0 8px 30px rgba(60,50,35,.18);margin:0 auto;transform:none!important;}
+    .exportbar{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;gap:8px;justify-content:center;padding:10px;background:rgba(35,32,28,.96);}
+    .exportbar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:500;border:none;background:#9a8574;color:#fff;padding:11px 16px;border-radius:4px;cursor:pointer;}
+    .exportbar button.alt{background:#3d3934;}
+    .exportbar button:disabled{opacity:.6;cursor:wait;}
+    @media print{
+      .exportbar{display:none!important;}
+      @page{size:A4;margin:0;}
+      html,body{background:#f4efe6;padding:0;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+      .devis{box-shadow:none;width:auto;margin:0;background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+      .devis-page{page-break-after:always;box-sizing:border-box;min-height:297mm;padding:16mm 16mm;background:#f4efe6;position:relative;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
+      .devis-page:last-child{page-break-after:avoid;}
+      .devis-page.cond{page-break-before:always;}
+      .devis-page + .devis-page{border-top:none;}
+      .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
+      *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
+    }</style></head>
+    <body>
+      <div class="exportbar">
+        <button onclick="window.print()">⬇ Télécharger le PDF</button>
+        <button class="alt" onclick="window.print()">Imprimer</button>
+      </div>
+      ${devisHTML}
+    </body></html>`;
+  const w=window.open('','_blank');
+  if(w){w.document.open();w.document.write(doc);w.document.close();return true;}
+  return false;
+}
+function openDevisWindow(){
+  render();
+  return openDevisWindowHTML($('devis').outerHTML,current.num,current.branding&&current.branding.companyName,current.docType);
+}
+async function exportDevis(){
+  if(openDevisWindow()){toast('Aperçu ouvert — bouton « Imprimer / Enregistrer en PDF »');return;}
+  /* Repli si les pop-ups sont bloqués : impression directe (mêmes marges @page). */
+  render();window.print();
+}
+function sendDevisEmail(){
+  const B=(current.branding&&current.branding.companyName)?current.branding:DEFAULT_BRANDING;
+  const docLabel=current.docType==='facture'?'Facture':'Devis';
+  const to=(current.cemail||'').trim();
+  const subject=`${docLabel} N°${current.num} — ${B.companyName}`;
+  const body=`Bonjour${current.contact?' '+current.contact:''},\n\n`+
+    `Veuillez trouver ci-joint ${docLabel==='Facture'?'la facture':'le devis'} N°${current.num}`+
+    `${current.proj?' pour le projet « '+current.proj+' »':''}.\n\n`+
+    `(pensez à joindre le PDF téléchargé — un email ne peut pas joindre de fichier automatiquement)\n\n`+
+    `Cordialement,\n${B.signatureName||B.companyName}`;
+  const url=`mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href=url;
+  toast('Client de messagerie ouvert — pensez à joindre le PDF téléchargé');
+}
+/* wa.me exige l'indicatif pays ; les numéros locaux commençant par 0 sont réputés israéliens (972). */
+function toWhatsAppPhone(raw){
+  const digits=(raw||'').replace(/\D/g,'');
+  if(!digits)return '';
+  return digits.startsWith('0')?'972'+digits.slice(1):digits;
+}
+function sendDevisWhatsApp(){
+  const B=(current.branding&&current.branding.companyName)?current.branding:DEFAULT_BRANDING;
+  const docLabel=current.docType==='facture'?'Facture':'Devis';
+  const phone=toWhatsAppPhone(current.cphone);
+  const text=`Bonjour${current.contact?' '+current.contact:''},\n\n`+
+    `Veuillez trouver ci-joint ${docLabel==='Facture'?'la facture':'le devis'} N°${current.num}`+
+    `${current.proj?' pour le projet « '+current.proj+' »':''}.\n\n`+
+    `(pensez à joindre le PDF téléchargé — WhatsApp Web ne permet pas de le joindre automatiquement)\n\n`+
+    `Cordialement,\n${B.signatureName||B.companyName}`;
+  const url=`https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  window.open(url,'_blank');
+  toast('WhatsApp ouvert — pensez à joindre le PDF téléchargé');
+}
+
+/* ============ IA — embellissement ============ */
+function getEmbellishLength(){try{return localStorage.getItem('mn_embellish_length')||'moyen';}catch(e){return 'moyen';}}
+function setEmbellishLength(v){try{localStorage.setItem('mn_embellish_length',v);}catch(e){}}
+async function embellish(sv,btn,textarea){
+  if(!sv.title||!sv.title.trim()){toast('Ajoutez un intitulé avant d\'embellir');return;}
+  /* Le plafond bloque AVANT l'appel : rien n'est envoyé, donc rien n'est facturé. */
+  if(txtPlafondAtteint()){toast('Plafond de rédaction du mois atteint. Rien n’a été envoyé. Relevez-le dans ⚙ Réglages.');return;}
+  btn.disabled=true;const old=btn.textContent;btn.textContent='…';
+  try{
+    const token=await sessionToken();
+    if(!token){toast('Reconnectez-vous : session expirée');btn.disabled=false;btn.textContent=old;return;}
+    const res=await fetch(SB_URL+'/functions/v1/embellish',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+      body:JSON.stringify({title:sv.title,desc:sv.desc,proj:current.proj,surf:current.surf,length:getEmbellishLength()})
+    });
+    const data=await res.json();
+    if(!res.ok||data.error){const err=new Error(data.error||('HTTP '+res.status));err.data=data;throw err;}
+    /* Compté seulement après une réponse réussie : un appel refusé n'est pas facturé. */
+    txtCompter(data.usage);
+    const txt=(data.text||'').trim();
+    if(txt){sv.desc=txt;textarea.value=txt;render();toast('Texte généré');}else{toast('Réponse vide');}
+  }catch(e){console.error(e);toast('IA indisponible : '+txtErreurLisible(e&&e.data,e));}
+  btn.disabled=false;btn.textContent=old;
+}
+
+/* ============ MODALES ============ */
+function openModal(html){$('modal').innerHTML=html;$('overlay').classList.add('open');}
+function closeModal(){$('overlay').classList.remove('open');delete $('modal').dataset.editing;}
+function askConfirm(msg,onYes){
+  openModal(`<h3 style="font-size:19px;margin-bottom:2px">Confirmer</h3><p class="msub" style="white-space:pre-line">${esc(msg)}</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="confirm-yes">Confirmer</button></div>`);
+  const y=$('confirm-yes');if(y)y.addEventListener('click',()=>{closeModal();try{onYes();}catch(e){toast('Erreur : '+e.message);}});
+}
+
+/* --- Enregistrer --- */
+let saveSel=null;
+function openSavePanel(){
+  saveSel=null;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Enregistrer le devis</h3><p class="msub">Attribuez-le à un client, ou enregistrez-le sans client (attribuable plus tard).</p>
+    <label class="fld"><span class="lbl">Nom du devis</span><input type="text" id="save-title" value="${esc((current.proj||'Devis')+' — N°'+current.num)}"></label>
+    <button class="mini" style="margin-bottom:12px" onclick="chooseNewClient()">➕ Créer le client « ${esc(current.raison)} » depuis l'en-tête</button>
+    <label class="fld"><span class="lbl">…ou attribuer à un client existant</span>
+      <input type="text" id="save-search" placeholder="Rechercher un client…" oninput="renderSaveClients()"></label>
+    <div id="save-clients" style="max-height:190px;overflow:auto;"></div>
+    <div id="save-selinfo" class="msub" style="margin-top:8px;min-height:18px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="doSaveDevis()">Enregistrer</button></div>`);
+  renderSaveClients();updateSaveSelInfo();
+}
+function renderSaveClients(){
+  const el=$('save-clients');if(!el)return;
+  const q=(($('save-search')||{}).value||'').toLowerCase();
+  const list=clients.filter(c=>c.name.toLowerCase().includes(q)).slice(0,10);
+  el.innerHTML=list.length?list.map(c=>`<button class="mini" style="display:block;width:100%;text-align:left;margin-bottom:4px" onclick="chooseClient('${c.id}')">${esc(c.name)}</button>`).join(''):'<div class="msub">Aucun client trouvé.</div>';
+}
+function chooseClient(id){saveSel={type:'existing',id};updateSaveSelInfo();}
+function chooseNewClient(){saveSel={type:'new'};updateSaveSelInfo();}
+function updateSaveSelInfo(){const el=$('save-selinfo');if(!el)return;el.innerHTML=saveSel?(saveSel.type==='new'?'→ Un <b>nouveau client</b> « '+esc(current.raison)+' » sera créé.':'→ Attribué à : <b>'+esc(clientName(saveSel.id))+'</b>'):'→ Sans client pour l\'instant.';}
+function currentDevisTitle(){return (current.proj||'Devis')+' — N°'+current.num;}
+const CLIENT_STATUS_LABELS={attente:'En attente',accepte:'Accepté',refuse:'Refusé'};
+function devisStatusBadge(d){
+  const isFacture=d.snapshot&&d.snapshot.docType==='facture';
+  const ftag=isFacture?'<span class="badge" style="margin-left:6px">Facture</span>':'';
+  if(d.status!=='valide')return ftag+'<span class="badge due" style="margin-left:6px">Brouillon</span>';
+  const cs=d.clientStatus||'attente';
+  const cls=cs==='accepte'?'ok':(cs==='refuse'?'due':'');
+  return ftag+`<span class="badge ok" style="margin-left:6px">Validé</span><span class="badge ${cls}" style="margin-left:4px">${CLIENT_STATUS_LABELS[cs]}</span>`;
+}
+async function setClientStatus(id,val){
+  const d=devisList.find(x=>x.id===id);if(!d)return;
+  d.clientStatus=val;d.updatedAt=Date.now();
+  await store.set(K_DEVIS,devisList);
+  openDevisPanel();
+}
+function clientStatusSelect(d){
+  if(d.status!=='valide')return '';
+  const cs=d.clientStatus||'attente';
+  return `<select class="mini" style="width:auto" onchange="setClientStatus('${d.id}',this.value)">
+    <option value="attente" ${cs==='attente'?'selected':''}>En attente</option>
+    <option value="accepte" ${cs==='accepte'?'selected':''}>Accepté</option>
+    <option value="refuse" ${cs==='refuse'?'selected':''}>Refusé</option>
+  </select>`;
+}
+/* Crée ou met à jour l'enregistrement du devis courant. status: 'brouillon' | 'valide'.
+   clientIdOverride : undefined => on garde le client existant/en attente ; null => sans client ; 'id' => attribué. */
+async function upsertDevis(status, clientIdOverride){
+  const id=currentDevisId||uid();
+  const idx=devisList.findIndex(d=>d.id===id);
+  const existing=idx>=0?devisList[idx]:null;
+  // On ne rétrograde jamais un devis validé en brouillon
+  const finalStatus=(existing&&existing.status==='valide'&&status==='brouillon')?'valide':status;
+  const clientId=(clientIdOverride!==undefined)?clientIdOverride
+                :existing?existing.clientId
+                :(pendingClientId||null);
+  const title=existing&&existing.title?existing.title:currentDevisTitle();
+  const snapshot=JSON.parse(JSON.stringify(current));
+  /* "Modifié le" ne doit avancer que sur un VRAI changement de contenu, pas juste parce
+     qu'on a ouvert/regardé le devis (ce qui déclenche aussi ce chemin via l'autosave —
+     voir saveDraft). Sinon la date affichée dans « Mes devis » ne veut plus rien dire :
+     demande explicite pour ne pas embrouiller Raphaël sur lequel est vraiment le bon.
+     `branding` est EXCLU de cette comparaison : un brouillon le recopie en suivant la
+     bibliothèque (signature, logo, thème…) à chaque ouverture et à chaque changement reçu
+     d'un autre appareil — un pur effet de bord de réglages modifiés ailleurs, pas une
+     modification de CE devis. Sans l'exclure, rouvrir un vieux brouillon un autre jour
+     (bibliothèque forcément différente entre-temps) le faisait apparaître "modifié à
+     l'instant" alors que rien n'avait été touché — exactement ce que Raphaël a signalé. */
+  const dirtyPart=s=>({...s,branding:undefined});
+  const contentChanged=!existing||JSON.stringify({title:existing.title,clientId:existing.clientId,status:existing.status,snapshot:dirtyPart(existing.snapshot)})!==JSON.stringify({title,clientId,status:finalStatus,snapshot:dirtyPart(snapshot)});
+  const rec={
+    id,num:current.num,
+    title,
+    clientId,status:finalStatus,
+    updatedAt:contentChanged?Date.now():(existing?existing.updatedAt:Date.now()),
+    snapshot
+  };
+  if(idx>=0)devisList[idx]=rec;else devisList.push(rec);
+  currentDevisId=id;
+  await store.set(K_DEVIS,devisList);
+  /* Numérotation : une fois un numéro réellement enregistré (ce devis existe pour de
+     vrai), il ne doit plus jamais être réattribué à un autre — même si CE devis est
+     supprimé ensuite. maxIssuedNum est le plancher, jamais redescendu, synchronisé au
+     même titre que le reste de library.branding (voir SYNC_KEYS). */
+  const numVal=parseInt(current.num)||0;
+  if(numVal>(library.branding.maxIssuedNum||0)){library.branding.maxIssuedNum=numVal;await store.set(K_LIB,library);}
+  if(finalStatus==='valide'&&clientId)await syncClientFromDevis(clientId,id);
+  return rec;
+}
+/* Le montant final de la fiche client est piloté par le devis validé qui lui est lié. */
+async function syncClientFromDevis(clientId,devisId){
+  const cli=clients.find(x=>x.id===clientId);if(!cli)return;
+  const d=devisList.find(x=>x.id===devisId);if(!d)return;
+  const S=d.snapshot;const T=computeTotals(S,(S.services||[]).filter(v=>v.on));
+  cli.montantFinal=Math.round(T.ttc);cli.devise=S.cur||cli.devise;cli.devisId=devisId;
+  await store.set(K_CLIENTS,clients);
+}
+async function doSaveDevis(){
+  const title=$('save-title').value||('Devis N°'+current.num);
+  let clientId,picked=false;
+  if(saveSel&&saveSel.type==='new'){
+    const c=normalizeClient({name:current.raison,contact:current.contact,phone:current.cphone,email:current.cemail,ville:current.ville,tva:current.tva});
+    clients.push(c);clientId=c.id;picked=true;await store.set(K_CLIENTS,clients);
+  }else if(saveSel&&saveSel.type==='existing'){clientId=saveSel.id;picked=true;}
+  else if(saveSel){clientId=null;picked=true;} /* « sans client » choisi explicitement */
+  const rec=await upsertDevis('valide',picked?clientId:undefined);
+  const i=devisList.findIndex(d=>d.id===rec.id);if(i>=0){devisList[i].title=title;await store.set(K_DEVIS,devisList);}
+  clearDraft();pendingClientId=null;closeModal();renderClients();toast('Devis validé et enregistré');
+}
+let reSel=null;
+function openReattribute(devisId){
+  reSel=devisId;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Attribuer à un client</h3>
+    <input type="text" id="re-search" placeholder="Rechercher…" oninput="renderReClients()" style="margin-bottom:10px">
+    <div id="re-clients" style="max-height:260px;overflow:auto"></div>`);
+  renderReClients();
+}
+function renderReClients(){
+  const el=$('re-clients');if(!el)return;
+  const q=(($('re-search')||{}).value||'').toLowerCase();
+  const list=clients.filter(c=>c.name.toLowerCase().includes(q));
+  el.innerHTML='<button class="mini" style="display:block;width:100%;text-align:left;margin-bottom:4px" onclick="assignDevis(\'\')">— Sans client —</button>'+list.map(c=>`<button class="mini" style="display:block;width:100%;text-align:left;margin-bottom:4px" onclick="assignDevis('${c.id}')">${esc(c.name)}</button>`).join('');
+}
+async function assignDevis(clientId){
+  const d=devisList.find(x=>x.id===reSel);
+  if(d){
+    const prev=clients.find(x=>x.devisId===d.id);if(prev&&prev.id!==clientId){prev.devisId=null;}
+    d.clientId=clientId||null;await store.set(K_DEVIS,devisList);
+    if(clientId&&d.status==='valide')await syncClientFromDevis(clientId,d.id);
+    await store.set(K_CLIENTS,clients);
+  }
+  closeModal();openDevisPanel();renderClients();toast('Devis attribué');
+}
+
+/* --- Mes devis --- */
+function clientName(id){const c=clients.find(x=>x.id===id);return c?c.name:'Sans client';}
+function openDevisPanel(){
+  let body='';
+  if(!devisList.length){body='<div class="empty">Aucun devis enregistré pour l\'instant.</div>';}
+  else{
+    const byClient={};devisList.forEach(d=>{(byClient[d.clientId]=byClient[d.clientId]||[]).push(d);});
+    body=Object.keys(byClient).map(cid=>{
+      const rows=byClient[cid].sort((a,b)=>b.updatedAt-a.updatedAt).map(d=>`
+        <div class="list-row"><div class="lr-main"><div class="lr-t">${esc(d.title)}${devisStatusBadge(d)}</div><div class="lr-s">N°${esc(d.num)} · Modifié le ${fmtDateTimeFr(d.updatedAt)}</div></div>
+          ${clientStatusSelect(d)}
+          <button class="mini" onclick="loadDevis('${d.id}')">Ouvrir</button>
+          <button class="mini" onclick="openReattribute('${d.id}')">Attribuer</button>
+          <button class="mini" onclick="duplicateDevis('${d.id}')">Dupliquer</button>
+          <button class="mini danger" onclick="deleteDevis('${d.id}')">Suppr.</button></div>`).join('');
+      return `<div class="client-group"><p class="cg-h">${esc(clientName(cid))}</p>${rows}</div>`;
+    }).join('');
+  }
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Mes devis</h3><p class="msub">Regroupés par client. Dupliquer crée une v2 pour le même client.</p>${body}`);
+}
+function loadDevis(id){
+  const d=devisList.find(x=>x.id===id);if(!d)return;
+  Object.assign(current,JSON.parse(JSON.stringify(d.snapshot)));
+  current.open={}; /* sections repliées par défaut à l'ouverture, même si sauvegardées ouvertes */
+  current.docType=d.snapshot.docType||'devis';current.clientSignature=d.snapshot.clientSignature||null;
+  /* Un brouillon n'est pas figé : il doit suivre les derniers réglages de la bibliothèque.
+     Seul un devis validé garde son branding gelé, pour l'exactitude historique. */
+  if(d.status!=='valide')current.branding={...library.branding};
+  currentDevisId=id;pendingClientId=d.clientId||null;closeModal();fillFields();buildPrest();buildExclu();render();toast('Devis chargé');
+}
+async function duplicateDevis(id){
+  const d=devisList.find(x=>x.id===id);if(!d)return;
+  const snap=JSON.parse(JSON.stringify(d.snapshot));
+  snap.branding={...library.branding};
+  /* Toujours " v2" en dur donnait plusieurs devis "N°0079 v2" dès qu'on dupliquait deux
+     fois le même original (ou qu'on dupliquait une copie déjà versionnée). Le numéro de
+     base est retrouvé en retirant un éventuel suffixe " vN" existant, puis on cherche la
+     version la plus haute déjà utilisée pour CE numéro de base (parmi tout devisList,
+     l'original valant implicitement v1) — la nouvelle copie prend le numéro suivant,
+     quelle que soit la copie d'où l'on duplique. */
+  const baseNum=(d.num||'').replace(/\s+v(\d+)$/i,'');
+  let maxV=1;
+  devisList.forEach(x=>{
+    if((x.num||'').replace(/\s+v(\d+)$/i,'')!==baseNum)return;
+    const m=/\sv(\d+)$/i.exec(x.num||'');
+    const v=m?parseInt(m[1],10):1;
+    if(v>maxV)maxV=v;
+  });
+  const newNum=baseNum+' v'+(maxV+1);
+  const rec={id:uid(),num:newNum,title:(d.title||'Devis')+' (copie)',clientId:d.clientId,status:'brouillon',updatedAt:Date.now(),snapshot:snap};
+  rec.snapshot.num=rec.num;devisList.push(rec);await store.set(K_DEVIS,devisList);openDevisPanel();toast('Copie créée (brouillon)');
+}
+function deleteDevis(id){
+  askConfirm('Supprimer ce devis ?',async()=>{await deleteDevisRecord(id);openDevisPanel();renderClients();toast('Devis supprimé');});
+}
+async function deleteDevisRecord(id){
+  _pendingDeletedDevisIds.add(id);
+  devisList=devisList.filter(x=>x.id!==id);await store.set(K_DEVIS,devisList);
+  const cli=clients.find(x=>x.devisId===id);if(cli){cli.devisId=null;await store.set(K_CLIENTS,clients);}
+  /* Une suppression est un geste ponctuel et délibéré (clic sur "Suppr."), pas une frappe
+     continue — pas de raison de la faire attendre le débounce de 500ms comme le reste. La
+     débouncer laissait une fenêtre où recharger la page tout de suite après (pour vérifier
+     que ça a marché, justement) pouvait couper l'envoi en plein vol avant qu'il n'atteigne
+     le serveur — la ligne réapparaissait alors, jamais vraiment supprimée. On pousse
+     immédiatement, en plus du filet debounce/visibilitychange/pagehide qui reste en place
+     pour tout le reste. */
+  clearTimeout(pushT);cloudPush();
+  if(currentDevisId===id){
+    /* Supprimer le devis actuellement ouvert dans le composeur ne suffisait pas à vider
+       currentDevisId : current.raison/services restaient affichés tels quels à l'écran, donc
+       la frappe suivante — ou un debounce déjà programmé (saveDraftDebounced, 600ms) au
+       moment du clic sur Supprimer — relançait upsertDevis('brouillon') et recréait presque
+       le même devis sous un nouvel id. C'est exactement le « il revient tout seul » signalé,
+       et la source des doublons qui rendaient la liste illisible. newDevis() vide vraiment
+       l'écran (et annule le debounce en vol via clearTimeout dans saveDraftDebounced). */
+    clearTimeout(_draftT);
+    newDevis();
+  }
+}
+/* --- Actions devis depuis une fiche client --- */
+function editDevis(id){
+  loadDevis(id); /* charge dans le composeur + pendingClientId */
+  showView('devis');
+  toast('Devis chargé — modifiez puis « Enregistrer » pour valider');
+}
+function createDevisForClient(cid){
+  const c=clients.find(x=>x.id===cid);if(!c)return;
+  newDevis();
+  current.raison=c.name||'';current.contact=c.contact||'';current.cphone=c.phone||'';current.cemail=c.email||'';current.ville=c.ville||'';
+  if(c.tva!=null)current.tva=c.tva;if(c.devise)current.cur=c.devise;
+  pendingClientId=cid;
+  fillFields();buildPrest();buildExclu();render();showView('devis');
+  toast('Nouveau devis pour '+(c.name||'ce client'));
+}
+function viewDevisSnapshot(id){
+  const d=devisList.find(x=>x.id===id);if(!d)return;
+  const snap=d.status!=='valide'?{...d.snapshot,branding:{...library.branding}}:d.snapshot;
+  const html=`<div class="devis">${buildDevisHTML(snap)}</div>`;
+  if(!openDevisWindowHTML(html,snap.num||d.num,snap.branding&&snap.branding.companyName,snap.docType)){toast('Autorisez les pop-ups pour voir le devis');}
+}
+function newDevis(){currentDevisId=null;seedComposerFromLibrary();
+  ensureBranding();
+  /* Le numéro suivant ne redescend jamais, même après suppression du devis qui portait
+     le numéro le plus haut : maxIssuedNum (mis à jour dans upsertDevis, à l'enregistrement
+     réel) est le plancher. Math.max avec devisList reste en garde-fou (au cas où
+     maxIssuedNum ne serait pas encore à jour, ex. anciennes données). Ouvrir/abandonner
+     "Nouveau Devis" sans jamais l'enregistrer ne consomme aucun numéro — seul un vrai
+     enregistrement (upsertDevis) avance le plancher, demande explicite de Raphaël pour
+     que la suite reste simple : toujours +1 par rapport au dernier devis réellement créé,
+     jamais de réattribution d'un numéro déjà utilisé. */
+  const numBase=(library.branding.numStart||1)-1;
+  const floor=Math.max(numBase,library.branding.maxIssuedNum||0,...devisList.map(d=>parseInt(d.num)||0));
+  current.num=(library.branding.numPrefix||'')+String(floor+1).padStart(4,'0');
+  current.date=new Date().toLocaleDateString('fr-FR');
+  current.raison='';current.contact='';current.cphone='';current.cemail='';current.caddr='';current.ville='';current.cp='';current.siret='';
+  current.proj='';current.surf='';current.paddr='';current.intro='';
+  current.pricingMode='global';current.gAmount=0;current.gIsTTC=false;current.tl='';
+  current.cur=library.branding.defaultCurrency||'₪';current.tva=library.branding.defaultTva!=null?library.branding.defaultTva:18;
+  current.docType='devis';current.clientSignature=null;
+  current.sigOverride=false;current.sigName='';
+  current.services.forEach(sv=>sv.on=false);
+  current.exclus.forEach(ex=>ex.on=false);
+  fillFields();buildPrest();buildExclu();render();toast('Nouveau devis');}
+
+/* --- Bibliothèque --- */
+function openLibraryPanel(){
+  if(!library.exclus)library.exclus=DEFAULT_EXCLUS.slice();
+  const secs=library.sections.map((sec,si)=>{
+    const moveOptions=`<option value="">→ Déplacer vers…</option>`+library.sections.map((s2,si2)=>si2===si?'':`<option value="${si2}">${esc(s2.name)}</option>`).join('');
+    const items=sec.items.map((it,ii)=>`<div class="lib-item" data-idx="${ii}">
+      <span class="drag-handle item-drag-handle" title="Glisser pour réordonner">⠿</span>
+      <input type="text" value="${esc(it.title)}" oninput="libEdit(${si},${ii},'title',this.value)">
+      <select class="lib-item-move" title="Déplacer ce service vers une autre section" onchange="libMoveItem(${si},${ii},this.value)">${moveOptions}</select>
+      <button class="mini danger" onclick="libDelItem(${si},${ii})">×</button></div>`).join('');
+    return `<div class="lib-sec" data-idx="${si}"><div class="lib-sec-h">
+      <span class="drag-handle sec-drag-handle" title="Glisser pour réordonner">⠿</span>
+      <input type="text" value="${esc(sec.name)}" oninput="libEdit(${si},null,'name',this.value)">
+      <button class="mini" onclick="libAddItem(${si})">+ ligne</button>
+      <button class="mini danger" onclick="libDelSection(${si})">Suppr.</button></div>
+      <div class="lib-items" data-sec="${si}">${items}</div></div>`;
+  }).join('');
+  const exclItems=library.exclus.map((t,ii)=>`<div class="lib-item">
+    <input type="text" value="${esc(t)}" oninput="libExclEdit(${ii},this.value)">
+    <button class="mini danger" onclick="libExclDel(${ii})">×</button></div>`).join('');
+  const exclSec=`<div class="lib-sec"><div class="lib-sec-h">
+    <span style="flex:1;font-weight:600;font-size:13.5px;">Hors prestation · non compris</span>
+    <button class="mini" onclick="libExclAdd()">+ ligne</button></div>${exclItems}</div>`;
+  const curLen=getEmbellishLength();
+  const lenSel=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 12px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:5px;">
+    <span style="flex:1;font-size:12.5px;color:var(--stone);">✨ Longueur des textes générés par l'IA (tous les boutons)</span>
+    <select onchange="setEmbellishLength(this.value)" style="width:auto;padding:6px 8px;">
+      <option value="court" ${curLen==='court'?'selected':''}>Court</option>
+      <option value="moyen" ${curLen==='moyen'?'selected':''}>Moyen</option>
+      <option value="long" ${curLen==='long'?'selected':''}>Long</option>
+    </select></div>`;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Bibliothèque</h3>
+    <p class="msub">Modifiez les sections et prestations. Glissez « ⠿ » pour réordonner. Enregistré et réutilisé pour les prochains devis.</p>
+    ${lenSel}
+    <div id="lib-sections">${secs}</div>
+    <button class="add-btn" onclick="libAddSection()">+ Ajouter une section</button>
+    ${exclSec}
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="resetLibrary()">↺ Services fournis</button>
+      <div style="display:flex;gap:8px;">
+        <button class="mini" onclick="libApplyToCurrent()">Recharger dans ce devis</button>
+        <button class="btn btn-primary" onclick="libSave()">Enregistrer la bibliothèque</button></div></div>`);
+  $('modal').dataset.editing='library';
+  wireLibraryDrag();
+}
+/* Réorganisation par glisser-déposer (souris + tactile via Pointer Events) */
+function attachDragReorder(container,itemSelector,handleSelector,onReorder){
+  if(!container)return;
+  container.querySelectorAll(handleSelector).forEach(handle=>{
+    const row=handle.closest(itemSelector);
+    if(!row||row.parentNode!==container)return;
+    handle.addEventListener('pointerdown',e=>{
+      e.preventDefault();
+      const dragging=row;
+      /* Rects captured once and never re-measured mid-drag — re-measuring after we
+         nudge siblings would fold the nudge back into the next reading and the
+         drag runs away to one end of the list. */
+      const siblings=Array.from(container.children).filter(el=>el.matches(itemSelector));
+      const startIndex=siblings.indexOf(dragging);
+      const rects=siblings.map(el=>el.getBoundingClientRect());
+      const dragH=rects[startIndex].height;
+      const startY=e.clientY;
+      let targetIndex=startIndex;
+      dragging.style.position='relative';dragging.style.zIndex='50';
+      dragging.classList.add('dragging-row');
+      try{handle.setPointerCapture(e.pointerId);}catch(err){}
+      function applyOffsets(newTarget){
+        siblings.forEach((el,i)=>{
+          if(i===startIndex)return;
+          let shift=0;
+          if(newTarget<startIndex&&i>=newTarget&&i<startIndex)shift=dragH;
+          else if(newTarget>startIndex&&i>startIndex&&i<=newTarget)shift=-dragH;
+          el.style.transition='transform .12s';
+          el.style.transform=shift?('translateY('+shift+'px)'):'';
+        });
+      }
+      function onMove(ev){
+        const dy=ev.clientY-startY;
+        dragging.style.transform='translateY('+dy+'px)';
+        const dragMid=rects[startIndex].top+rects[startIndex].height/2+dy;
+        let count=0;
+        siblings.forEach((el,i)=>{
+          if(i===startIndex)return;
+          const mid=rects[i].top+rects[i].height/2;
+          if(mid<dragMid)count++;
+        });
+        if(count!==targetIndex){targetIndex=count;applyOffsets(targetIndex);}
+      }
+      function onUp(){
+        document.removeEventListener('pointermove',onMove);
+        document.removeEventListener('pointerup',onUp);
+        try{handle.releasePointerCapture(e.pointerId);}catch(err){}
+        dragging.style.transform='';dragging.style.position='';dragging.style.zIndex='';
+        dragging.classList.remove('dragging-row');
+        siblings.forEach((el,i)=>{if(i!==startIndex){el.style.transform='';el.style.transition='';}});
+        const others=siblings.map((el,i)=>i).filter(i=>i!==startIndex);
+        others.splice(targetIndex,0,startIndex);
+        onReorder(others.map(i=>parseInt(siblings[i].dataset.idx,10)));
+      }
+      document.addEventListener('pointermove',onMove);
+      document.addEventListener('pointerup',onUp);
+    });
+  });
+}
+function wireLibraryDrag(){
+  attachDragReorder($('lib-sections'),'.lib-sec','.sec-drag-handle',newOrder=>{
+    library.sections=newOrder.map(i=>library.sections[i]);
+    openLibraryPanel();saveLibraryDebounced();
+  });
+  document.querySelectorAll('.lib-items').forEach(container=>{
+    const si=parseInt(container.dataset.sec,10);
+    attachDragReorder(container,'.lib-item','.item-drag-handle',newOrder=>{
+      library.sections[si].items=newOrder.map(i=>library.sections[si].items[i]);
+      openLibraryPanel();saveLibraryDebounced();
+    });
+  });
+}
+function libEdit(si,ii,key,val){
+  if(ii===null){
+    const oldName=library.sections[si].name;
+    library.sections[si].name=val;
+    if(oldName!==val)propagateSectionRename(oldName,val);
+  }else library.sections[si].items[ii][key]=val;
+  saveLibraryDebounced();
+}
+/* Renommer une section de bibliothèque ne doit PAS changer un devis déjà validé/envoyé
+   (sv.cat est une copie figée du nom au moment de la création du devis, volontairement,
+   pour la stabilité des devis déjà partis) — mais un brouillon encore en cours de travail
+   doit suivre le nouveau nom, sinon le renommage a l'air de « ne rien faire » pour
+   l'utilisatrice qui l'a fait exprès pour ce brouillon. */
+function propagateSectionRename(oldName,newName){
+  devisList.forEach(d=>{
+    if(d.status!=='brouillon'||!d.snapshot||!Array.isArray(d.snapshot.services))return;
+    let touched=false;
+    d.snapshot.services.forEach(sv=>{if(sv.cat===oldName){sv.cat=newName;touched=true;}});
+    if(touched&&d.snapshot.open&&Object.prototype.hasOwnProperty.call(d.snapshot.open,oldName)){
+      d.snapshot.open[newName]=d.snapshot.open[oldName];delete d.snapshot.open[oldName];
+    }
+  });
+  store.set(K_DEVIS,devisList);
+  const curEntry=currentDevisId?devisList.find(x=>x.id===currentDevisId):null;
+  const curIsDraft=!currentDevisId||!curEntry||curEntry.status!=='valide';
+  if(!curIsDraft)return;
+  let touchedCurrent=false;
+  current.services.forEach(sv=>{if(sv.cat===oldName){sv.cat=newName;touchedCurrent=true;}});
+  if(touchedCurrent&&current.open&&Object.prototype.hasOwnProperty.call(current.open,oldName)){
+    current.open[newName]=current.open[oldName];delete current.open[oldName];
+  }
+  /* render() ne repeint que l'aperçu imprimé (#devis) — l'accordéon d'édition (#prest, avec
+     les en-têtes de section visibles pendant qu'on compose) est une vue SÉPARÉE construite
+     par buildPrest(). Sans elle, l'en-tête du composeur restait affiché avec l'ancien nom
+     malgré des données à jour en mémoire (trouvé par le test, pas par relecture). */
+  if(touchedCurrent){buildPrest();render();}
+}
+function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvelle prestation',desc:'',mode:'none',price:0,qty:1,pu:0,defaultOn:false});openLibraryPanel();saveLibraryDebounced();}
+function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
+function libMoveItem(si,ii,targetSiStr){
+  const targetSi=parseInt(targetSiStr,10);
+  if(isNaN(targetSi)||targetSi===si||!library.sections[targetSi])return;
+  const item=library.sections[si].items.splice(ii,1)[0];if(!item)return;
+  library.sections[targetSi].items.push(item);
+  openLibraryPanel();saveLibraryDebounced();
+}
+function libAddSection(){library.sections.push({id:uid(),name:'Nouvelle section',items:[]});openLibraryPanel();saveLibraryDebounced();}
+function libDelSection(si){askConfirm('Supprimer cette section ?',()=>{library.sections.splice(si,1);openLibraryPanel();saveLibraryDebounced();});}
+function libExclEdit(ii,val){library.exclus[ii]=val;saveLibraryDebounced();}
+function libExclAdd(){library.exclus.push('Nouvel élément non compris');openLibraryPanel();saveLibraryDebounced();}
+function libExclDel(ii){library.exclus.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
+async function libSave(){await store.set(K_LIB,library);closeModal();toast('Bibliothèque enregistrée');}
+/* Ne réinitialise QUE sections/exclus (le bouton dit "Services fournis") — surtout ne pas
+   remplacer tout l'objet library, qui porte aussi le branding, la bibliothèque de fonds, les
+   catégories de tâches/chantier et les CGV : les écraser silencieusement au clic sur un bouton
+   qui ne parle que des services a déjà causé une vraie perte de données. */
+function resetLibrary(){askConfirm('Réinitialiser la bibliothèque sur les services fournis ? Vos modifications des services et de la liste hors-prestation seront perdues (le reste — réglages, fonds, catégories, CGV — n\'est pas touché).',async()=>{
+  const fresh=defaultLibrary();
+  library.sections=fresh.sections;
+  library.exclus=fresh.exclus;
+  await store.set(K_LIB,library);openLibraryPanel();toast('Services réinitialisés');
+});}
+
+/* --- Conditions générales --- */
+function openCgvPanel(){
+  if(!library.cgv||!library.cgv.length)library.cgv=DEFAULT_CGV.map(c=>({...c}));
+  const items=library.cgv.map((c,i)=>`<div class="lib-sec"><div class="lib-sec-h">
+    <input type="text" value="${esc(c.title)}" oninput="cgvEdit(${i},'title',this.value)">
+    <button class="mini danger" onclick="cgvDel(${i})">×</button></div>
+    <textarea class="cgv-body" oninput="cgvEdit(${i},'body',this.value)">${esc(c.body)}</textarea></div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Conditions générales</h3>
+    <p class="msub">Modifiez le texte légal du devis. Astuce : une ligne commençant par « - » devient une puce dans la liste (comme pour l'article sur les modalités de paiement).</p>
+    ${items}
+    <button class="add-btn" onclick="cgvAdd()">+ Ajouter un article</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="resetCgv()">↺ Texte par défaut</button>
+      <button class="btn btn-primary" onclick="cgvSave()">Enregistrer</button></div>`);
+}
+function cgvEdit(i,key,val){library.cgv[i][key]=val;saveLibraryDebounced();}
+function cgvAdd(){library.cgv.push({title:'Nouvel article.',body:''});openCgvPanel();saveLibraryDebounced();}
+function cgvDel(i){askConfirm('Supprimer cet article ?',()=>{library.cgv.splice(i,1);openCgvPanel();saveLibraryDebounced();});}
+function resetCgv(){askConfirm('Réinitialiser les conditions générales sur le texte par défaut ? Vos modifications seront perdues.',()=>{library.cgv=DEFAULT_CGV.map(c=>({...c}));openCgvPanel();saveLibraryDebounced();});}
+async function cgvSave(){
+  await store.set(K_LIB,library);
+  current.cgv=library.cgv.map(c=>({...c}));
+  render();closeModal();toast('Conditions générales enregistrées');
+}
+function libApplyToCurrent(){askConfirm('Recharger la bibliothèque effacera les lignes du devis en cours. Continuer ?',async()=>{await store.set(K_LIB,library);seedComposerFromLibrary();buildPrest();buildExclu();render();toast('Bibliothèque rechargée');});}
+
+/* ============ CLIENTS / COMPTES ============ */
+function ensureClientStatuses(){
+  if(!Array.isArray(library.clientStatuses)||!library.clientStatuses.length){
+    library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));
+    return;
+  }
+  /* Migration : une liste de statuts enregistrée avant l'ajout du geste « Archiver ce
+     client » n'a pas le champ `archive` sur « Terminé »/« Annulé » — sans lui, ni le
+     bouton ni le séparateur n'apparaissent, alors que rien n'a jamais été décoché à la
+     main. On le complète une seule fois, par id, sans toucher un statut personnalisé
+     (id inconnu du défaut) ni un choix explicite déjà enregistré. */
+  let manque=false;
+  library.clientStatuses.forEach(s=>{
+    if(s.archive===undefined){
+      const def=DEFAULT_CLIENT_STATUSES.find(d=>d.id===s.id);
+      if(def&&def.archive){s.archive=true;manque=true;}
+    }
+  });
+  if(manque)saveLibraryDebounced();
+}
+function clientStatus(c){ensureClientStatuses();return library.clientStatuses.find(s=>s.id===c.statut)||library.clientStatuses[0];}
+/* Un client est aux archives si SON statut est déclaré archivant. Rien d'autre : ni sa date
+   de fin, ni son solde. Sinon le rangement se mettrait à bouger tout seul. */
+function clientArchive(c){return !!clientStatus(c).archive;}
+/* Le statut est ce qui range un client aux archives : le sélecteur doit le DIRE, sinon le
+   lien entre « Terminé » et « le client a disparu sous le séparateur » ne se devine pas. */
+function clientStatusOptionsHtml(c){ensureClientStatuses();return library.clientStatuses.map(s=>`<option value="${esc(s.id)}" ${c.statut===s.id?'selected':''}>${esc(s.label)}${s.archive?' · archivé':''}</option>`).join('');}
+/* Le premier statut qui archive, et le premier qui n'archive pas. Ce sont eux que les
+   boutons « Archiver » / « Sortir des archives » posent : un geste direct, pour ne pas
+   obliger à comprendre d'abord le mécanisme des statuts. */
+function premierStatutArchive(){ensureClientStatuses();return library.clientStatuses.find(s=>s.archive)||null;}
+function premierStatutActif(){ensureClientStatuses();return library.clientStatuses.find(s=>!s.archive)||library.clientStatuses[0];}
+function normalizeClient(c){
+  let montantFinal,paiements,commissions;
+  if(c.montantFinal!=null||Array.isArray(c.paiements)||Array.isArray(c.commissions)){
+    montantFinal=+c.montantFinal||0;
+    paiements=Array.isArray(c.paiements)?c.paiements.map(p=>({id:p.id||uid(),categorie:p.categorie||'Architecture',label:p.label||'',montant:+p.montant||0,date:p.date||''})):[];
+    commissions=Array.isArray(c.commissions)?c.commissions.map(p=>({id:p.id||uid(),label:p.label||'',montantDu:+(p.montantDu!=null?p.montantDu:p.montant)||0,paye:+p.paye||0})):[];
+  } else if(Array.isArray(c.lignes)){
+    montantFinal=c.lignes.reduce((a,l)=>a+(+l.prixFinal||0),0);
+    paiements=c.lignes.filter(l=>(+l.recu||0)>0).map(l=>({id:uid(),categorie:'Architecture',label:l.type||'Paiement',montant:+l.recu||0}));
+    commissions=[];
+  } else { montantFinal=0;paiements=[];commissions=[]; }
+  return {id:c.id||uid(),name:String(c.name||c.raison||'Client'),statut:c.statut||'en_cours',devise:c.devise||'₪',devisId:c.devisId||null,contact:c.contact||'',phone:c.phone||c.cphone||'',email:c.email||'',ville:c.ville||'',debut:String(c.debut||''),fin:String(c.fin||''),commentaire:c.commentaire||'',tva:c.tva!=null?c.tva:18,montantFinal,paiements,commissions,docs:Array.isArray(c.docs)?c.docs.map(d=>({id:d.id,name:d.name||'Document',type:d.type||'',ligneId:d.ligneId||null})):[]};
+}
+function clientTotals(c){
+  const recu=(c.paiements||[]).reduce((a,p)=>a+(+p.montant||0),0);
+  const montant=+c.montantFinal||0;
+  const commissionsDue=(c.commissions||[]).reduce((a,p)=>a+(+p.montantDu||0),0);
+  const commissionsPaye=(c.commissions||[]).reduce((a,p)=>a+(+p.paye||0),0);
+  return {montant,recu,reste:montant-recu,commissions:commissionsDue,commissionsPaye,commissionsReste:commissionsDue-commissionsPaye};
+}
+function globalTotals(cs){return cs.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.recu+=t.recu;a.reste+=t.reste;a.commissions+=t.commissions;a.commissionsPaye+=t.commissionsPaye;a.commissionsReste+=t.commissionsReste;return a;},{montant:0,recu:0,reste:0,commissions:0,commissionsPaye:0,commissionsReste:0});}
+function relanceText(c){
+  const t=clientTotals(c);const dv=c.devise||'₪';
+  const B=(library.branding&&library.branding.companyName)?library.branding:DEFAULT_BRANDING;
+  const dest=c.contact||c.name;
+  const proj=c.name?` pour « ${c.name} »`:'';
+  const lignes=(c.paiements||[]).filter(p=>(+p.montant||0)>0);
+  const detail=lignes.length?'\nRèglements reçus :\n'+lignes.map(p=>{
+    const lbl=p.label||'Paiement';
+    const d=p.date?fmtDateFr(p.date):'';
+    return `- ${lbl} : ${fmt(p.montant)} ${dv}${d?' (le '+d+')':''}`;
+  }).join('\n')+'\n':'';
+  return `Bonjour ${dest},\n\nPetit rappel concernant le règlement de votre projet${proj} :\n${detail}\n- Montant total : ${fmt(t.montant)} ${dv}\n- Déjà réglé : ${fmt(t.recu)} ${dv}\n- Solde restant : ${fmt(t.reste)} ${dv}\n\nMerci de bien vouloir procéder au règlement du solde dès que possible. N'hésitez pas à me contacter pour toute question.\n\nCordialement,\n${B.signatureName||B.companyName}`;
+}
+function copyRelanceText(id){
+  const c=clients.find(x=>x.id===id);if(!c)return;
+  const ta=document.querySelector('.cl-detail textarea[data-relance="'+id+'"]');
+  const text=ta?ta.value:relanceText(c);
+  const done=()=>toast('Message copié — collez-le où vous voulez');
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));}
+  else fallbackCopy(text,done);
+}
+function fallbackCopy(text,done){
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');done();}catch(e){toast('Échec de la copie');}
+  document.body.removeChild(ta);
+}
+function sendRelanceWhatsApp(id){
+  const c=clients.find(x=>x.id===id);if(!c)return;
+  const ta=document.querySelector('.cl-detail textarea[data-relance="'+id+'"]');
+  const text=ta?ta.value:relanceText(c);
+  const phone=toWhatsAppPhone(c.phone);
+  if(!phone){toast('Aucun numéro de téléphone renseigné pour ce client');return;}
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`,'_blank');
+}
+
+const clientFilters={q:'',statuts:[],sortKey:'name',sortDir:'asc',archivesOuvert:true};
+const clientOpen={};
+let _saveT;
+function saveClients(){store.set(K_CLIENTS,clients);}
+function saveClientsDebounced(){clearTimeout(_saveT);_saveT=setTimeout(saveClients,500);}
+
+function setSort(key){
+  if(clientFilters.sortKey===key){clientFilters.sortDir=clientFilters.sortDir==='asc'?'desc':'asc';}
+  else{clientFilters.sortKey=key;clientFilters.sortDir=(key==='name'||key==='debut'||key==='statut')?'asc':'desc';}
+  renderClients();
+}
+function sortArrow(key){return clientFilters.sortKey===key?`<span class="cl-sortarrow">${clientFilters.sortDir==='asc'?'▲':'▼'}</span>`:'';}
+/* Met à jour uniquement l'en-tête d'une fiche (début, statut, nom) sans reconstruire tout le
+   tableau : évite que la fiche ouverte se referme et que le curseur saute pendant la saisie. */
+function updateClientRow(c){
+  const grp=document.querySelector('.cl-group[data-cid="'+c.id+'"]');if(!grp)return;
+  const row=grp.querySelector(':scope > .cl-row');if(!row)return;
+  const cells=row.children;
+  if(cells[0])cells[0].textContent=fmtDate(c.debut);
+  const dot=cells[1]&&cells[1].querySelector('.dot');
+  if(dot)dot.style.background=clientStatus(c).color;
+  const nameCell=row.querySelector('.cl-name');if(nameCell)nameCell.textContent=c.name;
+}
+function renderClients(){
+  const tbl=$('cl-table');if(!tbl)return;tbl.innerHTML='';
+  renderClientStatusFilters();
+  const head=document.createElement('div');head.className='cl-row head';
+  head.innerHTML=`<div class="sortable" data-sort="debut">Début${sortArrow('debut')}</div><div class="sortable" data-sort="statut" style="justify-content:center">Statut${sortArrow('statut')}</div><div class="sortable" data-sort="name">Client${sortArrow('name')}</div><div class="num sortable" data-sort="montant">Montant final (Plans)${sortArrow('montant')}</div><div class="num sortable col-sep" data-sort="reste">Reste dû${sortArrow('reste')}</div><div class="num sortable col-after-sep" data-sort="commissions">Montant commission${sortArrow('commissions')}</div><div class="num sortable" data-sort="commReste">Commission restante${sortArrow('commReste')}</div><div></div><div></div><div></div>`;
+  head.querySelectorAll('.sortable').forEach(el=>el.addEventListener('click',()=>setSort(el.dataset.sort)));
+  tbl.appendChild(head);
+  let list=clients.slice();
+  const q=clientFilters.q.trim().toLowerCase();
+  if(q)list=list.filter(c=>String(c.name||'').toLowerCase().includes(q)||(c.paiements||[]).some(l=>(l.label||'').toLowerCase().includes(q))||(c.commissions||[]).some(l=>(l.label||'').toLowerCase().includes(q)));
+  if(clientFilters.statuts.length)list=list.filter(c=>clientFilters.statuts.includes(c.statut||'en_cours'));
+  const dir=clientFilters.sortDir==='asc'?1:-1;
+  const sk=clientFilters.sortKey;
+  list.sort((a,b)=>{
+    if(sk==='name')return String(a.name||'').localeCompare(String(b.name||''))*dir;
+    if(sk==='debut')return String(a.debut||'').localeCompare(String(b.debut||''),undefined,{numeric:true})*dir;
+    if(sk==='statut'){ensureClientStatuses();const rank=x=>{const i=library.clientStatuses.findIndex(s=>s.id===(x.statut||'en_cours'));return i<0?9:i;};return (rank(a)-rank(b))*dir;}
+    const ta=clientTotals(a),tb=clientTotals(b);
+    const val=k=>k==='montant'?ta.montant:k==='reste'?ta.reste:k==='commissions'?ta.commissions:ta.commissionsReste;
+    const valb=k=>k==='montant'?tb.montant:k==='reste'?tb.reste:k==='commissions'?tb.commissions:tb.commissionsReste;
+    return (val(sk)-valb(sk))*dir;
+  });
+  if(!list.length){const e=document.createElement('div');e.className='empty';e.textContent='Aucun client.';tbl.appendChild(e);}
+  /* Deux blocs dans le MÊME tableau, pas deux tableaux : le pied continue de compter tout
+     le monde, et on garde sous les yeux ce qu'on a fait dans l'année. Le tri choisi
+     s'applique à l'intérieur de chaque bloc. */
+  const actifs=list.filter(c=>!clientArchive(c));
+  const archives=list.filter(c=>clientArchive(c));
+  const ligneClient=c=>{try{return ligneClientSure(c);}catch(e){
+    /* Une fiche illisible ne doit jamais vider toute la liste : on la signale à sa place. */
+    console.error('Fiche client illisible',c&&c.id,e);
+    const bad=document.createElement('div');bad.className='empty';bad.style.color='var(--danger,#b3261e)';
+    bad.textContent='⚠ Fiche illisible (id '+((c&&c.id)||'?')+') : '+((e&&e.message)||e);return bad;}};
+  const ligneClientSure=c=>{
+    const t=clientTotals(c);
+    const grp=document.createElement('div');grp.className='cl-group'+(clientOpen[c.id]?' open':'');grp.dataset.cid=c.id;
+    const row=document.createElement('div');row.className='cl-row';
+    const dv=c.devise||'₪';
+    row.innerHTML=`<div style="color:var(--stone)">${esc(fmtDate(c.debut))}</div><div style="text-align:center"><span class="dot" style="background:${esc(clientStatus(c).color)}"></span></div><div class="cl-name">${esc(c.name)}</div><div class="num">${fmt(t.montant)} ${dv}</div><div class="num col-sep ${t.reste>0?'due-txt':'ok-txt'}">${fmt(t.reste)} ${dv}</div><div class="num col-after-sep">${fmt(t.commissions)} ${dv}</div><div class="num ${t.commissionsReste>0?'due-txt':'ok-txt'}">${fmt(t.commissionsReste)} ${dv}</div><button class="cl-del" title="Supprimer ce client">🗑</button><div class="cl-chev">▶</div><div></div>`;
+    row.addEventListener('click',()=>{clientOpen[c.id]=!clientOpen[c.id];grp.classList.toggle('open',clientOpen[c.id]);});
+    row.querySelector('.cl-del').addEventListener('click',e=>{e.stopPropagation();askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');});});
+    grp.appendChild(row);
+    const det=document.createElement('div');det.className='cl-detail';det.appendChild(buildClientDetail(c));grp.appendChild(det);
+    return grp;
+  };
+  actifs.forEach(c=>tbl.appendChild(ligneClient(c)));
+  /* Le total des actifs juste sous les actifs, avant même de parler des archivés : c'est
+     là qu'on le cherche des yeux en arrivant sur l'écran, pas tout en bas après onze
+     chantiers terminés. Signalé par Raphaël, capture à l'appui. */
+  renderClientsFooterActifs(tbl,actifs,archives);
+  if(archives.length){
+    /* Le séparateur porte le compte et le total de la section, et se replie : au bout de
+       deux ans de chantiers terminés, personne ne veut faire défiler cinquante lignes pour
+       atteindre le pied de tableau. L'état est retenu d'une visite à l'autre. */
+    const ta=archives.reduce((a,c)=>a+clientTotals(c).montant,0);
+    const sep=document.createElement('button');
+    sep.type='button';
+    sep.className='cl-sep'+(clientFilters.archivesOuvert?' ouvert':'');
+    sep.innerHTML=`<span class="cl-sep-chev">▶</span>
+      <span class="cl-sep-txt">Archivés · ${archives.length} client${archives.length>1?'s':''}</span>
+      <span class="cl-sep-ca">${fmt(ta)} ₪</span>`;
+    sep.setAttribute('aria-expanded',clientFilters.archivesOuvert?'true':'false');
+    sep.addEventListener('click',()=>{
+      clientFilters.archivesOuvert=!clientFilters.archivesOuvert;
+      try{localStorage.setItem('mn-cl-archives',clientFilters.archivesOuvert?'1':'0');}catch(e){}
+      renderClients();
+    });
+    tbl.appendChild(sep);
+    if(clientFilters.archivesOuvert)archives.forEach(c=>tbl.appendChild(ligneClient(c)));
+    renderClientsFooterArchives(tbl,actifs,archives);
+  }
+  const tot=$('cl-totals');if(tot)tot.innerHTML='';
+}
+/* Pied de tableau : sommes des 4 colonnes, sur les clients FILTRÉS, alignées sous chaque
+   colonne. Un total ne mélange JAMAIS deux colonnes entre elles (le CA des plans et les
+   commissions dues à un prestataire ne s'additionnent pas : ce n'est pas le même argent,
+   ni le même sens — l'un est dû PAR le client, l'autre dû PAR Mélissa). Ancienne version :
+   une ligne « Total » unique (actifs+archivés mélangés sans le dire) suivie d'une ligne
+   « Total général » qui faisait cette addition incohérente. Depuis que les clients
+   archivés ont leur propre bloc à l'écran, le pied les distingue pareillement : un total
+   par bloc — celui des actifs collé à leurs lignes, celui des archivés collé aux leurs —
+   et le vrai total général, toutes colonnes gardées à part, en plus, pas à la place. */
+function sommeClients(cs){return cs.reduce((a,c)=>{const t=clientTotals(c);a.montant+=t.montant;a.reste+=t.reste;a.comm+=t.commissions;a.commReste+=t.commissionsReste;return a;},{montant:0,reste:0,comm:0,commReste:0});}
+function clientsFootLigne(tbl,dv,cle,libelle,t,grand){
+  const row=document.createElement('div');row.className='cl-row cl-foot'+(grand?' grand':'');row.dataset.foot=cle;
+  row.innerHTML=`<div></div><div></div><div class="ft-label">${esc(libelle)}</div><div class="num ft-val">${fmt(t.montant)} ${dv}</div><div class="num ft-val col-sep ${t.reste>0?'due-txt':'ok-txt'}">${fmt(t.reste)} ${dv}</div><div class="num ft-val col-after-sep">${fmt(t.comm)} ${dv}</div><div class="num ft-val ${t.commReste>0?'due-txt':'ok-txt'}">${fmt(t.commReste)} ${dv}</div><div></div><div></div><div></div>`;
+  tbl.appendChild(row);
+}
+function renderClientsFooterActifs(tbl,actifsList,archivesList){
+  const dv='₪';
+  const nActifs=actifsList.length,nArchives=archivesList.length,nTotal=nActifs+nArchives;
+  // Ligne d'intitulés du résumé
+  const lab=document.createElement('div');lab.className='cl-row cl-foot sep-top';
+  /* Les archives comptent dans le total : c'est le chiffre d'affaires de l'année, pas
+     seulement celui des chantiers en cours. On le DIT, sinon on croirait à une erreur. */
+  const detail=nTotal
+    ? ` · ${nTotal} client${nTotal>1?'s':''}`+(nArchives?` (dont ${nArchives} archivé${nArchives>1?'s':''})`:'')
+    : '';
+  lab.innerHTML=`<div></div><div></div><div class="ft-label">Résumé${detail}</div><div class="num ft-sub">CA total plans</div><div class="num ft-sub col-sep">Reste dû</div><div class="num ft-sub col-after-sep">CA commissions</div><div class="num ft-sub">Comm. restante</div><div></div><div></div><div></div>`;
+  tbl.appendChild(lab);
+  const ftActifs=sommeClients(actifsList);
+  // Sans archivé, ce bloc est le seul : « Total » plutôt que « Actifs », pas de « Total
+  // général » séparé plus bas (le distinguer d'un total général n'aurait aucun sens).
+  clientsFootLigne(tbl,dv,nArchives?'actifs':'total',nArchives?`Actifs (${nActifs})`:'Total',ftActifs,!nArchives);
+}
+function renderClientsFooterArchives(tbl,actifsList,archivesList){
+  const dv='₪';
+  const ftActifs=sommeClients(actifsList),ftArchives=sommeClients(archivesList);
+  const ftTotal={montant:ftActifs.montant+ftArchives.montant,reste:ftActifs.reste+ftArchives.reste,
+    comm:ftActifs.comm+ftArchives.comm,commReste:ftActifs.commReste+ftArchives.commReste};
+  clientsFootLigne(tbl,dv,'archives',`Archivés (${archivesList.length})`,ftArchives);
+  clientsFootLigne(tbl,dv,'total','Total général',ftTotal,true);
+}
+function wireMetaInputs(container,c){
+  container.querySelectorAll('input[data-cf]').forEach(inp=>{
+    inp.addEventListener('input',()=>{c[inp.dataset.cf]=inp.value;saveClientsDebounced();});
+    // À la sortie du champ : on met à jour la ligne concernée seulement (sans refermer la fiche)
+    inp.addEventListener('change',()=>{
+      c[inp.dataset.cf]=inp.value;
+      /* Un contact saisi sur un client que PERSONNE n'a encore nommé lui donne son nom.
+         Rien n'est écrasé : on ne remplace que le nom automatique. Dès que le nom a été
+         choisi, ce chemin ne s'applique plus. Sans ça, la fiche et toute la liste restaient
+         « Nouveau client » alors que le contact était rempli — le défaut signalé. */
+      if(inp.dataset.cf==='contact'&&clientSansNom(c)&&(inp.value||'').trim()){
+        c.name=inp.value.trim();
+        const n=container.closest('.cl-group')&&container.closest('.cl-group').querySelector('input[data-name]');
+        if(n)n.value=c.name;
+        toast('Client nommé « '+c.name+' » — modifiable en haut de la fiche');
+      }
+      saveClients();updateClientRow(c);
+    });
+  });
+}
+function cardWrap(icon,title,bodyEl){
+  const card=document.createElement('div');card.className='cl-card';
+  const bar=document.createElement('div');bar.className='cl-card-bar';bar.textContent=icon+' '+title;
+  const body=document.createElement('div');body.className='cl-card-body';
+  body.appendChild(bodyEl);
+  card.appendChild(bar);card.appendChild(body);
+  return card;
+}
+function buildClientDetail(c){
+  const frag=document.createElement('div');const dv=c.devise||'₪';
+  const t=clientTotals(c);
+  const twoCol=document.createElement('div');twoCol.className='cl-two-col';
+
+  /* ---- Colonne identité (gauche) : nom, statut, coordonnées de contact rapide ---- */
+  const side=document.createElement('div');side.className='cl-side';
+  const initials=(c.name||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';
+  side.innerHTML=`<div class="cl-side-head">
+      <div class="cl-side-avatar">${esc(initials)}</div>
+      <span class="cl-side-lbl">Nom du client</span>
+      ${clientSansNom(c)?'<span class="cl-side-alerte">à remplir</span>':''}
+      <input type="text" class="cl-side-name" data-name value="${esc(c.name)}" placeholder="Nom du client">
+      <select class="cl-side-statut" data-statut>
+        ${clientStatusOptionsHtml(c)}
+      </select>
+      ${(function(){
+        const arch=premierStatutArchive();
+        if(!arch)return '';
+        return clientArchive(c)
+          ? '<button type="button" class="cl-side-arch" data-desarchiver>↩ Sortir des archives</button>'
+          : '<button type="button" class="cl-side-arch" data-archiver>📦 Archiver ce client</button>';
+      })()}
+    </div>
+    <div class="cl-side-body">
+      <label class="fld"><span class="lbl">Contact</span><input type="text" data-cf="contact" value="${esc(c.contact||'')}"></label>
+      <label class="fld"><span class="lbl">Téléphone</span><input type="text" data-cf="phone" value="${esc(c.phone||'')}"></label>
+    </div>`;
+  wireMetaInputs(side,c);
+  const nameInp=side.querySelector('input[data-name]');
+  nameInp.addEventListener('input',()=>{c.name=nameInp.value;saveClientsDebounced();});
+  nameInp.addEventListener('change',()=>{
+    /* Demande explicite : le contact est souvent la même personne que le client — au lieu
+       de retaper le même nom, un nom enregistré alors que le contact est encore vide le
+       reprend automatiquement. Ne touche jamais un contact déjà renseigné (même chemin de
+       garde que l'auto-remplissage inverse ci-dessous : on ne remplace jamais une vraie
+       saisie). */
+    if(!((c.contact||'').trim())&&(c.name||'').trim()){
+      c.contact=c.name.trim();
+      const contactInp=side.querySelector('input[data-cf="contact"]');
+      if(contactInp)contactInp.value=c.contact;
+    }
+    saveClients();updateClientRow(c);
+  });
+  /* Changer de statut peut faire passer le client d'un bloc à l'autre du tableau : on
+     redessine, sinon il resterait affiché là où il n'est plus. */
+  side.querySelector('select[data-statut]').addEventListener('change',e=>{
+    const avant=clientArchive(c);
+    c.statut=e.target.value;saveClients();
+    if(clientArchive(c)!==avant)renderClients();else updateClientRow(c);
+  });
+  const bArch=side.querySelector('[data-archiver]');
+  if(bArch)bArch.addEventListener('click',()=>{
+    const st=premierStatutArchive();if(!st)return;
+    c.statut=st.id;saveClients();renderClients();
+    toast('Client archivé (« '+st.label+' ») — il reste compté dans les totaux');
+  });
+  const bDes=side.querySelector('[data-desarchiver]');
+  if(bDes)bDes.addEventListener('click',()=>{
+    const st=premierStatutActif();if(!st)return;
+    c.statut=st.id;saveClients();renderClients();
+    toast('Client sorti des archives (« '+st.label+' »)');
+  });
+  twoCol.appendChild(side);
+
+  /* ---- Suite de la colonne identité : informations de base complémentaires ---- */
+  const sep=document.createElement('div');sep.className='cl-side-sep';side.querySelector('.cl-side-body').appendChild(sep);
+  const generalBody=document.createElement('div');generalBody.className='cl-side-more';
+  generalBody.innerHTML=
+    `<label class="fld"><span class="lbl">Adresse/Ville</span><input type="text" data-cf="ville" value="${esc(c.ville||'')}"></label>`+
+    `<label class="fld"><span class="lbl">Email</span><input type="text" data-cf="email" value="${esc(c.email||'')}"></label>`+
+    `<label class="fld"><span class="lbl">Début du projet</span><input type="date" data-cf="debut" value="${isoDate(c.debut)}"></label>`+
+    `<label class="fld"><span class="lbl">Fin du projet</span><input type="date" data-cf="fin" value="${isoDate(c.fin)}"></label>`+
+    `<label class="fld"><span class="lbl">Commentaire</span><input type="text" data-cf="commentaire" value="${esc(c.commentaire||'')}"></label>`;
+  wireMetaInputs(generalBody,c);
+  side.querySelector('.cl-side-body').appendChild(generalBody);
+
+  /* ---- Colonne principale (droite) : blocs à bandeau ---- */
+  const main=document.createElement('div');main.className='cl-main';
+
+  const finBody=document.createElement('div');finBody.style.cssText='display:flex;flex-direction:column;gap:14px;';
+  const recap=document.createElement('div');recap.className='cl-recap';
+  recap.innerHTML=`<div class="rc-box"><span>Devis — montant</span><b>${fmt(t.montant)} ${dv}</b><small>Reçu ${fmt(t.recu)} · Reste ${fmt(t.reste)} ${dv}</small></div>
+    <div class="rc-box"><span>Commissions prestataires — cumul</span><b>${fmt(t.commissions)} ${dv}</b><small>Payé ${fmt(t.commissionsPaye)} · Reste à recevoir ${fmt(t.commissionsReste)} ${dv}</small></div>`;
+  finBody.appendChild(recap);
+
+  const devisBox=document.createElement('div');
+  const mf=document.createElement('div');mf.className='cl-montant';
+  mf.innerHTML=`<label style="flex:0 0 150px"><span>Montant final du devis</span><input type="number" data-mf value="${c.montantFinal||''}" placeholder="ex. 24000"></label>
+    <label style="flex:0 0 78px"><span>Devise</span><select data-devise><option ${dv==='₪'?'selected':''}>₪</option><option ${dv==='€'?'selected':''}>€</option><option ${dv==='$'?'selected':''}>$</option></select></label>
+    <div class="mf-reste">Reste à recevoir : <b>${fmt(t.reste)} ${dv}</b>${c.devisId?' <span class="mf-link">· lié au devis généré</span>':''}</div>`;
+  mf.querySelector('input[data-mf]').addEventListener('change',e=>{c.montantFinal=parseFloat(e.target.value)||0;c.devisId=null;saveClients();renderClients();});
+  mf.querySelector('select[data-devise]').addEventListener('change',e=>{c.devise=e.target.value;saveClients();renderClients();});
+  devisBox.appendChild(mf);
+  /* Devis du client (aperçu PDF, modification, suppression) */
+  devisBox.appendChild(buildClientDevisList(c));
+  finBody.appendChild(cardWrap('🧾','Devis — montant',devisBox));
+
+  const paymentsWrap=document.createElement('div');
+  const psub=document.createElement('div');psub.className='sub-line with-cat sub-line-head';
+  psub.innerHTML='<span>Catégorie</span><span>Intitulé</span><span>Montant</span><span>Date</span><span></span><span></span>';
+  paymentsWrap.appendChild(psub);
+  paymentsWrap.appendChild(buildSubList(c,'paiements','Intitulé (ex. 1er avance plan)',true));
+  const addP=document.createElement('button');addP.className='add-btn';addP.style.marginTop='6px';addP.textContent='+ Ajouter une ligne';
+  addP.addEventListener('click',()=>{(c.paiements=c.paiements||[]).push({id:uid(),categorie:'Architecture',label:'',montant:0});saveClients();renderClients();});
+  paymentsWrap.appendChild(addP);
+  finBody.appendChild(paymentsWrap);
+
+  finBody.appendChild(buildRelanceBox(c,t,dv));
+
+  const commBox=document.createElement('div');
+  const commSummary=document.createElement('div');commSummary.className='comm-summary';
+  commSummary.innerHTML=`<div><span>Total dû</span><b>${fmt(t.commissions)} ${dv}</b></div><div><span>Total payé</span><b>${fmt(t.commissionsPaye)} ${dv}</b></div><div><span>Reste à recevoir</span><b class="${t.commissionsReste<=0?'ok':'due'}">${fmt(t.commissionsReste)} ${dv}</b></div>`;
+  commBox.appendChild(commSummary);
+  commBox.appendChild(buildCommissionList(c));
+  const addC=document.createElement('button');addC.className='add-btn';addC.style.marginTop='6px';addC.textContent='+ Ajouter une commission';
+  addC.addEventListener('click',()=>{(c.commissions=c.commissions||[]).push({id:uid(),label:'',montantDu:0,paye:0});saveClients();renderClients();});
+  commBox.appendChild(addC);
+  finBody.appendChild(cardWrap('🤝','Commissions prestataires — cumul',commBox));
+  main.appendChild(cardWrap('💰','Financier',finBody));
+
+  main.appendChild(cardWrap('✅','Tâches liées',buildClientTasksBox(c)));
+  main.appendChild(cardWrap('🖼','Réalisations',buildClientRealisationsBox(c)));
+  main.appendChild(cardWrap('📎','Documents',buildDocGallery(c)));
+
+  const actions=document.createElement('div');actions.className='cl-detail-actions';
+  const del=document.createElement('button');del.className='mini danger';del.innerHTML='🗑 Supprimer ce client';
+  del.addEventListener('click',()=>askConfirm('Supprimer '+c.name+' ?',()=>{(c.docs||[]).forEach(d=>docStore.del(d.id));clients=clients.filter(x=>x.id!==c.id);saveClients();renderClients();toast('Client supprimé');}));
+  actions.appendChild(del);main.appendChild(actions);
+
+  twoCol.appendChild(main);
+  frag.appendChild(twoCol);
+  return frag;
+}
+function buildRelanceBox(c,t,dv){
+  const box=document.createElement('div');box.className='cl-relance';
+  if(t.reste<=0){
+    box.innerHTML=`<div class="rl-head"><span>Relance client</span></div><div class="rl-ok">✅ Solde à jour — aucune relance nécessaire.</div>`;
+    return box;
+  }
+  const text=relanceText(c);
+  box.innerHTML=`<div class="rl-head"><span>Relance client</span></div>
+    <textarea data-relance="${c.id}">${esc(text)}</textarea>
+    <div class="rl-btns">
+      <button class="mini" data-rl-copy>📋 Copier</button>
+      <button class="mini" data-rl-wa>💬 WhatsApp</button>
+    </div>`;
+  box.querySelector('[data-rl-copy]').addEventListener('click',()=>copyRelanceText(c.id));
+  box.querySelector('[data-rl-wa]').addEventListener('click',()=>sendRelanceWhatsApp(c.id));
+  return box;
+}
+function buildClientDevisList(c){
+  const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
+  const list=devisList.filter(d=>d.clientId===c.id).sort((a,b)=>b.updatedAt-a.updatedAt);
+  if(list.length){
+    list.forEach(d=>{
+      /* Un devis sans instantané ne devrait pas exister — mais s'il en apparaît un (import
+         partiel, sauvegarde d'une ancienne version), il ne doit pas faire disparaître TOUTE
+         la fiche client. On le montre tel quel, sans montant. */
+      if(!d.snapshot){
+        const ko=document.createElement('div');ko.className='list-row';ko.style.marginTop='6px';
+        ko.innerHTML=`<div class="lr-main"><div class="lr-t">${esc(d.title||'Devis')}</div>
+          <div class="lr-s">N°${esc(d.num||'?')} · contenu illisible, montant indisponible</div></div>`;
+        wrap.appendChild(ko);
+        return;
+      }
+      const T=computeTotals(d.snapshot,(d.snapshot.services||[]).filter(v=>v.on));
+      const dvc=d.snapshot.cur||'₪';
+      const r=document.createElement('div');r.className='list-row';r.style.marginTop='6px';
+      r.innerHTML=`<div class="lr-main"><div class="lr-t">${esc(d.title||'Devis')}${devisStatusBadge(d)}</div><div class="lr-s">N°${esc(d.num)} · ${fmt(T.ttc)} ${dvc} · ${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</div></div>
+        ${clientStatusSelect(d)}
+        <button class="mini" data-view>Voir (PDF)</button>
+        <button class="mini" data-edit>Modifier</button>
+        <button class="mini danger" data-del>Suppr.</button>`;
+      r.querySelector('[data-view]').addEventListener('click',()=>viewDevisSnapshot(d.id));
+      r.querySelector('[data-edit]').addEventListener('click',()=>editDevis(d.id));
+      r.querySelector('[data-del]').addEventListener('click',()=>askConfirm('Supprimer ce devis ?',async()=>{await deleteDevisRecord(d.id);renderClients();toast('Devis supprimé');}));
+      wrap.appendChild(r);
+    });
+  } else {
+    const e=document.createElement('div');e.className='msub';e.style.margin='4px 0';e.textContent='Aucun devis lié à ce client pour l\'instant.';wrap.appendChild(e);
+  }
+  const add=document.createElement('button');add.className='mini';add.style.marginTop='7px';add.textContent='➕ Créer un nouveau devis pour ce client';
+  add.addEventListener('click',()=>createDevisForClient(c.id));
+  wrap.appendChild(add);
+  return wrap;
+}
+function buildSubList(c,key,ph,withCat){
+  const wrap=document.createElement('div');const dv=c.devise||'₪';
+  (c[key]||[]).forEach(p=>{
+    const nd=(c.docs||[]).filter(d=>d.ligneId===p.id).length;
+    const r=document.createElement('div');r.className='sub-line'+(withCat?' with-cat':'');
+    const catSel=withCat?`<select data-cat>${['Architecture','Prestataire','Matériaux','Autre'].map(o=>`<option ${p.categorie===o?'selected':''}>${o}</option>`).join('')}</select>`:'';
+    const dateFld=withCat?`<input type="date" value="${isoDate(p.date)}" data-date title="Date du règlement (optionnel)">`:'';
+    r.innerHTML=`${catSel}<input type="text" value="${esc(p.label)}" data-label placeholder="${ph}"><input type="number" value="${p.montant||''}" data-montant placeholder="Montant ${dv}">${dateFld}<button class="doc-btn" title="Joindre un fichier">📎${nd?`<span class="doc-n">${nd}</span>`:''}</button><button class="rm" title="Supprimer">×</button>`;
+    if(withCat)r.querySelector('select[data-cat]').addEventListener('change',e=>{p.categorie=e.target.value;saveClientsDebounced();});
+    r.querySelector('input[data-label]').addEventListener('input',e=>{p.label=e.target.value;saveClientsDebounced();});
+    r.querySelector('input[data-montant]').addEventListener('change',e=>{p.montant=parseFloat(e.target.value)||0;saveClients();renderClients();});
+    if(withCat)r.querySelector('input[data-date]').addEventListener('change',e=>{p.date=e.target.value;saveClients();renderClients();});
+    r.querySelector('.doc-btn').addEventListener('click',()=>pickFiles(c,p.id));
+    r.querySelector('.rm').addEventListener('click',()=>{c[key]=c[key].filter(x=>x.id!==p.id);saveClients();renderClients();});
+    wrap.appendChild(r);
+  });
+  return wrap;
+}
+function buildCommissionList(c){
+  const wrap=document.createElement('div');const dv=c.devise||'₪';
+  const head=document.createElement('div');head.className='comm-line comm-head';
+  head.innerHTML='<div>Prestataire</div><div>Dû</div><div>Payé</div><div>Reste</div><div></div>';
+  wrap.appendChild(head);
+  (c.commissions||[]).forEach(p=>{
+    const nd=(c.docs||[]).filter(d=>d.ligneId===p.id).length;
+    const reste=(+p.montantDu||0)-(+p.paye||0);
+    const r=document.createElement('div');r.className='comm-line';
+    r.innerHTML=`<input type="text" value="${esc(p.label)}" data-label placeholder="Prestataire (ex. keramika)">
+      <input type="number" value="${p.montantDu||''}" data-du placeholder="Dû ${dv}">
+      <input type="number" value="${p.paye||''}" data-paye placeholder="Payé ${dv}">
+      <div class="comm-reste ${reste<=0?'paid':'due'}">${fmt(reste)} ${dv}</div>
+      <button class="doc-btn" title="Joindre un fichier">📎${nd?`<span class="doc-n">${nd}</span>`:''}</button>
+      <button class="rm" title="Supprimer">×</button>`;
+    r.querySelector('input[data-label]').addEventListener('input',e=>{p.label=e.target.value;saveClientsDebounced();});
+    r.querySelector('input[data-du]').addEventListener('change',e=>{p.montantDu=parseFloat(e.target.value)||0;saveClients();renderClients();});
+    r.querySelector('input[data-paye]').addEventListener('change',e=>{p.paye=parseFloat(e.target.value)||0;saveClients();renderClients();});
+    r.querySelector('.doc-btn').addEventListener('click',()=>pickFiles(c,p.id));
+    r.querySelector('.rm').addEventListener('click',()=>{c.commissions=c.commissions.filter(x=>x.id!==p.id);saveClients();renderClients();});
+    wrap.appendChild(r);
+  });
+  return wrap;
+}
+
+/* ---- Documents ---- */
+const DOC_BUCKET='client-docs';
+function dataUriToBlob(dataUri){
+  const meta=dataUri.slice(0,dataUri.indexOf(','));
+  const mime=(meta.match(/data:(.*?);base64/)||[])[1]||'application/octet-stream';
+  const bin=atob(dataUri.slice(dataUri.indexOf(',')+1));
+  const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+function blobToDataUri(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(reader.error);
+    reader.onload=()=>resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+const docStore={
+  async save(id,obj){
+    const hasCloud=sb&&sbUser&&ownerId;
+    const tooBigForLocal=(obj.dataUri||'').length>DOC_LOCAL_CACHE_LIMIT;
+    if(!tooBigForLocal||!hasCloud)await store.set('mn_doc_'+id,obj);else store.mem['mn_doc_'+id]=obj;
+    if(hasCloud){
+      try{
+        const blob=dataUriToBlob(obj.dataUri);
+        const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+id,blob,{contentType:obj.type||'application/octet-stream',upsert:true});
+        if(error)throw error;
+      }catch(e){console.error('doc cloud upload',e);toast('⚠️ Document gardé sur cet appareil seulement (échec envoi cloud)');}
+    }
+  },
+  async get(id){
+    const local=await store.get('mn_doc_'+id);
+    if(local)return local;
+    if(sb&&sbUser&&ownerId){
+      try{
+        const {data,error}=await sb.storage.from(DOC_BUCKET).download(ownerId+'/'+id);
+        if(error||!data)return null;
+        const dataUri=await blobToDataUri(data);
+        const obj={type:data.type||'application/octet-stream',dataUri};
+        if(dataUri.length>DOC_LOCAL_CACHE_LIMIT)store.mem['mn_doc_'+id]=obj;else await store.set('mn_doc_'+id,obj);
+        return obj;
+      }catch(e){return null;}
+    }
+    return null;
+  },
+  async del(id){
+    await store.del('mn_doc_'+id);
+    if(sb&&sbUser&&ownerId){try{await sb.storage.from(DOC_BUCKET).remove([ownerId+'/'+id]);}catch(e){}}
+  },
+};
+function pickFiles(c,ligneId){
+  choisirFichiers({multiple:true,accept:'image/*,application/pdf,.dwg,.dxf'},files=>attachFiles(c,ligneId,files));
+}
+const CAD_EXT=/\.(dwg|dxf)$/i;
+const CAD_MAX_SIZE=20*1024*1024;
+const DOC_LOCAL_CACHE_LIMIT=3*1024*1024;
+function readFileAsDoc(file){
+  return new Promise((res,rej)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>rej(reader.error);
+    reader.onload=()=>{
+      if(file.type&&file.type.indexOf('image/')===0){
+        const img=new Image();
+        img.onload=()=>{
+          const max=1400;let w=img.width,h=img.height;
+          if(w>max||h>max){const s=Math.min(max/w,max/h);w=Math.round(w*s);h=Math.round(h*s);}
+          const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);
+          res({name:file.name,type:'image/jpeg',dataUri:cv.toDataURL('image/jpeg',0.82)});
+        };
+        img.onerror=()=>res({name:file.name,type:file.type,dataUri:reader.result});
+        img.src=reader.result;
+      } else { res({name:file.name,type:file.type||'application/octet-stream',dataUri:reader.result}); }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function attachFiles(c,ligneId,files){
+  let n=0;
+  for(const file of Array.from(files||[])){
+    const isCad=CAD_EXT.test(file.name);
+    const max=isCad?CAD_MAX_SIZE:4*1024*1024;
+    if(file.size>max){toast(file.name+' : trop lourd (>'+(max/1024/1024)+' Mo), ignoré');continue;}
+    try{const doc=await readFileAsDoc(file);const id=uid();await docStore.save(id,doc);c.docs=c.docs||[];c.docs.push({id,name:doc.name,type:doc.type,ligneId:ligneId||null});n++;}catch(e){toast('Échec import '+file.name);}
+  }
+  saveClients();renderClients();if(n)toast(n+' document(s) ajouté(s)');
+}
+/* Le lien client d'une réalisation existait mais ne servait à rien : on ne pouvait pas
+   remonter d'un client vers ses chantiers photographiés. */
+function buildClientRealisationsBox(c){
+  const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
+  const liees=(realisations||[]).filter(r=>r.clientId===c.id);
+  if(liees.length){
+    liees.forEach(r=>{
+      const enAttente=realisationEnAttente(r);
+      const etat=r.published?(enAttente?'<span class="rz-warn">● à republier</span>':'<span class="rz-live">● en ligne</span>'):'pas encore publiée';
+      const row=document.createElement('div');row.className='list-row';
+      row.innerHTML=`<div class="lr-main" style="cursor:pointer">
+          <div class="lr-t">${esc(r.title||'Réalisation sans titre')}</div>
+          <div class="lr-s">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''} · ${etat}</div>
+        </div>`;
+      row.querySelector('.lr-main').addEventListener('click',()=>gotoRealisation(r.id));
+      wrap.appendChild(row);
+    });
+  } else {
+    const e=document.createElement('div');e.className='task-empty';
+    e.textContent='Aucune réalisation liée à ce client.';wrap.appendChild(e);
+  }
+  const add=document.createElement('button');add.className='mini';add.style.marginTop='2px';
+  add.textContent='+ Créer une réalisation pour ce client';
+  add.addEventListener('click',()=>{
+    const r=normalizeRealisation({title:c.name||'',clientId:c.id,date:String(new Date().getFullYear())});
+    realisations.push(r);saveRealisations();
+    gotoRealisation(r.id);
+    toast('Réalisation créée pour '+(c.name||'ce client'));
+  });
+  wrap.appendChild(add);
+  return wrap;
+}
+function buildClientTasksBox(c){
+  const wrap=document.createElement('div');wrap.style.margin='4px 0 8px';
+  const linked=tasks.filter(t=>t.clientId===c.id);
+  if(linked.length){
+    linked.forEach(t=>{
+      const r=document.createElement('div');r.className='list-row';
+      r.innerHTML=`<input type="checkbox" class="task-check" ${t.done?'checked':''} title="${t.done?'Marquer à faire':'Marquer fait'}">
+        <div class="lr-main" style="cursor:pointer">
+          <div class="lr-t" style="${t.done?'text-decoration:line-through;color:var(--stone);':''}">${esc(t.title)}</div>
+          <div class="lr-s">${taskTagsHtml(t,{hideClient:true})}</div>
+        </div>`;
+      r.querySelector('.task-check').addEventListener('click',e=>{e.stopPropagation();toggleTaskDone(t.id);renderClients();});
+      r.querySelector('.lr-main').addEventListener('click',()=>openClientTaskInDashboard(t.id));
+      wrap.appendChild(r);
+    });
+  } else {
+    const e=document.createElement('div');e.className='task-empty';e.textContent='Aucune tâche liée à ce client.';wrap.appendChild(e);
+  }
+  const addRow=document.createElement('div');addRow.style.cssText='display:flex;gap:8px;margin-top:2px;';
+  addRow.innerHTML=`<input type="text" placeholder="Nouvelle tâche pour ce client…" style="flex:1"><button class="mini">+ Ajouter</button>`;
+  const inp=addRow.querySelector('input'),btn=addRow.querySelector('button');
+  const doAdd=()=>{
+    const title=(inp.value||'').trim();if(!title)return;
+    const id=uid();
+    tasks.push({id,title,detail:'',dueDate:'',reminderDate:'',priority:'normal',category:'',clientId:c.id,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
+    saveTasks();inp.value='';renderClients();toast('Tâche ajoutée');
+  };
+  btn.addEventListener('click',doAdd);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')doAdd();});
+  wrap.appendChild(addRow);
+  return wrap;
+}
+function openClientTaskInDashboard(id){
+  showView('dashboard');
+  _taskOpenIds.add(id);
+  renderTaskList();
+  setTimeout(()=>{
+    const el=document.querySelector('.task-row[data-tid="'+id+'"]');
+    if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+  },80);
+}
+function buildDocGallery(c){
+  const g=document.createElement('div');g.className='doc-gallery';
+  (c.docs||[]).forEach(d=>{
+    const all=[...(c.paiements||[]),...(c.commissions||[])];
+    const ligne=all.find(l=>l.id===d.ligneId);
+    const tile=document.createElement('div');tile.className='doc-tile';
+    const isImg=(d.type||'').indexOf('image/')===0;
+    tile.innerHTML=`<div class="doc-thumb" data-open>${isImg?'<img alt="">':(CAD_EXT.test(d.name)?'📐':'📄')}</div>
+      <input class="doc-name" value="${esc(d.name)}">
+      <div class="doc-line">${ligne?esc(ligne.type||'ligne'):'— général'}</div>
+      <div class="doc-tools"><button data-open>Voir</button><button data-del>Suppr.</button></div>`;
+    if(isImg){const im=tile.querySelector('.doc-thumb img');docStore.get(d.id).then(doc=>{if(doc&&im)im.src=doc.dataUri;});}
+    tile.querySelectorAll('[data-open]').forEach(el=>el.addEventListener('click',()=>openDoc(d)));
+    tile.querySelector('[data-del]').addEventListener('click',()=>askConfirm('Supprimer ce document ?',()=>{docStore.del(d.id);c.docs=c.docs.filter(x=>x.id!==d.id);saveClients();renderClients();}));
+    const ni=tile.querySelector('.doc-name');ni.addEventListener('input',()=>{d.name=ni.value;saveClientsDebounced();});
+    g.appendChild(tile);
+  });
+  const addBtn=document.createElement('button');addBtn.className='doc-add';addBtn.innerHTML='＋<br>Ajouter<br>un document';
+  addBtn.addEventListener('click',()=>pickFiles(c,null));
+  g.appendChild(addBtn);
+  return g;
+}
+async function openDoc(d){
+  const doc=await docStore.get(d.id);if(!doc){toast('Document introuvable');return;}
+  const type=doc.type||d.type||'';
+  if(type.indexOf('image/')===0){openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3 style="font-size:16px;margin-bottom:10px">${esc(d.name)}</h3><img src="${doc.dataUri}" style="max-width:100%;border-radius:5px">`);}
+  else if(CAD_EXT.test(d.name)){openCadViewer(d,doc);}
+  else{const w=window.open();if(w){w.document.write('<title>'+esc(d.name)+'</title><iframe src="'+doc.dataUri+'" style="position:fixed;inset:0;width:100%;height:100%;border:none"></iframe>');w.document.close();}else{toast('Autorisez les pop-ups pour ouvrir le document');}}
+}
+let _cadMod=null,_cadDocManager=null,_cadDwgRegistered=false;
+async function loadCadViewerModule(){
+  if(_cadMod)return _cadMod;
+  _cadMod=await import('https://esm.sh/@mlightcad/cad-simple-viewer@1.6.3');
+  return _cadMod;
+}
+async function ensureDwgSupport(){
+  if(_cadDwgRegistered)return;
+  const [dm,conv]=await Promise.all([
+    import('https://esm.sh/@mlightcad/data-model@1.14.2'),
+    import('https://esm.sh/@mlightcad/libredwg-converter@3.14.3')
+  ]);
+  const workerUrl=new URL('assets/cad/libredwg-parser-worker.js',location.href).href;
+  const dwgConv=new conv.AcDbLibreDwgConverter({useWorker:true,parserWorkerUrl:workerUrl});
+  dm.AcDbDatabaseConverterManager.instance.register(dm.AcDbFileType.DWG,dwgConv);
+  _cadDwgRegistered=true;
+}
+async function openCadViewer(d,doc){
+  openModal(`<button class="modal-x" onclick="closeCadViewer()">×</button><h3 style="font-size:16px;margin-bottom:10px">${esc(d.name)}</h3><div id="cad-viewer-box" style="width:min(90vw,1100px);height:75vh;background:#2b2b2b;border-radius:6px;position:relative"><div id="cad-viewer-status" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#ddd;font-size:14px">Chargement du lecteur…</div></div>`);
+  const box=$('cad-viewer-box');
+  try{
+    const mod=await loadCadViewerModule();
+    if(/\.dwg$/i.test(d.name))await ensureDwgSupport();
+    if(_cadDocManager){try{await _cadDocManager.destroy();}catch(e){}_cadDocManager=null;}
+    _cadDocManager=mod.AcApDocManager.createInstance({container:box,autoResize:true});
+    const status=$('cad-viewer-status');if(status)status.textContent='Ouverture du fichier…';
+    const buf=await dataUriToBlob(doc.dataUri).arrayBuffer();
+    const ok=await _cadDocManager.openDocument(d.name,buf,{});
+    const st2=$('cad-viewer-status');if(st2)st2.remove();
+    if(!ok)toast("Impossible d'ouvrir ce fichier");
+  }catch(e){console.error('cad viewer',e);if(box)box.innerHTML='<div style="padding:20px;color:#f88">Échec du chargement du lecteur : '+esc(e.message||String(e))+'</div>';}
+}
+function closeCadViewer(){
+  if(_cadDocManager){try{_cadDocManager.destroy();}catch(e){}_cadDocManager=null;}
+  closeModal();
+}
+/* Le nom donné automatiquement à un client qu'on vient de créer. Tant qu'il est encore
+   celui-là, personne ne l'a choisi : on peut donc le remplacer sans rien écraser. */
+const CLIENT_SANS_NOM='Nouveau client';
+function clientSansNom(c){return !((c.name||'').trim())||(c.name||'').trim()===CLIENT_SANS_NOM;}
+/* Les fiches créées AVANT que le contact ne nomme le client restaient « Nouveau client »
+   pour toujours : leur contact était déjà saisi, aucun nouvel événement ne venait plus.
+   On les répare une fois, au chargement. Rien n'est écrasé — « Nouveau client » n'est pas
+   un nom, c'est l'absence de nom. Un client sans contact non plus n'est pas touché : on ne
+   lui invente pas un nom. */
+function reparerNomsClients(){
+  let n=0;
+  (clients||[]).forEach(c=>{
+    if(!clientSansNom(c))return;
+    const contact=(c.contact||'').trim();
+    if(!contact)return;
+    c.name=contact;n++;
+  });
+  if(n)saveClients();
+  return n;
+}
+function addClient(){
+  try{
+    clientFilters.q='';clientFilters.statut='all';
+    const q=$('cl-q'),st=$('cl-statut');if(q)q.value='';if(st)st.value='all';
+    const c=normalizeClient({name:CLIENT_SANS_NOM});
+    clients.unshift(c);clientOpen[c.id]=true;saveClients();renderClients();
+    const el=document.querySelector('.cl-group[data-cid="'+c.id+'"]');
+    if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='2px solid var(--oxblood)';el.style.borderRadius='6px';setTimeout(()=>{if(el){el.style.outline='';el.style.borderRadius='';}},1600);}
+    /* Le curseur est POSÉ dans le champ du nom, texte sélectionné : sans ça, ce champ ne
+       ressemble pas à un champ (gros texte serif sur fond sombre) et on remplit « Contact »
+       en croyant nommer le client — c'est exactement ce qui a été signalé. */
+    setTimeout(()=>{
+      const n=document.querySelector('.cl-group[data-cid="'+c.id+'"] input[data-name]');
+      if(n){n.focus();n.select();}
+    },700);
+    toast('Client créé — son nom vous attend, en haut de la fiche');
+  }catch(e){toast('Erreur : '+e.message);}
+}
+/* Retenu d'une visite à l'autre : replier les archives est un choix, pas un réglage à
+   refaire à chaque ouverture. Un stockage local indisponible (navigation privée) ne doit
+   pas casser l'affichage — on retombe sur « ouvert ». */
+function chargerEtatArchives(){
+  try{clientFilters.archivesOuvert=localStorage.getItem('mn-cl-archives')!=='0';}
+  catch(e){clientFilters.archivesOuvert=true;}
+}
+function wireClientFilters(){
+  const q=$('cl-q');
+  if(q)q.addEventListener('input',()=>{clientFilters.q=q.value;renderClients();});
+}
+/* Passe par `choisirFichiers` comme tous les autres imports : une entrée `display:none`
+   posée dans la page est, elle aussi, ignorée par le sélecteur de fichiers d'iOS. */
+function pickImportClientsCSV(){
+  choisirFichiers({accept:'.csv,text/csv'},files=>{if(files[0])importClientsCSV(files[0]);});
+}
+/* Puces de filtre par statut + légende : régénérées à chaque rendu (statuts modulables via
+   ⚙ Statuts) — pas de liste figée dans le HTML, sinon un statut renommé/ajouté/supprimé ne
+   s'y refléterait jamais. */
+function renderClientStatusFilters(){
+  ensureClientStatuses();
+  const wrap=$('cl-statut-multi');
+  if(wrap){
+    wrap.innerHTML=library.clientStatuses.map(s=>`<button type="button" class="mini cl-statut-chip${clientFilters.statuts.includes(s.id)?' active':''}" data-v="${s.id}">${esc(s.label)}</button>`).join('');
+    wrap.querySelectorAll('.cl-statut-chip').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const v=btn.dataset.v;
+        const i=clientFilters.statuts.indexOf(v);
+        if(i>=0)clientFilters.statuts.splice(i,1);else clientFilters.statuts.push(v);
+        btn.classList.toggle('active',clientFilters.statuts.includes(v));
+        renderClients();
+      });
+    });
+  }
+  const legend=$('cl-legend');
+  if(legend)legend.innerHTML=library.clientStatuses.map(s=>`<span><span class="dot" style="background:${esc(s.color)}"></span>${esc(s.label)}</span>`).join('');
+}
+/* L'onglet ouvert vit dans l'URL (#/<onglet>), pas seulement en mémoire : recharger la
+   page (F5, veille du navigateur) doit rouvrir le MÊME onglet, pas retomber sur le
+   Tableau de bord — sauf au tout premier chargement, où le Tableau de bord reste la
+   page d'entrée voulue. Un avantage direct de ce choix : un lien partagé vers un onglet
+   précis fonctionne, et survit à un nettoyage du stockage local (contrairement à une
+   mémorisation dans localStorage). */
+const CRM_VUES=['dashboard','devis','clients','chantier','realisations','boutique'];
+let _vueCourante='dashboard';
+function vueDepuisHash(){
+  const h=(location.hash||'').replace(/^#\/?/,'');
+  return CRM_VUES.includes(h)?h:null;
+}
+window.addEventListener('hashchange',()=>{
+  const v=vueDepuisHash();
+  if(v&&v!==_vueCourante)showView(v);
+});
+function showView(v){
+  _vueCourante=v;
+  const cible='#/'+v;
+  if(location.hash!==cible)history.replaceState(null,'',cible);
+  const dev=v==='devis',cli=v==='clients',dash=v==='dashboard',ch=v==='chantier',rz=v==='realisations',bt=v==='boutique';
+  document.querySelector('.stage').style.display=dev?'flex':'none';
+  document.body.classList.toggle('devis-active',dev);
+  $('clients-view').style.display=cli?'block':'none';
+  $('dashboard-view').style.display=dash?'block':'none';
+  $('chantier-view').style.display=ch?'block':'none';
+  $('realisations-view').style.display=rz?'block':'none';
+  $('boutique-view').style.display=bt?'block':'none';
+  /* L'Estimation du Projet est une sous-catégorie de Devis (pas son propre onglet) :
+     son écran s'ouvre depuis le menu Devis, et c'est donc Devis qui s'allume. */
+  $('vn-devis').classList.toggle('active',dev||ch);
+  $('vn-clients').classList.toggle('active',cli);
+  $('vn-dash').classList.toggle('active',dash);
+  $('vn-real').classList.toggle('active',rz);
+  $('vn-boutique').classList.toggle('active',bt);
+  /* Les deux navigations disent la même chose : celle du haut (bureau) et celle du bas
+     (téléphone). Une seule des deux est visible à la fois, mais l'état suit dans les deux
+     cas — sinon un changement de taille d'écran affiche un onglet actif faux. */
+  const vNavBas=ch?'devis':v;
+  document.querySelectorAll('#navbas button[data-vue]').forEach(b=>b.classList.toggle('active',b.dataset.vue===vNavBas));
+  if(cli)renderClients();
+  if(dash)renderDashboard();
+  if(ch)renderChantier();
+  if(rz)renderRealisations();
+  if(bt)renderBoutique();
+}
+/* Sur téléphone, le menu déroulant « Devis » de la barre du haut est invisible (cette
+   barre est masquée) : on pose la même question dans une fenêtre, au même endroit que
+   toutes les autres questions de l'appli. */
+/* Réglages, Sauvegarde et Vue mobile/bureau, sur téléphone. L'interrupteur reprend le
+   même composant que la barre du haut (.view-switch) — une seule façon de le montrer. */
+function menuPlusMobile(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Plus</h3>
+    <div class="ph-menu">
+      <div class="view-switch onlight" style="align-self:flex-start;margin-bottom:2px;">
+        <button type="button" class="vs-mobile" onclick="applySplitView(false);closeModal();">📱 Mobile</button>
+        <button type="button" class="vs-bureau" onclick="applySplitView(true);closeModal();">🖥 Bureau</button>
+      </div>
+      <button class="mini" id="plus-reglages">⚙ Réglages</button>
+      <button class="mini" id="plus-sauvegarde">💾 Sauvegarde</button>
+      <button class="mini" id="plus-sync">🔄 Synchronisation</button>
+    </div>`);
+  syncViewSwitches();
+  const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
+  go('plus-reglages',openSettingsPanel);
+  go('plus-sauvegarde',openBackupPanel);
+  go('plus-sync',openSyncPanel);
+}
+function devisMenuMobile(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Devis</h3>
+    <div class="ph-menu">
+      <button class="mini" id="dv-composer">📝 Composer un devis</button>
+      <button class="mini" id="dv-mes">📂 Mes devis</button>
+      <button class="mini" id="dv-estim">📐 Estimation du Projet</button>
+    </div>`);
+  const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
+  go('dv-composer',gotoComposer);
+  go('dv-mes',gotoMesDevis);
+  go('dv-estim',gotoEstimation);
+}
+/* ============ RECHERCHE GLOBALE ============
+   Un seul champ pour les clients, les devis, les tâches et les réalisations. Sans ça, il
+   faut se souvenir de l'onglet où vit la chose qu'on cherche. */
+function rchNorm(v){
+  return (v==null?'':String(v)).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function rechercher(q){
+  const t=rchNorm(q).trim();
+  if(t.length<2)return null;         /* une seule lettre renverrait tout : ce n'est pas une recherche */
+  const mots=t.split(/\s+/);
+  const colle=(...morceaux)=>rchNorm(morceaux.filter(Boolean).join(' '));
+  const tous=(champ)=>mots.every(m=>champ.indexOf(m)>=0);
+  const res={clients:[],devis:[],taches:[],realisations:[]};
+  (clients||[]).forEach(c=>{
+    if(tous(colle(c.name,c.contact,c.phone,c.email,c.ville,c.commentaire)))res.clients.push(c);
+  });
+  (devisList||[]).forEach(d=>{
+    const snap=d.snapshot||{};
+    if(tous(colle(d.title,d.num,snap.proj,snap.raison,clientName(d.clientId))))res.devis.push(d);
+  });
+  (tasks||[]).forEach(k=>{
+    if(tous(colle(k.title,k.note,clientName(k.clientId))))res.taches.push(k);
+  });
+  (realisations||[]).forEach(r=>{
+    const photos=(r.photos||[]).map(p=>(p.name||'')+' '+(p.caption||'')).join(' ');
+    if(tous(colle(r.title,r.lieu,r.mission,r.categorie,r.texte,r.date,photos,clientName(r.clientId))))res.realisations.push(r);
+  });
+  return res;
+}
+function openRecherche(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Rechercher</h3>
+    <p class="msub">Clients, devis, tâches et réalisations — tout en même temps.</p>
+    <input type="search" id="rch-q" class="rch-input" placeholder="Nom, ville, n° de devis, titre de chantier…" autocomplete="off">
+    <div class="rch-res" id="rch-res"></div>`);
+  const inp=$('rch-q');
+  inp.addEventListener('input',()=>peindreRecherche(inp.value));
+  inp.addEventListener('keydown',e=>{
+    if(e.key!=='Enter')return;
+    const premier=document.querySelector('#rch-res .rch-row');
+    if(premier)premier.click();
+  });
+  peindreRecherche('');
+  setTimeout(()=>inp.focus(),60);
+}
+function peindreRecherche(q){
+  const host=$('rch-res');if(!host)return;
+  host.innerHTML='';
+  const res=rechercher(q);
+  if(!res){
+    const v=document.createElement('p');v.className='rch-vide';
+    v.textContent='Tapez au moins deux lettres. La recherche regarde les noms, les villes, les numéros de devis, les titres de chantier et jusqu’aux légendes des photos.';
+    host.appendChild(v);return;
+  }
+  const total=res.clients.length+res.devis.length+res.taches.length+res.realisations.length;
+  if(!total){
+    const v=document.createElement('p');v.className='rch-vide';
+    v.textContent='Rien trouvé pour « '+q.trim()+' ».';
+    host.appendChild(v);return;
+  }
+  const groupe=(titre,items,ligne)=>{
+    if(!items.length)return;
+    const h=document.createElement('div');h.className='rch-grp';h.textContent=titre+' ('+items.length+')';
+    host.appendChild(h);
+    items.slice(0,8).forEach(x=>{
+      const {t,sub,go}=ligne(x);
+      const b=document.createElement('button');b.type='button';b.className='rch-row';
+      b.innerHTML='<span class="rch-t"></span><span class="rch-s"></span>';
+      b.querySelector('.rch-t').textContent=t;
+      b.querySelector('.rch-s').textContent=sub;
+      b.addEventListener('click',()=>{closeModal();go();});
+      host.appendChild(b);
+    });
+    if(items.length>8){
+      const p=document.createElement('p');p.className='rch-vide';p.style.padding='2px 2px 6px';
+      p.textContent='… et '+(items.length-8)+' autre(s). Précisez la recherche.';
+      host.appendChild(p);
+    }
+  };
+  groupe('Clients',res.clients,c=>({t:c.name||'Client',sub:[c.ville,c.phone,c.email].filter(Boolean).join(' · '),go:()=>gotoClient(c.id)}));
+  groupe('Devis',res.devis,d=>({t:(d.title||'Devis')+(d.num?' n°'+d.num:''),sub:[clientName(d.clientId),d.status].filter(Boolean).join(' · '),go:()=>editDevis(d.id)}));
+  groupe('Réalisations',res.realisations,r=>({t:r.title||'Réalisation sans titre',
+    sub:[(r.photos||[]).length+' photo(s)',r.lieu,r.categorie,r.published?'en ligne':''].filter(Boolean).join(' · '),
+    go:()=>gotoRealisation(r.id)}));
+  groupe('Tâches',res.taches,k=>({t:k.title||'Tâche',sub:[clientName(k.clientId),k.done?'faite':'à faire'].filter(Boolean).join(' · '),go:()=>openClientTaskInDashboard(k.id)}));
+}
+/* Ctrl+K / ⌘K : le raccourci attendu partout. */
+document.addEventListener('keydown',e=>{
+  if(!(e.ctrlKey||e.metaKey))return;
+  if((e.key||'').toLowerCase()!=='k')return;
+  e.preventDefault();
+  if(!document.getElementById('rch-q'))openRecherche();
+});
+
+function gotoRealisation(id){
+  _rzOpenId=id;
+  showView('realisations');
+  window.scrollTo(0,0);
+}
+function gotoClient(id){
+  clientOpen[id]=true;
+  showView('clients');
+  const el=document.querySelector('.cl-group[data-cid="'+id+'"]');
+  if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+}
+/* ============ TÂCHES (tableau de bord) ============ */
+const TASK_PRIORITIES={
+  attente:{label:'En attente',icon:'⏳',rank:6},
+  faible:{label:'Faible',icon:'🟢',rank:5},
+  normal:{label:'Normal',icon:'🔵',rank:4},
+  important:{label:'Important',icon:'❗',rank:3},
+  urgent:{label:'Urgent',icon:'🔥',rank:2},
+  critique:{label:'Critique',icon:'🚨',rank:1},
+};
+function ensureTaskCategories(){if(!Array.isArray(library.taskCategories))library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));}
+function taskCategory(t){ensureTaskCategories();return library.taskCategories.find(c=>c.id===t.category)||null;}
+let _taskOpenIds=new Set();
+let _taskSaveT=null;
+let taskSortDir=(()=>{try{return localStorage.getItem('mn_task_sort_dir')||'asc';}catch(e){return 'asc';}})();
+let taskFilterCats=new Set();
+let taskFilterPrios=new Set();
+let taskFilterDue=false;
+let taskFilterReminder=false;
+let taskFilterClientId='';
+(function loadTaskFilters(){
+  try{
+    const raw=localStorage.getItem('mn_task_filters');
+    if(raw){const o=JSON.parse(raw);taskFilterCats=new Set(o.cats||[]);taskFilterPrios=new Set(o.prios||[]);taskFilterDue=!!o.due;taskFilterReminder=!!o.reminder;taskFilterClientId=o.clientId||'';}
+  }catch(e){}
+})();
+let _taskArchiveOpen=false;
+function toggleTaskSortDir(){
+  taskSortDir=taskSortDir==='asc'?'desc':'asc';
+  try{localStorage.setItem('mn_task_sort_dir',taskSortDir);}catch(e){}
+  renderTaskList();
+}
+function persistTaskFilters(){
+  try{localStorage.setItem('mn_task_filters',JSON.stringify({cats:[...taskFilterCats],prios:[...taskFilterPrios],due:taskFilterDue,reminder:taskFilterReminder,clientId:taskFilterClientId}));}catch(e){}
+}
+function setTaskFilterClient(id){taskFilterClientId=id;persistTaskFilters();renderTaskList();}
+function filterTaskClientOptions(q){
+  const needle=(q||'').toLowerCase().trim();
+  document.querySelectorAll('.tf-client-item[data-name]').forEach(el=>{
+    el.style.display=!needle||el.dataset.name.indexOf(needle)>=0?'':'none';
+  });
+}
+function onTaskFilterToggle(tok,checked){
+  if(tok==='__due__')taskFilterDue=checked;
+  else if(tok==='__reminder__')taskFilterReminder=checked;
+  else if(tok.indexOf('__prio_')===0){const p=tok.slice(7);if(checked)taskFilterPrios.add(p);else taskFilterPrios.delete(p);}
+  else if(checked)taskFilterCats.add(tok);
+  else taskFilterCats.delete(tok);
+  persistTaskFilters();
+  renderTaskList();
+}
+function clearTaskFilters(){
+  taskFilterCats=new Set();taskFilterPrios=new Set();taskFilterDue=false;taskFilterReminder=false;taskFilterClientId='';
+  persistTaskFilters();
+  renderTaskList();
+}
+function taskFilterActiveCount(){return taskFilterCats.size+taskFilterPrios.size+(taskFilterDue?1:0)+(taskFilterReminder?1:0)+(taskFilterClientId?1:0);}
+function taskFilterMenuHtml(){
+  ensureTaskCategories();
+  const isChecked=tok=>tok==='__due__'?taskFilterDue:tok==='__reminder__'?taskFilterReminder:tok.indexOf('__prio_')===0?taskFilterPrios.has(tok.slice(7)):taskFilterCats.has(tok);
+  const row=(tok,label)=>`<label><input type="checkbox" ${isChecked(tok)?'checked':''} onchange="onTaskFilterToggle('${tok}',this.checked)"> ${label}</label>`;
+  /* Demande explicite de Raphaël, pour gagner de la place sur mobile : Échéance et Rappel
+     n'ont chacun qu'une seule case à cocher — leur donner chacun une colonne pleine
+     largeur était du gaspillage. Regroupés dans UNE colonne, titres conservés, l'un
+     au-dessus de l'autre plutôt que côte à côte. */
+  const colDueReminder=`<div class="tf-col"><div class="tf-col-h">Échéance</div>${row('__due__','📅 Avec échéance')}<div class="tf-col-h" style="margin-top:8px;">Rappel</div>${row('__reminder__','🔔 Avec rappel')}</div>`;
+  const colCat=`<div class="tf-col"><div class="tf-col-h">Catégorie</div>${library.taskCategories.map(c=>row(c.id,`${c.icon} ${esc(c.label)}`)).join('')}</div>`;
+  const colPrio=`<div class="tf-col"><div class="tf-col-h">Priorité</div>${Object.entries(TASK_PRIORITIES).map(([k,p])=>row('__prio_'+k,`${p.icon} ${p.label}`)).join('')}</div>`;
+  const clientsSorted=[...clients].sort((a,b)=>a.name.localeCompare(b.name));
+  const colClient=`<div class="tf-col tf-col-client"><div class="tf-col-h">👤 Client</div>
+    <input type="text" class="tf-client-search" placeholder="🔍 Rechercher…" oninput="filterTaskClientOptions(this.value)">
+    <div class="tf-client-list">
+      <div class="tf-client-item${taskFilterClientId?'':' active'}" onclick="setTaskFilterClient('')">— Tous les clients —</div>
+      ${clientsSorted.map(c=>`<div class="tf-client-item${taskFilterClientId===c.id?' active':''}" data-name="${esc(c.name.toLowerCase())}" onclick="setTaskFilterClient('${c.id}')">${esc(c.name)}</div>`).join('')}
+    </div></div>`;
+  return `<div class="task-filter-table">${colDueReminder}${colCat}${colPrio}${colClient}</div>`+
+    `<div class="task-filter-actions"><button type="button" class="mini" onclick="clearTaskFilters()">Réinitialiser</button></div>`;
+}
+function toggleTaskFilterMenu(e){
+  if(e)e.stopPropagation();
+  const m=$('task-filter-menu');if(!m)return;
+  const opening=!m.classList.contains('open');
+  m.classList.toggle('open',opening);
+  /* Sur un écran étroit, un menu presque pleine largeur (94vw) ancré au bouton qui l'ouvre
+     déborde tôt ou tard de l'écran — ce bouton n'est pas au bord, il est au milieu d'une
+     rangée de trois. On le repositionne par rapport à l'ÉCRAN plutôt qu'au bouton :
+     marges fixes de 12px de chaque côté, seul le "top" (calculé ici depuis la position
+     réelle du bouton) varie. Au-delà de 680px, le menu garde son ancrage normal au
+     bouton (`position:absolute`, bien plus étroit, pas de risque de déborder). */
+  if(opening&&window.innerWidth<=680){
+    const btn=e&&e.currentTarget;
+    m.classList.add('mobile-fixed');
+    const top=btn?btn.getBoundingClientRect().bottom+6:60;
+    m.style.top=top+'px';
+    /* La largeur ne débordait plus, mais rien ne limitait la hauteur : le menu pouvait
+       continuer sous la barre de navigation du bas, la coupant net (signalé, capture à
+       l'appui). Hauteur dispo = du bas du bouton jusqu'au haut de la barre du bas — sa
+       vraie hauteur est MESURÉE sur l'appareil (pas devinée), une barre de navigation
+       n'a pas la même hauteur partout (icônes+texte+marge de sécurité de l'encoche). */
+    const navbas=document.querySelector('.navbas');
+    const navH=(navbas&&getComputedStyle(navbas).display!=='none')?navbas.getBoundingClientRect().height:0;
+    m.style.maxHeight=Math.max(window.innerHeight-top-navH-10,150)+'px';
+  }else if(opening){
+    m.classList.remove('mobile-fixed');m.style.top='';m.style.maxHeight='';
+  }
+}
+function closeTaskFilterMenu(){const m=$('task-filter-menu');if(m){m.classList.remove('open');m.classList.remove('mobile-fixed');m.style.top='';m.style.maxHeight='';}}
+document.addEventListener('click',e=>{if(!e.target.closest('#task-filter-wrap'))closeTaskFilterMenu();});
+function applyTaskFilter(list){
+  const anyCat=taskFilterCats.size>0;
+  const anyPrio=taskFilterPrios.size>0;
+  return list.filter(t=>{
+    if(anyCat&&!taskFilterCats.has(t.category))return false;
+    if(anyPrio&&!taskFilterPrios.has(taskPriority(t)))return false;
+    if(taskFilterDue&&!t.dueDate)return false;
+    if(taskFilterReminder&&!t.reminderDate)return false;
+    if(taskFilterClientId&&t.clientId!==taskFilterClientId)return false;
+    return true;
+  });
+}
+function toggleTaskArchive(){_taskArchiveOpen=!_taskArchiveOpen;renderTaskList();}
+function saveTasks(){store.set(K_TASKS,tasks);}
+function saveTasksDebounced(){clearTimeout(_taskSaveT);_taskSaveT=setTimeout(saveTasks,500);}
+function todayIso(){return new Date().toISOString().slice(0,10);}
+function taskPriority(t){return TASK_PRIORITIES[t.priority]?t.priority:'normal';}
+function taskStatus(t){
+  if(t.done)return 'done';
+  if(t.dueDate&&t.dueDate<todayIso())return 'overdue';
+  return taskPriority(t);
+}
+function taskIcon(t){
+  const st=taskStatus(t);
+  if(st==='done')return '✓';
+  if(st==='overdue')return '⏰';
+  return TASK_PRIORITIES[st].icon;
+}
+function taskTagsHtml(t,opts){
+  opts=opts||{};
+  const st=taskStatus(t);
+  const tags=[];
+  if(st==='overdue')tags.push('<span class="task-tag overdue">En retard</span>');
+  else if(st==='urgent')tags.push('<span class="task-tag urgent">Urgent</span>');
+  else if(st==='important')tags.push('<span class="task-tag important">Important</span>');
+  else if(st==='critique')tags.push('<span class="task-tag critique">Critique</span>');
+  const cat=taskCategory(t);
+  if(cat)tags.push(`<span class="task-tag">${cat.icon} ${esc(cat.label)}</span>`);
+  if(t.clientId&&!opts.hideClient)tags.push(`<span class="task-tag" onclick="event.stopPropagation();gotoClient('${t.clientId}')" style="cursor:pointer">👤 ${esc(clientName(t.clientId))}</span>`);
+  if(t.dueDate)tags.push(`<span class="task-tag">📅 ${esc(fmtDateFr(t.dueDate))}</span>`);
+  if(t.reminderDate)tags.push(`<span class="task-tag">🔔 ${esc(fmtDateFr(t.reminderDate))}</span>`);
+  if((t.docs||[]).length)tags.push(`<span class="task-tag">📎 ${t.docs.length}</span>`);
+  if(t.done&&t.completedAt)tags.push(`<span class="task-tag">✓ Terminée le ${esc(fmtDateTimeFr(t.completedAt))}</span>`);
+  return tags.join('');
+}
+function fmtDateTimeFr(ts){
+  const d=new Date(ts);
+  const pad=n=>String(n).padStart(2,'0');
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} à ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function fmtDateFr(iso){
+  if(!iso)return '';
+  const [y,m,d]=iso.split('-');
+  return d&&m&&y?`${d}/${m}/${y}`:iso;
+}
+/* Tri unique : priorité (urgent → faible), puis échéance la plus proche. Le bouton ↑/↓
+   inverse ce classement dans son ensemble — pas de menu "critère" séparé (demandé simplifié :
+   un seul filtre-tableau + un sens de tri, rien d'autre à ce niveau). */
+function sortedTasks(){
+  const list=[...tasks];
+  const dir=taskSortDir==='asc'?1:-1;
+  const rank={overdue:0,critique:1,urgent:2,important:3,normal:4,faible:5,attente:6};
+  return list.sort((a,b)=>{
+    const ra=rank[taskStatus(a)],rb=rank[taskStatus(b)];
+    if(ra!==rb)return dir*(ra-rb);
+    if(a.dueDate&&b.dueDate)return dir*(a.dueDate<b.dueDate?-1:a.dueDate>b.dueDate?1:0);
+    if(a.dueDate)return dir*-1;
+    if(b.dueDate)return dir*1;
+    return dir*((a.createdAt||0)-(b.createdAt||0));
+  });
+}
+function taskPriorityOptionsHtml(t){
+  return Object.entries(TASK_PRIORITIES).map(([k,p])=>`<option value="${k}" ${taskPriority(t)===k?'selected':''}>${p.icon} ${p.label}</option>`).join('');
+}
+function taskCategoryOptionsHtml(t){
+  ensureTaskCategories();
+  const cur=t&&t.category||'';
+  return `<option value="">— Sans catégorie —</option>`+library.taskCategories.map(c=>`<option value="${c.id}" ${cur===c.id?'selected':''}>${c.icon} ${esc(c.label)}</option>`).join('');
+}
+function taskClientOptionsHtml(t){
+  const cur=t&&t.clientId||'';
+  const sorted=[...clients].sort((a,b)=>a.name.localeCompare(b.name));
+  return `<option value="">— Aucun client —</option>`+sorted.map(c=>`<option value="${c.id}" ${cur===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+}
+function taskDocsHtml(t){
+  const tiles=(t.docs||[]).map(d=>{
+    const isImg=(d.type||'').indexOf('image/')===0;
+    return `<div class="task-doc-tile">
+      <div class="task-doc-thumb" onclick="openDoc({id:'${d.id}',name:'${esc(d.name).replace(/'/g,"\\'")}',type:'${d.type||''}'})">${isImg?`<img id="task-doc-img-${d.id}" alt="">`:(CAD_EXT.test(d.name)?'📐':'📄')}</div>
+      <div class="task-doc-name">${esc(d.name)}</div>
+      <button class="task-doc-del" onclick="removeTaskDoc('${t.id}','${d.id}')">Suppr.</button>
+    </div>`;
+  }).join('');
+  return `<div class="task-docs">${tiles}<button class="task-doc-add" onclick="pickTaskFiles('${t.id}')">＋<br>Photo/doc</button></div>`;
+}
+function taskRowHtml(t){
+  const open=_taskOpenIds.has(t.id);
+  const check=`<input type="checkbox" class="task-check" ${t.done?'checked':''} onclick="event.stopPropagation();toggleTaskDone('${t.id}')" title="${t.done?'Marquer à faire':'Marquer fait'}">`;
+  if(!open){
+    return `<div class="task-row ${t.done?'done':''}" data-tid="${t.id}" onclick="toggleTaskOpen('${t.id}')">
+      <div class="task-head">
+        ${check}
+        <span class="task-icon" title="Statut">${taskIcon(t)}</span>
+        <div class="task-main">
+          <div class="task-title">${esc(t.title)}</div>
+          ${t.detail?`<div class="task-detail-preview">${esc(t.detail)}</div>`:''}
+          <div class="task-meta">${taskTagsHtml(t)}</div>
+        </div>
+        <span class="task-chevron">▾</span>
+      </div>
+    </div>`;
+  }
+  return `<div class="task-row ${t.done?'done':''}" data-tid="${t.id}">
+    <div class="task-head" onclick="toggleTaskOpen('${t.id}')">
+      ${check}
+      <span class="task-icon" title="Statut">${taskIcon(t)}</span>
+      <div class="task-meta" style="flex:1">${taskTagsHtml(t)}</div>
+      <span class="task-chevron">▴</span>
+    </div>
+    <div class="task-body" onclick="event.stopPropagation()">
+      <label class="fld"><span class="lbl">Titre</span><input type="text" value="${esc(t.title)}" oninput="updateTaskField('${t.id}','title',this.value)"></label>
+      <label class="fld"><span class="lbl">Notes</span><textarea style="min-height:60px;" oninput="updateTaskField('${t.id}','detail',this.value)">${esc(t.detail||'')}</textarea></label>
+      <label class="fld"><span class="lbl">Client</span><select onchange="updateTaskFieldRerender('${t.id}','clientId',this.value)">${taskClientOptionsHtml(t)}</select></label>
+      <div class="row2">
+        <label class="fld"><span class="lbl">Échéance</span><input type="date" value="${t.dueDate||''}" onchange="updateTaskFieldRerender('${t.id}','dueDate',this.value)"></label>
+        <label class="fld"><span class="lbl">Rappel</span><input type="date" value="${t.reminderDate||''}" onchange="updateTaskFieldRerender('${t.id}','reminderDate',this.value)"></label>
+      </div>
+      <div class="row2">
+        <label class="fld"><span class="lbl">Catégorie</span><select onchange="updateTaskFieldRerender('${t.id}','category',this.value)">${taskCategoryOptionsHtml(t)}</select></label>
+        <label class="fld"><span class="lbl">Priorité</span><select onchange="updateTaskFieldRerender('${t.id}','priority',this.value)">${taskPriorityOptionsHtml(t)}</select></label>
+      </div>
+      ${taskDocsHtml(t)}
+      <div style="display:flex;justify-content:space-between;margin-top:4px;">
+        <button class="mini danger" onclick="deleteTaskConfirm('${t.id}')">Supprimer la tâche</button>
+        <button class="mini" onclick="toggleTaskOpen('${t.id}')">Fermer</button>
+      </div>
+    </div>
+  </div>`;
+}
+function renderTaskList(){
+  const root=$('dash-tasks');if(!root)return;
+  const fmenu=$('task-filter-menu');if(fmenu)fmenu.innerHTML=taskFilterMenuHtml();
+  const fcount=taskFilterActiveCount();
+  const fbadge=$('task-filter-badge');if(fbadge){fbadge.style.display=fcount?'inline-flex':'none';fbadge.textContent=fcount||'';}
+  const dirBtn=$('task-sort-dir-btn');if(dirBtn)dirBtn.textContent=(taskSortDir==='asc'?'↑':'↓')+' Ordre';
+  const csum=$('task-client-summary');
+  if(csum){
+    const cl=taskFilterClientId?clients.find(c=>c.id===taskFilterClientId):null;
+    if(cl){
+      const clientTasks=tasks.filter(t=>t.clientId===cl.id);
+      const done=clientTasks.filter(t=>t.done).length;
+      const pending=clientTasks.length-done;
+      const overdue=clientTasks.filter(t=>!t.done&&t.dueDate&&t.dueDate<todayIso()).length;
+      csum.innerHTML=`<div class="task-client-summary">
+        <span class="tcs-name">👤 ${esc(cl.name)}</span>
+        <span>${clientTasks.length} tâche${clientTasks.length>1?'s':''}</span>
+        <span class="tcs-ok">${done} terminée${done>1?'s':''}</span>
+        <span>${pending} en cours</span>
+        ${overdue?`<span class="tcs-overdue">${overdue} en retard</span>`:''}
+        <button type="button" class="mini" onclick="gotoClient('${cl.id}')">Voir la fiche →</button>
+      </div>`;
+    }else{csum.innerHTML='';}
+  }
+  const filtered=applyTaskFilter(sortedTasks());
+  const active=filtered.filter(t=>!t.done);
+  const archived=filtered.filter(t=>t.done).sort((a,b)=>(b.completedAt||0)-(a.completedAt||0));
+  if(!tasks.length){root.innerHTML='<div class="task-empty">Aucune tâche pour l\'instant — ajoute ce que tu ne veux pas oublier.</div>';}
+  else if(!active.length&&!archived.length){root.innerHTML='<div class="task-empty">Aucune tâche ne correspond à ce filtre.</div>';}
+  else if(!active.length){root.innerHTML='<div class="task-empty">Aucune tâche active — tout est dans les archives.</div>';}
+  else{root.innerHTML=active.map(taskRowHtml).join('');}
+  const arch=$('dash-tasks-archive');
+  if(arch){
+    if(!archived.length){arch.innerHTML='';}
+    else{
+      arch.innerHTML=`<div class="task-archive ${_taskArchiveOpen?'open':''}">
+        <div class="task-archive-head" onclick="toggleTaskArchive()">📦 Archives (${archived.length})<span class="chev">▶</span></div>
+        <div class="task-archive-body">${archived.map(taskRowHtml).join('')}</div>
+      </div>`;
+    }
+  }
+  (tasks||[]).forEach(t=>{
+    if(!_taskOpenIds.has(t.id))return;
+    (t.docs||[]).forEach(d=>{
+      if((d.type||'').indexOf('image/')!==0)return;
+      const im=$('task-doc-img-'+d.id);if(!im)return;
+      docStore.get(d.id).then(doc=>{if(doc&&im)im.src=doc.dataUri;});
+    });
+  });
+}
+function toggleTaskOpen(id){
+  if(_taskOpenIds.has(id))_taskOpenIds.delete(id);else _taskOpenIds.add(id);
+  renderTaskList();
+}
+function updateTaskField(id,key,val){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  t[key]=val;t.updatedAt=Date.now();
+  saveTasksDebounced();
+}
+function updateTaskFieldRerender(id,key,val){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  t[key]=val;t.updatedAt=Date.now();
+  saveTasks();renderTaskList();
+}
+function toggleTaskDone(id){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  t.done=!t.done;
+  t.completedAt=t.done?Date.now():null;
+  t.updatedAt=Date.now();
+  saveTasks();renderTaskList();
+}
+function deleteTaskConfirm(id){
+  askConfirm('Supprimer cette tâche ?',()=>{
+    const t=tasks.find(x=>x.id===id);
+    if(t)(t.docs||[]).forEach(d=>docStore.del(d.id));
+    tasks=tasks.filter(x=>x.id!==id);
+    _taskOpenIds.delete(id);
+    saveTasks();renderTaskList();toast('Tâche supprimée');
+  });
+}
+function pickTaskFiles(id){
+  choisirFichiers({multiple:true,accept:'image/*,application/pdf,.dwg,.dxf'},files=>attachTaskFiles(id,files));
+}
+async function attachTaskFiles(id,files){
+  const t=tasks.find(x=>x.id===id);if(!t)return;
+  let n=0;
+  for(const file of Array.from(files||[])){
+    const isCad=CAD_EXT.test(file.name);
+    const max=isCad?CAD_MAX_SIZE:4*1024*1024;
+    if(file.size>max){toast(file.name+' : trop lourd (>'+(max/1024/1024)+' Mo), ignoré');continue;}
+    try{const doc=await readFileAsDoc(file);const did=uid();await docStore.save(did,doc);t.docs=t.docs||[];t.docs.push({id:did,name:doc.name,type:doc.type});n++;}
+    catch(e){toast('Échec import '+file.name);}
+  }
+  t.updatedAt=Date.now();
+  saveTasks();renderTaskList();if(n)toast(n+' document(s) ajouté(s)');
+}
+function removeTaskDoc(taskId,docId){
+  const t=tasks.find(x=>x.id===taskId);if(!t)return;
+  askConfirm('Supprimer ce document ?',()=>{
+    docStore.del(docId);
+    t.docs=(t.docs||[]).filter(x=>x.id!==docId);
+    t.updatedAt=Date.now();
+    saveTasks();renderTaskList();
+  });
+}
+function openTaskModal(clientId){
+  ensureTaskCategories();
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Nouvelle tâche</h3>
+    <label class="fld"><span class="lbl">Titre</span><input type="text" id="task-title" placeholder="Ex. Commander les échantillons de parquet"></label>
+    <label class="fld"><span class="lbl">Client</span><select id="task-client">${taskClientOptionsHtml(clientId?{clientId}:null)}</select></label>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Échéance</span><input type="date" id="task-due"></label>
+      <label class="fld"><span class="lbl">Rappel</span><input type="date" id="task-reminder"></label>
+    </div>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Catégorie</span><select id="task-category">${taskCategoryOptionsHtml(null)}</select></label>
+      <label class="fld"><span class="lbl">Priorité</span><select id="task-priority">${taskPriorityOptionsHtml({priority:'normal'})}</select></label>
+    </div>
+    <!-- Les notes n'existaient qu'APRÈS création, dans la fiche dépliée : il fallait créer
+         la tâche, la rouvrir, puis écrire. On note quand on y pense, pas deux gestes plus tard. -->
+    <label class="fld"><span class="lbl">Notes (facultatif)</span><textarea id="task-detail" style="min-height:64px;" placeholder="Ce qu'il faut se rappeler : un lien, un contact, une précision."></textarea></label>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+      <button class="btn btn-primary" onclick="saveTaskFromModal()">Ajouter</button>
+    </div>`);
+  setTimeout(()=>{const el=$('task-title');if(el)el.focus();},50);
+}
+function saveTaskFromModal(){
+  const title=($('task-title').value||'').trim();
+  if(!title){toast('Le titre est requis');return;}
+  const dueDate=$('task-due').value||'';
+  const reminderDate=$('task-reminder').value||'';
+  const priority=TASK_PRIORITIES[$('task-priority').value]?$('task-priority').value:'normal';
+  const category=$('task-category').value||'';
+  const clientId=$('task-client').value||'';
+  const id=uid();
+  const detail=(($('task-detail')||{}).value||'').trim();
+  tasks.push({id,title,detail,dueDate,reminderDate,priority,category,clientId,done:false,docs:[],createdAt:Date.now(),updatedAt:Date.now()});
+  saveTasks();closeModal();
+  _taskOpenIds.add(id);
+  renderTaskList();toast('Tâche ajoutée');
+}
+function openTaskCategoriesPanel(){
+  ensureTaskCategories();
+  const rows=library.taskCategories.map((c,i)=>`<div class="lib-item">
+    <input type="text" value="${esc(c.icon)}" oninput="taskCatEdit(${i},'icon',this.value)" placeholder="📁" style="flex:0 0 52px;text-align:center;">
+    <input type="text" value="${esc(c.label)}" oninput="taskCatEdit(${i},'label',this.value)" placeholder="Nom" style="flex:2">
+    <button class="mini danger" onclick="taskCatDel(${i})">×</button></div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Catégories de tâches</h3>
+    <p class="msub">Pour regrouper les tâches par domaine (icône + nom, modifiables).</p>
+    ${rows}
+    <button class="add-btn" onclick="taskCatAdd()">+ Ajouter une catégorie</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="taskCatReset()">↺ Catégories par défaut</button>
+      <button class="btn btn-primary" onclick="taskCatSave()">Enregistrer</button></div>`);
+}
+function taskCatEdit(i,key,val){ensureTaskCategories();library.taskCategories[i][key]=val;saveLibraryDebounced();}
+function taskCatAdd(){ensureTaskCategories();library.taskCategories.push({id:uid(),label:'Nouvelle catégorie',icon:'🏷️'});openTaskCategoriesPanel();saveLibraryDebounced();}
+function taskCatDel(i){
+  ensureTaskCategories();
+  askConfirm('Supprimer cette catégorie ? Les tâches qui l\'utilisent redeviendront sans catégorie.',()=>{
+    const removed=library.taskCategories[i];
+    library.taskCategories.splice(i,1);
+    if(removed)tasks.forEach(t=>{if(t.category===removed.id)t.category='';});
+    saveTasks();store.set(K_LIB,library);openTaskCategoriesPanel();renderTaskList();
+  });
+}
+function taskCatReset(){askConfirm('Réinitialiser les catégories de tâches sur la liste par défaut ?',()=>{library.taskCategories=DEFAULT_TASK_CATEGORIES.map(c=>({...c}));openTaskCategoriesPanel();saveLibraryDebounced();});}
+async function taskCatSave(){await store.set(K_LIB,library);closeModal();renderTaskList();toast('Catégories enregistrées');}
+function openClientStatusesPanel(){
+  ensureClientStatuses();
+  const rows=library.clientStatuses.map((s,i)=>`<div class="lib-item">
+    <input type="color" value="${esc(s.color)}" oninput="clientStatusEdit(${i},'color',this.value)" style="flex:0 0 40px;padding:0;height:34px;">
+    <input type="text" value="${esc(s.label)}" oninput="clientStatusEdit(${i},'label',this.value)" placeholder="Nom" style="flex:2">
+    <label class="lib-arch" title="Ranger ces clients sous le séparateur « Archivés »"><input type="checkbox" ${s.archive?'checked':''} onchange="clientStatusEdit(${i},'archive',this.checked)"> archivé</label>
+    <button class="mini danger" onclick="clientStatusDel(${i})">×</button></div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Statuts clients</h3>
+    <p class="msub">Pour qualifier l'avancement d'un client (couleur + nom, modifiables). Cochez <b>archivé</b> pour que ces clients passent sous le séparateur du tableau — ils y restent visibles, et leurs montants comptent toujours dans les totaux. Le bouton « 📦 Archiver ce client », dans sa fiche, pose le <b>premier</b> statut archivé de cette liste.</p>
+    ${rows}
+    <button class="add-btn" onclick="clientStatusAdd()">+ Ajouter un statut</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
+      <button class="mini" onclick="clientStatusReset()">↺ Statuts par défaut</button>
+      <button class="btn btn-primary" onclick="clientStatusSave()">Enregistrer</button></div>`);
+}
+function clientStatusEdit(i,key,val){ensureClientStatuses();library.clientStatuses[i][key]=val;saveLibraryDebounced();renderClients();}
+function clientStatusAdd(){ensureClientStatuses();library.clientStatuses.push({id:uid(),label:'Nouveau statut',color:'#8a8578'});openClientStatusesPanel();saveLibraryDebounced();renderClients();}
+function clientStatusDel(i){
+  ensureClientStatuses();
+  if(library.clientStatuses.length<=1){toast('Il faut garder au moins un statut');return;}
+  askConfirm('Supprimer ce statut ? Les clients concernés basculeront sur le premier statut de la liste.',()=>{
+    const removed=library.clientStatuses[i];
+    library.clientStatuses.splice(i,1);
+    if(removed)clients.forEach(c=>{if(c.statut===removed.id)c.statut=library.clientStatuses[0].id;});
+    saveClients();store.set(K_LIB,library);openClientStatusesPanel();renderClients();
+  });
+}
+function clientStatusReset(){askConfirm('Réinitialiser les statuts clients sur la liste par défaut ?',()=>{library.clientStatuses=DEFAULT_CLIENT_STATUSES.map(c=>({...c}));openClientStatusesPanel();saveLibraryDebounced();renderClients();});}
+async function clientStatusSave(){await store.set(K_LIB,library);closeModal();renderClients();toast('Statuts enregistrés');}
+function computeTodos(){
+  const relances=clients.filter(c=>c.statut!=='annule').map(c=>({c,t:clientTotals(c)})).filter(x=>x.t.reste>0).sort((a,b)=>b.t.reste-a.t.reste);
+  const brouillons=devisList.filter(d=>d.status==='brouillon').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
+  const enAttente=devisList.filter(d=>d.status==='valide'&&(d.clientStatus||'attente')==='attente').sort((a,b)=>(a.updatedAt||0)-(b.updatedAt||0));
+  /* Le site ne se met pas à jour tout seul : une réalisation retouchée reste en ligne dans
+     sa version précédente jusqu'à ce qu'on republie. Personne n'y pense — d'où ce rappel
+     là où l'on regarde en premier. */
+  const republier=(realisations||[]).filter(realisationEnAttente).map(r=>({r,n:realisationARepublier(r)}));
+  return {relances,brouillons,enAttente,republier};
+}
+function renderDashboard(){
+  const kpiRoot=$('dash-kpi'),todoRoot=$('dash-todos');
+  if(!kpiRoot||!todoRoot)return;
+  renderTaskList();
+  const {relances,brouillons,enAttente,republier}=computeTodos();
+  const bilanLot=buildPubLotPanel();
+  const gt=globalTotals(clients);
+  kpiRoot.innerHTML=`
+    <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.montant)} ₪</div><div class="dash-kpi-lbl">Facturé (total)</div></div>
+    <div class="dash-kpi-item"><div class="dash-kpi-val">${fmt(gt.recu)} ₪</div><div class="dash-kpi-lbl">Reçu</div></div>
+    <div class="dash-kpi-item"><div class="dash-kpi-val ${gt.reste>0?'due':'ok'}">${fmt(gt.reste)} ₪</div><div class="dash-kpi-lbl">Reste dû</div></div>
+    <div class="dash-kpi-item"><div class="dash-kpi-val">${brouillons.length}</div><div class="dash-kpi-lbl">Devis en brouillon</div></div>`;
+  if(!relances.length&&!brouillons.length&&!enAttente.length&&!republier.length){
+    todoRoot.innerHTML=`<div class="empty">Rien à signaler pour l'instant — tout est à jour.</div>`;
+    if(bilanLot)todoRoot.insertBefore(bilanLot,todoRoot.firstChild);
+    return;
+  }
+  let html='';
+  if(relances.length){
+    html+=`<div class="dash-sec-title">💰 À relancer (${relances.length})</div>`;
+    html+=relances.map(({c,t})=>`<div class="dash-todo" onclick="gotoClient('${c.id}')"><span class="dash-todo-main">${esc(c.name)}</span><span class="dash-todo-amt due">${fmt(t.reste)} ₪</span></div>`).join('');
+  }
+  if(enAttente.length){
+    html+=`<div class="dash-sec-title">📨 Devis en attente de réponse (${enAttente.length})</div>`;
+    html+=enAttente.map(d=>`<div class="dash-todo" onclick="editDevis('${d.id}')"><span class="dash-todo-main">${esc(clientName(d.clientId))} · ${esc(d.title||'Devis')}</span><span class="dash-todo-amt">${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</span></div>`).join('');
+  }
+  if(republier.length){
+    html+=`<div class="dash-sec-title">🖼 À republier sur le site (${republier.length})</div>`;
+    html+=republier.map(({r,n})=>`<div class="dash-todo" onclick="gotoRealisation('${r.id}')"><span class="dash-todo-main">${esc(r.title||'Réalisation sans titre')}</span><span class="dash-todo-amt due">${n?(n+' photo(s)'):'fiche modifiée'}</span></div>`).join('');
+    /* Ouvrir chaque fiche pour recliquer « Publier » est exactement ce que personne ne fait.
+       Le rappel porte donc le geste avec lui. */
+    html+=`<button class="mini" style="margin-top:6px" onclick="republierToutes()">🌐 Tout republier (${republier.length})</button>`;
+  }
+  if(brouillons.length){
+    html+=`<div class="dash-sec-title">📝 Devis à finaliser (${brouillons.length})</div>`;
+    html+=brouillons.map(d=>`<div class="dash-todo" onclick="editDevis('${d.id}')"><span class="dash-todo-main">${esc(d.title||'Devis')} · N°${esc(d.num)}</span><span class="dash-todo-amt">${new Date(d.updatedAt).toLocaleDateString('fr-FR')}</span></div>`).join('');
+  }
+  todoRoot.innerHTML=html;
+  if(bilanLot)todoRoot.insertBefore(bilanLot,todoRoot.firstChild);
+}
+
+/* ============ SAUVEGARDE (export / import) ============ */
+function openBackupPanel(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Sauvegarde des données</h3>
+    <p class="msub">Vos clients, devis, tâches, bibliothèque et documents sont enregistrés sur cet appareil. Exportez un fichier de secours — et réimportez-le sur un autre appareil (ou un nouveau téléphone) pour y retrouver toutes vos données.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+      <button class="btn btn-primary" onclick="exportData()">⬇ Exporter mes données</button>
+      <button class="btn btn-onlight" onclick="choisirFichiers({accept:'application/json,.json'},f=>importData(f[0]))">⬆ Importer une sauvegarde</button>
+    </div>
+    <p class="msub" style="margin-top:12px">Conseil : gardez ce fichier dans votre Google Drive. Sur un nouvel appareil, ouvrez l'appli puis « Importer une sauvegarde ».</p>
+
+    <div class="ed-eyebrow" style="margin-top:18px">Sauvegarde complète, photos comprises</div>
+    <p class="ias-note">Le fichier ci-dessus ne contient que les <b>vignettes</b> des photos : les originaux vivent dans le cloud. Cette archive-ci contient les <b>photos en pleine définition</b>, versions retouchées par l'IA comprises. C'est elle qui protège vraiment vos réalisations.</p>
+    <label class="fld"><span class="lbl">Que sauvegarder</span><select id="bk-portee"></select></label>
+    <p class="msub" id="bk-taille"></p>
+    <div id="bk-prog" hidden><div class="rz-bar"><i style="width:0%"></i></div><p class="msub" id="bk-prog-txt"></p></div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
+      <button class="btn btn-primary" id="bk-go">⬇ Sauvegarde complète (.zip)</button>
+      <button class="btn btn-onlight" onclick="choisirFichiers({accept:'.zip,application/zip'},f=>importComplet(f[0]))">⬆ Importer une sauvegarde complète (.zip)</button>
+    </div>
+    <p class="ias-msg" id="bk-msg"></p>`);
+
+  const sel=$('bk-portee');
+  if(sel){
+    const total=realisations.reduce((a,r)=>a+(r.photos||[]).length,0);
+    sel.innerHTML='<option value="">Toutes les réalisations ('+total+' photo(s))</option>'
+      +realisations.map(r=>'<option value="'+r.id+'">'+esc(r.title||'Réalisation sans titre')+' ('+((r.photos||[]).length)+' photo(s))</option>').join('');
+    const majTaille=()=>{
+      const liste=sel.value?realisations.filter(r=>r.id===sel.value):realisations;
+      const n=liste.reduce((a,r)=>a+(r.photos||[]).reduce((b,p)=>b+1+photoVersions(p).length,0),0);
+      const st=_storageStat;
+      const moyen=(st&&st.files>3)?(st.bytes/st.files):1200000;
+      $('bk-taille').textContent=n?('Environ '+moLisible(n*moyen)+' à télécharger ('+n+' fichier(s)). Sur téléphone, préférez une réalisation à la fois si l’archive dépasse quelques centaines de Mo.')
+        :'Aucune photo à sauvegarder pour l’instant.';
+      $('bk-go').disabled=!n;
+    };
+    sel.addEventListener('change',majTaille);
+    majTaille();
+    if(!_storageStat)loadStorageStat().then(()=>{if($('bk-taille'))majTaille();});
+    $('bk-go').addEventListener('click',()=>exportComplet(sel.value));
+  }
+}
+
+/* ============ SAUVEGARDE COMPLÈTE (données + photos) ============
+   La sauvegarde JSON ne porte que les vignettes : elle ne suffit pas à retrouver une
+   galerie si le compte Supabase disparaît. Celle-ci embarque les fichiers en pleine
+   définition, dans une archive lisible à la main (un dossier par réalisation) ET
+   réimportable telle quelle. */
+let _bkStop=false;
+function bkProgres(fait,total,texte){
+  const box=$('bk-prog');if(!box)return;
+  box.hidden=false;
+  const b=box.querySelector('i');if(b)b.style.width=Math.round(fait/Math.max(total,1)*100)+'%';
+  const t=$('bk-prog-txt');if(t)t.textContent=texte;
+}
+function bkDire(t){const el=$('bk-msg');if(el)el.textContent=t||'';}
+const BK_README=[
+'SAUVEGARDE COMPLÈTE — CRM Melissa Nabet','',
+'Ce que contient cette archive :','',
+'  donnees.json        toutes vos données (clients, devis, tâches, réalisations,',
+'                      réglages) et les vignettes des photos.',
+'  photos/             les photos en pleine définition, un dossier par réalisation.',
+'                      Les fichiers « -ia » sont les versions retouchées par l’IA ;',
+'                      l’original est toujours conservé à côté.',
+'  photos/_index.json  ce qui permet à l’application de remettre chaque photo à sa',
+'                      place. Ne pas le supprimer si vous comptez réimporter.','',
+'Pour tout retrouver sur un nouvel appareil :',
+'  ouvrir l’application, se connecter, puis Sauvegarde →',
+'  « Importer une sauvegarde complète (.zip) » et choisir CE fichier.','',
+'Les photos sont aussi lisibles directement : ouvrez le dossier photos/.',
+'Ne recompressez pas l’archive avec un autre outil si vous comptez la réimporter.',
+''].join('\n');
+
+async function exportComplet(rid){
+  if(!(sb&&sbUser&&ownerId)){bkDire('Connexion requise : les photos en pleine définition sont dans le cloud.');return;}
+  const liste=rid?realisations.filter(r=>r.id===rid):realisations.slice();
+  const taches=[];
+  liste.forEach(r=>{
+    (r.photos||[]).forEach((p,i)=>{
+      /* On retire l'extension du titre avant d'en faire un nom de fichier : sinon
+         « salon.jpg » donne « salon-jpg.jpg ». */
+      const titre=(p.name||'photo').replace(/\.[a-z0-9]{2,5}$/i,'');
+      const base='photos/'+slugify(r.title||'realisation')+'/'+String(i+1).padStart(2,'0')+'-'+slugify(titre);
+      taches.push({key:fullKey(p.id),name:base+'.jpg',rid:r.id,pid:p.id,type:'original'});
+      /* Chaque retouche part dans l'archive, pas seulement celle qui est affichée : ce sont
+         autant d'images payées, et l'archive est le seul endroit d'où on peut les reprendre. */
+      photoVersions(p).forEach((v,k)=>{
+        taches.push({key:v.key,name:base+'-ia'+(k?String(k+1):'')+'.jpg',rid:r.id,pid:p.id,type:'ia'});
+      });
+    });
+  });
+  _bkStop=false;
+  const btn=$('bk-go');
+  if(btn){btn.disabled=true;btn.textContent='Arrêter';btn.onclick=()=>{_bkStop=true;bkDire('Arrêt demandé…');};}
+  bkDire('');
+  const entries=[],index=[],absents=[];
+  const enc=new TextEncoder();
+  try{
+    for(let i=0;i<taches.length;i++){
+      if(_bkStop)break;
+      const t=taches[i];
+      bkProgres(i,taches.length,'Photo '+(i+1)+' sur '+taches.length+'…');
+      const blob=await photoStore.get(t.key);
+      if(!blob){absents.push(t.name);continue;}
+      entries.push({name:t.name,bytes:new Uint8Array(await blob.arrayBuffer())});
+      index.push({fichier:t.name,realisation:t.rid,photo:t.pid,type:t.type,cle:t.key});
+      await new Promise(res=>setTimeout(res,0)); /* laisse l'écran respirer sur téléphone */
+    }
+    if(_bkStop){bkDire('Sauvegarde interrompue : aucun fichier n’a été téléchargé.');return;}
+    bkProgres(taches.length,taches.length,'Assemblage de l’archive…');
+    const data=await donneesSauvegarde();
+    entries.unshift({name:'donnees.json',bytes:enc.encode(JSON.stringify(data))});
+    entries.unshift({name:'LISEZ-MOI.txt',bytes:enc.encode(BK_README)});
+    entries.push({name:'photos/_index.json',bytes:enc.encode(JSON.stringify(index))});
+    const zip=buildZip(entries);
+    const nom='sauvegarde-complete-'+(rid?slugify((liste[0]||{}).title||'realisation')+'-':'')+new Date().toISOString().slice(0,10)+'.zip';
+    downloadBlob(zip,nom);
+    bkDire('Archive téléchargée : '+moLisible(zip.size)+', '+index.length+' photo(s)'
+      +(absents.length?' · '+absents.length+' introuvable(s) dans le cloud : '+absents.slice(0,3).join(', '):'')+'.');
+  }catch(e){
+    console.error('sauvegarde complète',e);
+    bkDire('Échec : '+((e&&e.message)||'erreur')+'. Essayez une réalisation à la fois — l’archive était peut-être trop lourde pour cet appareil.');
+  }finally{
+    const b=$('bk-go');
+    if(b){b.disabled=false;b.textContent='⬇ Sauvegarde complète (.zip)';b.onclick=null;
+      const sel=$('bk-portee');b.addEventListener('click',()=>exportComplet(sel?sel.value:''));}
+    const box=$('bk-prog');if(box)box.hidden=true;
+  }
+}
+/* Les mêmes données que l'export JSON : une seule définition de ce qu'est une sauvegarde. */
+async function donneesSauvegarde(){
+  const docs={};
+  for(const c of clients){for(const d of (c.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
+  for(const t of tasks){for(const d of (t.docs||[])){try{const doc=await docStore.get(d.id);if(doc)docs[d.id]=doc;}catch(e){}}}
+  const realThumbs={};
+  for(const r of realisations){for(const p of (r.photos||[])){try{const b=await photoStore.get(thumbKey(p.id));if(b)realThumbs[thumbKey(p.id)]=await blobToDataUri(b);}catch(e){}}}
+  return {app:'melissa-nabet-devis',version:1,exportedAt:new Date().toISOString(),library,clients,devis:devisList,tasks,realisations,produits,realThumbs,docs};
+}
+
+/* ---- Lecture d'une archive .zip écrite par `buildZip` (méthode « store ») ----
+   On lit le répertoire central, seule table fiable : les en-têtes locaux peuvent porter
+   des tailles à zéro quand l'archive a été écrite en flux. */
+function readZip(buf){
+  const u=new Uint8Array(buf), dv=new DataView(buf);
+  let eocd=-1;
+  for(let i=u.length-22;i>=Math.max(0,u.length-66000);i--){
+    if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;}
+  }
+  if(eocd<0)throw new Error('ce fichier n’est pas une archive .zip lisible');
+  const nb=dv.getUint16(eocd+10,true), cdOff=dv.getUint32(eocd+16,true);
+  const out=new Map();
+  let p=cdOff;
+  for(let k=0;k<nb;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)throw new Error('archive abîmée (répertoire central)');
+    const methode=dv.getUint16(p+10,true);
+    const taille=dv.getUint32(p+24,true);
+    const nLen=dv.getUint16(p+28,true), eLen=dv.getUint16(p+30,true), cLen=dv.getUint16(p+32,true);
+    const lOff=dv.getUint32(p+42,true);
+    const nom=new TextDecoder().decode(u.slice(p+46,p+46+nLen));
+    if(methode!==0)throw new Error('archive recompressée par un autre outil : réimportez le .zip tel qu’il a été téléchargé');
+    const lnLen=dv.getUint16(lOff+26,true), leLen=dv.getUint16(lOff+28,true);
+    const debut=lOff+30+lnLen+leLen;
+    out.set(nom,u.slice(debut,debut+taille));
+    p+=46+nLen+eLen+cLen;
+  }
+  return out;
+}
+async function importComplet(file){
+  bkDire('Lecture de l’archive…');
+  let fichiers;
+  try{ fichiers=readZip(await file.arrayBuffer()); }
+  catch(e){ bkDire('Impossible de lire cette archive : '+((e&&e.message)||'erreur')); return; }
+  const json=fichiers.get('donnees.json');
+  if(!json){bkDire('Cette archive ne contient pas donnees.json : ce n’est pas une sauvegarde complète du CRM.');return;}
+  let data,index=[];
+  try{ data=JSON.parse(new TextDecoder().decode(json)); }
+  catch(e){ bkDire('Le fichier donnees.json de l’archive est illisible.'); return; }
+  try{ const idx=fichiers.get('photos/_index.json'); if(idx)index=JSON.parse(new TextDecoder().decode(idx)); }catch(e){}
+  if(!data||!Array.isArray(data.clients)){bkDire('Sauvegarde invalide (données manquantes).');return;}
+  const nbPhotos=index.length;
+  askConfirm('Importer cette sauvegarde complète ? Elle remplacera les données de cet appareil, et renverra '+nbPhotos+' photo(s) dans le cloud.',async()=>{
+    try{
+      await appliquerSauvegarde(data);
+      let ok=0;const rates=[];
+      for(let i=0;i<index.length;i++){
+        const e=index[i];
+        bkProgres(i,index.length,'Photo '+(i+1)+' sur '+index.length+'…');
+        const bytes=fichiers.get(e.fichier);
+        if(!bytes){rates.push(e.fichier);continue;}
+        try{
+          /* `cle` n'existe pas dans les archives faites avant les versions multiples :
+             on retombe alors sur l'ancienne règle, une seule retouche par photo. */
+          const cible=e.cle||(e.type==='ia'?iaKey(e.photo):fullKey(e.photo));
+          await photoStore.save(cible,new Blob([bytes],{type:'image/jpeg'}));
+          ok++;
+        }catch(err){rates.push(e.fichier);}
+      }
+      storageInvalidate();
+      render();renderClients();renderTaskList();renderRealisations();
+      const box=$('bk-prog');if(box)box.hidden=true;
+      bkDire('Sauvegarde restaurée : '+ok+' photo(s) remises en place'+(rates.length?' · '+rates.length+' en échec ('+rates.slice(0,2).join(', ')+')':'')+'.');
+      toast('Sauvegarde complète importée');
+    }catch(e){
+      console.error('import complet',e);
+      bkDire('Échec de l’import : '+((e&&e.message)||'erreur'));
+    }
+  });
+}
+async function exportData(){
+  toast('Préparation de la sauvegarde…');
+  /* Ce fichier-ci ne porte que les VIGNETTES des photos : inclure les originaux ferait un
+     JSON de plusieurs centaines de Mo, impossible à produire depuis un téléphone. Pour les
+     originaux, c'est « Sauvegarde complète (.zip) » juste en dessous. */
+  const data=await donneesSauvegarde();
+  try{
+    const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='sauvegarde-melissa-nabet-'+new Date().toISOString().slice(0,10)+'.json';
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+    toast('Sauvegarde téléchargée');
+  }catch(e){toast('Échec export : '+e.message);}
+}
+/* Écrit une sauvegarde dans l'application. Partagé par l'import JSON et l'import de
+   l'archive complète : deux copies de cette règle finiraient par diverger. */
+async function appliquerSauvegarde(data){
+  if(data.library&&data.library.sections){library=data.library;await store.set(K_LIB,library);}
+  clients=(data.clients||[]).map(normalizeClient);await store.set(K_CLIENTS,clients);
+  devisList=objets(data.devis);await store.set(K_DEVIS,devisList);
+  if(Array.isArray(data.tasks)){tasks=data.tasks;await store.set(K_TASKS,tasks);}
+  if(Array.isArray(data.realisations)){realisations=data.realisations.map(normalizeRealisation);await store.set(K_REAL,realisations);}
+  if(Array.isArray(data.produits)){produits=data.produits.map(normalizeProduit);await store.set(K_PROD,produits);}
+  if(data.realThumbs){for(const k in data.realThumbs){try{await photoStore.save(k,dataUriToBlob(data.realThumbs[k]));}catch(e){}}}
+  if(data.docs){for(const id in data.docs){try{await docStore.save(id,data.docs[id]);}catch(e){}}}
+}
+async function importData(file){
+  try{
+    const text=await file.text();
+    const data=JSON.parse(text);
+    if(!data||!Array.isArray(data.clients)){toast('Fichier de sauvegarde invalide');return;}
+    askConfirm('Importer cette sauvegarde ? Elle remplacera les données de cet appareil.',async()=>{
+      await appliquerSauvegarde(data);
+      render();renderClients();renderTaskList();renderRealisations();toast('Données importées');
+    });
+  }catch(e){toast('Échec import : '+e.message);}
+}
+
+/* ============ EXPORT/IMPORT CSV CLIENTS ============ */
+const CSV_CLIENT_COLS=['name','statut','contact','phone','email','ville','debut','fin','montantFinal','devise','commentaire'];
+const CSV_CLIENT_HEADERS=['Nom','Statut','Contact','Téléphone','Email','Ville','Début','Fin','Montant final','Devise','Commentaire'];
+function csvEscape(v){
+  const s=(v==null?'':String(v));
+  return /[",\n;]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+}
+function csvParseLine(line){
+  const out=[];let cur='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQ){
+      if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else{inQ=false;}}
+      else cur+=ch;
+    }else{
+      if(ch==='"')inQ=true;
+      else if(ch===','){out.push(cur);cur='';}
+      else cur+=ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+function exportClientsCSV(){
+  if(!clients.length){toast('Aucun client à exporter');return;}
+  const rows=[CSV_CLIENT_HEADERS.join(',')];
+  clients.forEach(c=>{rows.push(CSV_CLIENT_COLS.map(k=>csvEscape(c[k])).join(','));});
+  const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='clients-melissa-nabet-'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+  toast('CSV clients exporté ('+clients.length+')');
+}
+async function importClientsCSV(file){
+  try{
+    const text=await file.text();
+    const lines=text.replace(/^﻿/,'').split(/\r\n|\n/).filter(l=>l.length);
+    if(lines.length<2){toast('Fichier CSV vide');return;}
+    const header=csvParseLine(lines[0]).map(h=>h.trim().toLowerCase());
+    const idx={};CSV_CLIENT_HEADERS.forEach((h,i)=>{idx[h.toLowerCase()]=i;});
+    // Tolère soit les en-têtes français exportés, soit les clés techniques (name, phone, email…)
+    const colFor=(label,key)=>{const i=header.indexOf(label.toLowerCase());return i>=0?i:header.indexOf(key.toLowerCase());};
+    const map={
+      name:colFor('Nom','name'),statut:colFor('Statut','statut'),contact:colFor('Contact','contact'),
+      phone:colFor('Téléphone','phone'),email:colFor('Email','email'),ville:colFor('Ville','ville'),
+      debut:colFor('Début','debut'),fin:colFor('Fin','fin'),montantFinal:colFor('Montant final','montantFinal'),
+      devise:colFor('Devise','devise'),commentaire:colFor('Commentaire','commentaire'),
+    };
+    if(map.name<0){toast('Colonne "Nom" introuvable dans le CSV');return;}
+    let added=0,updated=0;
+    lines.slice(1).forEach(line=>{
+      const cells=csvParseLine(line);
+      const name=(cells[map.name]||'').trim();if(!name)return;
+      const data={name};
+      if(map.statut>=0&&cells[map.statut])data.statut=cells[map.statut].trim();
+      if(map.contact>=0)data.contact=cells[map.contact]||'';
+      if(map.phone>=0)data.phone=cells[map.phone]||'';
+      if(map.email>=0)data.email=cells[map.email]||'';
+      if(map.ville>=0)data.ville=cells[map.ville]||'';
+      if(map.debut>=0)data.debut=cells[map.debut]||'';
+      if(map.fin>=0)data.fin=cells[map.fin]||'';
+      if(map.montantFinal>=0)data.montantFinal=parseFloat(cells[map.montantFinal])||0;
+      if(map.devise>=0&&cells[map.devise])data.devise=cells[map.devise].trim();
+      if(map.commentaire>=0)data.commentaire=cells[map.commentaire]||'';
+      const existing=clients.find(c=>c.name.toLowerCase()===name.toLowerCase());
+      if(existing){Object.assign(existing,data);updated++;}
+      else{clients.push(normalizeClient(data));added++;}
+    });
+    saveClients();renderClients();
+    toast(`Import terminé — ${added} créé(s), ${updated} mis à jour`);
+  }catch(e){toast('Échec import CSV : '+e.message);}
+}
+
+/* ============ TABS ============ */
+function showTab(w){
+  document.body.classList.toggle('show-preview',w==='preview');
+  document.body.classList.toggle('show-editor',w==='editor');
+  const fab=$('devis-tab-fab');if(fab)fab.textContent=w==='preview'?'✏️ Composer':'👁 Aperçu';
+}
+function toggleDevisTab(){showTab(document.body.classList.contains('show-preview')?'editor':'preview');}
+function toggleDevisMenu(e){if(e)e.stopPropagation();const m=$('vn-devis-menu');if(m)m.classList.toggle('open');}
+function closeDevisMenu(){const m=$('vn-devis-menu');if(m)m.classList.remove('open');}
+/* Demande explicite de Raphaël : "Composer" (menu du haut comme menu mobile) ouvrait
+   jusqu'ici le devis qui se trouvait déjà chargé en mémoire (currentDevisId), pas un
+   devis vierge — au risque de modifier par erreur un devis en cours sans s'en rendre
+   compte. newDevis() vide vraiment l'écran ; le devis quitté reste son brouillon
+   normal dans "Mes devis" (l'édition en cours est déjà sauvegardée en continu par
+   saveDraftDebounced, ~600ms), donc rien n'est perdu, et on ne le rouvre plus jamais
+   tout seul — seul un choix explicite dans "Mes devis" (loadDevis) le fait revenir. */
+function gotoComposer(){closeDevisMenu();newDevis();showView('devis');showTab('editor');}
+function gotoMesDevis(){closeDevisMenu();showView('devis');openDevisPanel();}
+/* L'Estimation du Projet est une sous-catégorie de Devis, pas un onglet à son niveau :
+   même écran qu'avant (`chantier-view`), atteint depuis le menu Devis plutôt que depuis
+   sa propre entrée de navigation. */
+function gotoEstimation(){closeDevisMenu();showView('chantier');}
+document.addEventListener('click',e=>{if(!e.target.closest('#vn-devis-wrap'))closeDevisMenu();});
+/* Deux instances possibles de l'interrupteur Mobile/Bureau à la fois (barre du haut +
+   menu "Plus" sur téléphone étroit) : on les tient toutes les deux à jour ensemble,
+   plutôt que de ne mettre à jour qu'un seul bouton texte comme avant. */
+function syncViewSwitches(){
+  const on=document.body.classList.contains('force-split');
+  document.querySelectorAll('.view-switch').forEach(w=>{
+    const m=w.querySelector('.vs-mobile'),b=w.querySelector('.vs-bureau');
+    if(m)m.classList.toggle('active',!on);
+    if(b)b.classList.toggle('active',on);
+  });
+}
+function applySplitView(on){
+  document.body.classList.toggle('force-split',on);
+  syncViewSwitches();
+  try{localStorage.setItem('mn_split_view',on?'1':'0');}catch(e){}
+}
+syncViewSwitches();
+try{if(localStorage.getItem('mn_split_view')==='1')applySplitView(true);}catch(e){}
+
+
+/* ============ RÉALISATIONS — galerie publiable ============ */
+/* Circuit VOLONTAIREMENT SÉPARÉ des documents client. Les photos de fin de chantier sont
+   destinées à sortir de l'appli (site web) : elles sont donc gardées en définition de
+   publication (2560 px, JPEG 0,92). Les documents client (`readFileAsDoc`) restent, eux,
+   compressés à 1400 px / 0,82 — c'est adapté à LEUR usage de pièce jointe de dossier.
+   Ne jamais fusionner les deux circuits ni aligner l'un sur l'autre.
+   Les retouches sont NON DESTRUCTIVES : on ne stocke que des paramètres (`photo.edit`),
+   l'original importé n'est jamais réécrit. */
+const REAL_MAX=2560, REAL_Q=0.92, REAL_THUMB=440, REAL_THUMB_Q=0.78, REAL_MAX_FILE=25*1024*1024;
+/* Vidéos : publiées TELLES QUELLES — pas de retouche, pas de recompression (aucun pipeline
+   de transcodage côté serveur). Le plafond est donc plus généreux que pour une photo, mais
+   pas illimité : un fichier de plusieurs Go bloquerait l'envoi depuis un téléphone en 4G
+   pendant de longues minutes sans qu'on puisse savoir si ça avance. */
+const VIDEO_MAX_FILE=300*1024*1024;
+const REAL_RATIOS=[
+  /* « Libre » laissait croire à un rognage libre : c'est l'inverse — aucun format n'est
+     imposé, le cadre garde la proportion de la photo. Le mot le dit maintenant. */
+  {id:'libre',label:'Format d’origine',v:0},
+  {id:'3:2',label:'3:2',v:3/2},
+  {id:'4:3',label:'4:3',v:4/3},
+  {id:'16:9',label:'16:9',v:16/9},
+  {id:'1:1',label:'1:1',v:1},
+];
+/* `crop` EST le rognage : le rectangle gardé, en fractions de la photo (0 → 1), tracé à la
+   main sur l'image. `null` = pas de rognage.
+   `zoom`/`panX`/`panY`/`pan` sont les anciens réglages de cadrage : plus aucune commande ne
+   les écrit, mais `cropWindow` sait encore les lire — sans quoi les photos déjà cadrées
+   changeraient de cadrage toutes seules. */
+const CROP_ZOOM_MAX=3;
+const CROP_MIN=0.05;   /* on ne garde pas moins de 5 % de la photo : au-delà c'est une bouillie */
+function blankEdit(){return {persp:0,rot:0,expo:0,contrast:0,temp:0,tint:0,sat:0,ratio:'libre',crop:null,pan:0,zoom:1,panX:0,panY:0};}
+/* Un rectangle valable, ou rien. Il tient dans la photo, ne descend pas sous CROP_MIN, et
+   « toute la photo » est ramené à `null` : garder l'image entière n'est pas un rognage, et
+   le laisser passer marquerait la photo « à republier » pour rien. */
+function cropNormalise(c){
+  if(!c)return null;
+  let w=parseFloat(c.w),h=parseFloat(c.h),x=parseFloat(c.x),y=parseFloat(c.y);
+  if(!isFinite(w)||!isFinite(h)||!isFinite(x)||!isFinite(y))return null;
+  w=Math.min(1,Math.max(CROP_MIN,w));h=Math.min(1,Math.max(CROP_MIN,h));
+  x=Math.min(1-w,Math.max(0,x));y=Math.min(1-h,Math.max(0,y));
+  if(w>=0.999&&h>=0.999)return null;
+  return {x:x,y:y,w:w,h:h};
+}
+/* Une photo « d'origine » à l'écran n'est PAS la photo importée : ce sont les réglages
+   manuels appliqués par-dessus. Tant que personne ne l'écrit, une rotation de 12° passe pour
+   la photo brute — et on cherche d'où vient l'écart. D'où ces deux fonctions : savoir s'il y
+   a des réglages, et savoir les nommer. */
+function editEstNeutre(e){
+  const b=blankEdit();
+  return Object.keys(b).every(k=>((e&&e[k]!==undefined)?e[k]:b[k])===b[k]);
+}
+const ED_RESUME=[
+  {k:'persp',t:v=>'verticales '+(v>0?'+':'')+Math.round(v)},
+  {k:'rot',t:v=>'rotation '+v.toFixed(1).replace('.',',')+'°'},
+  {k:'expo',t:v=>'exposition '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'contrast',t:v=>'contraste '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'temp',t:v=>'température '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'tint',t:v=>'teinte '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+  {k:'sat',t:v=>'saturation '+(v>0?'+':'')+v.toFixed(2).replace('.',',')},
+];
+function editResume(e){
+  const out=[];
+  ED_RESUME.forEach(d=>{const v=parseFloat((e||{})[d.k])||0;if(v)out.push(d.t(v));});
+  if(e&&e.ratio&&e.ratio!=='libre')out.push('cadrage '+e.ratio);
+  const c=cropNormalise((e||{}).crop);
+  if(c)out.push('rogné à '+Math.round(c.w*100)+' × '+Math.round(c.h*100)+' %');
+  else{
+    const z=parseFloat((e||{}).zoom)||1;
+    if(z>1.001)out.push('resserré à '+Math.round(z*100)+' %');
+    if(e&&(parseFloat(e.pan)||parseFloat(e.panX)||parseFloat(e.panY)))out.push('cadrage décalé');
+  }
+  return out;
+}
+
+/* ---- Ce qu'on sait d'une photo : ce qu'elle a vécu, et où elle en est du site ----
+   Deux questions revenaient sans réponse : « qu'est-ce qui est en ligne ? » et « qu'est-ce
+   qui a été fait sur cette photo ? ». Le CRM ne gardait ni l'un ni l'autre : une photo
+   ajoutée après une publication ressemblait en tout point à une photo déjà en ligne. */
+function photoHistMax(){
+  const n=parseInt((library&&library.iaSettings&&library.iaSettings.histMax),10);
+  return (isFinite(n)&&n>0)?n:30;
+}
+function photoLog(p,kind,detail){
+  if(!p)return;
+  p.hist=p.hist||[];
+  const last=p.hist[0];
+  /* Une session de réglages, c'est un événement, pas un par mouvement de curseur : tant
+     qu'on reste sur le même geste à moins de 10 minutes, on met à jour au lieu d'empiler. */
+  if(last&&last.k===kind&&kind==='reglages'&&Date.now()-last.t<600000){last.t=Date.now();return;}
+  p.hist.unshift({t:Date.now(),k:kind,d:detail||''});
+  p.hist=p.hist.slice(0,photoHistMax());
+}
+/* Toute modification visible de la photo. C'est ce qui permet de dire « modifiée depuis sa
+   mise en ligne » plutôt que de laisser croire que le site est à jour. */
+function photoTouch(p,kind,detail){
+  if(!p)return;
+  p.touchedAt=Date.now();
+  if(kind)photoLog(p,kind,detail);
+}
+/* ---- CE QUI EST EN LIGNE, PHOTO PAR PHOTO ----
+   Une photo n'avait pas d'état vis-à-vis du site : une retouche posait une image à côté de
+   l'originale, et rien ne disait laquelle était « celle du site ». Publier ne pouvait donc
+   que deviner, et la date de publication ne dit pas CE QUI a été publié.
+
+   Chaque photo publiée porte maintenant `p.pub` — l'identité exacte de ce qui est en ligne :
+
+     p.pub = {sig, rev, full, thumb, w, h, cap, cover, v, vlabel, at}
+
+   `sig` décrit les PIXELS publiés : la version retenue et les réglages manuels avec
+   lesquels elle a été rendue. Deux publications de même signature écrivent le même fichier :
+   inutile de le réécrire, et son adresse ne bouge pas. Signature différente = adresse
+   différente (`rev`), donc aucun cache ne peut montrer l'ancienne photo. */
+function pubHash(s){
+  /* FNV-1a 32 bits : court, stable d'une session à l'autre, et sans dépendance. Il ne sert
+     qu'à nommer un fichier — aucune propriété cryptographique n'est requise. */
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=(h*0x01000193)>>>0;}
+  return ('0000000'+h.toString(16)).slice(-8);
+}
+/* Signature des pixels publiés. Tout ce qui change l'IMAGE écrite doit y figurer — et rien
+   d'autre : renommer une version ou la photo ne change pas un pixel du site, et ne doit donc
+   pas réclamer une republication (c'est ce que faisait l'ancien repère par date). */
+function photoPubSig(p){
+  const vid=photoActiveId(p), e=p.edit||blankEdit();
+  /* `imgRev` compte les remplacements de la photo d'origine. Sans lui, remplacer une photo
+     passerait inaperçu : le remplacement réécrit la MÊME clé de stockage (`rp_<id>`) et
+     remet les réglages à zéro — la signature serait donc identique à celle publiée, et le
+     site garderait l'ancienne image en se croyant à jour. */
+  return [photoVersionKey(p,vid,false),p.imgRev||0,
+    e.persp||0,e.rot||0,e.expo||0,e.contrast||0,e.temp||0,e.tint||0,e.sat||0,e.ratio||'libre',e.pan||0,
+    /* Rogner change l'image publiée : sans le rectangle ici, on recadrerait et le site
+       garderait l'ancien cadrage en se croyant à jour — le nom du fichier publié est
+       porté par le contenu. Les anciens champs restent lus, des photos les portent. */
+    JSON.stringify(cropNormalise(e.crop)),e.zoom||1,e.panX||0,e.panY||0,
+    PUB_FULL,PUB_FULL_Q,PUB_THUMB,PUB_THUMB_Q].join('|');
+}
+/* Nom de fichier PORTÉ PAR LE CONTENU, plus par le rang. Deux conséquences voulues :
+   - une image retouchée part à une NOUVELLE adresse : ni le CDN ni le navigateur ne peuvent
+     servir l'ancienne, ce qui était la panne visible (« ça republie les anciennes photos ») ;
+   - réordonner ne réécrit plus rien : l'ordre du site est celui du manifeste, pas celui des
+     noms de fichiers. */
+function photoPubNames(r,p,sig){
+  const rev=pubHash(sig);
+  return {rev,full:r.id+'/'+p.id+'-'+rev+'.jpg',thumb:r.id+'/'+p.id+'-'+rev+'-t.jpg'};
+}
+/* Ce qui, sur le site, changerait si on republiait maintenant — et POURQUOI, en clair.
+   Chaîne vide = cette photo est déjà en ligne à l'identique. */
+function photoPubChange(r,p){
+  const pub=p.pub;
+  /* Photo mise en ligne AVANT ce mécanisme : on ne sait pas quelle version y est, mais on
+     sait qu'elle y est. La déclarer « nouvelle » ferait crier « à republier » sur tout un
+     chantier déjà à jour — exactement le faux signal qu'on cherche à supprimer. On retombe
+     donc sur l'ancien repère par date. Son fichier sera réécrit à la prochaine publication
+     (son adresse change), et le suivi deviendra exact sans rien demander. */
+  if(!pub||!pub.sig){
+    if(!p.publishedAt)return 'nouvelle';
+    return ((p.touchedAt||0)>p.publishedAt)?'modifiée depuis sa mise en ligne':'';
+  }
+  const raisons=[];
+  if(pub.sig!==photoPubSig(p)){
+    const vid=photoActiveId(p);
+    if((pub.v||'orig')!==vid)raisons.push('« '+photoVersionLabel(p,vid)+' » au lieu de « '+(pub.vlabel||'?')+' »');
+    else raisons.push('réglages de l’image');
+  }
+  if((pub.cap||'')!==((p.caption||'').trim()))raisons.push((p.caption||'').trim()?'légende':'légende retirée');
+  const couv=couvertureEffective(r);
+  if(!!pub.cover!==(couv===p.id))raisons.push(couv===p.id?'devient la couverture':'n’est plus la couverture');
+  return raisons.join(' · ');
+}
+/* État vis-à-vis du site public. `r.published` dit si la RÉALISATION est en ligne ; ceci dit
+   si CETTE photo l'est, ce qui n'est pas la même chose dès qu'on en ajoute une après coup.
+   Repli par date pour les photos publiées AVANT ce mécanisme : elles n'ont pas de `p.pub`,
+   et on ne va pas les déclarer absentes du site alors qu'elles y sont. */
+/* Les photos qui partent VRAIMENT sur le site : celles qui ne sont pas écartées. Écarter
+   une photo, c'est la garder dans le CRM sans la montrer au public — une prise ratée, un
+   détail technique, une photo qui ne sert qu'au dossier. UNE seule écriture de cette règle :
+   le plan de publication, la publication elle-même, les décomptes et l'écran de confirmation
+   s'en servent tous. */
+function photosPubliees(r){return (r.photos||[]).filter(p=>!p.horsSite);}
+/* La couverture EFFECTIVE : celle qui a été choisie, sauf si elle a été écartée du site —
+   auquel cas c'est la première photo publiée. Une seule écriture de cette règle : la
+   publication, le plan ET la comparaison « qu'est-ce qui a changé » doivent parler de la
+   même couverture. Deux définitions, et une photo reste « à republier » pour toujours :
+   publiée comme couverture d'un côté, comparée à un autre choix de l'autre. */
+function couvertureEffective(r){
+  const pub=photosPubliees(r);
+  if(!pub.length)return '';
+  return pub.some(p=>p.id===r.cover)?r.cover:pub[0].id;
+}
+
+function photoPubState(r,p){
+  if(p&&p.horsSite)return 'ecartee';
+  if(!r||!r.published)return 'hors';
+  const quoi=photoPubChange(r,p);
+  if(quoi==='nouvelle')return 'absente';
+  return quoi?'modifiee':'enligne';
+}
+const PHOTO_PUB_LABEL={enligne:'en ligne',modifiee:'modifiée · à republier',absente:'pas encore en ligne',hors:'',ecartee:'écartée du site'};
+/* Une réalisation en ligne dont une photo a bougé depuis. C'est LA chose qu'on oublie :
+   on retouche, on ajoute une photo, et le site garde l'ancienne version sans rien dire. */
+function realisationARepublier(r){
+  if(!r||!r.published)return 0;
+  return realisationPublishPlan(r).change;
+}
+/* `realisationARepublier` ne compte que les PHOTOS à renvoyer : un renommage ou un
+   changement de lieu/texte, qui ne touche aucune photo, y vaut 0 — alors que le site,
+   lui, affiche encore l'ancien texte tant qu'on n'a pas republié. Sans ce second signal,
+   rien n'invitait à republier une fiche renommée : ni le badge, ni le rappel du tableau de
+   bord, ni « Tout republier ». */
+function realisationEnAttente(r){
+  if(!r||!r.published)return false;
+  return !realisationPublishPlan(r).rien;
+}
+/* Le plan de publication : ce qui partirait si on publiait maintenant, photo par photo.
+   C'est LA source unique — le bandeau de la fiche, le compte sur le bouton, l'écran de
+   confirmation et la publication elle-même s'en servent tous. Sans ça, l'écran pourrait
+   annoncer une chose et la publication en faire une autre. */
+function realisationPublishPlan(r){
+  const photos=photosPubliees(r).map((p,i)=>{
+    const sig=photoPubSig(p);
+    const noms=photoPubNames(r,p,sig);
+    const pourquoi=r.published?photoPubChange(r,p):'nouvelle';
+    return {p,i,sig,rev:noms.rev,full:noms.full,thumb:noms.thumb,
+      etat:(pourquoi==='nouvelle'?'nouvelle':(pourquoi?'changee':'inchangee')),pourquoi};
+  });
+  /* L'ordre et la fiche du projet vivent dans le manifeste, pas dans les images : ils
+     changent le site sans qu'aucune photo ne bouge. Il faut donc le dire à part. */
+  const ordreAvant=(r.pub&&Array.isArray(r.pub.order))?r.pub.order.join(','):null;
+  const ordreApres=photosPubliees(r).map(p=>p.id).join(',');
+  const ordre=!!(r.published&&ordreAvant!==null&&ordreAvant!==ordreApres);
+  const ficheAvant=(r.pub&&r.pub.fiche)||'';
+  const ficheApres=realisationFicheSig(r);
+  const fiche=!!(r.published&&r.pub&&ficheAvant!==ficheApres);
+  /* Une photo écartée compte comme retirée du site au même titre qu'une photo supprimée :
+     dans les deux cas, le visiteur ne la verra plus après la publication. */
+  const retirees=(r.published&&r.pub&&Array.isArray(r.pub.pids))
+    ? r.pub.pids.filter(id=>!photosPubliees(r).some(p=>p.id===id)).length : 0;
+  const ecartees=(r.photos||[]).length-photosPubliees(r).length;
+  const nouvelles=photos.filter(x=>x.etat==='nouvelle').length;
+  const changees=photos.filter(x=>x.etat==='changee').length;
+  /* La couverture choisie peut avoir été écartée : le site prendrait alors la première
+     photo publiée sans que personne l'ait décidé. On le dit, et on la désigne. */
+  const couvEcartee=!!(r.cover&&(r.photos||[]).some(p=>p.id===r.cover&&p.horsSite)&&photos.length);
+  /* Vidéos : pas de retouche donc pas d'état « modifiée », seulement présente/absente. */
+  const vidsAvant=(r.published&&r.pub&&Array.isArray(r.pub.vids))?r.pub.vids:[];
+  const vidsApres=(r.videos||[]).map(v=>v.id);
+  const videosNouvelles=vidsApres.filter(id=>vidsAvant.indexOf(id)<0).length;
+  const videosRetirees=vidsAvant.filter(id=>vidsApres.indexOf(id)<0).length;
+  return {photos,nouvelles,changees,retirees,ecartees,couvEcartee,ordre,fiche,
+    coverId:couvertureEffective(r),
+    inchangees:photos.filter(x=>x.etat==='inchangee').length,
+    videosNouvelles,videosRetirees,
+    change:nouvelles+changees,
+    rien:!(nouvelles||changees||retirees||ordre||fiche||videosNouvelles||videosRetirees)};
+}
+/* Les champs du projet qui partent dans le manifeste. Le titre de la photo n'y est pas :
+   il ne quitte jamais le CRM. */
+/* Les champs TEXTE d'une fiche publiée, nettoyés comme le manifeste les veut — utilisé à
+   la fois par une publication complète (avec les photos) et par la synchro automatique du
+   texte seul (`syncRealisationFicheEnLigne`), pour que les deux écrivent exactement la
+   même chose et ne divergent jamais. */
+function ficheTexteChamps(r){
+  const f={title:(r.title||'').trim(),date:(r.date||'').trim()};
+  [['lieu',r.lieu],['surface',r.surface],['mission',r.mission],['categorie',r.categorie],['texte',r.texte]].forEach(([k,v])=>{
+    if((v||'').trim())f[k]=String(v).trim();
+  });
+  if(r.personnelle)f.personnelle=true;
+  return f;
+}
+function realisationFicheSig(r){
+  return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||'',
+    r.personnelle?'perso':''].join('\u0001');
+}
+const HIST_LABEL={horssite:'Écartée du site',sursite:'Remise sur le site',couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée',retour:'Retour à la publication précédente'};
+function normalizeRealisation(r){
+  /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
+     et un portfolio : ils partent sur le site avec les photos. */
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],videos:[],published:false,personnelle:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
+     `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
+     manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
+  o.photos=(o.photos||[]).map(p=>migratePhotoVersions(
+    Object.assign({id:uid(),name:'',caption:'',w:0,h:0,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)})));
+  /* Pas d'`edit` : une vidéo est publiée telle quelle, il n'y a rien à retoucher. */
+  o.videos=(o.videos||[]).map(v=>Object.assign({id:uid(),name:'',contentType:'video/mp4',size:0,createdAt:Date.now()},v));
+  return o;
+}
+function ensureRealisations(){if(!Array.isArray(realisations))realisations=[];}
+function saveRealisations(){realisations.forEach(r=>{r.updatedAt=r.updatedAt||Date.now();});store.set(K_REAL,realisations);}
+let _rzSaveT=null;
+function saveRealisationsDebounced(){clearTimeout(_rzSaveT);_rzSaveT=setTimeout(saveRealisations,500);}
+function findRealisation(id){return realisations.find(r=>r.id===id)||null;}
+function findPhoto(pid){
+  for(const r of realisations){const p=(r.photos||[]).find(x=>x.id===pid);if(p)return p;}
+  return null;
+}
+/* ============ LES VERSIONS D'UNE PHOTO ============
+
+   Une photo n'a plus deux états (l'originale et UNE retouche, avec une bascule) mais une
+   PILE : l'originale, puis chaque retouche produite, dans l'ordre. Une seule est ACTIVE —
+   c'est elle qui s'affiche, s'exporte et part sur le site.
+
+   Pourquoi ce changement : avec un seul emplacement, relancer une retouche écrasait la
+   précédente sans qu'on puisse comparer, et l'envoi repartait toujours de l'originale. On
+   ne pouvait donc ni garder deux essais, ni enchaîner une retouche sur une autre.
+
+     p.versions = [{id, key, model, prompt, params, from, createdAt, label}]
+     p.active   = 'orig' | <id de version>
+     p.edits    = {orig:{…}, <id>:{…}}   chaque version garde SES réglages manuels
+     p.edit     = la copie vivante des réglages de la version active
+
+   `key` est rangée DANS la version : la toute première garde `ra_<photo>`, la clé de
+   l'ancien format, pour que les retouches déjà en ligne restent lisibles sans rien
+   recopier. Les suivantes prennent `ra_<photo>_<version>`. */
+
+function photoVersions(p){if(!Array.isArray(p.versions))p.versions=[];return p.versions;}
+function photoVersion(p,vid){return photoVersions(p).find(v=>v.id===vid)||null;}
+/* L'identifiant actif, toujours valide : une version supprimée ailleurs (autre onglet,
+   synchronisation) ne doit pas laisser la photo pointer sur du vide. */
+function photoActiveId(p){
+  const a=p.active||'orig';
+  return (a==='orig'||photoVersion(p,a))?a:'orig';
+}
+function photoVersionKey(p,vid,thumb){
+  if(!vid||vid==='orig')return thumb?thumbKey(p.id):fullKey(p.id);
+  const v=photoVersion(p,vid);
+  /* Une retouche n'a pas de vignette à part : son image sert pour les deux. */
+  return v?v.key:(thumb?thumbKey(p.id):fullKey(p.id));
+}
+function photoVersionLabel(p,vid){
+  if(!vid||vid==='orig')return 'Photo d’origine';
+  const v=photoVersion(p,vid);
+  if(!v)return 'version supprimée';
+  return v.label||('Retouche '+(photoVersions(p).indexOf(v)+1));
+}
+function photoEditOf(p,vid){
+  if(vid===photoActiveId(p))return p.edit||blankEdit();
+  return (p.edits||{})[vid]||blankEdit();
+}
+/* Changer de version affichée. Les réglages manuels suivent la version, ils ne la
+   traversent pas : ce qui a été redressé sur l'originale n'a rien à faire sur une retouche
+   où le modèle a déjà redressé. */
+function photoSetActive(p,vid){
+  const clone=e=>JSON.parse(JSON.stringify(e||blankEdit()));
+  const cur=photoActiveId(p);
+  vid=(vid==='orig'||photoVersion(p,vid))?vid:'orig';
+  if(vid===cur)return false;
+  if(!p.edits)p.edits={};
+  p.edits[cur]=clone(p.edit);
+  p.active=vid;
+  p.edit=clone(p.edits[vid]);
+  /* C'est cette version-là qui partira à l'export et sur le site : la photo n'est donc plus
+     à jour vis-à-vis de ce qui est publié. */
+  photoTouch(p,'version',photoVersionLabel(p,vid));
+  return true;
+}
+/* Supprime une version et son image. Les retouches qui en descendaient se rattachent à ce
+   dont ELLE descendait : sinon leur origine désignerait une version disparue. */
+async function photoDeleteVersion(p,vid){
+  const v=photoVersion(p,vid);if(!v)return false;
+  const nom=photoVersionLabel(p,vid);
+  const repli=(v.from&&(v.from==='orig'||photoVersion(p,v.from)))?v.from:'orig';
+  try{await photoStore.del(v.key);}catch(e){console.error('suppression version',e);}
+  _imgCache.delete(v.key);
+  photoVersions(p).forEach(x=>{if(x.from===vid)x.from=repli;});
+  p.versions=photoVersions(p).filter(x=>x.id!==vid);
+  if(p.edits)delete p.edits[vid];
+  if(photoActiveId(p)===vid||p.active===vid){
+    p.active=repli;
+    p.edit=JSON.parse(JSON.stringify((p.edits||{})[repli]||blankEdit()));
+  }
+  photoTouch(p,'iasuppr',nom);
+  return true;
+}
+/* Toutes les clés d'images d'une photo — l'originale, sa vignette et chaque retouche. Un
+   seul endroit à tenir : suppression, remplacement, sauvegarde et comptage s'en servent. */
+function photoAllKeys(p){
+  return [fullKey(p.id),thumbKey(p.id)].concat(photoVersions(p).map(v=>v.key));
+}
+/* Ancien format → nouveau. Faite au chargement, sur place, sans rien recopier dans le
+   stockage : l'unique retouche existante devient la version 1 et garde sa clé. */
+function migratePhotoVersions(p){
+  /* Le nettoyage des champs de l'ancien format est fait DANS TOUS LES CAS. Constaté en base
+     sur de vraies photos : une fusion venue d'un autre appareil recopiait `ia`/`useIa` sur
+     une photo déjà migrée, et ces champs morts repartaient ensuite à chaque synchronisation. */
+  if(Array.isArray(p.versions)&&p.edits){delete p.ia;delete p.useIa;delete p.editOrig;delete p.editIa;return p;}
+  const clone=e=>JSON.parse(JSON.stringify(e||blankEdit()));
+  if(!Array.isArray(p.versions))p.versions=[];
+  if(!p.edits){
+    const avaitIa=!!p.ia, actif=!!(p.ia&&p.useIa);
+    p.edits={orig:clone(actif?p.editOrig:p.edit)};
+    if(avaitIa){
+      const v={id:'v1',key:iaKey(p.id),model:p.ia.model||'',prompt:p.ia.prompt||'',
+        params:p.ia.params||{},from:'orig',createdAt:p.ia.createdAt||Date.now(),label:''};
+      p.versions.push(v);
+      p.edits[v.id]=clone(actif?p.edit:p.editIa);
+    }
+    p.active=actif?'v1':'orig';
+  }
+  delete p.ia;delete p.useIa;delete p.editOrig;delete p.editIa;
+  return p;
+}
+
+function isEditingRealisations(){
+  if(typeof _ed!=='undefined'&&_ed)return true; /* éditeur photo ouvert : ses objets sont vivants */
+  const a=document.activeElement;
+  return !!(a&&a.closest&&a.closest('#realisations-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));
+}
+/* Fusion EN PLACE : l'identité des objets `realisation` et `photo` est préservée, sinon les
+   champs en cours d'édition (et `_ed.p` dans l'éditeur) pointeraient vers des orphelins. */
+function mergeRealisations(list){
+  const incoming=(list||[]).map(normalizeRealisation);
+  const seen=new Set();
+  incoming.forEach(nr=>{
+    seen.add(nr.id);
+    const cur=realisations.find(x=>x.id===nr.id);
+    if(!cur){realisations.push(nr);return;}
+    const photos=nr.photos.map(np=>{
+      const cp=(cur.photos||[]).find(x=>x.id===np.id);
+      if(!cp)return np;
+      Object.assign(cp.edit,np.edit);Object.assign(cp,np,{edit:cp.edit});
+      return cp;
+    });
+    Object.assign(cur,nr,{photos});
+  });
+  realisations=realisations.filter(r=>seen.has(r.id));
+}
+
+/* ============ PLACE OCCUPÉE DANS LE CLOUD ============
+   Le plan gratuit Supabase plafonne à 1 Go. À une photo d'environ 1 Mo, ça tient un à deux
+   ans — puis les envois échouent, et sans avertissement on ne comprend pas pourquoi une
+   photo « ne s'ajoute pas ». On compte donc les DEUX seaux : les documents et les photos
+   privées (`client-docs`) ET ce qui est publié sur le site (`galerie`). Ne compter que le
+   premier sous-estimait d'autant que la galerie publiée pèse. */
+const STORAGE_DEFAULTS={quotaMo:1024,seuil:70,photoMo:1.2};
+function storageSettings(){
+  library.storage=Object.assign({},STORAGE_DEFAULTS,library.storage||{});
+  return library.storage;
+}
+let _storageStat=null;       /* {at,bytes,files,docs,gal,photoMoyen} */
+let _storageLoading=false;
+const STORAGE_TTL=120000;    /* la mesure coûte deux listings : inutile de la refaire sans arrêt */
+async function bucketBytes(bucket,prefix,profondeur){
+  let bytes=0,files=0;
+  const {data,error}=await sb.storage.from(bucket).list(prefix,{limit:1000});
+  if(error)throw error;
+  for(const f of (data||[])){
+    const taille=f&&f.metadata&&f.metadata.size;
+    if(taille!=null){bytes+=taille;files++;}
+    else if((profondeur||0)<2){
+      /* Une entrée sans métadonnées est un dossier : la galerie range ses photos par
+         réalisation, on descend d'un cran. */
+      const sous=await bucketBytes(bucket,prefix+'/'+f.name,(profondeur||0)+1);
+      bytes+=sous.bytes;files+=sous.files;
+    }
+  }
+  return {bytes,files};
+}
+function storageInvalidate(){_storageStat=null;}
+async function loadStorageStat(force){
+  if(!(sb&&sbUser&&ownerId))return null;
+  if(!force&&_storageStat&&Date.now()-_storageStat.at<STORAGE_TTL)return _storageStat;
+  if(_storageLoading)return _storageStat;
+  _storageLoading=true;
+  try{
+    const docs=await bucketBytes(DOC_BUCKET,ownerId,0);
+    let gal={bytes:0,files:0};
+    try{gal=await bucketBytes(GALLERY_BUCKET,ownerId,0);}catch(e){ /* seau public absent : on n'invente pas de chiffre */ }
+    const bytes=docs.bytes+gal.bytes, files=docs.files+gal.files;
+    _storageStat={at:Date.now(),bytes,files,docs,gal,erreur:''};
+  }catch(e){
+    _storageStat={at:Date.now(),bytes:0,files:0,docs:null,gal:null,erreur:(e&&e.message)||'erreur'};
+  }finally{_storageLoading=false;}
+  return _storageStat;
+}
+function storagePct(st){
+  const q=(storageSettings().quotaMo|0)*1048576;
+  if(!q||!st)return 0;
+  return Math.min(999,st.bytes/q*100);
+}
+function moLisible(o){
+  const mo=o/1048576;
+  if(mo>=1024)return (mo/1024).toFixed(2).replace('.',',')+' Go';
+  if(mo<0.1&&o>0)return '< 0,1 Mo';
+  return mo.toFixed(1).replace('.',',')+' Mo';
+}
+/* Combien de photos peuvent encore entrer. On préfère la taille moyenne RÉELLE des fichiers
+   déjà stockés à une estimation de principe : une photo de téléphone ne pèse pas la même
+   chose d'un appareil à l'autre. */
+function storagePhotosRestantes(st){
+  const set=storageSettings();
+  const q=(set.quotaMo|0)*1048576;
+  const reste=Math.max(0,q-st.bytes);
+  const moyen=(st.files>3&&st.bytes>0)?(st.bytes/st.files):((parseFloat(set.photoMo)||1.2)*1048576);
+  return Math.floor(reste/Math.max(moyen,1));
+}
+/* Bandeau visible là où l'on ajoute des photos. Rien tant qu'on est sous le seuil : une
+   alerte permanente ne s'alerte plus de rien. */
+function paintStorageBanner(){
+  const host=document.getElementById('rz-storage');
+  if(!host)return;
+  if(!(sb&&sbUser&&ownerId)){host.innerHTML='';return;}
+  const st=_storageStat;
+  if(!st){
+    loadStorageStat().then(x=>{if(x)paintStorageBanner();});
+    host.innerHTML='';return;
+  }
+  if(st.erreur){host.innerHTML='';return;}
+  const set=storageSettings();
+  const pct=storagePct(st);
+  if(pct<(set.seuil|0)){host.innerHTML='';return;}
+  const plein=pct>=95;
+  const reste=storagePhotosRestantes(st);
+  host.innerHTML='';
+  const box=document.createElement('div');
+  box.className='rz-quota'+(plein?' plein':'');
+  const t=document.createElement('p');
+  t.textContent=(plein?'⛔ Stockage presque plein : ':'⚠ Stockage : ')
+    +moLisible(st.bytes)+' sur '+set.quotaMo+' Mo ('+Math.round(pct)+' %). '
+    +(plein?'Les prochains envois de photos vont échouer.':'Il reste de la place pour environ '+reste+' photo(s).');
+  box.appendChild(t);
+  const q=document.createElement('p');q.className='rz-quota-sub';
+  q.textContent='Pour faire de la place : supprimez les photos ratées d’un chantier, ou retirez du site une réalisation ancienne (ses fichiers publiés sont alors effacés). Le seuil d’alerte et la capacité du plan se règlent dans Sauvegarde → Synchronisation.';
+  box.appendChild(q);
+  const bar=document.createElement('div');bar.className='rz-bar';
+  bar.innerHTML='<i></i>';bar.querySelector('i').style.width=Math.min(100,pct)+'%';
+  box.appendChild(bar);
+  host.appendChild(box);
+}
+
+/* ---- Stockage des fichiers photo ----
+   Même bucket que les documents (`client-docs`), chemin `ownerId/<clé>`. La policy réelle
+   (vérifiée en base) est `(storage.foldername(name))[1] = auth.uid()::text` : c'est le
+   PREMIER segment qui compte, donc un sous-dossier resterait autorisé. On garde malgré
+   tout un chemin plat, avec les préfixes `rp_`/`rt_` pour distinguer les usages.
+   Rien n'est mis en localStorage : une photo de publication pèse ~1 Mo, le cache local
+   sature (cf. DOC_LOCAL_CACHE_LIMIT). Mémoire + cloud uniquement. */
+const PHOTO_MEM_MAX=40;
+const photoStore={
+  mem:{},
+  _keep(key,blob){
+    delete this.mem[key];this.mem[key]=blob;
+    const keys=Object.keys(this.mem);
+    while(keys.length>PHOTO_MEM_MAX)delete this.mem[keys.shift()];
+  },
+  async save(key,blob){
+    this._keep(key,blob);
+    if(!(sb&&sbUser&&ownerId))throw new Error('hors ligne');
+    const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+key,blob,{contentType:'image/jpeg',upsert:true});
+    if(error)throw error;
+  },
+  async get(key){
+    if(this.mem[key])return this.mem[key];
+    if(!(sb&&sbUser&&ownerId))return null;
+    try{
+      const {data,error}=await sb.storage.from(DOC_BUCKET).download(ownerId+'/'+key);
+      if(error||!data)return null;
+      this._keep(key,data);return data;
+    }catch(e){return null;}
+  },
+  async del(key){
+    delete this.mem[key];
+    if(sb&&sbUser&&ownerId){try{await sb.storage.from(DOC_BUCKET).remove([ownerId+'/'+key]);}catch(e){}}
+  },
+};
+function fullKey(pid){return 'rp_'+pid;}
+function thumbKey(pid){return 'rt_'+pid;}
+/* Même seau privé que les photos (DOC_BUCKET), même logique — sauf le type de contenu,
+   qui doit suivre celui du fichier importé (mp4, mov, webm…) et pas être figé en JPEG. */
+const videoStore={
+  async save(key,blob,contentType){
+    if(!(sb&&sbUser&&ownerId))throw new Error('hors ligne');
+    const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+key,blob,{contentType:contentType||'video/mp4',upsert:true});
+    if(error)throw error;
+  },
+  async get(key){
+    if(!(sb&&sbUser&&ownerId))return null;
+    try{
+      const {data,error}=await sb.storage.from(DOC_BUCKET).download(ownerId+'/'+key);
+      if(error||!data)return null;
+      return data;
+    }catch(e){return null;}
+  },
+  async del(key){
+    if(sb&&sbUser&&ownerId){try{await sb.storage.from(DOC_BUCKET).remove([ownerId+'/'+key]);}catch(e){}}
+  },
+};
+function videoKey(vid){return 'rv_'+vid;}
+/* Extension déduite du type MIME (le nom du fichier, lui, peut être trompeur — un iPhone
+   exporte parfois un .mov en video/quicktime). Repli sur .mp4, le plus lisible partout. */
+function videoExt(v){
+  const type=(v.contentType||'').toLowerCase();
+  if(type.includes('quicktime')||type.includes('mov'))return '.mov';
+  if(type.includes('webm'))return '.webm';
+  if(type.includes('ogg'))return '.ogv';
+  return '.mp4';
+}
+
+/* Cache d'images décodées (objets Image prêts pour le rendu). Plafonné : une photo 2560 px
+   décodée occupe ~26 Mo en mémoire vive, on ne peut pas toutes les garder. */
+const _imgCache=new Map();
+function cacheImg(key,img){
+  _imgCache.delete(key);_imgCache.set(key,img);
+  while(_imgCache.size>2){const k=_imgCache.keys().next().value;_imgCache.delete(k);}
+}
+function blobToImage(blob){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(url);res(img);};
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('image illisible'));};
+    img.src=url;
+  });
+}
+/* Sans précision, c'est la version ACTIVE de la photo qui est chargée — la même règle
+   partout : écran, export, publication. `original:true` force la photo d'origine (le
+   comparatif s'en sert), `versionId` en désigne une en particulier (retoucher à partir
+   d'une version précise). */
+async function loadPhotoImage(pid,{thumb=false,original=false,versionId=null}={}){
+  const ph=findPhoto(pid);
+  if(!ph)return null;
+  const vid=original?'orig':(versionId!=null?versionId:photoActiveId(ph));
+  const key=photoVersionKey(ph,vid,thumb);
+  if(!thumb&&_imgCache.has(key))return _imgCache.get(key);
+  const blob=await photoStore.get(key);
+  if(!blob)return null;
+  const img=await blobToImage(blob);
+  if(!thumb)cacheImg(key,img);
+  return img;
+}
+
+/* ---- Import : décodage orienté (EXIF) puis deux rendus, publication + vignette ---- */
+async function decodeOriented(file){
+  if(typeof createImageBitmap==='function'){
+    try{return await createImageBitmap(file,{imageOrientation:'from-image'});}catch(e){}
+  }
+  return await blobToImage(file);
+}
+function drawScaled(src,maxSide){
+  const sw=src.width||src.videoWidth,sh=src.height||src.videoHeight;
+  let w=sw,h=sh;
+  if(w>maxSide||h>maxSide){const s=Math.min(maxSide/w,maxSide/h);w=Math.round(w*s);h=Math.round(h*s);}
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  cv.getContext('2d').drawImage(src,0,0,w,h);
+  return cv;
+}
+function canvasToBlob(cv,q){
+  return new Promise(res=>cv.toBlob(b=>res(b),'image/jpeg',q));
+}
+/* Un import de vingt photos depuis un téléphone dure une minute : sans progression, on
+   croit que rien ne se passe. Et un fichier refusé doit dire LEQUEL et POURQUOI — un
+   `toast` de trois secondes se rate, surtout quand plusieurs fichiers échouent d'affilée. */
+let _rzImport=null;        /* import en cours : {total,done,name} */
+let _rzImportReport=null;  /* bilan du dernier import : {n,refus:[{name,why}]} */
+function moTxt(o){return (o/1048576).toFixed(o<10485760?1:0)+' Mo';}
+/* Refus décidable AVANT décodage : ce n'est pas une image, ou c'est trop lourd. */
+function photoFileRefus(file){
+  const type=(file.type||'').toLowerCase();
+  if(type&&!/^image\//.test(type))return 'ce n’est pas une image (' + type + ')';
+  if(file.size>REAL_MAX_FILE)return 'trop lourd : '+moTxt(file.size)+' — maximum '+moTxt(REAL_MAX_FILE);
+  return '';
+}
+/* Refus constaté au décodage. Le cas HEIC est le plus fréquent (photos d'iPhone) et le
+   message doit dire quoi faire, pas seulement que ça a raté. */
+function photoFileRaison(file,e){
+  const msg=(e&&e.message)||'';
+  if(/hors ligne|réseau|network|fetch|failed to fetch/i.test(msg))return 'envoi interrompu : connexion perdue ('+msg+'). Réessayez une fois reconnectée.';
+  if(/hei[cf]/i.test((file.type||'')+' '+(file.name||'')))
+    return 'format HEIC : le navigateur ne sait pas l’ouvrir. Sur iPhone : Réglages → Appareil photo → Formats → « Le plus compatible », ou exportez la photo en JPEG.';
+  return 'fichier illisible'+(msg?' ('+msg+')':'');
+}
+/* Décodage + les deux rendus stockés (publication et vignette). Partagé par l'import et
+   par le remplacement d'une photo : une seule chaîne, donc un seul comportement. */
+async function decodePhotoFile(file){
+  const src=await decodeOriented(file);
+  const full=drawScaled(src,REAL_MAX);
+  const thumb=drawScaled(src,REAL_THUMB);
+  const [fb,tb]=await Promise.all([canvasToBlob(full,REAL_Q),canvasToBlob(thumb,REAL_THUMB_Q)]);
+  if(src.close)src.close();
+  return {fb,tb,w:full.width,h:full.height};
+}
+/* Renvoie '' si la photo est entrée, sinon la raison du refus, en français. */
+async function importOnePhoto(r,file){
+  const refus=photoFileRefus(file);
+  if(refus)return refus;
+  try{
+    const d=await decodePhotoFile(file);
+    const pid=uid();
+    try{
+      await photoStore.save(fullKey(pid),d.fb);
+      await photoStore.save(thumbKey(pid),d.tb);
+    }catch(e){
+      /* La photo n'entrera pas dans la réalisation : ce qui a déjà été envoyé n'est
+         référencé par rien et occuperait de la place sans que personne puisse le voir ni le
+         supprimer. On nettoie derrière nous — le stockage est plafonné. */
+      try{await photoStore.del(fullKey(pid));}catch(err){}
+      try{await photoStore.del(thumbKey(pid));}catch(err){}
+      throw e;
+    }
+    const nouvelle={id:pid,name:file.name||'photo',caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
+    photoLog(nouvelle,'import',file.name||'');
+    r.photos.push(nouvelle);
+    if(!r.cover)r.cover=pid;
+    return '';
+  }catch(e){console.error('import photo',e);return photoFileRaison(file,e);}
+}
+async function addPhotosToRealisation(r,files){
+  const list=Array.from(files||[]);
+  if(!list.length)return;
+  if(!(sb&&sbUser&&ownerId)){
+    _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'photo',why:'connexion requise : les photos sont enregistrées dans le cloud, pas sur l’appareil'}))};
+    renderRealisations();return;
+  }
+  const refus=[];let n=0;
+  _rzImportReport=null;
+  _rzImport={total:list.length,done:0,name:(list[0].name||'')};
+  renderRealisations();
+  for(const file of list){
+    _rzImport.name=file.name||'photo';paintImportProgress();
+    const why=await importOnePhoto(r,file);
+    if(why)refus.push({name:file.name||'photo',why});else n++;
+    _rzImport.done++;paintImportProgress();
+  }
+  _rzImport=null;
+  _rzImportReport=refus.length?{n,refus}:null;
+  r.updatedAt=Date.now();
+  storageInvalidate();
+  saveRealisations();renderRealisations();
+  if(n)toast(n+' photo(s) ajoutée(s)');
+}
+/* Mise à jour en place : re-rendre toute la grille à chaque fichier relancerait le rendu
+   WebGL de toutes les vignettes déjà présentes, ce qui ralentit l'import qu'on affiche. */
+function paintImportProgress(){
+  const box=document.getElementById('rz-import');
+  if(!box||!_rzImport)return;
+  const {total,done,name,type}=_rzImport;
+  const t=box.querySelector('.rz-import-txt');
+  if(t)t.textContent='Import de '+total+' '+(type||'photo')+'(s) — '+Math.min(done+1,total)+' / '+total+' · '+name;
+  const b=box.querySelector('.rz-bar i');
+  if(b)b.style.width=Math.round(done/total*100)+'%';
+}
+/* ---- Vidéos ------------------------------------------------------------------------
+   Publiées TELLES QUELLES : pas de retouche, pas de recompression, pas de vignette
+   générée — le navigateur affiche seul la première image du fichier via <video>. Circuit
+   volontairement plus simple que celui des photos, sur le même principe (privées dans
+   DOC_BUCKET tant que non publiées, un geste explicite « Republier » les envoie). */
+function videoFileRefus(file){
+  const type=(file.type||'').toLowerCase();
+  if(type&&!/^video\//.test(type))return 'ce n’est pas une vidéo (' + type + ')';
+  if(file.size>VIDEO_MAX_FILE)return 'trop lourde : '+moTxt(file.size)+' — maximum '+moTxt(VIDEO_MAX_FILE);
+  return '';
+}
+async function importOneVideo(r,file){
+  const refus=videoFileRefus(file);
+  if(refus)return refus;
+  const vid=uid();
+  try{
+    await videoStore.save(videoKey(vid),file,file.type||'video/mp4');
+    const nouvelle={id:vid,name:file.name||'vidéo',contentType:file.type||'video/mp4',size:file.size,createdAt:Date.now()};
+    r.videos.push(nouvelle);
+    return '';
+  }catch(e){
+    console.error('import vidéo',e);
+    try{await videoStore.del(videoKey(vid));}catch(err){}
+    const msg=(e&&e.message)||'';
+    if(/hors ligne|réseau|network|fetch|failed to fetch/i.test(msg))return 'envoi interrompu : connexion perdue ('+msg+'). Réessayez une fois reconnectée.';
+    return 'fichier illisible'+(msg?' ('+msg+')':'');
+  }
+}
+async function addVideosToRealisation(r,files){
+  const list=Array.from(files||[]);
+  if(!list.length)return;
+  if(!(sb&&sbUser&&ownerId)){
+    _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'vidéo',why:'connexion requise : les vidéos sont enregistrées dans le cloud, pas sur l’appareil'}))};
+    renderRealisations();return;
+  }
+  r.videos=r.videos||[];
+  const refus=[];let n=0;
+  _rzImportReport=null;
+  _rzImport={total:list.length,done:0,name:(list[0].name||''),type:'vidéo'};
+  renderRealisations();
+  for(const file of list){
+    _rzImport.name=file.name||'vidéo';paintImportProgress();
+    const why=await importOneVideo(r,file);
+    if(why)refus.push({name:file.name||'vidéo',why});else n++;
+    _rzImport.done++;paintImportProgress();
+  }
+  _rzImport=null;
+  _rzImportReport=refus.length?{n,refus,type:'vidéo'}:null;
+  r.updatedAt=Date.now();
+  saveRealisations();renderRealisations();
+  if(n)toast(n+' vidéo(s) ajoutée(s)');
+}
+function rzPickVideos(r){
+  choisirFichiers({multiple:true,accept:'video/*'},files=>addVideosToRealisation(r,files));
+}
+async function deleteVideo(r,v){
+  askConfirm('Retirer la vidéo « '+(v.name||'vidéo')+' » ?'+(r.published?' Elle sera retirée du site à la prochaine republication.':''),async()=>{
+    r.videos=(r.videos||[]).filter(x=>x.id!==v.id);
+    r.updatedAt=Date.now();
+    saveRealisations();renderRealisations();
+    try{await videoStore.del(videoKey(v.id));}catch(e){}
+  });
+}
+/* Bandeau de progression, puis bilan des refus. Le bilan reste à l'écran jusqu'à ce qu'on
+   le masque : c'est la seule trace de la photo qui n'est PAS entrée. */
+function buildImportPanel(){
+  if(_rzImport){
+    const box=document.createElement('div');box.className='rz-import';box.id='rz-import';
+    box.innerHTML='<div class="rz-import-txt"></div><div class="rz-bar"><i style="width:0%"></i></div>';
+    setTimeout(paintImportProgress,0);
+    return box;
+  }
+  if(_rzImportReport){
+    const {n,refus,type}=_rzImportReport;
+    const box=document.createElement('div');box.className='ia-erreur';
+    const t=document.createElement('p');
+    t.textContent=(n?n+' '+(type||'photo')+'(s) ajoutée(s), ':'')+refus.length+' fichier(s) refusé(s) :';
+    box.appendChild(t);
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    refus.forEach(x=>{
+      const li=document.createElement('li');
+      li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;
+      li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+    f.addEventListener('click',()=>{_rzImportReport=null;renderRealisations();});
+    box.appendChild(f);
+    return box;
+  }
+  return null;
+}
+function rzPickPhotos(r){
+  choisirFichiers({multiple:true,accept:'image/*'},files=>addPhotosToRealisation(r,files));
+}
+/* ---- Remplacer une photo sans perdre sa place ----
+   Une photo refaite (mieux cadrée, mieux éclairée) doit garder son rang, son titre et sa
+   légende : la remplacer en supprimant puis réimportant les perdrait toutes les trois, et
+   la remettrait en fin de galerie. */
+async function replaceOnePhoto(r,p,file){
+  const refus=photoFileRefus(file);
+  if(refus)return refus;
+  try{
+    const d=await decodePhotoFile(file);
+    /* Deux fichiers à échanger (la pleine définition et la vignette) et aucune transaction
+       possible côté stockage : si le second envoi échoue, on se retrouverait avec la
+       NOUVELLE photo en grand et l'ANCIENNE en vignette — un état que rien n'affiche comme
+       anormal. On garde donc de quoi remettre en place ce qui a été écrasé. */
+    const ancienFull=await photoStore.get(fullKey(p.id));
+    const ancienThumb=await photoStore.get(thumbKey(p.id));
+    try{
+      await photoStore.save(fullKey(p.id),d.fb);
+      await photoStore.save(thumbKey(p.id),d.tb);
+    }catch(e){
+      try{if(ancienFull)await photoStore.save(fullKey(p.id),ancienFull);}catch(err){}
+      try{if(ancienThumb)await photoStore.save(thumbKey(p.id),ancienThumb);}catch(err){}
+      throw e;
+    }
+    _imgCache.delete(fullKey(p.id));_imgCache.delete(thumbKey(p.id));
+    /* La texture WebGL est mise en cache sous une clé dérivée de l'id de la photo, qui ne
+       change pas : sans cette remise à zéro, l'écran continuerait d'afficher l'ancienne
+       image alors que le fichier, lui, a bien changé. */
+    _glTexKey='';
+    /* Les retouches ont été calculées à partir de l'ANCIENNE image : les garder
+       afficherait l'ancienne photo sous un nouveau nom. */
+    for(const v of photoVersions(p).slice()){
+      try{await photoStore.del(v.key);}catch(e){}
+      _imgCache.delete(v.key);
+    }
+    p.versions=[];p.edits={orig:blankEdit()};p.active='orig';
+    p.w=d.w;p.h=d.h;
+    /* Les corrections visaient l'ancienne image (verticales, recadrage) : les garder sur
+       une autre photo n'a aucun sens. */
+    Object.assign(p.edit,blankEdit());
+    p.edits={orig:blankEdit()};
+    /* L'image d'origine a changé sous la même clé : c'est ce compteur qui le fait savoir à
+       la publication (voir `photoPubSig`). */
+    p.imgRev=(p.imgRev||0)+1;
+    photoTouch(p,'remplacee',file.name||'');
+    return '';
+  }catch(e){
+    console.error('remplacement photo',e);
+    /* On sait ici que rien n'a bougé (les fichiers écrasés ont été remis) : autant le dire,
+       plutôt que de laisser craindre une photo à moitié remplacée. */
+    return 'remplacement annulé, la photo d’avant est toujours en place — '+photoFileRaison(file,e);
+  }
+}
+function rzReplacePhoto(r,p){
+  choisirFichiers({accept:'image/*'},files=>{
+    const file=files[0];if(!file)return;
+    const pertes=[];
+    const nv=photoVersions(p).length;
+    if(nv)pertes.push(nv>1?('ses '+nv+' retouches IA seront supprimées'):'sa retouche IA sera supprimée');
+    if(JSON.stringify(p.edit)!==JSON.stringify(blankEdit()))pertes.push('ses réglages seront remis à zéro');
+    askConfirm('Remplacer cette photo par « '+(file.name||'le fichier choisi')+' » ? Son titre, sa légende et sa place sont conservés'
+      +(pertes.length?', mais '+pertes.join(' et ')+'.':'.'),async()=>{
+      const why=await replaceOnePhoto(r,p,file);
+      if(why){_rzImportReport={n:0,refus:[{name:file.name||'photo',why}]};renderRealisations();return;}
+      r.updatedAt=Date.now();saveRealisations();
+      if(_ed&&_ed.p===p){await reloadEditorImage();buildEditorControls();}
+      renderRealisations();toast('Photo remplacée');
+    });
+  });
+}
+
+/* ============ MOTEUR DE RENDU (WebGL) ============
+   Un seul passage : homographie (redressement des verticales) + rotation + recadrage +
+   étalonnage couleur. Tout est calculé à la volée depuis `photo.edit` — rien n'est écrit
+   dans le fichier d'origine. */
+let _gl=null,_glCv=null,_glProg=null,_glTex=null,_glTexKey='';
+const GL_VS='attribute vec2 a;varying vec2 v;void main(){v=a;gl_Position=vec4(a.x*2.0-1.0,1.0-a.y*2.0,0.0,1.0);}';
+const GL_FS=[
+'precision highp float;','varying vec2 v;','uniform sampler2D tex;',
+'uniform mat3 H;','uniform vec2 c0;','uniform vec2 c1;',
+'uniform float rotc;','uniform float rots;','uniform float rotk;','uniform float asp;',
+'uniform float expo;','uniform float contrast;','uniform float temp;','uniform float tint;','uniform float sat;',
+'void main(){',
+'  vec2 d = c0 + v*(c1-c0);',
+'  vec2 e = vec2((d.x-0.5)*asp, d.y-0.5);',
+'  e = vec2(e.x*rotc - e.y*rots, e.x*rots + e.y*rotc) * rotk;',
+'  d = vec2(e.x/asp + 0.5, e.y + 0.5);',
+'  vec3 p = H * vec3(d, 1.0);',
+'  vec2 uv = p.xy / p.z;',
+'  uv = clamp(uv, 0.0, 1.0);',
+'  vec3 c = texture2D(tex, uv).rgb;',
+'  c *= pow(2.0, expo);',
+'  c = (c - 0.5) * contrast + 0.5;',
+'  c.r *= 1.0 + temp;',
+'  c.b *= 1.0 - temp;',
+'  c.g *= 1.0 + tint;',
+'  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));',
+'  c = mix(vec3(l), c, sat);',
+'  gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);',
+'}'].join('\n');
+function glSetup(){
+  if(_gl!==null)return _gl;
+  _glCv=document.createElement('canvas');
+  const opts={preserveDrawingBuffer:true,antialias:false,premultipliedAlpha:false};
+  _gl=_glCv.getContext('webgl',opts)||_glCv.getContext('experimental-webgl',opts)||false;
+  if(!_gl)return false;
+  const g=_gl;
+  const mk=(t,src)=>{const sh=g.createShader(t);g.shaderSource(sh,src);g.compileShader(sh);
+    if(!g.getShaderParameter(sh,g.COMPILE_STATUS)){console.error('shader',g.getShaderInfoLog(sh));return null;}return sh;};
+  const vs=mk(g.VERTEX_SHADER,GL_VS),fs=mk(g.FRAGMENT_SHADER,GL_FS);
+  if(!vs||!fs){_gl=false;return false;}
+  _glProg=g.createProgram();g.attachShader(_glProg,vs);g.attachShader(_glProg,fs);g.linkProgram(_glProg);
+  if(!g.getProgramParameter(_glProg,g.LINK_STATUS)){console.error('link',g.getProgramInfoLog(_glProg));_gl=false;return false;}
+  g.useProgram(_glProg);
+  const buf=g.createBuffer();
+  g.bindBuffer(g.ARRAY_BUFFER,buf);
+  g.bufferData(g.ARRAY_BUFFER,new Float32Array([0,0, 1,0, 0,1, 0,1, 1,0, 1,1]),g.STATIC_DRAW);
+  const loc=g.getAttribLocation(_glProg,'a');
+  g.enableVertexAttribArray(loc);g.vertexAttribPointer(loc,2,g.FLOAT,false,0,0);
+  _glTex=g.createTexture();
+  g.bindTexture(g.TEXTURE_2D,_glTex);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);
+  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
+  g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,false);
+  return _gl;
+}
+/* Homographie carré unité -> quadrilatère source (Heckbert). Sert au redressement :
+   on échantillonne un quadrilatère plus étroit du côté qui fuit, ce qui redresse les
+   verticales convergentes sans jamais produire de coin vide. */
+function quadHomography(q){
+  const [x0,y0,x1,y1,x2,y2,x3,y3]=q;
+  const sx=x0-x1+x2-x3, sy=y0-y1+y2-y3;
+  if(Math.abs(sx)<1e-9&&Math.abs(sy)<1e-9){
+    return [x1-x0, x2-x1, x0, y1-y0, y2-y1, y0, 0, 0, 1];
+  }
+  const dx1=x1-x2, dx2=x3-x2, dy1=y1-y2, dy2=y3-y2;
+  const den=dx1*dy2-dy1*dx2;
+  const g=(sx*dy2-sy*dx2)/den, h=(dx1*sy-dy1*sx)/den;
+  return [x1-x0+g*x1, x3-x0+h*x3, x0, y1-y0+g*y1, y3-y0+h*y3, y0, g, h, 1];
+}
+function perspectiveQuad(persp){
+  const p=Math.max(-1,Math.min(1,(persp||0)/100));
+  const a=1-0.45*Math.abs(p);
+  /* compensation verticale : sans elle, une forte correction écrase visuellement l'image */
+  const vk=1-0.12*Math.abs(p), vy=y=>0.5+(y-0.5)*vk;
+  if(p>0)  return [0.5-a/2,vy(0), 0.5+a/2,vy(0), 1,vy(1), 0,vy(1)];
+  if(p<0)  return [0,vy(0), 1,vy(0), 0.5+a/2,vy(1), 0.5-a/2,vy(1)];
+  return [0,0, 1,0, 1,1, 0,1];
+}
+/* Facteur de zoom qui garantit qu'une rotation ne laisse aucun coin vide. */
+function rotZoom(deg,asp){
+  const t=Math.abs(deg||0)*Math.PI/180;
+  if(t<1e-6)return 1;
+  const c=Math.cos(t),s=Math.sin(t);
+  return Math.min(asp/(asp*c+s), 1/(asp*s+c));
+}
+/* Fenêtre de recadrage, dans l'espace de destination [0,1]², pour un ratio donné. */
+/* La fenêtre gardée dans la photo, en fractions (0 → 1). Deux choses la déterminent :
+   - le FORMAT, s'il y en a un : il impose la proportion du cadre ;
+   - le RESSERREMENT (`zoom`) : combien on rentre dedans. C'est lui qui rogne.
+   Sans format, le cadre garde la proportion d'origine — resserrer reste possible, et c'est
+   ce qui manquait : « Format d'origine » voulait dire « aucun recadrage », donc le curseur
+   n'avait rien à faire. */
+function cropWindow(edit,srcW,srcH){
+  const asp=srcW/srcH;
+  /* Le rectangle tracé à la main a le dernier mot : c'est LUI le rognage. Il porte déjà sa
+     proportion, il n'y a plus rien à recalculer à partir du format. */
+  const rect=cropNormalise(edit.crop);
+  if(rect)return {c0:[rect.x,rect.y],c1:[rect.x+rect.w,rect.y+rect.h],
+                  outAsp:(rect.w*srcW)/(rect.h*srcH),slackX:1-rect.w,slackY:1-rect.h};
+  const def=REAL_RATIOS.find(r=>r.id===(edit.ratio||'libre'));
+  const target=def?def.v:0;
+  const z=Math.max(1,Math.min(CROP_ZOOM_MAX,parseFloat(edit.zoom)||1));
+  let fw=1,fh=1;
+  if(target){ if(target<=asp)fw=target/asp; else fh=asp/target; }
+  fw/=z; fh/=z;
+  const slackX=1-fw, slackY=1-fh;
+  /* Compatibilité : une photo réglée avant n'a que `pan`, sur l'axe qui avait du jeu.
+     On le lit là où il agissait, pour que son cadrage ne bouge pas d'un pixel. */
+  const vieux=Math.max(-1,Math.min(1,parseFloat(edit.pan)||0));
+  const axeVieux=target?((target<=asp)?'x':'y'):null;
+  const px=(edit.panX!==undefined&&edit.panX!==null)?edit.panX:(axeVieux==='x'?vieux:0);
+  const py=(edit.panY!==undefined&&edit.panY!==null)?edit.panY:(axeVieux==='y'?vieux:0);
+  const cx=Math.max(-1,Math.min(1,parseFloat(px)||0));
+  const cy=Math.max(-1,Math.min(1,parseFloat(py)||0));
+  const x=(slackX/2)+(slackX/2)*(slackX>0?cx:0);
+  const y=(slackY/2)+(slackY/2)*(slackY>0?cy:0);
+  return {c0:[x,y],c1:[x+fw,y+fh],outAsp:target||asp,slackX:slackX,slackY:slackY};
+}
+function glRenderTo(img,edit,maxSide,texKey){
+  const g=glSetup();
+  if(!g)return null;
+  const srcW=img.width,srcH=img.height;
+  const cw=cropWindow(edit,srcW,srcH);
+  let outW,outH;
+  const cropPxW=srcW*(cw.c1[0]-cw.c0[0]), cropPxH=srcH*(cw.c1[1]-cw.c0[1]);
+  const s=Math.min(1,maxSide/Math.max(cropPxW,cropPxH));
+  outW=Math.max(2,Math.round(cropPxW*s));outH=Math.max(2,Math.round(cropPxH*s));
+  _glCv.width=outW;_glCv.height=outH;
+  g.viewport(0,0,outW,outH);
+  if(_glTexKey!==texKey){
+    g.bindTexture(g.TEXTURE_2D,_glTex);
+    g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,img);
+    _glTexKey=texKey;
+  }
+  const H=quadHomography(perspectiveQuad(edit.persp));
+  const u=n=>g.getUniformLocation(_glProg,n);
+  /* WebGL attend les matrices en colonne-major ; H est écrite en ligne-major. */
+  g.uniformMatrix3fv(u('H'),false,new Float32Array([H[0],H[3],H[6], H[1],H[4],H[7], H[2],H[5],H[8]]));
+  g.uniform2f(u('c0'),cw.c0[0],cw.c0[1]);
+  g.uniform2f(u('c1'),cw.c1[0],cw.c1[1]);
+  const rad=(edit.rot||0)*Math.PI/180, asp=srcW/srcH;
+  g.uniform1f(u('rotc'),Math.cos(rad));
+  g.uniform1f(u('rots'),Math.sin(rad));
+  g.uniform1f(u('rotk'),rotZoom(edit.rot,asp));
+  g.uniform1f(u('asp'),asp);
+  g.uniform1f(u('expo'),edit.expo||0);
+  g.uniform1f(u('contrast'),1+(edit.contrast||0));
+  g.uniform1f(u('temp'),edit.temp||0);
+  g.uniform1f(u('tint'),edit.tint||0);
+  g.uniform1f(u('sat'),1+(edit.sat||0));
+  g.uniform1i(u('tex'),0);
+  g.activeTexture(g.TEXTURE0);
+  g.bindTexture(g.TEXTURE_2D,_glTex);
+  g.drawArrays(g.TRIANGLES,0,6);
+  return _glCv;
+}
+
+/* ---- Réglage automatique : gris-moyen + étalement d'histogramme sur un échantillon ---- */
+function sampleStats(img){
+  const cv=document.createElement('canvas');cv.width=64;cv.height=64;
+  const ctx=cv.getContext('2d');ctx.drawImage(img,0,0,64,64);
+  const d=ctx.getImageData(0,0,64,64).data;
+  let r=0,g=0,b=0;const lum=[];
+  for(let i=0;i<d.length;i+=4){
+    r+=d[i];g+=d[i+1];b+=d[i+2];
+    lum.push(0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2]);
+  }
+  const n=d.length/4;
+  lum.sort((a,b2)=>a-b2);
+  const q=f=>lum[Math.max(0,Math.min(lum.length-1,Math.round(f*(lum.length-1))))]/255;
+  return {r:r/n/255,g:g/n/255,b:b/n/255,mean:lum.reduce((a,x)=>a+x,0)/n/255,p05:q(0.05),p95:q(0.95)};
+}
+const AUTO_TARGET=0.46;
+function autoEdit(img,edit){
+  const st=sampleStats(img);
+  const clamp=(v,m)=>Math.max(-m,Math.min(m,v));
+  const temp=clamp((st.b-st.r)/Math.max(0.02,st.b+st.r),0.28);
+  const rc=st.r*(1+temp), bc=st.b*(1-temp);
+  const tint=clamp(((rc+bc)/2)/Math.max(0.02,st.g)-1,0.16);
+  const spread=Math.max(0.05,st.p95-st.p05);
+  const contrast=Math.max(0,Math.min(0.35,(0.78/spread)-1));
+  /* L'exposition se calcule sur la luminance APRÈS balance des blancs et en tenant compte
+     du contraste : sur une photo à dominante chaude, neutraliser la dominante fait chuter
+     la luminance (le rouge est réduit), et le contraste assombrit encore une image sous
+     0,5. Calculée sur la luminance d'origine, la correction laissait l'image trop sombre. */
+  const lumWb=0.2126*rc+0.7152*st.g*(1+tint)+0.0722*bc;
+  const k=1+contrast;
+  const needed=(AUTO_TARGET-0.5)/k+0.5;
+  const expo=clamp(Math.log2(Math.max(0.05,needed)/Math.max(0.03,lumWb)),1.2);
+  return Object.assign({},edit,{temp:+temp.toFixed(3),tint:+tint.toFixed(3),expo:+expo.toFixed(3),contrast:+contrast.toFixed(3),sat:0.06});
+}
+
+/* ============ VUE RÉALISATIONS ============ */
+let _rzOpenId=null;
+function renderRealisations(){
+  const host=$('rz-body');if(!host)return;
+  ensureRealisations();
+  if(_rzOpenId&&!findRealisation(_rzOpenId))_rzOpenId=null;
+  const vue=document.getElementById('realisations-view');
+  if(vue)vue.classList.toggle('rz-ouvert',!!_rzOpenId);
+  if(!_rzOpenId&&_rzSelMode){_rzSelMode=false;_rzSel.clear();}
+  if(!_rzOpenId)_rzOrderMode=false;
+  /* Un filtre qui ne montre plus rien (la dernière réalisation concernée vient d'être
+     publiée, par exemple) se rouvre tout seul : sinon l'écran semble vide sans raison. */
+  if(_rzFiltre&&(realisations||[]).length&&!realisations.some(rzFiltreTest))_rzFiltre='';
+  host.innerHTML='';
+  /* Le bandeau de reprise est posé AVANT la liste comme avant la fiche : une demande en
+     attente peut porter sur n'importe quelle réalisation, pas seulement celle qui est
+     ouverte. */
+  const rep=buildIaReprisePanel();
+  if(rep)host.appendChild(rep);
+  if(_rzOpenId)renderRealisationDetail(host,findRealisation(_rzOpenId));
+  else renderRealisationList(host);
+  paintStorageBanner();
+}
+/* Filtre de la grille des réalisations. Il n'apparaît qu'à partir du moment où la grille
+   devient difficile à parcourir : en dessous, c'est un contrôle de plus pour rien. */
+const RZ_FILTRE_SEUIL=6;
+let _rzFiltre='';   /* '' | 'republier' | 'enligne' | 'brouillon' | 'cat:<catégorie>' */
+function rzFiltreTest(r){
+  if(!_rzFiltre)return true;
+  if(_rzFiltre==='republier')return realisationEnAttente(r);
+  if(_rzFiltre==='enligne')return !!r.published&&!realisationEnAttente(r);
+  if(_rzFiltre==='brouillon')return !r.published;
+  if(_rzFiltre.startsWith('cat:'))return (r.categorie||'')===_rzFiltre.slice(4);
+  return true;
+}
+function buildRzFiltres(host){
+  if((realisations||[]).length<RZ_FILTRE_SEUIL)return;
+  const compte=f=>{const av=_rzFiltre;_rzFiltre=f;const n=realisations.filter(rzFiltreTest).length;_rzFiltre=av;return n;};
+  const cats=[...new Set(realisations.map(r=>(r.categorie||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
+  const choix=[{k:'',t:'Toutes'},{k:'republier',t:'À republier'},{k:'enligne',t:'En ligne'},{k:'brouillon',t:'Pas publiées'}]
+    .concat(cats.map(c=>({k:'cat:'+c,t:c})));
+  const bar=document.createElement('div');bar.className='rz-filtres';
+  choix.forEach(c=>{
+    const n=compte(c.k);
+    if(!n&&c.k)return;                 /* un filtre qui ne rapporte rien n'a pas à être proposé */
+    const b=document.createElement('button');b.type='button';b.className='rz-filtre'+(_rzFiltre===c.k?' actif':'');
+    b.setAttribute('aria-pressed',_rzFiltre===c.k?'true':'false');
+    b.textContent=c.t+' ('+n+')';
+    b.addEventListener('click',()=>{_rzFiltre=c.k;renderRealisations();});
+    bar.appendChild(b);
+  });
+  host.appendChild(bar);
+}
+function renderRealisationList(host){
+  buildRzFiltres(host);
+  const grid=document.createElement('div');grid.className='rz-grid';
+  const visibles=realisations.filter(rzFiltreTest).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  visibles.forEach(r=>{
+    const card=document.createElement('button');card.className='rz-card';
+    const cover=(r.cover&&(r.photos||[]).some(p=>p.id===r.cover))?r.cover:((r.photos||[])[0]||{}).id;
+    card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
+      <div class="rz-cbody">
+        <div class="rz-ctitle">${esc(r.title||'Réalisation sans titre')}</div>
+        <div class="rz-cmeta">${(r.photos||[]).length} photo(s)${r.date?' · '+esc(r.date):''}${r.categorie?' · '+esc(r.categorie):''}${
+          r.published?(realisationEnAttente(r)?' · <span class="rz-warn">● à republier</span>':' · <span class="rz-live">● en ligne</span>'):''}</div>
+      </div>`;
+    if(cover){
+      const im=card.querySelector('img');
+      const ph=(r.photos||[]).find(p=>p.id===cover);
+      if(im&&ph)renderThumbInto(ph,im,null);
+    }
+    card.addEventListener('click',()=>{_rzOpenId=r.id;renderRealisations();window.scrollTo(0,0);});
+    grid.appendChild(card);
+  });
+  if(!_rzFiltre){
+    const add=document.createElement('button');add.className='rz-new';
+    add.innerHTML='＋<br>Nouvelle réalisation';
+    add.addEventListener('click',newRealisation);
+    grid.appendChild(add);
+  }
+  host.appendChild(grid);
+  if(!realisations.length){
+    const e=document.createElement('div');e.className='rz-empty';
+    e.textContent='Aucune réalisation pour l’instant. Créez-en une par chantier terminé, puis ajoutez-y les photos à publier.';
+    host.appendChild(e);
+  } else if(!visibles.length){
+    const e=document.createElement('div');e.className='rz-empty';
+    e.textContent='Aucune réalisation dans ce filtre.';
+    host.appendChild(e);
+  }
+}
+function renderRealisationDetail(host,r){
+  if(!r)return;
+  /* Le plan est calculé UNE fois, avant de dessiner : la barre (le compte sur le bouton) et
+     le bandeau doivent dire la même chose, sinon l'un annoncerait un état déjà périmé. */
+  const plan=realisationPublishPlan(r);
+  _pubEnAttente=r.published?plan.change:0;
+  /* Une fiche renommée sans qu'aucune photo ne bouge doit quand même rendre le bouton
+     visible (primaire) et inviter à republier — sinon rien ne distingue « à jour » de
+     « titre modifié, jamais republié ». */
+  const _pubBesoin=r.published&&!plan.rien;
+  /* En cours DÉJÀ DEPUIS UNE AUTRE VUE : la publication n'est pas liée à l'écran ouvert,
+     elle continue en tâche de fond — mais si on revenait ici sans le savoir, le bouton
+     rendrait « Republier » comme si de rien n'était, et un second clic enverrait une
+     deuxième publication par-dessus la première. `_publishingIds` (posé par
+     publishRealisation) survit à la navigation ; le bouton s'en sert pour rester
+     verrouillé tant que ce n'est pas fini, qu'on ait quitté l'écran entre-temps ou non. */
+  const enCours=_publishingIds.has(r.id);
+  const head=document.createElement('div');
+  const back=document.createElement('button');back.className='rz-back';back.textContent='← Toutes les réalisations';
+  back.addEventListener('click',()=>{_rzOpenId=null;renderRealisations();});
+  head.appendChild(back);
+  const bar=document.createElement('div');bar.className='rz-detail-head';
+  bar.innerHTML=`<h2 style="font-family:'Cormorant Garamond',serif;font-size:23px;font-weight:600;">${esc(r.title||'Réalisation sans titre')}</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ${enCours?'btn-onlight':(r.published?(_pubBesoin?'btn-primary':'btn-onlight'):'btn-primary')}" data-publish${enCours?' disabled':''}>${enCours?'Publication…':(r.published?(_pubEnAttente>0?('⬆ Republier ('+_pubEnAttente+')'):(_pubBesoin?'⬆ Mettre le site à jour':'✓ En ligne — republier')):'🌐 Publier sur le site')}</button>
+      ${r.published?'<button class="btn btn-onlight" data-unpublish>Retirer du site</button>':''}
+      <button class="btn btn-onlight" data-serie>✨ Retoucher plusieurs photos</button>
+      <button class="btn btn-onlight" data-order>⇅ Réordonner</button>
+      <button class="btn btn-onlight" data-select>☑ Sélectionner</button>
+      <button class="btn btn-onlight" data-export>⬇ Tout télécharger</button>
+      <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
+    </div>
+    ${enCours?'<p class="pub-note">Publication en cours — vous pouvez changer d’onglet ou fermer cet écran, elle continue toute seule.</p>':''}`;
+  if(!enCours)bar.querySelector('[data-publish]').addEventListener('click',()=>askPublishRealisation(r));
+  const unpub=bar.querySelector('[data-unpublish]');
+  if(unpub)unpub.addEventListener('click',()=>unpublishRealisation(r));
+  bar.querySelector('[data-serie]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
+  bar.querySelector('[data-order]').addEventListener('click',()=>rzToggleOrderMode(!_rzOrderMode));
+  bar.querySelector('[data-select]').addEventListener('click',()=>rzToggleSelectMode(true));
+  bar.querySelector('[data-export]').addEventListener('click',()=>rzAskDownload(r,r.photos||[]));
+  bar.querySelector('[data-del]').addEventListener('click',()=>delRealisation(r.id));
+  head.appendChild(bar);
+  const site=document.createElement('p');
+  site.className='rz-site';
+  /* Compté photo par photo, et par comparaison de ce qui EST en ligne avec ce qui partirait —
+     pas par une date. Renommer une version ne change pas un pixel du site : ça ne doit donc
+     pas réclamer une republication, sinon le rappel ne veut plus rien dire. */
+  const enAttente=[];
+  if(plan.changees)enAttente.push(plan.changees+' modifiée(s)');
+  if(plan.nouvelles)enAttente.push(plan.nouvelles+' nouvelle(s)');
+  if(plan.retirees)enAttente.push(plan.retirees+' retirée(s)');
+  if(plan.ordre)enAttente.push('ordre');
+  if(plan.fiche)enAttente.push('fiche du projet');
+  site.innerHTML=r.published
+    ? 'Visible sur le site : <a href="'+SITE_URL+'" target="_blank" rel="noopener">'+esc(SITE_URL)+'</a>.'
+      +' <b>'+plan.inchangees+'</b> photo(s) en ligne à jour'
+      +(enAttente.length?', <b class="rz-warn">en attente : '+esc(enAttente.join(', '))+'</b> — « Republier » montre le détail avant d’envoyer quoi que ce soit.':'.')
+    : 'Pas encore sur le site. Rien ne part en ligne tant que vous ne cliquez pas sur « Publier ».';
+  head.appendChild(site);
+  /* Le retour en arrière appartient à l'état du site, pas à la barre d'actions : il est
+     rare, il ne se comprend qu'à côté de « ce qui est en ligne », et la barre tenait déjà
+     mal sur un téléphone. Il nomme la date à laquelle il ramène — sinon « précédente » ne
+     veut rien dire. */
+  if(r.published&&r.pubPrev&&r.pubPrev.fiche){
+    const retour=document.createElement('button');
+    retour.className='mini';retour.type='button';retour.dataset.rollback='1';
+    retour.style.marginTop='6px';
+    retour.textContent='↩ Revenir à la publication'+(r.pubPrev.label?' du '+r.pubPrev.label:' précédente');
+    retour.addEventListener('click',()=>askConfirm(
+      'Remettre en ligne la publication du '+(r.pubPrev.label||'pas précédent')+' ?\n\n'
+      +'Le site retrouvera exactement les photos et les textes de ce moment-là. Les images sont'
+      +' toujours en place : rien n’est recalculé, rien n’est refacturé. Vous pourrez revenir à'
+      +' la publication actuelle du même geste.',()=>rollbackRealisation(r)));
+    head.appendChild(retour);
+  }
+  if(_pubLastError){
+    const err=document.createElement('div');err.className='ia-erreur';
+    const t=document.createElement('p');t.textContent=_pubLastError;err.appendChild(t);
+    const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+    f.addEventListener('click',()=>{_pubLastError=null;renderRealisations();});
+    err.appendChild(f);
+    head.appendChild(err);
+  }
+
+  const imp=buildImportPanel();
+  if(imp)head.appendChild(imp);
+  const serie=buildIaSeriePanel();
+  if(serie)head.appendChild(serie);
+
+  const meta=document.createElement('div');meta.className='rz-meta';
+  meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation</span><input type="text" data-f="title" value="${esc(r.title)}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Client (optionnel)</span><select data-f="clientId"></select></label>
+    <label class="fld" style="flex:0 0 120px"><span class="lbl">Année</span><input type="text" data-f="date" placeholder="ex. 2026" value="${esc(r.date)}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Lieu</span><input type="text" data-f="lieu" placeholder="ex. Tel Aviv" value="${esc(r.lieu||'')}"></label>
+    <label class="fld" style="flex:0 0 120px"><span class="lbl">Surface</span><input type="text" data-f="surface" placeholder="ex. 85 m²" value="${esc(r.surface||'')}"></label>
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Type de mission</span>
+      <input type="text" data-f="mission" list="rz-missions" placeholder="ex. Rénovation complète" value="${esc(r.mission||'')}">
+      <datalist id="rz-missions">${RZ_MISSIONS.map(m=>'<option value="'+esc(m)+'">').join('')}</datalist></label>
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Catégorie — la section du site</span>
+      <select data-f="categorie"></select></label>
+    <label class="fld rz-perso" style="flex:1;min-width:230px"><span class="lbl">Où sur le site</span>
+      <span class="rz-perso-in"><input type="checkbox" data-perso${r.personnelle?' checked':''}>
+        <span>Réalisation <b>personnelle</b> — elle quitte la liste principale et le bandeau d’accueil, et rejoint sa propre section.</span></span></label>`;
+  /* Un menu, pas un champ libre : deux orthographes du même mot fabriquaient deux sections
+     sur le site. La dernière ligne ouvre les réglages pour ajouter ou renommer une
+     catégorie — la liste se gère depuis le CRM, sans toucher au code. */
+  const selCat=meta.querySelector('[data-f="categorie"]');
+  selCat.innerHTML='<option value="">— aucune (le projet n’est rangé nulle part) —</option>'
+    +siteCategories().map(c=>`<option value="${esc(c)}"${(r.categorie||'')===c?' selected':''}>${esc(c)}</option>`).join('')
+    +'<option value="__gerer">✎ Gérer les catégories…</option>';
+  selCat.addEventListener('change',()=>{
+    if(selCat.value==='__gerer'){selCat.value=r.categorie||'';openSitePanel();return;}
+    r.categorie=selCat.value;r.updatedAt=Date.now();saveRealisationsDebounced();
+    scheduleFicheSync(r);
+  });
+  /* Changer de section change ce que le site montre : la réalisation quitte la liste
+     principale pour une autre. C'est donc une modification de la fiche publiée — elle part
+     donc, comme le reste du texte, sans repasser par l'écran de republication des photos. */
+  const perso=meta.querySelector('[data-perso]');
+  perso.addEventListener('change',()=>{
+    r.personnelle=perso.checked;r.updatedAt=Date.now();
+    saveRealisations();renderRealisations();
+    scheduleFicheSync(r);
+  });
+  const sel=meta.querySelector('[data-f="clientId"]');
+  sel.innerHTML='<option value="">— aucun —</option>'+clients.map(c=>`<option value="${c.id}"${r.clientId===c.id?' selected':''}>${esc(c.name||'Client')}</option>`).join('');
+  head.appendChild(meta);
+  const liens=buildRealisationLiens(r);
+  if(liens)head.appendChild(liens);
+
+  /* Le texte de présentation est publié tel quel sur le site : c'est ce qui transforme une
+     galerie de photos en projet raconté. Il reste facultatif. */
+  const pres=document.createElement('div');pres.className='rz-pres';
+  pres.innerHTML=`<label class="fld"><span class="lbl">Texte de présentation (publié sur le site)</span>
+      <textarea data-f="texte" rows="3" maxlength="900" placeholder="Ce que le chantier a demandé, ce qui a été fait, les partis pris. Deux ou trois phrases suffisent.">${esc(r.texte||'')}</textarea></label>
+    <div class="rz-pres-acts">
+      <button class="mini" data-redige>✨ Rédiger un texte</button>
+      <span class="rz-pres-n"></span>
+    </div>`;
+  const ta=pres.querySelector('[data-f="texte"]'), cpt=pres.querySelector('.rz-pres-n');
+  const majN=()=>{cpt.textContent=(ta.value.length||0)+' / 900 caractères'+(ta.value.trim()?'':' — sans texte, le site n’affiche que les photos');};
+  ta.addEventListener('input',majN);majN();
+  pres.querySelector('[data-redige]').addEventListener('click',e=>redigerTexteRealisation(r,e.target,ta,majN));
+  /* La catégorie a sa propre poignée (elle porte une option « Gérer… » qui n'est pas une
+     valeur) : l'écriture générique ci-dessous y inscrirait « __gerer » dans la fiche. */
+  [...meta.querySelectorAll('[data-f]:not([data-f="categorie"])'),...pres.querySelectorAll('[data-f]')].forEach(el=>{
+    /* `clientId` ne part jamais sur le site — c'est un lien interne du CRM, pas un champ
+       de la fiche publique — donc pas de synchro live pour lui. */
+    const ecrire=()=>{
+      r[el.dataset.f]=el.value;r.updatedAt=Date.now();saveRealisationsDebounced();
+      if(el.dataset.f!=='clientId')scheduleFicheSync(r);
+    };
+    el.addEventListener('input',ecrire);
+    /* Changer de client change les raccourcis affichés juste en dessous : on redessine. */
+    el.addEventListener('change',()=>{ecrire();if(el.dataset.f==='clientId'){saveRealisations();renderRealisations();}});
+  });
+  head.appendChild(pres);
+  host.appendChild(head);
+
+  const grid=document.createElement('div');grid.className='rz-photos'+(_rzOrderMode?' rz-ordering':'');
+  (r.photos||[]).forEach((p,idx)=>{
+    const tile=document.createElement('div');
+    const picked=_rzSel.has(p.id);
+    tile.className='rz-ph'+(_rzSelMode?' rz-selectable':'')+(picked?' rz-picked':'')+(p.horsSite?' rz-hors-site':'');
+    tile.dataset.pid=p.id;
+    const edited=JSON.stringify(p.edit)!==JSON.stringify(blankEdit());
+    const etat=photoPubState(r,p);
+    const coins=_rzSelMode?`<span class="rz-check">${picked?'✓':''}</span>`
+      :_rzOrderMode?`<span class="rz-ph-num">${r.cover===p.id?'★ ':''}${idx+1}</span>
+        <div class="rz-ph-move">
+          <button type="button" data-up title="Reculer d’une place"${idx===0?' disabled':''}>◀</button>
+          <button type="button" data-down title="Avancer d’une place"${idx===(r.photos.length-1)?' disabled':''}>▶</button>
+        </div>`
+      :`<button class="rz-ph-del" title="Retirer cette photo">×</button>
+        <button class="rz-ph-menu" title="Actions sur cette photo">⋯</button>`;
+    tile.innerHTML=`<div class="rz-ph-vue">
+        <div class="rz-ph-load">…</div><img alt="" style="display:none">
+        <div class="rz-ph-tags">
+          ${etat!=='hors'?`<span class="rz-tag t-${etat}">${esc(PHOTO_PUB_LABEL[etat])}</span>`:''}
+          ${photoVersions(p).length?`<span class="rz-tag t-ia">${photoActiveId(p)==='orig'
+              ?('✨ '+photoVersions(p).length+' retouche'+(photoVersions(p).length>1?'s':'')+' de côté')
+              :('✨ '+esc(photoVersionLabel(p,photoActiveId(p))))}</span>`:''}
+          ${edited&&!photoVersions(p).length?'<span class="rz-tag t-reg">réglée</span>':''}
+        </div>
+        ${(r.cover===p.id&&!_rzOrderMode)?'<span class="rz-ph-badge" style="top:6px;bottom:auto;background:rgba(154,133,116,.92)">couverture</span>':''}
+        ${coins}
+      </div>
+      <button type="button" class="rz-ph-txt" title="Renommer ou légender">
+        <span class="rz-ph-name">${esc(p.name||'Sans titre')}</span>
+        <span class="rz-ph-cap${p.caption?'':' vide'}">${esc(p.caption||'＋ légende')}</span>
+      </button>`;
+    const im=tile.querySelector('img'),ld=tile.querySelector('.rz-ph-load');
+    renderThumbInto(p,im,ld);
+    const del=tile.querySelector('.rz-ph-del');
+    if(del)del.addEventListener('click',e=>{e.stopPropagation();delPhoto(r,p.id);});
+    const menu=tile.querySelector('.rz-ph-menu');
+    if(menu)menu.addEventListener('click',e=>{e.stopPropagation();openPhotoMenu(r,p);});
+    const up=tile.querySelector('[data-up]'),dn=tile.querySelector('[data-down]');
+    if(up)up.addEventListener('click',e=>{e.stopPropagation();rzMovePhoto(r,p.id,-1);});
+    if(dn)dn.addEventListener('click',e=>{e.stopPropagation();rzMovePhoto(r,p.id,1);});
+    tile.querySelector('.rz-ph-txt').addEventListener('click',e=>{
+      e.stopPropagation();
+      if(_rzSelMode){rzToggleSel(p.id);return;}
+      if(_rzOrderMode)return;
+      openPhotoTextDialog(r,p);
+    });
+    tile.querySelector('.rz-ph-vue').addEventListener('click',()=>{
+      if(_rzSelMode){rzToggleSel(p.id);return;}
+      if(_rzOrderMode)return;   /* on range : ouvrir l'éditeur ici serait un faux pas */
+      openPhotoEditor(r.id,p.id);
+    });
+    if(_rzOrderMode)makeTileDraggable(r,tile,p.id);
+    grid.appendChild(tile);
+  });
+  if(!(r.photos||[]).length){
+    const vide=document.createElement('p');vide.className='rz-empty';vide.style.gridColumn='1/-1';
+    vide.textContent='Aucune photo dans cette réalisation. Ajoutez les photos du chantier terminé : elles restent privées tant que vous ne publiez pas.';
+    grid.appendChild(vide);
+  }
+  if(!_rzSelMode&&!_rzOrderMode){
+    const add=document.createElement('button');add.className='rz-add';
+    add.innerHTML='＋<br>Ajouter des photos';
+    add.addEventListener('click',()=>rzPickPhotos(r));
+    grid.appendChild(add);
+  }
+  host.appendChild(grid);
+  if(_rzSelMode)host.appendChild(buildSelectionBar(r));
+  else if(_rzOrderMode)host.appendChild(buildOrderBar(r));
+  if(!_rzSelMode&&!_rzOrderMode)host.appendChild(buildVideosSection(r));
+}
+/* Section VIDÉOS, sous la galerie photo — jamais mêlée à elle : pas de rognage, pas de
+   retouche, pas de couverture possible pour une vidéo, donc pas la même grille. Publiées
+   après les photos sur la page du site, dans l'ordre d'ajout ici (pas de réordonnancement
+   en V1 — peu de vidéos par chantier en pratique ; à ajouter si le besoin se confirme). */
+function buildVideosSection(r){
+  const box=document.createElement('div');box.className='rz-videos';
+  const titre=document.createElement('h3');titre.className='rz-videos-titre';titre.textContent='Vidéos';
+  box.appendChild(titre);
+  const grid=document.createElement('div');grid.className='rz-videos-grid';
+  (r.videos||[]).forEach(v=>{
+    const tile=document.createElement('div');tile.className='rz-video-tile';
+    tile.innerHTML=`<video muted preload="metadata" playsinline></video>
+      <div class="rz-video-nom">${esc(v.name||'vidéo')}</div>
+      <button type="button" class="rz-video-del" title="Retirer cette vidéo">×</button>`;
+    videoStore.get(videoKey(v.id)).then(blob=>{
+      const vid=tile.querySelector('video');
+      if(blob&&vid)vid.src=URL.createObjectURL(blob);
+    });
+    tile.querySelector('.rz-video-del').addEventListener('click',()=>deleteVideo(r,v));
+    grid.appendChild(tile);
+  });
+  const add=document.createElement('button');add.className='rz-add';add.type='button';
+  add.innerHTML='＋<br>Ajouter des vidéos';
+  add.addEventListener('click',()=>rzPickVideos(r));
+  grid.appendChild(add);
+  box.appendChild(grid);
+  return box;
+}
+
+/* ============ ORDRE DES PHOTOS ============
+   L'ordre de `r.photos` est celui de la publication (p0, p1, …) donc celui du site : le
+   ranger ici, c'est ranger la page publique. Deux gestes pour un même résultat, parce
+   qu'aucun ne marche partout : glisser-déposer à la souris, ◀ ▶ au doigt. */
+function rzToggleOrderMode(on){
+  _rzOrderMode=!!on;
+  if(_rzOrderMode){_rzSelMode=false;_rzSel.clear();}
+  renderRealisations();
+}
+/* Réordonner change l'adresse publique de TOUTES les photos qui suivent (p2 devient p3) :
+   c'est la réalisation entière qui n'est plus à jour en ligne, pas seulement la déplacée. */
+function rzOrderChanged(r,p,detail){
+  const t=Date.now();
+  (r.photos||[]).forEach(x=>{x.touchedAt=t;});
+  if(p)photoLog(p,'ordre',detail||'');
+  r.updatedAt=t;saveRealisations();renderRealisations();
+}
+function rzMovePhoto(r,pid,delta){
+  const list=r.photos||[];
+  const i=list.findIndex(x=>x.id===pid);
+  if(i<0)return;
+  const j=Math.max(0,Math.min(list.length-1,i+delta));
+  if(i===j)return;
+  const [p]=list.splice(i,1);list.splice(j,0,p);
+  rzOrderChanged(r,p,'place '+(j+1)+' sur '+list.length);
+}
+function rzMovePhotoBefore(r,pid,cible,apres){
+  const list=r.photos||[];
+  if(pid===cible)return;
+  const i=list.findIndex(x=>x.id===pid);
+  if(i<0)return;
+  const [p]=list.splice(i,1);
+  let j=list.findIndex(x=>x.id===cible);
+  if(j<0){list.splice(i,0,p);return;}
+  if(apres)j++;
+  list.splice(j,0,p);
+  rzOrderChanged(r,p,'place '+(j+1)+' sur '+list.length);
+}
+let _rzDragId=null;
+function makeTileDraggable(r,tile,pid){
+  tile.draggable=true;
+  tile.addEventListener('dragstart',e=>{
+    _rzDragId=pid;tile.classList.add('rz-dragging');
+    try{e.dataTransfer.setData('text/plain',pid);e.dataTransfer.effectAllowed='move';}catch(err){}
+  });
+  tile.addEventListener('dragend',()=>{
+    _rzDragId=null;tile.classList.remove('rz-dragging');
+    document.querySelectorAll('.rz-drop-a,.rz-drop-b').forEach(el=>el.classList.remove('rz-drop-a','rz-drop-b'));
+  });
+  tile.addEventListener('dragover',e=>{
+    if(!_rzDragId||_rzDragId===pid)return;
+    e.preventDefault();
+    const box=tile.getBoundingClientRect();
+    const apres=(e.clientX-box.left)>box.width/2;
+    tile.classList.toggle('rz-drop-b',apres);
+    tile.classList.toggle('rz-drop-a',!apres);
+  });
+  tile.addEventListener('dragleave',()=>tile.classList.remove('rz-drop-a','rz-drop-b'));
+  tile.addEventListener('drop',e=>{
+    e.preventDefault();
+    const src=_rzDragId||(e.dataTransfer&&e.dataTransfer.getData('text/plain'));
+    const box=tile.getBoundingClientRect();
+    const apres=(e.clientX-box.left)>box.width/2;
+    tile.classList.remove('rz-drop-a','rz-drop-b');
+    _rzDragId=null;
+    if(src&&src!==pid)rzMovePhotoBefore(r,src,pid,apres);
+  });
+}
+function buildOrderBar(r){
+  const bar=document.createElement('div');bar.className='rz-selbar';
+  bar.innerHTML=`<span class="rz-selcount">Ranger les photos</span>
+    <span class="rz-selhint">Glissez une photo à sa place, ou utilisez ◀ ▶. C’est cet ordre qui sera publié sur le site. ★ marque la photo de couverture.</span>
+    <button class="mini" data-date>Trier par date d’ajout</button>
+    <button class="btn btn-primary" data-done>✓ Terminer</button>`;
+  bar.querySelector('[data-date]').addEventListener('click',()=>{
+    askConfirm('Remettre les photos dans leur ordre d’ajout ? L’ordre que vous avez composé sera perdu.',()=>{
+      (r.photos||[]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+      rzOrderChanged(r,null,'');
+      toast('Photos triées par date d’ajout');
+    });
+  });
+  bar.querySelector('[data-done]').addEventListener('click',()=>rzToggleOrderMode(false));
+  return bar;
+}
+function rzSetCover(r,pid){
+  if(r.cover===pid)return;
+  r.cover=pid;
+  const p=(r.photos||[]).find(x=>x.id===pid);
+  /* La couverture part dans le manifeste (`cover:true`) : c'est la vignette du site. */
+  if(p)photoTouch(p,'couverture','');
+  r.updatedAt=Date.now();saveRealisations();renderRealisations();
+  toast('Photo de couverture définie');
+}
+
+/* ============ TITRE ET LÉGENDE D'UNE PHOTO ============ */
+function openPhotoTextDialog(r,p){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Titre et légende</h3>
+    <p class="msub">Le titre sert à vous repérer dans le CRM et n’apparaît pas sur le site. La légende, elle, s’affiche sous la photo pour les visiteurs — laissez-la vide si la photo se suffit.</p>
+    <label class="fld"><span class="lbl">Titre de la photo</span>
+      <input type="text" id="ph-name" maxlength="80" value="${esc(p.name||'')}" placeholder="ex. Salon vu de l’entrée"></label>
+    <label class="fld"><span class="lbl">Légende publiée sur le site</span>
+      <textarea id="ph-cap" rows="3" maxlength="200" placeholder="ex. Cuisine ouverte, plan de travail en chêne massif">${esc(p.caption||'')}</textarea></label>
+    <p class="msub" id="ph-cap-n" style="margin-top:-6px"></p>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
+      <button class="mini" id="ph-txt-clear">Effacer la légende</button>
+      <span style="flex:1"></span>
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="ph-txt-ok">Enregistrer</button>
+    </div>`);
+  const nom=$('ph-name'),cap=$('ph-cap'),cpt=$('ph-cap-n');
+  const compte=()=>{cpt.textContent=(cap.value.length||0)+' / 200 caractères'+(cap.value.trim()?'':' — sans légende, rien ne s’affiche sous la photo');};
+  cap.addEventListener('input',compte);compte();
+  $('ph-txt-clear').addEventListener('click',()=>{cap.value='';compte();cap.focus();});
+  $('ph-txt-ok').addEventListener('click',()=>{
+    const n=nom.value.trim(),c=cap.value.trim();
+    const change=(n!==(p.name||''))||(c!==(p.caption||''));
+    p.name=n;p.caption=c;
+    /* La légende part sur le site : la changer, c'est changer ce qui est publié. */
+    if(change)photoTouch(p,'texte',n?(n+(c?' · '+c:'')):c);
+    r.updatedAt=Date.now();saveRealisations();
+    closeModal();
+    const t=document.querySelector('#ed-modal .ed-title');
+    if(t&&_ed&&_ed.p===p)t.textContent=p.name||'photo';
+    renderRealisations();
+    if(change)toast('Titre et légende enregistrés');
+  });
+  setTimeout(()=>{if(nom)nom.focus();},60);
+}
+
+/* ============ ACTIONS SUR UNE PHOTO ============
+   Une vignette de 160 px ne peut pas porter six boutons : tout ce qui n'est pas « ouvrir »
+   ou « supprimer » passe par ce menu, comme dans n'importe quelle galerie. */
+function openPhotoMenu(r,p){
+  const estCouv=r.cover===p.id;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3 style="font-size:19px">${esc(p.name||'Photo')}</h3>
+    <p class="msub">${p.caption?esc(p.caption):'Aucune légende. Elle s’affiche sous la photo sur le site.'}</p>
+    <div class="ph-menu">
+      <button class="mini" data-edit>🖼 Ouvrir l’éditeur</button>
+      <button class="mini" data-text>✎ Titre et légende</button>
+      ${photoVersions(p).length?`<button class="mini" data-ver>🖼 Version publiée : ${esc(photoVersionLabel(p,photoActiveId(p)))}</button>`:''}
+      <button class="mini" data-site>${p.horsSite?'🌐 Remettre sur le site':'🚫 Ne pas publier cette photo'}</button>
+      <button class="mini" data-cover ${estCouv?'disabled':''}>★ ${estCouv?'Déjà en couverture':'Mettre en couverture'}</button>
+      <button class="mini" data-repl>⇄ Remplacer la photo</button>
+      <button class="mini" data-dl>⬇ Télécharger</button>
+    </div>`);
+  const go=(sel,fn)=>{const b=document.querySelector('#modal [data-'+sel+']');if(b)b.addEventListener('click',()=>{closeModal();fn();});};
+  go('edit',()=>openPhotoEditor(r.id,p.id));
+  go('text',()=>openPhotoTextDialog(r,p));
+  go('ver',()=>openPhotoVersionDialog(r,p));
+  go('site',()=>photoToggleSite(r,p));
+  if(!estCouv)go('cover',()=>rzSetCover(r,p.id));
+  go('repl',()=>rzReplacePhoto(r,p));
+  go('dl',()=>rzAskDownload(r,[p]));
+}
+/* La marche à suivre pour afficher le solde. C'est la SEULE chose de tout le CRM qui ne peut
+   pas se faire depuis ici : créer une clé sur un compte fal.ai demande d'être connecté à ce
+   compte. Alors on donne le chemin exact, une étape à la fois, avec les adresses — plutôt
+   qu'un « demandez à votre administrateur ». */
+function iaExpliquerSolde(detail){
+  const ref=(String(SB_URL||'').replace(/^https?:\/\//,'').split('.')[0])||'';
+  const secrets=ref?('https://supabase.com/dashboard/project/'+ref+'/settings/functions'):'https://supabase.com/dashboard';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3 style="font-size:19px">Afficher le solde fal.ai ici</h3>
+    <p class="msub">Chez fal.ai, faire tourner un modèle et lire la facturation ne demandent pas le même droit. La clé en place fait tourner les modèles — c'est elle qui compte pour retoucher. Lire le solde exige une clé <b>de portée ADMIN</b>, en plus, qui ne remplace pas la première.</p>
+    <ol class="ias-steps">
+      <li>Ouvrez <a href="https://fal.ai/dashboard/keys" target="_blank" rel="noopener">fal.ai → Keys</a> et créez une clé en choisissant la portée <b>ADMIN</b>. Copiez-la.</li>
+      <li>Ouvrez <a href="${esc(secrets)}" target="_blank" rel="noopener">Supabase → Edge Functions → Secrets</a>, ajoutez un secret nommé exactement <code>FAL_ADMIN_KEY</code> et collez la clé dedans.</li>
+      <li>Revenez ici et touchez <b>↻</b> à côté du solde. Rien à redéployer.</li>
+    </ol>
+    <p class="ias-note">La clé qui fait tourner les modèles (<code>FAL_KEY</code>) n'est pas touchée : la retouche continue de fonctionner pendant et après.</p>
+    <p class="ias-note">En attendant, le solde réel se lit sur <a href="https://fal.ai/dashboard/billing" target="_blank" rel="noopener">fal.ai → Billing</a>, et le pied de ce panneau compte exactement vos retouches du mois.</p>
+    ${detail?`<p class="ias-note">Réponse du serveur : ${esc(detail)}</p>`:''}
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+}
+
+/* Choisir la version publiée SANS ouvrir l'éditeur. C'est le geste le plus courant une fois
+   les retouches faites : on compare, on retient, on publie. Aller le chercher au fond d'un
+   onglet de l'éditeur en faisait une manœuvre. */
+function openPhotoVersionDialog(r,p){
+  const actif=photoActiveId(p);
+  const liste=[{id:'orig'}].concat(photoVersions(p));
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3 style="font-size:19px">Version publiée</h3>
+    <p class="msub">Celle qui est choisie s’affiche dans la galerie, part à l’export et sur le site. Les autres restent là : rien n’est écrasé.</p>
+    <div class="ph-menu">${liste.map(v=>`<button class="mini${v.id===actif?' on':''}" data-v="${esc(v.id)}">${v.id===actif?'✓ ':''}${esc(photoVersionLabel(p,v.id))}${v.id==='orig'?'':' · '+esc(iaModelLabel(v.model))}</button>`).join('')}</div>`);
+  document.querySelectorAll('#modal [data-v]').forEach(b=>b.addEventListener('click',()=>{
+    const vid=b.dataset.v;
+    closeModal();
+    if(!photoSetActive(p,vid))return;
+    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+    toast('Version publiée : '+photoVersionLabel(p,vid));
+  }));
+}
+/* Écarter une photo du site : elle reste dans le CRM, elle ne part plus sur la page
+   publique. Le geste inverse est au même endroit. */
+function photoToggleSite(r,p){
+  const enLigne=!p.horsSite&&r.published&&photoPubState(r,p)==='enligne';
+  const acte=()=>{
+    p.horsSite=!p.horsSite;
+    photoTouch(p,p.horsSite?'horssite':'sursite','');
+    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+    toast(p.horsSite?'Photo écartée du site':'Photo remise sur le site');
+  };
+  if(p.horsSite)return acte();
+  askConfirm('Ne plus publier cette photo ? Elle reste dans le CRM et dans vos sauvegardes'
+    +(enLigne?', mais elle sera retirée du site à la prochaine publication.':', elle ne partira simplement pas sur le site.'),acte);
+}
+
+/* La vignette montre la photo AVEC ses retouches : la galerie doit refléter ce qui sera
+   publié, pas l'original. Rendu à la volée depuis la vignette stockée (rapide).
+   ATTENTION : ne jamais réutiliser le `src` d'un objet Image déjà chargé pour alimenter
+   une AUTRE balise <img>. `blobToImage` libère l'URL d'objet dès le chargement (l'Image
+   garde ses pixels décodés, ce qui suffit pour WebGL) — mais l'URL, elle, est morte, et
+   une balise qui la reçoit affiche une image cassée. On crée donc une URL fraîche par
+   balise, libérée une fois que CETTE balise a chargé. */
+function showBlobIn(blob,im,ld){
+  const u=URL.createObjectURL(blob);
+  im.onload=()=>{URL.revokeObjectURL(u);im.style.display='block';if(ld)ld.remove();};
+  im.onerror=()=>{URL.revokeObjectURL(u);if(ld)ld.textContent='illisible';};
+  im.src=u;
+}
+async function renderThumbInto(p,im,ld){
+  try{
+    /* Quand une version IA est active, la vignette doit la montrer : la galerie reflète
+       ce qui sera publié. Pas de vignette IA stockée, on rend depuis la pleine taille. */
+    const blob=await photoStore.get(photoVersionKey(p,photoActiveId(p),true));
+    if(!blob){if(ld)ld.textContent='indisponible';return;}
+    const edit=p.edit||blankEdit();
+    if(JSON.stringify(edit)===JSON.stringify(blankEdit())){showBlobIn(blob,im,ld);return;}
+    const img=await blobToImage(blob);
+    /* Clé de texture = l'IMAGE rendue, pas la photo : sinon, après un changement de version,
+       la vignette réutilisait la texture de la version précédente et la grille montrait
+       l'ancienne image — c'est-à-dire l'inverse de ce qu'elle est censée refléter. */
+    const cv=glRenderTo(img,edit,REAL_THUMB,'t_'+photoVersionKey(p,photoActiveId(p),true));
+    if(!cv){showBlobIn(blob,im,ld);return;}
+    im.src=cv.toDataURL('image/jpeg',0.8);
+    im.style.display='block';if(ld)ld.remove();
+  }catch(e){if(ld)ld.textContent='erreur';}
+}
+/* Vignette d'UNE version précise, quelle qu'elle soit — pas forcément l'active. Sert au
+   choix « quelle version part sur le site » : chaque candidate garde SES propres réglages
+   (`photoEditOf`), pas ceux de la version actuellement affichée. */
+async function renderVersionThumbInto(p,vid,im){
+  try{
+    const blob=await photoStore.get(photoVersionKey(p,vid,true));
+    if(!blob)return;
+    const edit=photoEditOf(p,vid);
+    if(JSON.stringify(edit)===JSON.stringify(blankEdit())){showBlobIn(blob,im);return;}
+    const img=await blobToImage(blob);
+    const cv=glRenderTo(img,edit,160,'t_'+photoVersionKey(p,vid,true));
+    if(!cv){showBlobIn(blob,im);return;}
+    im.src=cv.toDataURL('image/jpeg',0.8);im.style.display='block';
+  }catch(e){}
+}
+/* Depuis une réalisation, retrouver le client et le devis correspondant. Sans ça, le
+   chantier photographié et son dossier commercial vivaient dans deux mondes séparés. */
+function buildRealisationLiens(r){
+  if(!r.clientId)return null;
+  const c=clients.find(x=>x.id===r.clientId);
+  if(!c)return null;
+  const box=document.createElement('div');box.className='rz-liens';
+  const b=document.createElement('button');b.className='mini';b.textContent='👤 Fiche de '+(c.name||'ce client');
+  b.addEventListener('click',()=>gotoClient(c.id));
+  box.appendChild(b);
+  (devisList||[]).filter(d=>d.clientId===c.id).slice(0,4).forEach(d=>{
+    const bd=document.createElement('button');bd.className='mini';
+    bd.textContent='🧾 '+(d.title||'Devis')+(d.num?' n°'+d.num:'');
+    bd.addEventListener('click',()=>editDevis(d.id));
+    box.appendChild(bd);
+  });
+  return box;
+}
+
+/* Missions courantes, proposées sans être imposées : le champ reste libre. */
+const RZ_MISSIONS=['Rénovation complète','Aménagement intérieur','Décoration','Agencement sur mesure','Suivi de chantier','Conseil et plans'];
+/* Les catégories vivent dans les réglages du site (`siteCategories()`) : une liste
+   ordonnée, modifiable depuis le CRM, et c'est elle qui remplit le menu de la fiche comme
+   les sections du site public. L'ancien couple RZ_CATS / rzCatsConnues — une liste figée
+   plus un champ de saisie libre — a été retiré : deux orthographes du même mot y
+   fabriquaient deux sections sur le site. */
+
+/* Rédaction assistée du texte de présentation. Passe par la MÊME fonction serveur que le
+   bouton « Embellir » des devis (la clé Anthropic reste côté serveur) mais avec `kind`
+   = 'realisation' : le texte d'un portfolio ne s'écrit pas comme une ligne de devis.
+   Une fonction serveur plus ancienne, qui ne connaît pas `kind`, rendra simplement un texte
+   de facture — pas une panne, mais un texte à retoucher. */
+async function redigerTexteRealisation(r,btn,ta,apres){
+  if(!(r.title||'').trim()){toast('Donnez d’abord un nom à la réalisation');return;}
+  if(txtPlafondAtteint()){
+    _pubLastError='Plafond de rédaction du mois atteint ('+txtMoisResume().texte+'). Rien n’a été envoyé, rien n’a été facturé. Relevez-le dans ⚙ Réglages.';
+    renderRealisations();return;
+  }
+  const vieux=btn.textContent;btn.disabled=true;btn.textContent='Rédaction…';
+  try{
+    const token=await sessionToken();
+    if(!token)throw new Error('session expirée, reconnectez-vous');
+    const legendes=(r.photos||[]).map(p=>(p.caption||'').trim()).filter(Boolean).slice(0,6);
+    const res=await fetch(SB_URL+'/functions/v1/embellish',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+      body:JSON.stringify({kind:'realisation',title:r.title,desc:r.texte||'',proj:r.lieu||'',
+        surf:(r.surface||'').replace(/[^0-9,.]/g,''),mission:r.mission||'',annee:r.date||'',
+        legendes,length:'long'})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok||data.error){const err=new Error(data.error||('HTTP '+res.status));err.data=data;throw err;}
+    txtCompter(data.usage);
+    const txt=(data.text||'').trim();
+    if(!txt)throw new Error('réponse vide');
+    r.texte=txt;ta.value=txt;r.updatedAt=Date.now();saveRealisations();
+    if(apres)apres();
+    toast('Texte rédigé — relisez-le avant de publier');
+  }catch(e){
+    console.error('texte réalisation',e);
+    _pubLastError='Rédaction impossible : '+txtErreurLisible(e&&e.data,e)+' Rien n’a été modifié — vous pouvez écrire le texte à la main.';
+    renderRealisations();
+  }finally{btn.disabled=false;btn.textContent=vieux;}
+}
+/* ============ BOUTIQUE — ce que le magasin vend ============
+   Un PRODUIT n'est pas une réalisation : une réalisation est un chantier terminé qu'on
+   montre, un produit est une chose qu'on achète. Il a une matière, un prix (facultatif),
+   une disponibilité, et un canal de vente — aujourd'hui WhatsApp, rien d'autre.
+
+   Ce qui est RÉUTILISÉ des réalisations, volontairement : le format des photos, l'import,
+   le stockage, l'éditeur et le rendu des vignettes. Dupliquer ce moteur pour la boutique
+   aurait fait diverger les deux au premier correctif.
+
+   Ce qui n'est PAS fait, et n'a pas été demandé : panier, compte client, frais de port,
+   stock, paiement en ligne. L'encaissement est un chantier à part (26af62e0). */
+let produits=[];
+let _btOpenId=null, _btLang='fr', _btFiltre='';
+const PROD_DISPO=[{id:'oui',label:'Disponible'},{id:'commande',label:'Sur commande'},{id:'rupture',label:'Épuisé'}];
+const PROD_CATS_DEFAUT=['Revêtement mural','Papier peint','Panneau décoratif','Accessoire'];
+/* Traduisibles : ce qui se lit. Pas le prix (un nombre), pas la disponibilité (une liste). */
+const PROD_TRADUISIBLES=['nom','description','matiere'];
+
+function normalizeProduit(x){
+  const o=Object.assign({id:uid(),nom:'',description:'',matiere:'',prix:'',dispo:'oui',
+    categorie:'',photos:[],cover:'',published:false,i18n:{},
+    createdAt:Date.now(),updatedAt:Date.now()},x||{});
+  if(!o.i18n||typeof o.i18n!=='object')o.i18n={};
+  o.photos=(o.photos||[]).map(p=>Object.assign({id:uid(),name:'',caption:'',w:0,h:0,useIa:false,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)}));
+  return o;
+}
+function ensureProduits(){if(!Array.isArray(produits))produits=[];}
+function saveProduits(){produits.forEach(p=>{p.updatedAt=p.updatedAt||Date.now();});store.set(K_PROD,produits);}
+let _btSaveT=null;
+function saveProduitsDebounced(){clearTimeout(_btSaveT);_btSaveT=setTimeout(saveProduits,500);}
+function findProduit(id){return produits.find(p=>p.id===id)||null;}
+function isEditingBoutique(){
+  const a=document.activeElement;
+  return !!(a&&a.closest&&a.closest('#boutique-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));
+}
+/* Les catégories de PRODUITS se gèrent comme celles des réalisations : une liste ordonnée
+   dans les réglages du site, jamais un champ libre. */
+function produitCategories(){
+  const st=siteSettings();
+  if(!Array.isArray(st.categoriesProduits))st.categoriesProduits=PROD_CATS_DEFAUT.slice();
+  st.categoriesProduits=st.categoriesProduits.map(c=>String(c||'').trim()).filter(Boolean).filter((c,i,t)=>t.indexOf(c)===i);
+  (produits||[]).forEach(p=>{
+    const c=(p.categorie||'').trim();
+    if(c&&st.categoriesProduits.indexOf(c)<0)st.categoriesProduits.push(c);
+  });
+  if(!st.categoriesProduits.length)st.categoriesProduits=PROD_CATS_DEFAUT.slice();
+  return st.categoriesProduits;
+}
+function produitTexte(p,cle,lang){
+  if(lang==='fr')return p[cle]||'';
+  return ((p.i18n||{})[lang]||{})[cle]||'';
+}
+function produitSetTexte(p,cle,lang,val){
+  if(lang==='fr'){p[cle]=val;return;}
+  if(!p.i18n||typeof p.i18n!=='object')p.i18n={};
+  if(!p.i18n[lang]||typeof p.i18n[lang]!=='object')p.i18n[lang]={};
+  p.i18n[lang][cle]=val;
+}
+function produitNom(p){return (p.nom||'').trim()||'Produit sans nom';}
+
+/* ---- L'écran ------------------------------------------------------------------------ */
+function renderBoutique(){
+  const host=$('bt-body');if(!host)return;
+  ensureProduits();
+  if(_btOpenId&&!findProduit(_btOpenId))_btOpenId=null;
+  const vueBt=document.getElementById('boutique-view');
+  if(vueBt)vueBt.classList.toggle('rz-ouvert',!!_btOpenId);
+  host.innerHTML='';
+  if(_btOpenId)renderProduitDetail(host,findProduit(_btOpenId));
+  else renderProduitList(host);
+}
+function renderProduitList(host){
+  /* Un filtre à une seule case n'est pas un filtre : il n'apparaît qu'à partir de deux
+     catégories réellement portées par un produit. */
+  const cats=[...new Set(produits.map(p=>(p.categorie||'').trim()).filter(Boolean))];
+  const ordre=produitCategories();
+  cats.sort((a,b)=>{const ia=ordre.indexOf(a),ib=ordre.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  if(cats.length>1){
+    const bar=document.createElement('div');bar.className='rz-filtres';
+    [{k:'',t:'Tous'}].concat(cats.map(c=>({k:c,t:c}))).forEach(c=>{
+      const n=c.k?produits.filter(p=>(p.categorie||'')===c.k).length:produits.length;
+      const b=document.createElement('button');b.type='button';b.className='rz-filtre'+(_btFiltre===c.k?' actif':'');
+      b.setAttribute('aria-pressed',_btFiltre===c.k?'true':'false');
+      b.textContent=c.t+' ('+n+')';
+      b.addEventListener('click',()=>{_btFiltre=c.k;renderBoutique();});
+      bar.appendChild(b);
+    });
+    host.appendChild(bar);
+  }
+  const grid=document.createElement('div');grid.className='rz-grid';
+  const vus=produits.filter(p=>!_btFiltre||(p.categorie||'')===_btFiltre)
+    .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  vus.forEach(p=>{
+    const card=document.createElement('button');card.className='rz-card';
+    const cover=(p.cover&&(p.photos||[]).some(x=>x.id===p.cover))?p.cover:((p.photos||[])[0]||{}).id;
+    const dispo=(PROD_DISPO.find(d=>d.id===p.dispo)||PROD_DISPO[0]).label;
+    card.innerHTML=`<div class="rz-cover">${cover?'<img alt="" style="display:none">':'Aucune photo'}</div>
+      <div class="rz-cbody">
+        <div class="rz-ctitle">${esc(produitNom(p))}</div>
+        <div class="rz-cmeta">${(p.prix||'').trim()?esc(p.prix.trim()):'<i>prix sur demande</i>'} · ${esc(dispo)}${
+          p.categorie?' · '+esc(p.categorie):''}${p.published?' · <span class="rz-live">● en ligne</span>':''}</div>
+      </div>`;
+    if(cover){
+      const im=card.querySelector('img');
+      const ph=(p.photos||[]).find(x=>x.id===cover);
+      if(im&&ph)renderThumbInto(ph,im,null);
+    }
+    card.addEventListener('click',()=>{_btOpenId=p.id;renderBoutique();window.scrollTo(0,0);});
+    grid.appendChild(card);
+  });
+  /* Classe distincte de `.rz-new` (la tuile des réalisations) tout en partageant son
+     apparence : deux écrans différents ne doivent pas se confondre — ni à l'œil, ni pour
+     qui compte les éléments de la page. */
+  const add=document.createElement('button');add.className='bt-new';
+  add.innerHTML='＋<br>Nouveau produit';
+  add.addEventListener('click',newProduit);
+  grid.appendChild(add);
+  host.appendChild(grid);
+  if(!produits.length){
+    const e=document.createElement('div');e.className='rz-empty';
+    e.textContent='Aucun produit pour l’instant. Ajoutez ce que le magasin propose à la vente : une photo, un nom, une matière — le prix est facultatif.';
+    host.appendChild(e);
+  }
+}
+
+function renderProduitDetail(host,p){
+  if(!p)return;
+  const L=_btLang, rtl=L==='he'?' dir="rtl"':'';
+  const back=document.createElement('button');back.className='rz-back';back.textContent='← Tous les produits';
+  back.addEventListener('click',()=>{_btOpenId=null;renderBoutique();});
+  host.appendChild(back);
+
+  const bar=document.createElement('div');bar.className='rz-detail-head';
+  bar.innerHTML=`<h2 style="font-family:var(--devis-heading-font);font-size:23px;font-weight:600;">${esc(produitNom(p))}</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn ${p.published?'btn-onlight':'btn-primary'}" data-pub>${p.published?'✓ En ligne — republier':'🌐 Publier sur le site'}</button>
+      ${p.published?'<button class="btn btn-onlight" data-unpub>Retirer du site</button>':''}
+      <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
+    </div>`;
+  bar.querySelector('[data-pub]').addEventListener('click',()=>publishProduit(p));
+  const unp=bar.querySelector('[data-unpub]');
+  if(unp)unp.addEventListener('click',()=>unpublishProduit(p));
+  bar.querySelector('[data-del]').addEventListener('click',()=>delProduit(p.id));
+  host.appendChild(bar);
+
+  const etat=document.createElement('p');etat.className='rz-site';
+  etat.innerHTML=p.published
+    ? 'En vente sur le site : <a href="'+SITE_URL+'" target="_blank" rel="noopener">'+esc(SITE_URL)+'</a>. Republiez après une modification pour la voir en ligne.'
+    : 'Pas encore en ligne. Rien ne part sur le site tant que vous ne cliquez pas sur « Publier ».';
+  host.appendChild(etat);
+
+  /* Une langue à la fois : trois colonnes de texte sont illisibles sur un téléphone. Et
+     ici l'hébreu n'est pas décoratif — c'est la langue des clients du magasin. */
+  const langs=siteLanguesActives();
+  if(langs.length>1){
+    const ong=document.createElement('div');ong.className='site-onglets';
+    SITE_LANGUES.filter(l=>langs.indexOf(l.code)>=0).forEach(l=>{
+      const b=document.createElement('button');b.type='button';
+      b.className='site-onglet'+(l.code===L?' on':'');
+      b.textContent=l.nom;
+      b.addEventListener('click',()=>{_btLang=l.code;renderBoutique();});
+      ong.appendChild(b);
+    });
+    const n=document.createElement('span');n.className='site-onglets-note';n.textContent='langue en cours d’écriture';
+    ong.appendChild(n);
+    host.appendChild(ong);
+  }
+
+  const suff=L==='fr'?'':' — '+((SITE_LANGUES.find(l=>l.code===L)||{}).nom||L);
+  const repli=(v,fr)=>(L!=='fr'&&!(v||'').trim()&&(fr||'').trim())
+    ?'<p class="site-repli">Non traduit — le français s’affichera.</p>':'';
+  const meta=document.createElement('div');meta.className='rz-meta';
+  meta.innerHTML=`<label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom du produit${suff}</span>
+      <input type="text" data-p="nom"${rtl} value="${esc(produitTexte(p,'nom',L))}" placeholder="${L==='fr'?'ex. Panneau chêne rainuré':esc(p.nom||'—')}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Matière / finition${suff}</span>
+      <input type="text" data-p="matiere"${rtl} value="${esc(produitTexte(p,'matiere',L))}" placeholder="${L==='fr'?'ex. Chêne massif, huilé':esc(p.matiere||'—')}"></label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Prix <em>(vide = « sur demande »)</em></span>
+      <input type="text" data-p="prix" value="${esc(p.prix||'')}" placeholder="ex. 180 ₪ / m²"></label>
+    <label class="fld" style="flex:1;min-width:140px"><span class="lbl">Disponibilité</span>
+      <select data-p="dispo">${PROD_DISPO.map(d=>`<option value="${d.id}"${p.dispo===d.id?' selected':''}>${esc(d.label)}</option>`).join('')}</select></label>
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Catégorie — la section du site</span>
+      <select data-p="categorie"></select></label>`;
+  const selCat=meta.querySelector('[data-p="categorie"]');
+  selCat.innerHTML='<option value="">— aucune —</option>'
+    +produitCategories().map(c=>`<option value="${esc(c)}"${(p.categorie||'')===c?' selected':''}>${esc(c)}</option>`).join('')
+    +'<option value="__gerer">✎ Gérer les catégories…</option>';
+  selCat.addEventListener('change',()=>{
+    if(selCat.value==='__gerer'){selCat.value=p.categorie||'';openSitePanel();return;}
+    p.categorie=selCat.value;p.updatedAt=Date.now();saveProduitsDebounced();
+  });
+  host.appendChild(meta);
+  if(L!=='fr'){
+    const r1=document.createElement('div');
+    r1.innerHTML=repli(produitTexte(p,'nom',L),p.nom)+repli(produitTexte(p,'matiere',L),p.matiere);
+    if(r1.innerHTML)host.appendChild(r1);
+  }
+
+  const desc=document.createElement('div');desc.className='rz-pres';
+  desc.innerHTML=`<label class="fld"><span class="lbl">Description${suff} <em>(publiée sur le site)</em></span>
+    <textarea data-p="description" rows="4" maxlength="900"${rtl} placeholder="${L==='fr'?'Ce que c’est, comment ça se pose, pour quelles pièces.':'—'}">${esc(produitTexte(p,'description',L))}</textarea></label>`;
+  host.appendChild(desc);
+  if(L!=='fr'){
+    const r2=document.createElement('div');r2.innerHTML=repli(produitTexte(p,'description',L),p.description);
+    if(r2.innerHTML)host.appendChild(r2);
+  }
+
+  [...meta.querySelectorAll('[data-p]:not([data-p="categorie"])'),...desc.querySelectorAll('[data-p]')].forEach(el=>{
+    const cle=el.dataset.p;
+    const ecrire=()=>{
+      if(PROD_TRADUISIBLES.indexOf(cle)>=0)produitSetTexte(p,cle,L,el.value);
+      else p[cle]=el.value;
+      p.updatedAt=Date.now();saveProduitsDebounced();
+    };
+    el.addEventListener('input',ecrire);
+    el.addEventListener('change',ecrire);
+  });
+
+  /* Le canal de vente d'aujourd'hui, et le seul : WhatsApp. Annoncé ici pour qu'on sache
+     ce que le visiteur verra — et pour dire quoi faire s'il manque. */
+  const canal=document.createElement('p');canal.className='ias-note';
+  const tel=(siteSettings().tel||'').trim();
+  canal.innerHTML=tel
+    ? 'Sur le site, chaque produit porte un bouton WhatsApp vers le <b>'+esc(tel)+'</b>, avec le nom du produit déjà écrit dans le message.'
+    : '<b>Aucun numéro WhatsApp renseigné</b> : sans lui, les visiteurs n’auront aucun moyen de commander. Ajoutez-le dans ⚙ Le site public.';
+  host.appendChild(canal);
+
+  const imp=buildImportPanel();
+  if(imp)host.appendChild(imp);
+  host.appendChild(buildProduitPhotos(p));
+}
+
+function buildProduitPhotos(p){
+  const wrap=document.createElement('div');
+  const tete=document.createElement('p');tete.className='ed-eyebrow';
+  tete.textContent='Photos du produit';
+  wrap.appendChild(tete);
+  if(!(p.photos||[]).length){
+    const v=document.createElement('div');v.className='rz-empty';
+    v.textContent='Aucune photo. Un produit sans photo ne s’affiche pas sur le site : ajoutez-en au moins une.';
+    wrap.appendChild(v);
+  }
+  const grid=document.createElement('div');grid.className='rz-photos';
+  (p.photos||[]).forEach((ph,i)=>{
+    /* Mêmes classes que les vignettes d'une réalisation : une seule apparence à maintenir. */
+    const t=document.createElement('div');t.className='rz-ph';
+    t.innerHTML=`<div class="rz-ph-vue"><img alt=""></div>
+      <div class="bt-ph-foot">
+        <button class="mini" data-cov title="Mettre en couverture">${p.cover===ph.id||(!p.cover&&i===0)?'★ couverture':'☆'}</button>
+        <button class="mini danger" data-sup title="Retirer cette photo">×</button>
+      </div>`;
+    renderThumbInto(ph,t.querySelector('img'),null);
+    t.querySelector('[data-cov]').addEventListener('click',()=>{p.cover=ph.id;p.updatedAt=Date.now();saveProduits();renderBoutique();});
+    t.querySelector('[data-sup]').addEventListener('click',()=>askConfirm('Retirer cette photo du produit ?',async()=>{
+      for(const k of photoAllKeys(ph)){await photoStore.del(k);}
+      p.photos=p.photos.filter(x=>x.id!==ph.id);
+      if(p.cover===ph.id)p.cover='';
+      p.updatedAt=Date.now();storageInvalidate();saveProduits();renderBoutique();
+    }));
+    grid.appendChild(t);
+  });
+  const add=document.createElement('button');add.className='rz-add';
+  add.innerHTML='＋<br>Ajouter des photos';
+  add.addEventListener('click',()=>btPickPhotos(p));
+  grid.appendChild(add);
+  wrap.appendChild(grid);
+  return wrap;
+}
+function btPickPhotos(p){
+  choisirFichiers({multiple:true,accept:'image/*'},files=>addPhotosToProduit(p,files));
+}
+/* Même moteur d'import que les réalisations : `importOnePhoto` ne connaît que « un objet
+   qui a des photos ». Le seul écart est ce qu'on sauvegarde et ce qu'on redessine. */
+async function addPhotosToProduit(p,files){
+  const list=Array.from(files||[]);
+  if(!list.length)return;
+  if(!(sb&&sbUser&&ownerId)){
+    _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'photo',why:'connexion requise : les photos sont enregistrées dans le cloud, pas sur l’appareil'}))};
+    renderBoutique();return;
+  }
+  const refus=[];let n=0;
+  _rzImportReport=null;
+  _rzImport={total:list.length,done:0,name:(list[0].name||'')};
+  renderBoutique();
+  for(const file of list){
+    _rzImport.name=file.name||'photo';paintImportProgress();
+    const why=await importOnePhoto(p,file);
+    if(why)refus.push({name:file.name||'photo',why});else n++;
+    _rzImport.done++;paintImportProgress();
+  }
+  _rzImport=null;
+  _rzImportReport=refus.length?{n,refus}:null;
+  p.updatedAt=Date.now();
+  storageInvalidate();
+  saveProduits();renderBoutique();
+  if(n)toast(n+' photo(s) ajoutée(s)');
+}
+
+function newProduit(){
+  ensureProduits();
+  const p=normalizeProduit({});
+  produits.push(p);saveProduits();
+  _btOpenId=p.id;renderBoutique();
+  setTimeout(()=>{const i=document.querySelector('#bt-body [data-p="nom"]');if(i)i.focus();},60);
+}
+function delProduit(id){
+  const p=findProduit(id);if(!p)return;
+  askConfirm('Supprimer « '+produitNom(p)+' » et ses '+(p.photos||[]).length+' photo(s) ? C’est définitif.',async()=>{
+    for(const ph of (p.photos||[])){for(const k of photoAllKeys(ph)){await photoStore.del(k);}}
+    produits=produits.filter(x=>x.id!==id);
+    _btOpenId=null;storageInvalidate();saveProduits();renderBoutique();toast('Produit supprimé');
+  });
+}
+
+function newRealisation(){
+  const r=normalizeRealisation({title:'',date:String(new Date().getFullYear())});
+  realisations.push(r);saveRealisations();
+  _rzOpenId=r.id;renderRealisations();
+  setTimeout(()=>{const i=document.querySelector('#rz-body [data-f="title"]');if(i)i.focus();},60);
+}
+/* Supprimer une réalisation PUBLIÉE ne la retirait pas du site : la fiche restait dans le
+   manifeste et ses images dans le seau public. Le projet restait donc en ligne pour
+   toujours — et comme la réalisation n'existait plus dans l'appli, plus aucun bouton ne
+   permettait de l'enlever. Ses images continuaient en plus à compter dans le quota sans
+   que rien ne les référence. Le retrait en ligne passe donc AVANT, et s'il échoue on
+   n'efface rien du tout : mieux vaut une suppression à refaire qu'un projet fantôme. */
+function delRealisation(id){
+  const r=findRealisation(id);if(!r)return;
+  const enLigne=!!r.published;
+  askConfirm('Supprimer « '+(r.title||'cette réalisation')+' » et ses '+(r.photos||[]).length+' photo(s) ?'
+    +(enLigne?' Elle sera d’abord retirée du site public.':'')+' C’est définitif.',async()=>{
+    if(enLigne){
+      try{await retirerDuSite(r);}
+      catch(e){
+        console.error('suppression réalisation',e);
+        saveRealisations();renderRealisations();
+        toast('Retrait du site impossible : '+((e&&e.message)||'erreur')+'. Rien n’a été supprimé.');
+        return;
+      }
+    }
+    for(const p of (r.photos||[])){for(const k of photoAllKeys(p)){await photoStore.del(k);}}
+    for(const v of (r.videos||[])){await videoStore.del(videoKey(v.id));}
+    realisations=realisations.filter(x=>x.id!==id);
+    _rzOpenId=null;storageInvalidate();saveRealisations();renderRealisations();
+    toast(enLigne?'Réalisation supprimée et retirée du site':'Réalisation supprimée');
+  });
+}
+function delPhoto(r,pid){
+  askConfirm('Retirer cette photo de la réalisation ?',async()=>{
+    const gone=(r.photos||[]).find(p=>p.id===pid);
+    for(const k of (gone?photoAllKeys(gone):[fullKey(pid),thumbKey(pid)])){await photoStore.del(k);}
+    r.photos=(r.photos||[]).filter(p=>p.id!==pid);
+    if(r.cover===pid)r.cover=(r.photos[0]||{}).id||'';
+    r.updatedAt=Date.now();storageInvalidate();saveRealisations();renderRealisations();
+  });
+}
+
+/* ============ ÉDITEUR PHOTO ============ */
+let _ed=null;
+const ED_SLIDERS={
+  geometrie:[
+    {k:'persp',label:'Verticales',min:-100,max:100,step:1,fmt:v=>Math.round(v)},
+    {k:'rot',label:'Rotation',min:-12,max:12,step:0.2,fmt:v=>v.toFixed(1)+'°'},
+  ],
+  lumiere:[
+    {k:'expo',label:'Exposition',min:-1.5,max:1.5,step:0.02,fmt:v=>v.toFixed(2)},
+    {k:'contrast',label:'Contraste',min:-0.4,max:0.6,step:0.01,fmt:v=>v.toFixed(2)},
+    {k:'temp',label:'Température',min:-0.35,max:0.35,step:0.01,fmt:v=>v.toFixed(2)},
+    {k:'tint',label:'Teinte',min:-0.2,max:0.2,step:0.01,fmt:v=>v.toFixed(2)},
+    {k:'sat',label:'Saturation',min:-0.5,max:0.5,step:0.01,fmt:v=>v.toFixed(2)},
+  ],
+};
+async function openPhotoEditor(rid,pid){
+  const r=findRealisation(rid);if(!r)return;
+  const p=(r.photos||[]).find(x=>x.id===pid);if(!p)return;
+  if(!glSetup()){toast('Votre navigateur ne gère pas WebGL : édition indisponible');return;}
+  const host=document.createElement('div');host.className='ed-modal';host.id='ed-modal';
+  /* Un seul bouton pour sortir : « Retour » et « Terminer » faisaient exactement la même
+     chose (tout est enregistré au fur et à mesure), et deux façons de faire un même geste,
+     c'est une hésitation de plus. */
+  const rang=(r.photos||[]).findIndex(x=>x.id===p.id), nbPh=(r.photos||[]).length;
+  host.innerHTML=`<div class="ed-bar">
+      <button class="btn btn-primary" data-close>✓ Terminer</button>
+      <span class="ed-title">${esc(p.name||'photo')}</span>
+      <button class="btn" data-hist title="Historique de cette photo">🕘</button>
+    </div>
+    <div class="ed-body">
+      <div class="ed-stage">
+        <canvas id="ed-canvas"></canvas>
+        ${nbPh>1?`<button class="ed-nav prev" data-prev title="Photo précédente" aria-label="Photo précédente"${rang<=0?' disabled':''}>‹</button>
+        <button class="ed-nav next" data-next title="Photo suivante" aria-label="Photo suivante"${rang>=nbPh-1?' disabled':''}>›</button>
+        <span class="ed-pos" aria-live="polite">${rang+1} / ${nbPh}</span>`:''}
+        <div class="ed-crop" id="ed-crop" hidden>
+          <div class="ed-crop-box" id="ed-crop-box">
+            <div class="ed-crop-grid"></div>
+            ${['nw','n','ne','e','se','s','sw','w'].map(h=>`<span class="ed-crop-h" data-h="${h}"></span>`).join('')}
+            <span class="ed-crop-taille" id="ed-crop-taille"></span>
+          </div>
+        </div>
+      </div>
+      <div class="ed-panel">
+        <div class="ed-tabs">
+          <button class="ed-tab active" data-tab="ia">✨ Retouche</button>
+          <button class="ed-tab" data-tab="geometrie">Géométrie</button>
+          <button class="ed-tab" data-tab="lumiere">Lumière</button>
+          <button class="ed-tab" data-tab="cadrage">Cadrage</button>
+        </div>
+        <div id="ed-controls"></div>
+        <div class="ed-acts" id="ed-photo-meta">
+          <button class="btn btn-onlight" data-text>✎ Titre et légende</button>
+          <button class="btn btn-onlight" data-replace>⇄ Remplacer la photo</button>
+        </div>
+        <div id="ed-photo-acts">
+          <div class="ed-acts">
+            <button class="btn btn-onlight" data-undo title="Annuler le dernier réglage">↩ Annuler</button>
+            <button class="btn btn-onlight" data-redo title="Rétablir">↪ Rétablir</button>
+          </div>
+          <div class="ed-acts" style="margin-top:8px">
+            <button class="btn btn-onlight" data-auto>✨ Réglage auto</button>
+            <button class="btn btn-onlight" data-reset>↺ Réinitialiser</button>
+          </div>
+          <div class="ed-acts" style="margin-top:8px">
+            <button class="btn btn-onlight" data-series>Appliquer la lumière à toute la série</button>
+            <button class="btn btn-onlight" data-cover>Photo de couverture</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(host);
+  /* La retouche par consigne écrite est le mode d'entrée : c'est elle qui fait passer une
+     photo de téléphone à une photo publiable. Les réglages manuels restent à un doigt. */
+  _ed={r,p,tab:'ia',img:null,imgAlt:null,altEdit:null,split:0.5,orig:JSON.parse(JSON.stringify(p.edit)),raf:0,
+       hist:[JSON.stringify(p.edit)],histI:0};
+  host.querySelector('[data-close]').addEventListener('click',closePhotoEditor);
+  host.querySelector('[data-undo]').addEventListener('click',()=>edHistGo(-1));
+  host.querySelector('[data-redo]').addEventListener('click',()=>edHistGo(1));
+  host.querySelector('[data-hist]').addEventListener('click',()=>openPhotoHistory(_ed.r,_ed.p));
+  /* Les flèches sont POSÉES SUR la photo : sans `stopPropagation`, le clic déclencherait
+     aussi le geste de la zone image (curseur avant/après, ou déplacement du cadrage). */
+  host.querySelectorAll('[data-prev],[data-next]').forEach(b=>{
+    const d=b.hasAttribute('data-prev')?-1:1;
+    b.addEventListener('click',e=>{e.stopPropagation();edGoto(d);});
+    ['mousedown','touchstart'].forEach(ev=>b.addEventListener(ev,e=>e.stopPropagation(),{passive:true}));
+  });
+  host.querySelector('[data-text]').addEventListener('click',()=>openPhotoTextDialog(_ed.r,_ed.p));
+  host.querySelector('[data-replace]').addEventListener('click',()=>rzReplacePhoto(_ed.r,_ed.p));
+  host.querySelector('[data-auto]').addEventListener('click',()=>{
+    if(!_ed.img)return;
+    Object.assign(_ed.p.edit,autoEdit(_ed.img,_ed.p.edit));
+    _ed.tab='lumiere';paintEditorTabs();buildEditorControls();edPaint();edTouch();
+    toast('Réglage automatique appliqué');
+  });
+  host.querySelector('[data-reset]').addEventListener('click',()=>{
+    Object.assign(_ed.p.edit,blankEdit());buildEditorControls();edPaint();edTouch();
+  });
+  host.querySelector('[data-series]').addEventListener('click',applyLightToSeries);
+  host.querySelector('[data-cover]').addEventListener('click',()=>{
+    _ed.r.cover=_ed.p.id;edTouch();toast('Photo de couverture définie');
+  });
+  host.querySelectorAll('.ed-tab').forEach(b=>b.addEventListener('click',()=>{
+    _ed.tab=b.dataset.tab;paintEditorTabs();buildEditorControls();edPaintHint();edPaint();
+  }));
+  const stage=host.querySelector('.ed-stage');
+  /* Deux gestes sur la photo, jamais les deux en même temps :
+     - une version IA existe → on fait glisser le curseur avant/après ;
+     - sinon → appui long pour voir la photo sans réglages. */
+  const posSplit=e=>{
+    const cvEl=$('ed-canvas');if(!cvEl)return;
+    const r=cvEl.getBoundingClientRect();
+    const cx=(e.touches&&e.touches[0]?e.touches[0].clientX:e.clientX);
+    if(cx==null||!r.width)return;
+    _ed.split=Math.max(0,Math.min(1,(cx-r.left)/r.width));
+    edPaint();
+  };
+  let glisse=false;
+  /* Deux gestes sur la photo, et jamais les deux en même temps :
+     - onglet Cadrage → le CADRE DE ROGNAGE, qui a ses propres écouteurs (edCropBrancher) et
+       couvre le canevas : rien n'arrive ici ;
+     - sinon → curseur avant / après, qu'il s'agisse d'une autre version ou simplement de
+       la photo avec et sans vos réglages. */
+  ['mousedown','touchstart'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(edCropActif())return;
+    if(edHasCompare()){glisse=true;_ed.glisse=true;posSplit(e);if(e.cancelable)e.preventDefault();}
+  },{passive:false}));
+  ['mousemove','touchmove'].forEach(ev=>stage.addEventListener(ev,e=>{
+    if(glisse){posSplit(e);if(e.cancelable)e.preventDefault();}
+  },{passive:false}));
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>stage.addEventListener(ev,()=>{
+    glisse=false;
+    if(_ed&&_ed.glisse){_ed.glisse=false;edPaint();}
+  }));
+  edCropBrancher();
+  /* La photo affichée change de taille quand la fenêtre change : le cadre doit suivre,
+     sinon il désigne une autre partie de l'image que celle qu'on croit. */
+  _ed.surTaille=()=>{if(_ed)edCropPaint();};
+  window.addEventListener('resize',_ed.surTaille);
+  /* Ctrl+Z / Ctrl+Maj+Z : le réflexe de tout le monde sur un ordinateur. Le raccourci ne
+     vit que le temps de l'éditeur. */
+  _ed.clavier=(ev)=>{
+    if(!_ed)return;
+    /* Les flèches passent d'une photo à l'autre, comme les boutons sur l'image. Elles ne
+       doivent rien voler à un champ en cours de saisie (consigne, titre, légende) ni à un
+       curseur de réglage, qui s'ajustent eux aussi aux flèches. */
+    if(!(ev.ctrlKey||ev.metaKey||ev.altKey)&&(ev.key==='ArrowLeft'||ev.key==='ArrowRight')){
+      const a=document.activeElement, t=a&&(a.tagName||'').toLowerCase();
+      if(t==='input'||t==='textarea'||t==='select'||(a&&a.isContentEditable))return;
+      ev.preventDefault();edGoto(ev.key==='ArrowLeft'?-1:1);return;
+    }
+    if(!(ev.ctrlKey||ev.metaKey))return;
+    const k=(ev.key||'').toLowerCase();
+    if(k==='z'){ev.preventDefault();edHistGo(ev.shiftKey?1:-1);}
+    else if(k==='y'){ev.preventDefault();edHistGo(1);}
+  };
+  document.addEventListener('keydown',_ed.clavier);
+  paintEditorTabs();buildEditorControls();edHistPaint();
+  const cv=$('ed-canvas');
+  const ctx=cv.getContext('2d');cv.width=600;cv.height=400;
+  ctx.fillStyle='#2f2c28';ctx.fillRect(0,0,600,400);
+  ctx.fillStyle='#b4aa9b';ctx.font='14px Inter, sans-serif';ctx.textAlign='center';
+  ctx.fillText('Chargement de la photo…',300,200);
+  const img=await loadPhotoImage(p.id,{thumb:false});
+  if(!_ed)return;
+  if(!img){toast('Photo introuvable dans le cloud');closePhotoEditor();return;}
+  _ed.img=img;edPaint();
+  await edLoadAlt();          /* de quoi comparer avant/après s'il existe une version IA */
+  if(_ed){edPaintHint();edPaint();}
+}
+/* ---------------------------------------------------------------------------------------
+   LE CADRE DE ROGNAGE
+   On trace un rectangle SUR la photo et on le tire par ses poignées : c'est ce que fait
+   n'importe quel outil « rogner », et c'est ce qui manquait. L'onglet Cadrage montre donc
+   la photo ENTIÈRE (voir edPaint) — sinon on ne pourrait pas récupérer ce qu'on a coupé.
+   --------------------------------------------------------------------------------------- */
+function edCropActif(){return !!(_ed&&_ed.tab==='cadrage'&&_ed.img);}
+/* La proportion imposée, exprimée en fractions de la photo. Un 1:1 sur une photo paysage
+   n'est pas un carré en fractions : d'où la division par la proportion de l'image. */
+function edCropRatioFrac(){
+  if(!_ed||!_ed.img)return 0;
+  const def=REAL_RATIOS.find(r=>r.id===((_ed.p.edit.ratio)||'libre'));
+  const t=def?def.v:0;
+  if(!t)return 0;
+  return t/(_ed.img.width/_ed.img.height);
+}
+/* Le cadre affiché. Sans rectangle enregistré, on prend la fenêtre que calcule `cropWindow` :
+   une photo cadrée avec les anciens réglages montre donc son cadrage réel, et le premier
+   geste le reprend là où il est au lieu de le perdre. */
+function edCropRect(){
+  if(!_ed||!_ed.img)return {x:0,y:0,w:1,h:1};
+  const cw=cropWindow(_ed.p.edit,_ed.img.width,_ed.img.height);
+  return {x:cw.c0[0],y:cw.c0[1],w:cw.c1[0]-cw.c0[0],h:cw.c1[1]-cw.c0[1]};
+}
+/* Écrire le cadre EFFACE les anciens réglages qu'il remplace : les garder ferait deux
+   sources de vérité pour la même chose, et `cropWindow` en ignorerait une en silence. */
+function edCropPose(r){
+  const e=_ed.p.edit;
+  e.crop=cropNormalise(r);
+  e.zoom=1;e.pan=0;e.panX=0;e.panY=0;
+}
+/* Place le cadre sur le canevas et le remplit. Appelé à chaque rendu et à chaque
+   redimensionnement : la photo affichée change de taille avec la fenêtre, le cadre suit. */
+/* Le cadre est visible, ou il ne l'est pas — et les flèches de défilement suivent, parce
+   qu'elles visent exactement le même pixel que ses poignées de gauche et de droite. Un
+   seul endroit décide des deux : quand `edPaint` masquait le cadre de son côté, les
+   flèches restaient cachées pour toujours (trouvé par le test). */
+function edCropMontre(v){
+  const host=$('ed-crop');if(host)host.hidden=!v;
+  const cv=$('ed-canvas'), stage=cv&&cv.closest('.ed-stage');
+  if(stage)stage.classList.toggle('rogne',!!v);
+}
+function edCropPaint(){
+  const host=$('ed-crop');if(!host)return;
+  const cv=$('ed-canvas');
+  const stage=cv&&cv.closest('.ed-stage');
+  if(!cv||!stage||!edCropActif()){edCropMontre(false);return;}
+  const rs=stage.getBoundingClientRect(), rc=cv.getBoundingClientRect();
+  if(!rc.width||!rc.height){edCropMontre(false);return;}
+  edCropMontre(true);
+  host.style.left=(rc.left-rs.left)+'px';
+  host.style.top=(rc.top-rs.top)+'px';
+  host.style.width=rc.width+'px';
+  host.style.height=rc.height+'px';
+  const r=edCropRect();
+  const b=$('ed-crop-box');
+  b.style.left=(r.x*100)+'%';b.style.top=(r.y*100)+'%';
+  b.style.width=(r.w*100)+'%';b.style.height=(r.h*100)+'%';
+  /* Le nombre de pixels VRAIMENT gardés : c'est ce qui dit si la photo tiendra encore la
+     largeur d'un écran une fois publiée. */
+  const t=$('ed-crop-taille');
+  if(t){
+    const px=Math.round(r.w*_ed.img.width)+' × '+Math.round(r.h*_ed.img.height)+' px';
+    t.textContent=cropNormalise(_ed.p.edit.crop)||r.w<0.999||r.h<0.999
+      ? px+'  ·  '+Math.round(r.w*100)+' % × '+Math.round(r.h*100)+' %'
+      : 'Photo entière — tirez un coin pour rogner';
+  }
+}
+/* Le rectangle après un geste, proportion imposée comprise. `mode` porte les bords tirés
+   ('nw', 'e', 's'…), 'move' déplace, 'new' trace un cadre neuf. */
+function edCropCalcule(mode,r0,d0,d1,fr){
+  let x0=r0.x,y0=r0.y,x1=r0.x+r0.w,y1=r0.y+r0.h;
+  if(mode==='move'){
+    let x=Math.max(0,Math.min(1-r0.w,r0.x+(d1.x-d0.x)));
+    let y=Math.max(0,Math.min(1-r0.h,r0.y+(d1.y-d0.y)));
+    return {x:x,y:y,w:r0.w,h:r0.h};
+  }
+  if(mode==='new'){
+    x0=Math.min(d0.x,d1.x);x1=Math.max(d0.x,d1.x);
+    y0=Math.min(d0.y,d1.y);y1=Math.max(d0.y,d1.y);
+    /* Le coin ANCRÉ est celui posé en premier : le cadre grandit dans le sens du doigt. */
+    mode=(d1.y<d0.y?'n':'s')+(d1.x<d0.x?'w':'e');
+  }else{
+    const dx=d1.x-d0.x, dy=d1.y-d0.y;
+    if(mode.indexOf('w')>=0)x0=r0.x+dx;
+    if(mode.indexOf('e')>=0)x1=r0.x+r0.w+dx;
+    if(mode.indexOf('n')>=0)y0=r0.y+dy;
+    if(mode.indexOf('s')>=0)y1=r0.y+r0.h+dy;
+  }
+  x0=Math.max(0,Math.min(1,x0));x1=Math.max(0,Math.min(1,x1));
+  y0=Math.max(0,Math.min(1,y0));y1=Math.max(0,Math.min(1,y1));
+  let w=Math.max(CROP_MIN,x1-x0), h=Math.max(CROP_MIN,y1-y0);
+  if(!fr){
+    /* Bord seul : l'autre dimension ne bouge pas. */
+    if(mode==='n'||mode==='s')w=r0.w;
+    if(mode==='e'||mode==='w')h=r0.h;
+  }else{
+    /* Proportion imposée : le geste mène sur son axe, l'autre suit. */
+    if(mode==='n'||mode==='s')w=h*fr; else h=w/fr;
+    const k=Math.min(1,1/w,1/h);w*=k;h*=k;
+    if(w<CROP_MIN||h<CROP_MIN){const m=Math.max(CROP_MIN/w,CROP_MIN/h);w=Math.min(1,w*m);h=Math.min(1,h*m);}
+  }
+  /* Le bord tenu par le doigt reste où il est ; l'opposé suit. */
+  let x=(mode.indexOf('w')>=0)?(x1-w):x0;
+  let y=(mode.indexOf('n')>=0)?(y1-h):y0;
+  if(mode==='n'||mode==='s')x=r0.x+(r0.w-w)/2;
+  if(mode==='e'||mode==='w')y=r0.y+(r0.h-h)/2;
+  x=Math.max(0,Math.min(1-w,x));
+  y=Math.max(0,Math.min(1-h,y));
+  return {x:x,y:y,w:w,h:h};
+}
+/* Reformer le cadre courant à la proportion choisie, sans changer ce qu'il vise : on garde
+   son centre. Sans cadre, on prend le plus grand rectangle qui rentre dans la photo. */
+function edCropVersRatio(){
+  if(!_ed||!_ed.img)return;
+  const fr=edCropRatioFrac();
+  const r=edCropRect();
+  if(!fr){edCropPose(r);return;}
+  let w=r.w,h=w/fr;
+  if(h>r.h){h=r.h;w=h*fr;}
+  const k=Math.min(1,1/w,1/h);w*=k;h*=k;
+  const cx=r.x+r.w/2, cy=r.y+r.h/2;
+  edCropPose({x:Math.max(0,Math.min(1-w,cx-w/2)),y:Math.max(0,Math.min(1-h,cy-h/2)),w:w,h:h});
+}
+/* Le geste complet, souris et doigt par le même chemin (pointer events) : un seul code à
+   tenir, et le doigt n'hérite pas d'un comportement écrit pour la souris. */
+function edCropBrancher(){
+  const host=$('ed-crop');if(!host)return;
+  host.addEventListener('pointerdown',e=>{
+    if(!edCropActif())return;
+    const box=host.getBoundingClientRect();
+    if(!box.width||!box.height)return;
+    e.preventDefault();e.stopPropagation();
+    const poignee=e.target.closest('[data-h]');
+    const dansLeCadre=!!e.target.closest('.ed-crop-box');
+    const mode=poignee?poignee.dataset.h:(dansLeCadre?'move':'new');
+    const pos=ev=>({x:Math.max(0,Math.min(1,(ev.clientX-box.left)/box.width)),
+                    y:Math.max(0,Math.min(1,(ev.clientY-box.top)/box.height))});
+    const d0=pos(e), r0=edCropRect(), fr=edCropRatioFrac();
+    let bouge=false;
+    const onMove=ev=>{
+      const d1=pos(ev);
+      if(!bouge&&mode==='new'&&Math.abs(d1.x-d0.x)<0.01&&Math.abs(d1.y-d0.y)<0.01)return;
+      bouge=true;
+      edCropPose(edCropCalcule(mode,r0,d0,d1,fr));
+      edCropPaint();
+    };
+    const onUp=()=>{
+      document.removeEventListener('pointermove',onMove);
+      document.removeEventListener('pointerup',onUp);
+      document.removeEventListener('pointercancel',onUp);
+      try{host.releasePointerCapture(e.pointerId);}catch(err){}
+      /* Un geste = UN cran d'annulation, et rien d'enregistré si le doigt n'a fait
+         qu'effleurer : un appui sans mouvement ne doit pas effacer un cadrage. */
+      if(!bouge)return;
+      buildEditorControls();edTouch();edCropPaint();
+    };
+    try{host.setPointerCapture(e.pointerId);}catch(err){}
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
+    document.addEventListener('pointercancel',onUp);
+  });
+}
+
+/* La barre du haut dit quel geste est actif : ils ne coexistent pas. */
+function edPaintHint(){
+  const el=document.querySelector('#ed-modal [data-cmp]');
+  if(!el||!_ed)return;
+  el.textContent=edCropActif()
+    ? 'Tirez les coins du cadre pour rogner.'
+    : !edHasCompare()
+      ? 'Rien à comparer : cette photo n’a ni réglage manuel ni retouche.'
+      : _ed.imgAlt
+        ? 'Faites glisser sur la photo : avant à gauche, après à droite.'
+        : 'Posez le doigt sur la photo et faites glisser : avant à gauche, après à droite.';
+}
+function paintEditorTabs(){
+  document.querySelectorAll('#ed-modal .ed-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===_ed.tab));
+  /* Réglage auto, réinitialisation, lumière de la série et couverture agissent sur les
+     réglages photographiques : les laisser visibles sur l'onglet IA laissait croire qu'ils
+     s'appliquaient à la retouche IA. */
+  const acts=$('ed-photo-acts');
+  if(acts)acts.style.display=(_ed.tab==='ia')?'none':'';
+  edHistPaint();
+}
+/* Ce qu'on regarde, écrit noir sur blanc, sur TOUS les onglets. Sans cette ligne, une photo
+   qui porte une rotation manuelle s'annonce « photo d'origine » alors que ce n'est pas ce
+   qu'on voit — et le geste pour la comparer n'était affiché que sur ordinateur. */
+function edBuildEtat(host){
+  const p=_ed.p;
+  const box=document.createElement('div');box.className='ed-etat';
+  const reg=editResume(p.edit);
+  const l1=document.createElement('p');l1.className='ed-etat-l';
+  const nom=document.createElement('b');nom.textContent=photoVersionLabel(p,photoActiveId(p));
+  l1.appendChild(document.createTextNode('À l’écran : '));
+  l1.appendChild(nom);
+  if(reg.length)l1.appendChild(document.createTextNode(' + vos réglages (' + reg.join(', ') + ')'));
+  box.appendChild(l1);
+  const l2=document.createElement('p');l2.className='ed-cmp';l2.setAttribute('data-cmp','');
+  box.appendChild(l2);
+  if(reg.length){
+    /* La rotation de 12° prise par mégarde, on ne la voit nulle part depuis l'onglet
+       Retouche — et c'est pourtant elle qui explique l'écart. Un geste pour la retirer. */
+    const raz=document.createElement('button');raz.className='mini ed-raz';raz.type='button';
+    raz.textContent='↺ Annuler mes réglages';
+    raz.addEventListener('click',()=>askConfirm(
+      'Remettre à zéro les réglages manuels de cette photo (' + reg.join(', ') + ') ? Elle revient telle qu’elle a été importée. Les retouches IA ne sont pas touchées.',
+      ()=>{
+        Object.assign(p.edit,blankEdit());
+        edTouch();buildEditorControls();edPaintHint();edPaint();
+        toast('Réglages remis à zéro');
+      }));
+    box.appendChild(raz);
+  }
+  host.appendChild(box);
+}
+function buildEditorControls(){
+  const host=$('ed-controls');if(!host||!_ed)return;
+  host.innerHTML='';
+  edBuildEtat(host);
+  edPaintHint();
+  const e=_ed.p.edit;
+  if(_ed.tab==='ia'){ buildIaPanel(host); return; }
+  if(_ed.tab==='cadrage'){
+    /* Rogner se fait SUR LA PHOTO, pas dans ce panneau : il ne porte que ce que le geste ne
+       peut pas dire — la proportion à imposer, et ce qui s'applique à toute la série. */
+    const hint=document.createElement('p');hint.className='ed-hint';
+    hint.textContent='Tirez les coins ou les bords du cadre blanc pour rogner. Le cadre se déplace en le faisant glisser, et vous pouvez en tracer un neuf en partant d’une zone sombre. Ce qui est assombri est jeté.';
+    host.appendChild(hint);
+    const fmt=document.createElement('p');fmt.className='ed-hint';
+    fmt.style.marginTop='2px';
+    fmt.textContent='Un format impose une proportion au cadre — la même sur toutes les photos d’une réalisation, c’est ce qui donne une galerie propre.';
+    host.appendChild(fmt);
+    const rats=document.createElement('div');rats.className='ed-ratios';
+    REAL_RATIOS.forEach(rt=>{
+      const b=document.createElement('button');b.type='button';b.textContent=rt.label;
+      b.className='mini'+((e.ratio||'libre')===rt.id?' on':'');
+      b.addEventListener('click',()=>{
+        e.ratio=rt.id;
+        /* Choisir un format REFORME le cadre tout de suite : un format qui n'aurait d'effet
+           qu'au prochain geste ne se verrait pas, et on le croirait sans effet. */
+        edCropVersRatio();
+        edTouch();buildEditorControls();edPaintHint();edPaint();
+      });
+      rats.appendChild(b);
+    });
+    host.appendChild(rats);
+    const c=cropNormalise(e.crop);
+    const etat=document.createElement('p');etat.className='ed-hint';etat.style.marginTop='2px';
+    etat.textContent=c
+      ? 'Rognée : '+Math.round(c.w*100)+' % × '+Math.round(c.h*100)+' % de la photo gardés.'
+      : 'Photo entière — rien n’est coupé pour l’instant.';
+    host.appendChild(etat);
+    /* Rogner est une opération qu'on rate souvent du premier coup : on doit pouvoir la
+       défaire sans perdre la lumière et les verticales déjà réglées. */
+    const raz=document.createElement('button');raz.className='mini';raz.type='button';
+    raz.textContent='↺ Annuler le rognage';
+    raz.style.marginBottom='8px';
+    raz.disabled=!c&&(e.ratio||'libre')==='libre';
+    raz.addEventListener('click',()=>{
+      e.ratio='libre';e.crop=null;e.zoom=1;e.panX=0;e.panY=0;e.pan=0;
+      buildEditorControls();edPaint();edTouch();toast('Photo entière rétablie');
+    });
+    host.appendChild(raz);
+    const all=document.createElement('button');all.className='btn btn-onlight';all.textContent='Appliquer ce cadrage à toute la série';
+    all.addEventListener('click',()=>{
+      const n=(_ed.r.photos||[]).length;
+      /* Le rectangle est en FRACTIONS de la photo : il s'applique tel quel à des images de
+         tailles différentes, et garde la même proportion partout — c'est ce qu'on veut
+         d'une galerie. Le sujet, lui, n'est pas au même endroit d'une photo à l'autre :
+         d'où le mot « à recentrer » plutôt qu'une promesse que ce sera bon partout. */
+      const r=cropNormalise(e.crop);
+      (_ed.r.photos||[]).forEach(ph=>{
+        ph.edit.ratio=e.ratio;
+        ph.edit.crop=r?{x:r.x,y:r.y,w:r.w,h:r.h}:null;
+        ph.edit.zoom=1;ph.edit.pan=0;ph.edit.panX=0;ph.edit.panY=0;
+      });
+      edTouch();toast('Cadrage appliqué à '+n+' photo(s) — à recentrer photo par photo si besoin');
+    });
+    host.appendChild(all);
+    return;
+  }
+  if(_ed.tab==='geometrie'){
+    const hint=document.createElement('p');hint.className='ed-hint';
+    hint.textContent='« Verticales » redresse un bâtiment qui part en pyramide parce que le téléphone était incliné vers le haut. C’est le défaut qui trahit le plus une photo amateur.';
+    host.appendChild(hint);
+  }
+  (ED_SLIDERS[_ed.tab]||[]).forEach(cfg=>host.appendChild(sliderRow(cfg)));
+}
+function sliderRow(cfg){
+  const e=_ed.p.edit;
+  /* `lire` sert aux réglages dont la valeur effective ne se lit pas directement dans le
+     champ (le cadrage retombe sur l'ancien `pan`), et `defaut` à ceux dont le neutre n'est
+     pas zéro (le resserrement part de 1). */
+  const val0=cfg.lire?cfg.lire():((e[cfg.k]!==undefined&&e[cfg.k]!==null)?e[cfg.k]:(cfg.defaut||0));
+  const row=document.createElement('div');row.className='ed-slider';
+  row.innerHTML=`<label>${esc(cfg.label)}</label><input type="range" min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${val0}"><span class="val"></span>`;
+  const inp=row.querySelector('input'),val=row.querySelector('.val');
+  const show=()=>{val.textContent=cfg.fmt(parseFloat(inp.value));};
+  show();
+  inp.addEventListener('input',()=>{e[cfg.k]=parseFloat(inp.value);show();edPaint();});
+  inp.addEventListener('change',edTouch);
+  return row;
+}
+/* Comparateur avant / après.
+
+   Il manquait la chose la plus importante : après une retouche, rien à l'écran ne disait ce
+   qui avait changé — une seule image, sans point de comparaison. Le curseur coupe l'image en
+   deux : à gauche l'avant, à droite l'après. On le fait glisser au doigt.
+
+   « Avant » veut dire deux choses selon le cas, et c'est voulu :
+   - une version IA existe → avant = la photo d'origine avec SES réglages, après = la version IA ;
+   - sinon → avant = la photo sans aucun réglage, après = la photo réglée. */
+/* Il y a de quoi comparer dans deux cas, et le MÊME geste sert aux deux : une autre version
+   existe (on la met en face), ou la photo porte des réglages manuels (on la montre avec et
+   sans). L'appui long qui servait au second cas a disparu : deux gestes pour une même
+   question, dont un jamais annoncé sur téléphone, ça ne s'apprend pas. */
+function edHasCompare(){
+  if(!_ed||!_ed.img)return false;
+  return !!_ed.imgAlt||!editEstNeutre(_ed.p.edit);
+}
+async function edLoadAlt(){
+  if(!_ed)return;
+  const p=_ed.p;
+  _ed.altErr=null;
+  const vs=photoVersions(p);
+  if(!vs.length){_ed.imgAlt=null;_ed.altEdit=null;_ed.altId=null;return;}
+  /* L'autre version, c'est celle DONT SORT la version affichée : comparer la deuxième
+     retouche à l'originale ne dirait rien de ce que le dernier envoi a changé. Quand c'est
+     l'originale qui est affichée, l'autre est la dernière retouche produite. */
+  const act=photoActiveId(p);
+  const other=(act==='orig')?vs[vs.length-1].id
+    :((photoVersion(p,act)||{}).from&&(photoVersion(p,act).from==='orig'||photoVersion(p,photoVersion(p,act).from))
+        ?photoVersion(p,act).from:'orig');
+  let alt=null;
+  try{ alt=await loadPhotoImage(p.id,{thumb:false,versionId:other}); }catch(e){alt=null;}
+  if(!_ed||_ed.p!==p)return;
+  _ed.imgAlt=alt;_ed.altId=other;
+  _ed.altEdit=JSON.parse(JSON.stringify(photoEditOf(p,other)));
+  /* Sans ce message, le comparateur disparaîtrait sans un mot et on croirait à un oubli. */
+  if(!alt)_ed.altErr='« '+photoVersionLabel(p,other)+' » n’a pas pu être chargée depuis le cloud : la comparaison avant/après est indisponible. Vérifiez votre connexion, puis rouvrez la photo.';
+}
+/* Les mêmes réglages, cadrage retiré : la lumière et les verticales restent, seul le
+   rognage est neutralisé. */
+function edSansCadre(e){
+  const c=Object.assign({},e||{});
+  c.crop=null;c.ratio='libre';c.zoom=1;c.pan=0;c.panX=0;c.panY=0;
+  return c;
+}
+function edPaint(){
+  if(!_ed||!_ed.img)return;
+  cancelAnimationFrame(_ed.raf);
+  _ed.raf=requestAnimationFrame(()=>{
+    const cv=$('ed-canvas');if(!cv)return;
+    /* Onglet Cadrage : on montre la photo ENTIÈRE. Un cadre de rognage posé sur une image
+       déjà rognée ne pourrait jamais récupérer ce qui a été coupé — c'est tout l'intérêt
+       de pouvoir élargir le cadre. Le rectangle par-dessus dit ce qui sera gardé. */
+    const enCadrage=(_ed.tab==='cadrage');
+    const edit=enCadrage?edSansCadre(_ed.p.edit):_ed.p.edit;
+    const out=glRenderTo(_ed.img,edit,1400,'f_'+_ed.p.id);
+    if(!out)return;
+    cv.width=out.width;cv.height=out.height;
+    const ctx=cv.getContext('2d');
+    if(enCadrage){ctx.drawImage(out,0,0);edCropPaint();return;}
+    /* Hors de l'onglet Cadrage, le cadre n'a rien à dire : il masquerait la photo. */
+    edCropMontre(false);
+
+    /* Sans version IA, le « avant » est la même image sans réglages : un seul rendu suffit,
+       l'appui long continue de servir. */
+    /* Le partage reste affiché EN PERMANENCE quand il y a une autre version à mettre en
+       face : c'est le mode de lecture d'une photo retouchée. Quand il n'y a que des réglages
+       manuels, il n'apparaît que pendant le geste — sinon on réglerait l'exposition en ne
+       voyant que la moitié de la photo. */
+    const compare=edHasCompare()&&(!!_ed.imgAlt||!!_ed.glisse);
+    if(!compare){ctx.drawImage(out,0,0);edPaintLabels(ctx,cv,null);return;}
+
+    /* glRenderTo dessine TOUJOURS dans le même canevas WebGL : sans cette copie, les deux
+       « versions » seraient la même image et le comparateur ne comparerait rien. */
+    const snap=_ed.snap||(_ed.snap=document.createElement('canvas'));
+    snap.width=out.width;snap.height=out.height;
+    snap.getContext('2d').drawImage(out,0,0);
+    /* Sans autre version à mettre en face, l'AVANT est la même image rendue SANS les
+       réglages manuels : c'est exactement ce que montrait l'appui long. */
+    const altImg=_ed.imgAlt||_ed.img;
+    const altEd=_ed.imgAlt?(_ed.altEdit||blankEdit()):blankEdit();
+    const alt=glRenderTo(altImg,altEd,1400,'alt_'+_ed.p.id);
+    _glTexKey=''; /* deux images dans le même rendu : la texture en cache n'est plus la bonne */
+    const x=Math.round(cv.width*(_ed.split==null?0.5:_ed.split));
+    /* L'avant occupe toute la surface ; l'après est découpé à droite du curseur. Les deux
+       rendus peuvent avoir des tailles différentes (le modèle rend dans sa propre
+       définition) : on les ramène au même cadre. */
+    /* L'autre version est l'AVANT quand elle précède celle qu'on regarde — c'est-à-dire
+       dès qu'une retouche est affichée. Si c'est l'originale qui est affichée, l'autre est
+       une retouche, donc l'APRÈS. */
+    const avantEstAlt=_ed.imgAlt?(photoActiveId(_ed.p)!=='orig'):true;
+    const bas=avantEstAlt?alt:snap, haut=avantEstAlt?snap:alt;
+    if(bas)ctx.drawImage(bas,0,0,cv.width,cv.height);
+    if(haut){
+      ctx.save();
+      ctx.beginPath();ctx.rect(x,0,cv.width-x,cv.height);ctx.clip();
+      ctx.drawImage(haut,0,0,cv.width,cv.height);
+      ctx.restore();
+    }
+    ctx.fillStyle='rgba(255,255,255,.92)';ctx.fillRect(x-1,0,2,cv.height);
+    edPaintLabels(ctx,cv,x);
+  });
+}
+function edPaintLabels(ctx,cv,x){
+  if(x==null)return;
+  const f=Math.max(13,Math.round(cv.width/46));
+  ctx.font='700 '+f+'px Inter, sans-serif';
+  ctx.textBaseline='top';
+  const tag=(txt,px,align)=>{
+    ctx.textAlign=align;
+    const w=ctx.measureText(txt).width;
+    const bx=align==='left'?px:px-w;
+    ctx.fillStyle='rgba(35,32,28,.62)';
+    ctx.fillRect(bx-8,f*0.6,w+16,f*1.6);
+    ctx.fillStyle='#fff';ctx.fillText(txt,px,f);
+  };
+  if(x>f*5)tag('AVANT',f,'left');
+  if(cv.width-x>f*5)tag('APRÈS',cv.width-f,'right');
+}
+/* ---- Annuler / rétablir ----
+   On peut réinitialiser, mais pas revenir d'un cran : sur un réglage tâtonné, c'est ce qui
+   manque le plus. La pile garde des ÉTATS complets de `photo.edit` (un objet minuscule),
+   pas des différences : c'est plus simple et ça ne peut pas dériver. Un état n'est empilé
+   que lorsqu'un geste est TERMINÉ (`edTouch`), jamais à chaque mouvement de curseur. */
+const ED_HIST_MAX=40;
+function edTouch(){
+  if(!_ed)return;
+  photoTouch(_ed.p,'reglages');
+  _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
+  edHistPush();
+}
+function edHistPush(){
+  if(!_ed||!_ed.hist)return;
+  const etat=JSON.stringify(_ed.p.edit);
+  if(etat===_ed.hist[_ed.histI])return;      /* rien n'a bougé : rien à empiler */
+  _ed.hist=_ed.hist.slice(0,_ed.histI+1);    /* on repart d'ici : la branche « rétablir » tombe */
+  _ed.hist.push(etat);
+  if(_ed.hist.length>ED_HIST_MAX)_ed.hist.shift();
+  _ed.histI=_ed.hist.length-1;
+  edHistPaint();
+}
+function edHistGo(d){
+  if(!_ed||!_ed.hist)return;
+  const j=_ed.histI+d;
+  if(j<0||j>=_ed.hist.length)return;
+  _ed.histI=j;
+  /* On écrit DANS l'objet existant : l'éditeur, la vignette et la publication pointent tous
+     sur `photo.edit`, le remplacer les laisserait sur un orphelin. */
+  Object.assign(_ed.p.edit,JSON.parse(_ed.hist[j]));
+  photoTouch(_ed.p,'reglages');
+  _ed.r.updatedAt=Date.now();saveRealisationsDebounced();
+  buildEditorControls();edPaint();edHistPaint();
+}
+function edHistPaint(){
+  const u=document.querySelector('#ed-modal [data-undo]'), r=document.querySelector('#ed-modal [data-redo]');
+  if(!_ed||!u||!r)return;
+  u.disabled=_ed.histI<=0;
+  r.disabled=_ed.histI>=_ed.hist.length-1;
+}
+function applyLightToSeries(){
+  if(!_ed)return;
+  const src=_ed.p.edit;
+  const others=(_ed.r.photos||[]).filter(p=>p.id!==_ed.p.id);
+  if(!others.length){toast('Cette réalisation n’a qu’une photo');return;}
+  askConfirm('Appliquer exposition, contraste, température, teinte et saturation de cette photo aux '+others.length+' autre(s) ? La géométrie de chaque photo reste la sienne.',()=>{
+    others.forEach(p=>{['expo','contrast','temp','tint','sat'].forEach(k=>{p.edit[k]=src[k];});});
+    edTouch();toast('Lumière appliquée à '+others.length+' photo(s)');
+  });
+}
+/* Historique de la photo. Sans lui, impossible de savoir ce qui a été fait, quand, avec quel
+   modèle et avec quelle consigne — ni si ce qui est en ligne correspond à ce qu'on voit. */
+function openPhotoHistory(r,p){
+  const etat=photoPubState(r,p);
+  const quand=t=>{
+    const d=new Date(t);
+    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  };
+  const lignes=(p.hist||[]).map(h=>`<li><span class="hist-t">${esc(quand(h.t))}</span>
+      <span class="hist-k">${esc(HIST_LABEL[h.k]||h.k)}</span>
+      ${h.d?`<span class="hist-d">${esc(h.d)}</span>`:''}</li>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Historique de la photo</h3>
+    <p class="msub">${esc(p.name||'photo')}</p>
+    <p class="hist-etat t-${etat}">${etat==='hors'
+      ? 'Cette réalisation n’est pas publiée : aucune de ses photos n’est en ligne.'
+      : etat==='enligne' ? 'Cette photo est en ligne sur le site, à jour.'
+      : etat==='modifiee' ? 'Cette photo est en ligne, mais elle a été modifiée depuis : republiez pour mettre le site à jour.'
+      : 'Cette photo n’est pas encore en ligne : elle a été ajoutée après la dernière publication.'}</p>
+    ${photoVersions(p).length?`<p class="msub">Version affichée : <b>${esc(photoVersionLabel(p,photoActiveId(p)))}</b> — c’est elle qui part à l’export et sur le site.</p>`:''}
+    <ul class="hist">${lignes||'<li><span class="hist-k">Aucun événement enregistré pour l’instant. L’import, les réglages, les retouches IA et les publications s’inscriront ici.</span></li>'}</ul>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
+      ${(p.hist||[]).length?`<button class="mini" onclick="clearPhotoHistory('${esc(p.id)}')">🗑 Vider l’historique</button>`:'<span></span>'}
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button>
+    </div>`);
+}
+
+/* Vider l'historique : c'est une suppression, donc elle se confirme comme les autres. Elle
+   n'efface que le journal — ni la photo, ni sa retouche, ni son état de publication. */
+function clearPhotoHistory(pid){
+  const p=findPhoto(pid);if(!p)return;
+  const r=(realisations||[]).find(x=>(x.photos||[]).some(y=>y.id===pid));
+  askConfirm('Vider l’historique de cette photo ? La photo, sa retouche et son état de publication ne sont pas touchés. C’est définitif.',()=>{
+    p.hist=[];
+    saveRealisations();
+    if(r)openPhotoHistory(r,p);else closeModal();
+    toast('Historique vidé');
+  });
+}
+
+/* Passer à la photo suivante sans repasser par la grille : c'est ce qu'on fait quand on
+   traite une série, et c'est aussi la prévisualisation en grand de chaque photo. */
+async function edGoto(delta){
+  if(!_ed)return;
+  const r=_ed.r,list=r.photos||[];
+  const i=list.findIndex(x=>x.id===_ed.p.id);
+  const j=i+delta;
+  if(i<0||j<0||j>=list.length)return;
+  const id=list[j].id;
+  closePhotoEditor();
+  await openPhotoEditor(r.id,id);
+}
+function closePhotoEditor(){
+  const host=$('ed-modal');if(host)host.remove();
+  if(_ed&&_ed.clavier)document.removeEventListener('keydown',_ed.clavier);
+  if(_ed&&_ed.surTaille)window.removeEventListener('resize',_ed.surTaille);
+  _ed=null;_glTexKey='';
+  saveRealisations();renderRealisations();
+}
+
+/* ============ NOMS DE FICHIERS ============ */
+function slugify(s){
+  return (s||'photo').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50)||'photo';
+}
+
+
+/* ============ ARCHIVE ZIP (sans dépendance externe) ============
+   Un téléchargement en lot ne peut pas être une rafale de liens : sur mobile, le
+   navigateur bloque tout après le premier fichier. On produit donc UN fichier .zip.
+   Méthode « store » (aucune compression) : un JPEG est déjà compressé, compresser à
+   nouveau ne gagnerait rien et coûterait du temps de calcul sur un téléphone. */
+const _crcTable=(()=>{
+  const t=new Uint32Array(256);
+  for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[i]=c>>>0;}
+  return t;
+})();
+function crc32(bytes){
+  let c=0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++)c=_crcTable[(c^bytes[i])&0xFF]^(c>>>8);
+  return (c^0xFFFFFFFF)>>>0;
+}
+function dosDateTime(d){
+  return {
+    time:((d.getHours()&31)<<11)|((d.getMinutes()&63)<<5)|((d.getSeconds()/2)&31),
+    date:(((d.getFullYear()-1980)&127)<<9)|(((d.getMonth()+1)&15)<<5)|(d.getDate()&31),
+  };
+}
+/* entries : [{name, bytes:Uint8Array}] */
+function buildZip(entries){
+  const enc=new TextEncoder();
+  const now=dosDateTime(new Date());
+  const parts=[],central=[];
+  let offset=0;
+  entries.forEach(e=>{
+    const nameBytes=enc.encode(e.name);
+    const crc=crc32(e.bytes),size=e.bytes.length;
+    const local=new Uint8Array(30+nameBytes.length);
+    const lv=new DataView(local.buffer);
+    lv.setUint32(0,0x04034b50,true);
+    lv.setUint16(4,20,true);
+    lv.setUint16(6,0x0800,true); /* noms en UTF-8 */
+    lv.setUint16(8,0,true);      /* store */
+    lv.setUint16(10,now.time,true);lv.setUint16(12,now.date,true);
+    lv.setUint32(14,crc,true);lv.setUint32(18,size,true);lv.setUint32(22,size,true);
+    lv.setUint16(26,nameBytes.length,true);lv.setUint16(28,0,true);
+    local.set(nameBytes,30);
+    parts.push(local,e.bytes);
+
+    const cd=new Uint8Array(46+nameBytes.length);
+    const cv=new DataView(cd.buffer);
+    cv.setUint32(0,0x02014b50,true);
+    cv.setUint16(4,20,true);cv.setUint16(6,20,true);
+    cv.setUint16(8,0x0800,true);cv.setUint16(10,0,true);
+    cv.setUint16(12,now.time,true);cv.setUint16(14,now.date,true);
+    cv.setUint32(16,crc,true);cv.setUint32(20,size,true);cv.setUint32(24,size,true);
+    cv.setUint16(28,nameBytes.length,true);
+    cv.setUint16(30,0,true);cv.setUint16(32,0,true);cv.setUint16(34,0,true);
+    cv.setUint16(36,0,true);cv.setUint32(38,0,true);
+    cv.setUint32(42,offset,true);
+    cd.set(nameBytes,46);
+    central.push(cd);
+    offset+=local.length+size;
+  });
+  const cdSize=central.reduce((a,c)=>a+c.length,0);
+  const end=new Uint8Array(22);
+  const ev=new DataView(end.buffer);
+  ev.setUint32(0,0x06054b50,true);
+  ev.setUint16(4,0,true);ev.setUint16(6,0,true);
+  ev.setUint16(8,entries.length,true);ev.setUint16(10,entries.length,true);
+  ev.setUint32(12,cdSize,true);ev.setUint32(16,offset,true);
+  ev.setUint16(20,0,true);
+  return new Blob([...parts,...central,end],{type:'application/zip'});
+}
+function downloadBlob(blob,filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),8000);
+}
+
+/* ============ SÉLECTION MULTIPLE DANS UNE RÉALISATION ============
+   Plusieurs personnes alimentent la même galerie depuis des téléphones différents :
+   il faut pouvoir récupérer sur son propre appareil des photos ajoutées depuis un autre,
+   et faire le ménage à plusieurs sans supprimer une par une. */
+let _rzSel=new Set(), _rzSelMode=false, _rzOrderMode=false;
+function rzToggleSelectMode(on){
+  _rzSelMode=(on===undefined)?!_rzSelMode:!!on;
+  if(!_rzSelMode)_rzSel.clear();
+  renderRealisations();
+}
+function rzToggleSel(pid){
+  if(_rzSel.has(pid))_rzSel.delete(pid);else _rzSel.add(pid);
+  renderRealisations();
+}
+function rzSelectAll(r){
+  const all=(r.photos||[]).map(p=>p.id);
+  if(_rzSel.size===all.length)_rzSel.clear();else all.forEach(id=>_rzSel.add(id));
+  renderRealisations();
+}
+function rzSelectedPhotos(r){
+  return (r.photos||[]).filter(p=>_rzSel.has(p.id));
+}
+
+/* Nom de fichier lisible et stable : slug du chantier + numéro d'ordre dans la galerie. */
+function photoFileName(r,p,index,suffix){
+  const base=slugify(r.title||'realisation');
+  return base+'-'+String(index+1).padStart(2,'0')+(suffix||'')+'.jpg';
+}
+
+async function rzDownload(r,photos,{retouchees}){
+  if(!photos.length)return;
+  const label=retouchees?'retouchées':'importées';
+  toast('Préparation de '+photos.length+' photo'+(photos.length>1?'s':'')+'…');
+  const entries=[];
+  let fail=0;
+  for(const p of photos){
+    const index=(r.photos||[]).findIndex(x=>x.id===p.id);
+    try{
+      let blob;
+      if(retouchees){
+        const img=await loadPhotoImage(p.id,{thumb:false});
+        if(!img)throw new Error('photo absente');
+        const out=glRenderTo(img,p.edit||blankEdit(),REAL_MAX,'dl_'+p.id);
+        if(!out)throw new Error('rendu impossible');
+        blob=await canvasToBlob(out,0.92);
+      }else{
+        blob=await photoStore.get(fullKey(p.id));
+        if(!blob)throw new Error('photo absente');
+      }
+      entries.push({name:photoFileName(r,p,index,retouchees?'-retouchee':''),bytes:new Uint8Array(await blob.arrayBuffer())});
+    }catch(e){console.error('téléchargement',e);fail++;}
+  }
+  _glTexKey='';
+  if(!entries.length){toast('Aucune photo n’a pu être préparée');return;}
+  if(entries.length===1){
+    downloadBlob(new Blob([entries[0].bytes],{type:'image/jpeg'}),entries[0].name);
+  }else{
+    downloadBlob(buildZip(entries),slugify(r.title||'realisation')+'-'+label+'.zip');
+  }
+  toast(entries.length+' photo(s) téléchargée(s)'+(fail?' · '+fail+' échec(s)':''));
+}
+
+function rzAskDownload(r,photos){
+  const n=photos.length;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Télécharger ${n} photo${n>1?'s':''}</h3>
+    <p class="msub">${n>1?'Un seul fichier .zip, pour que le téléphone ne bloque pas les téléchargements suivants.':'Le fichier est enregistré directement.'}</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" data-dl="brutes">Photos telles qu’importées</button>
+      <button class="btn btn-onlight" data-dl="retouchees">Photos avec les retouches</button>
+    </div>
+    <p class="msub" style="margin-top:12px">« Telles qu’importées » = ce qui a été déposé dans l’appli, sans retouche, en pleine définition (jusqu’à ${REAL_MAX} px). C’est ce qu’il faut pour récupérer sur un autre téléphone les photos ajoutées depuis celui de quelqu’un d’autre.</p>`);
+  const m=$('modal');
+  m.querySelector('[data-dl="brutes"]').addEventListener('click',()=>{closeModal();rzDownload(r,photos,{retouchees:false});});
+  m.querySelector('[data-dl="retouchees"]').addEventListener('click',()=>{closeModal();rzDownload(r,photos,{retouchees:true});});
+}
+
+function rzDeleteSelected(r){
+  const photos=rzSelectedPhotos(r);
+  if(!photos.length)return;
+  const n=photos.length;
+  askConfirm('Supprimer '+n+' photo'+(n>1?'s':'')+' de cette réalisation ? C’est définitif.',async()=>{
+    for(const p of photos){for(const k of photoAllKeys(p)){await photoStore.del(k);}}
+    const ids=new Set(photos.map(p=>p.id));
+    r.photos=(r.photos||[]).filter(p=>!ids.has(p.id));
+    if(ids.has(r.cover))r.cover=(r.photos[0]||{}).id||'';
+    r.updatedAt=Date.now();
+    _rzSel.clear();_rzSelMode=false;
+    saveRealisations();renderRealisations();
+    toast(n+' photo(s) supprimée(s)'+(r.published?' — republiez pour mettre le site à jour':''));
+  });
+}
+
+/* CE QUI PART SUR LE SITE, décidé sur une SÉLECTION. Avant, le drapeau « ne pas publier »
+   ne se posait qu'une photo à la fois, au fond du menu ⋯ d'une vignette : sélectionner
+   dix photos puis publier n'avait donc aucun effet — tout partait quand même. C'est
+   exactement ce qui était reproché. */
+function rzAskSelectionSite(r){
+  const photos=rzSelectedPhotos(r);
+  const n=photos.length;
+  if(!n)return;
+  const autres=(r.photos||[]).length-n;
+  const dejaHors=photos.filter(p=>p.horsSite).length;
+  const appliquer=(fn,msg)=>{
+    fn();
+    r.updatedAt=Date.now();saveRealisations();renderRealisations();
+    toast(msg+(r.published?' — republiez pour mettre le site à jour':''));
+  };
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Le site et ces ${n} photo${n>1?'s':''}</h3>
+    <p class="msub">Ce réglage dit ce qui part sur le site public. Rien n’est envoyé maintenant : la page en ligne ne change qu’à la publication.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" data-only ${autres?'':'disabled'}>🌐 Ne publier que ces ${n} photo${n>1?'s':''}</button>
+      <button class="btn btn-onlight" data-add ${dejaHors?'':'disabled'}>➕ Remettre ces ${n} sur le site</button>
+      <button class="btn btn-onlight" data-off ${dejaHors===n?'disabled':''}>🚫 Retirer ces ${n} du site</button>
+    </div>
+    <p class="msub" style="margin-top:12px">« Ne publier que celles-ci » écarte les ${autres} autre${autres>1?'s':''} photo${autres>1?'s':''} de cette réalisation. Aucune n’est supprimée : elles restent dans le CRM et dans vos sauvegardes, et se remettent en ligne du même geste.</p>`);
+  const m=$('modal');
+  const marquer=(liste,hors)=>liste.forEach(p=>{
+    if(!!p.horsSite===hors)return;
+    p.horsSite=hors;photoTouch(p,hors?'horssite':'sursite','');
+  });
+  m.querySelector('[data-only]').addEventListener('click',()=>{
+    closeModal();
+    const gardes=new Set(photos.map(p=>p.id));
+    appliquer(()=>{
+      marquer(photos,false);
+      marquer((r.photos||[]).filter(p=>!gardes.has(p.id)),true);
+      _rzSel.clear();_rzSelMode=false;
+    },'Seules ces '+n+' photo(s) partiront sur le site');
+  });
+  m.querySelector('[data-add]').addEventListener('click',()=>{
+    closeModal();
+    appliquer(()=>{marquer(photos,false);_rzSel.clear();_rzSelMode=false;},n+' photo(s) remise(s) sur le site');
+  });
+  m.querySelector('[data-off]').addEventListener('click',()=>{
+    closeModal();
+    appliquer(()=>{marquer(photos,true);_rzSel.clear();_rzSelMode=false;},n+' photo(s) retirée(s) du site');
+  });
+}
+
+function buildSelectionBar(r){
+  const bar=document.createElement('div');
+  bar.className='rz-selbar';
+  const n=_rzSel.size, total=(r.photos||[]).length;
+  bar.innerHTML=`<span class="rz-selcount">${n} sur ${total}</span>
+    <button class="mini" data-all>${n===total&&total?'Tout désélectionner':'Tout sélectionner'}</button>
+    <button class="btn btn-primary" data-site ${n?'':'disabled'}>🌐 Site${n?' ('+n+')':''}</button>
+    <button class="btn" data-ia ${n?'':'disabled'}>✨ Retoucher${n?' ('+n+')':''}</button>
+    <button class="btn" data-dl ${n?'':'disabled'}>⬇ Télécharger${n?' ('+n+')':''}</button>
+    <button class="btn btn-onlight" data-del ${n?'':'disabled'}>🗑 Supprimer${n?' ('+n+')':''}</button>
+    <button class="mini" data-cancel>Annuler</button>`;
+  bar.querySelector('[data-all]').addEventListener('click',()=>rzSelectAll(r));
+  bar.querySelector('[data-site]').addEventListener('click',()=>rzAskSelectionSite(r));
+  bar.querySelector('[data-ia]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
+  bar.querySelector('[data-dl]').addEventListener('click',()=>rzAskDownload(r,rzSelectedPhotos(r)));
+  bar.querySelector('[data-del]').addEventListener('click',()=>rzDeleteSelected(r));
+  bar.querySelector('[data-cancel]').addEventListener('click',()=>rzToggleSelectMode(false));
+  return bar;
+}
+
+/* ============ MÉMO DE PRISE DE VUE ============ */
+function openShootingMemo(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Bien photographier un chantier terminé</h3>
+    <p class="msub">Ce qui se joue à la prise de vue ne se rattrape pas en retouche. Cinq minutes ici valent une heure d’édition.</p>
+    <div style="font-size:13.5px;line-height:1.65;color:var(--ink)">
+      <p style="margin:0 0 10px"><b>1. Téléphone bien droit.</b> Dès qu’il penche vers le haut, le bâtiment part en pyramide. Activez la grille et le niveau dans l’appareil photo, et tenez l’écran vertical.</p>
+      <p style="margin:0 0 10px"><b>2. Jamais le 0,5×.</b> L’ultra grand-angle déforme les bords et étire les volumes — aucune retouche ne le rattrape. Reculez plutôt que d’élargir.</p>
+      <p style="margin:0 0 10px"><b>3. HDR activé.</b> C’est ce qui garde le détail dans une fenêtre lumineuse sans noyer la pièce dans le noir. Une fenêtre cramée est une donnée perdue, définitivement.</p>
+      <p style="margin:0 0 10px"><b>4. Toutes les lumières allumées.</b> Y compris en plein jour : ça équilibre l’intérieur avec la fenêtre et donne de la profondeur.</p>
+      <p style="margin:0 0 10px"><b>5. Hauteur d’yeux, depuis un angle.</b> Environ 1,50 m, dos à un coin de la pièce : c’est ce qui montre le volume réel.</p>
+      <p style="margin:0 0 10px"><b>6. Rangez le cadre.</b> Câbles, poubelle, cartons, votre reflet dans un miroir ou une vitre. Trente secondes de rangement évitent une retouche payante.</p>
+      <p style="margin:0"><b>7. Plusieurs cadrages du même point.</b> Une large, une serrée sur un détail soigné. La galerie a besoin des deux.</p>
+    </div>`);
+}
+
+
+
+/* ============ RETOUCHE IA (fal.ai) ============
+   Le CRM n'est lié à aucun modèle en particulier. Les réglages proposés ne sont pas choisis
+   à la main : ils sont LUS DANS LE SCHÉMA du modèle (son OpenAPI, public), donc on retrouve
+   exactement les paramètres que fal.ai propose sur son propre site — y compris ceux ajoutés
+   après l'écriture de ce code, et pour n'importe quel modèle du catalogue.
+
+   La clé du fournisseur ne transite JAMAIS par le navigateur : la page du CRM est publique,
+   une clé posée là serait lisible par n'importe qui. Elle vit dans les secrets Supabase.
+
+   Le résultat est stocké À CÔTÉ de l'original, jamais à sa place. */
+
+/* CATALOGUE DE MODÈLES — chaque identifiant a été vérifié contre le catalogue réel de
+   fal.ai (son schéma public répond 200), aucun n'est deviné. Le CRM n'est pas limité à
+   cette liste : « ⚙ Gérer » permet de coller n'importe quel identifiant de fal.ai/models.
+   Le pont lit le schéma du modèle choisi et s'adapte tout seul.
+   `cat` sert uniquement à regrouper l'affichage. */
+const IA_CATALOGUE=[
+  {cat:'Retouche par consigne écrite',id:'fal-ai/nano-banana-pro/edit',label:'Nano Banana Pro (Google)',note:'Comprend le mieux une consigne écrite. ~0,13 $ en 1K/2K, ~0,24 $ en 4K.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/gemini-25-flash-image/edit',label:'Nano Banana (Gemini 2.5 Flash)',note:'La version rapide et moins chère du précédent.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-2-pro/edit',label:'FLUX.2 Pro — édition',note:'Très bon rendu photographique, fidèle à la photo d’origine.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-2/edit',label:'FLUX.2 — édition',note:'Même famille, moins cher.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-pro/kontext',label:'FLUX.1 Kontext Pro',note:'Retouche dirigée, une image à la fois.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/flux-pro/kontext/max',label:'FLUX.1 Kontext Max',note:'La version la plus fidèle de Kontext.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/bytedance/seedream/v4/edit',label:'Seedream 4 — édition',note:'Bon sur les intérieurs, rendu net.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/qwen-image-edit-plus',label:'Qwen Image Edit Plus',note:'Alternative économique.'},
+  {cat:'Retouche par consigne écrite',id:'fal-ai/qwen-image-edit',label:'Qwen Image Edit',note:'Version simple, la moins chère.'},
+  {cat:'Retouche ciblée',id:'fal-ai/object-removal',label:'Retirer un objet',note:'Décrire l’objet à faire disparaître. Ne touche à rien d’autre.'},
+  {cat:'Retouche ciblée',id:'fal-ai/image-editing/background-change',label:'Changer le fond',note:'Remplace l’arrière-plan en gardant le sujet.'},
+  {cat:'Agrandir / rendre plus net',id:'fal-ai/recraft/upscale/creative',label:'Agrandissement Recraft',note:'Agrandit et redonne du détail. Sans consigne.'},
+  {cat:'Agrandir / rendre plus net',id:'fal-ai/clarity-upscaler',label:'Clarity Upscaler',note:'Agrandissement net, très utilisé en immobilier.'},
+  {cat:'Agrandir / rendre plus net',id:'fal-ai/aura-sr',label:'Aura SR',note:'Agrandissement rapide ×4. Sans consigne.'},
+];
+/* `library.iaModels` ne contient QUE les modèles ajoutés à la main. Tout le catalogue est
+   proposé d'office dans la liste de l'onglet Retouche : y recopier des entrées ne servirait
+   qu'à les afficher deux fois. */
+/* Réglages pilotés par le CRM lui-même : inutile de les montrer deux fois.
+   `image_url` autant que `image_urls` : selon le modèle, l'image se transmet sous l'un ou
+   sous l'autre, et c'est le pont qui choisit d'après le schéma. */
+const IA_HIDDEN_PARAMS=['image_urls','image_url','sync_mode','prompt'];
+
+/* ---- Réglages de la retouche ----
+   Toute valeur qui décide de quelque chose vit ici, pas dans le code : la résolution
+   demandée, le plafond mensuel qui BLOQUE, le coût unitaire servant à estimer la dépense,
+   la longueur de l'historique gardé et le modèle proposé par défaut. Réglable dans
+   « ⚙ Réglages » (panneau Réglages du CRM, ou depuis l'onglet Retouche). */
+const IA_DEFAULTS={
+  resolution:'2K',      /* 'modele' = laisser le défaut du modèle */
+  plafondMois:100,      /* 0 = pas de plafond */
+  coutUnitaire:0.13,    /* $ par retouche, sert à estimer la dépense du mois */
+  histMax:30,
+  modeleDefaut:'fal-ai/nano-banana-pro/edit',
+  confirmer:true,       /* demander confirmation avant chaque envoi facturé */
+  sondageSec:3,         /* à quelle fréquence demander où en est la demande dans la file */
+  attenteMaxMin:10,     /* au bout de combien de temps on cesse de REGARDER (la demande, elle, continue) */
+};
+function iaSettings(){
+  library.iaSettings=Object.assign({},IA_DEFAULTS,library.iaSettings||{});
+  return library.iaSettings;
+}
+
+function ensureIaModels(){
+  if(!Array.isArray(library.iaModels))library.iaModels=[];
+  /* Les anciennes versions recopiaient des modèles du catalogue dans cette liste : on les
+     retire, sinon ils apparaîtraient deux fois dans le menu. */
+  library.iaModels=library.iaModels.filter(m=>m&&m.id&&!IA_CATALOGUE.some(c=>c.id===m.id));
+  if(!library.iaPrompts)library.iaPrompts=[];
+  if(!library.iaParams)library.iaParams={};
+  if(!Array.isArray(library.iaFavoris))library.iaFavoris=[];
+}
+function iaKey(pid){return 'ra_'+pid;} /* clé historique : la toute première retouche d'une photo */
+
+/* La version choisie comme point de départ du prochain envoi. `null` = celle qui est
+   affichée. On ne garde qu'un identifiant : s'il ne vaut plus rien (autre photo ouverte,
+   version supprimée), on retombe tout seul sur la version affichée. */
+let _iaFrom=null;
+function iaFromId(photo){
+  if(_iaFrom&&(_iaFrom==='orig'||photoVersion(photo,_iaFrom)))return _iaFrom;
+  return photoActiveId(photo);
+}
+/* Nommer une version : « Retouche 2 » ne dit rien, « désencombré » se retrouve. */
+function iaAskRenameVersion(photo,vid){
+  const v=photoVersion(photo,vid);if(!v)return;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Nommer cette version</h3>
+    <p class="msub">Un nom court, pour la reconnaître dans la liste. Laissez vide pour revenir au nom automatique.</p>
+    <label class="fld"><span class="lbl">Nom</span>
+      <input type="text" id="ver-nom" maxlength="40" value="${esc(v.label||'')}" placeholder="${esc(photoVersionLabel(photo,vid))}"></label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="ver-ok">Enregistrer</button>
+    </div>`);
+  const inp=$('ver-nom');
+  const valider=()=>{
+    v.label=(inp.value||'').trim().slice(0,40);
+    photoTouch(photo,'texte','version : '+photoVersionLabel(photo,vid));
+    saveRealisations();closeModal();buildEditorControls();
+    toast('Version renommée');
+  };
+  $('ver-ok').addEventListener('click',valider);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')valider();});
+  setTimeout(()=>inp.focus(),60);
+}
+/* Le nom lisible d'un modèle, qu'il vienne du catalogue ou de la liste personnelle. */
+function iaModelLabel(id){
+  const m=(library.iaModels||[]).find(x=>x.id===id)||IA_CATALOGUE.find(x=>x.id===id);
+  return (m&&m.label)||id;
+}
+
+/* Favoris. Quatorze modèles au catalogue, plus ceux collés à la main : on en utilise deux
+   ou trois. Les favoris remontent en tête de liste sans disparaître de leur rubrique —
+   déplacer un modèle qu'on cherchait ailleurs coûte plus cher que de le voir deux fois. */
+function iaFavoris(){
+  if(!Array.isArray(library.iaFavoris))library.iaFavoris=[];
+  return library.iaFavoris;
+}
+function iaEstFavori(id){return iaFavoris().indexOf(id)>=0;}
+function iaToggleFavori(id){
+  const f=iaFavoris(), i=f.indexOf(id);
+  if(i>=0)f.splice(i,1); else f.push(id);
+  saveLibraryDebounced();
+  return i<0;
+}
+
+/* Jeton de la session en cours. Les fonctions serveur exigent un utilisateur réellement
+   connecté : la clé publiable de l'application ne suffit pas (et ne doit pas suffire). */
+async function sessionToken(){
+  if(!sb)return null;
+  try{
+    const {data}=await sb.auth.getSession();
+    return (data&&data.session&&data.session.access_token)||null;
+  }catch(e){return null;}
+}
+async function iaCall(payload){
+  const token=await sessionToken();
+  if(!token)throw new Error('session expirée — reconnectez-vous');
+  const res=await fetch(SB_URL+'/functions/v1/photo-ia',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+    body:JSON.stringify(payload)
+  });
+  const data=await res.json().catch(()=>({error:'réponse illisible du serveur'}));
+  if(!res.ok||data.error){
+    /* Le serveur joint parfois des indications à son message (par exemple : cet échec est
+       un choix de configuration, pas une panne). Les perdre obligerait à analyser une
+       phrase française pour les retrouver. */
+    const err=new Error(data.error||('HTTP '+res.status));
+    err.data=data;
+    throw err;
+  }
+  return data;
+}
+
+/* ---- Solde du compte fournisseur, pour ne pas avoir à aller le consulter ailleurs ---- */
+let _iaBalance=null;
+async function iaLoadBalance(force){
+  /* L'échec est mémorisé comme le succès : la lecture du solde n'est pas indispensable au
+     travail, et sans ça on rappellerait le serveur à chaque ouverture de l'éditeur. */
+  if(_iaBalance&&!force&&Date.now()-_iaBalance.at<60000){
+    if(_iaBalance.err)throw new Error(_iaBalance.err);
+    return _iaBalance;
+  }
+  try{
+    const d=await iaCall({action:'balance'});
+    _iaBalance={balance:d.balance,currency:d.currency,username:d.username,at:Date.now()};
+    return _iaBalance;
+  }catch(e){
+    _iaBalance={err:(e&&e.message)||'erreur',adminManquante:!!(e&&e.data&&e.data.adminManquante),at:Date.now()};
+    throw e;
+  }
+}
+
+/* ---- Schéma d'entrée du modèle : c'est lui qui décide des réglages affichés ---- */
+const _iaSchemas={};
+async function iaSchema(model){
+  if(_iaSchemas[model])return _iaSchemas[model];
+  const d=await iaCall({action:'schema',model});
+  _iaSchemas[model]=d;
+  return d;
+}
+/* Un paramètre peut être décrit par `type` ou par `anyOf` (souvent « ce type ou null »). */
+function iaFieldType(spec){
+  if(spec.enum)return 'enum';
+  if(spec.type)return spec.type;
+  const any=(spec.anyOf||[]).filter(x=>x.type&&x.type!=='null');
+  if(any.length){
+    if(any[0].enum)return 'enum';
+    return any[0].type;
+  }
+  return 'inconnu';
+}
+function iaFieldEnum(spec){
+  if(spec.enum)return spec.enum;
+  const any=(spec.anyOf||[]).find(x=>x.enum);
+  return any?any.enum:null;
+}
+
+function iaParamsFor(model){
+  ensureIaModels();
+  if(!library.iaParams[model])library.iaParams[model]={};
+  return library.iaParams[model];
+}
+/* Valeur effective : ce que l'utilisateur a choisi pour CE modèle, sinon la préférence
+   générale (réglages), sinon le défaut du modèle. */
+function iaPrefs(){
+  const st=iaSettings();
+  return st.resolution==='modele'?{}:{resolution:st.resolution};
+}
+function iaValue(model,name,spec){
+  const saved=iaParamsFor(model);
+  if(Object.prototype.hasOwnProperty.call(saved,name))return saved[name];
+  const pref=iaPrefs()[name];
+  if(pref!==undefined){
+    const enums=iaFieldEnum(spec)||[];
+    if(enums.indexOf(pref)>=0)return pref;
+  }
+  return spec.default;
+}
+
+function iaSpendKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function iaSpend(){library.iaUsage=library.iaUsage||{};return library.iaUsage[iaSpendKey()]||0;}
+function iaCountCall(){
+  library.iaUsage=library.iaUsage||{};
+  const k=iaSpendKey();
+  library.iaUsage[k]=(library.iaUsage[k]||0)+1;
+  saveLibraryDebounced();
+}
+/* Une demande annulée AVANT d'avoir démarré n'est pas facturée : la laisser comptée ferait
+   mentir le plafond dans l'autre sens, et bloquerait des envois qui n'ont rien coûté. */
+function iaUncountCall(){
+  library.iaUsage=library.iaUsage||{};
+  const k=iaSpendKey();
+  library.iaUsage[k]=Math.max(0,(library.iaUsage[k]||0)-1);
+  saveLibraryDebounced();
+}
+
+/* ============ LA FILE D'ATTENTE DE fal ============
+
+   Avant, le pont appelait `fal.run` et attendait la fin dans la requête. Sur une image
+   lourde ou une file chargée, la fonction serveur expirait AVANT la réponse : l'image était
+   perdue — et facturée quand même, puisque le modèle avait tourné. C'est ce qui interdisait
+   le 4K, et ce qui rendait la retouche en série risquée : elle multiplie les appels longs.
+
+   Maintenant, trois temps courts — déposer la demande, demander où elle en est, récupérer
+   l'image. Aucun ne dépend de la durée du modèle, donc aucun ne peut expirer. Et comme la
+   demande porte un identifiant qu'on écrit AVANT de rendre la main, fermer la page ne la
+   perd plus : elle est reprise à la réouverture. */
+
+function iaJobs(){
+  if(!Array.isArray(library.iaJobs))library.iaJobs=[];
+  return library.iaJobs;
+}
+/* Écriture IMMÉDIATE (`saveLibrary`), jamais différée : entre le dépôt et l'enregistrement,
+   une page fermée perdrait une demande déjà payée. C'est tout l'objet du chantier. */
+function iaJobAdd(job){iaJobs().push(job);return saveLibrary();}
+function iaJobDrop(id){library.iaJobs=iaJobs().filter(j=>j.id!==id);return saveLibrary();}
+
+/* La réalisation qui porte cette photo : une demande reprise dans une AUTRE session doit
+   savoir où reposer son résultat. */
+function iaRealOf(photo){
+  return realisations.find(r=>(r.photos||[]).some(p=>p.id===photo.id))||null;
+}
+
+const iaSleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* Ce qu'on écrit à l'écran pendant l'attente. « En file d'attente · 3ᵉ » et « le modèle
+   travaille » ne veulent pas dire la même chose : le premier peut encore être annulé sans
+   être facturé, le second non. */
+function iaEtatTexte(job){
+  const s=Math.max(0,Math.round((Date.now()-(job.at||Date.now()))/1000));
+  const t=s<60?s+' s':(Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')+' s');
+  if(job.etat==='RECUP')return 'Récupération de l’image… · '+t;
+  if(job.etat==='IN_QUEUE')return 'En file d’attente'+(job.position!=null?' · '+(job.position+1)+'ᵉ':'')+' · '+t;
+  return 'Le modèle travaille… · '+t;
+}
+
+/* Prépare l'image et les réglages, dépose la demande dans la file, et l'inscrit AVANT de
+   rendre la main. */
+async function iaSubmitJob(r,photo,consigne,modelId,from){
+  /* De quelle version on part. Par défaut celle qui est affichée : on retouche ce qu'on
+     regarde. Repartir de l'originale reste à un clic, et c'est ce que fait la série. */
+  const src=(from&&(from==='orig'||photoVersion(photo,from)))?from:photoActiveId(photo);
+  const img=await loadPhotoImage(photo.id,{thumb:false,versionId:src});
+  if(!img)throw new Error('image de départ introuvable');
+  /* On envoie la photo AVEC les corrections déjà faites (verticales, lumière, cadrage) :
+     l'IA travaille sur ce qu'on veut publier, pas sur le brut. Les réglages sont ceux de la
+     version de départ — chaque version a les siens. */
+  const cv=glRenderTo(img,photoEditOf(photo,src),1600,'ia_'+photo.id+'_'+src);
+  if(!cv)throw new Error('rendu impossible');
+  _glTexKey='';
+  /* Les préférences du CRM ne sont pas seulement affichées : elles partent réellement — mais
+     seulement là où le modèle les accepte. Envoyer « 2K » à un modèle qui nomme ses
+     résolutions autrement le ferait échouer. On lit son schéma avant. */
+  const prefs={};
+  const voulu=iaPrefs();
+  try{
+    const sc=await iaSchema(modelId);
+    Object.keys(voulu).forEach(k=>{
+      const spec=sc.properties&&sc.properties[k];
+      if(!spec)return;
+      const enums=iaFieldEnum(spec)||[];
+      if(enums.indexOf(voulu[k])>=0)prefs[k]=voulu[k];
+    });
+  }catch(e){ /* schéma illisible : on part sans préférence, le modèle prendra ses défauts */ }
+  const input=Object.assign(prefs,iaParamsFor(modelId),{prompt:consigne});
+  const d=await iaCall({action:'submit',model:modelId,input,imageDataUri:cv.toDataURL('image/jpeg',0.9)});
+  if(!d.requestId)throw new Error('fal.ai n’a pas renvoyé d’identifiant de demande');
+  const job={id:uid(),reqId:d.requestId,model:modelId,prompt:consigne,
+    statusUrl:d.statusUrl||'',responseUrl:d.responseUrl||'',cancelUrl:d.cancelUrl||'',
+    realId:r.id,photoId:photo.id,photoName:photo.name||'photo',from:src,
+    at:Date.now(),etat:'IN_QUEUE',position:(typeof d.queuePosition==='number'?d.queuePosition:null)};
+  await iaJobAdd(job);
+  /* La file a accepté la demande : le modèle va tourner, donc elle sera facturée. On la
+     compte ICI et pas à l'arrivée — sinon le plafond ne verrait rien d'une série en vol. */
+  iaCountCall();
+  return job;
+}
+
+/* Suit une demande jusqu'à son image. Trois issues, qui ne se traitent pas pareil :
+   - terminée → on récupère l'image ;
+   - introuvable chez fal (expirée, annulée) → il n'y a rien à attendre, la demande est jetée ;
+   - toujours en cours au bout du délai réglé → la demande N'EST PAS jetée : elle continue
+     chez fal et sera reprise. C'est la différence entre « on arrête de regarder » et
+     « c'est perdu ». */
+async function iaWaitJob(job,onEtat){
+  const st=iaSettings();
+  const pas=Math.max(1,parseInt(st.sondageSec,10)||3)*1000;
+  /* Le panneau de réglages refuse déjà tout ce qui sort de 1 à 120 min : ce garde-fou-ci ne
+     sert qu'à ne pas partir sur une valeur inutilisable (0, NaN, texte). */
+  const maxMin=Math.max(0.05,parseFloat(st.attenteMaxMin)||10);
+  const limite=Date.now()+maxMin*60000;
+  for(;;){
+    if(job.annule){const e=new Error('Demande annulée.');e.annule=true;e.definitif=true;throw e;}
+    const d=await iaCall({action:'status',model:job.model,requestId:job.reqId,statusUrl:job.statusUrl});
+    job.etat=d.status;job.position=(typeof d.queuePosition==='number')?d.queuePosition:null;
+    if(onEtat)onEtat(job);
+    if(d.status==='COMPLETED')break;
+    if(d.status==='NOT_FOUND'){
+      const e=new Error('Demande introuvable chez fal.ai : elle a expiré ou a été annulée. Il n’y a rien à récupérer.');
+      e.definitif=true;throw e;
+    }
+    if(Date.now()>limite){
+      throw new Error('Toujours pas terminée après '+maxMin+' min. La demande continue chez fal.ai : elle sera reprise à la prochaine ouverture de l’onglet Réalisations, ou par « Reprendre ». Ce délai se règle dans ⚙ Réglages.');
+    }
+    await iaSleep(pas);
+  }
+  job.etat='RECUP';if(onEtat)onEtat(job);
+  let res;
+  try{
+    res=await iaCall({action:'result',model:job.model,requestId:job.reqId,responseUrl:job.responseUrl});
+  }catch(e){
+    /* Le modèle a rendu un échec, ou la demande n'existe plus : il n'y a pas d'image à
+       attendre. Tout le reste (réseau coupé, serveur muet) laisse la demande en place. */
+    if(/a échoué|introuvable/i.test((e&&e.message)||''))e.definitif=true;
+    throw e;
+  }
+  if(!res.imageDataUri){const e=new Error('aucune image renvoyée');e.definitif=true;throw e;}
+  return res;
+}
+
+/* Récupération ET pose. C'est le MÊME chemin pour une retouche lancée à l'instant et pour
+   une retouche reprise après réouverture de la page : `iaStoreResult` reste appelée d'un
+   seul endroit, comme avant. */
+async function iaCollectJob(job,onEtat){
+  const r=findRealisation(job.realId);
+  const photo=r&&(r.photos||[]).find(p=>p.id===job.photoId);
+  if(!r||!photo){
+    await iaJobDrop(job.id);
+    throw new Error('La photo de cette retouche n’existe plus : la demande a été abandonnée.');
+  }
+  let data;
+  try{
+    data=await iaWaitJob(job,onEtat);
+  }catch(e){
+    /* On ne jette une demande QUE si on SAIT qu'il n'y a plus rien à récupérer : expirée
+       chez fal, annulée, ou échec rendu par le modèle. Une coupure réseau, un serveur muet,
+       un délai dépassé ne doivent PAS faire perdre une image déjà payée : la demande reste
+       dans la liste et sera reprise. Le bandeau propose « Abandonner » pour les cas sans
+       espoir — c'est un geste explicite, pas un effet de bord. */
+    if(e.definitif)await iaJobDrop(job.id);
+    throw e;
+  }
+  await iaStoreResult(r,photo,data,job.prompt,job.model,job.from);
+  await iaJobDrop(job.id);
+  return {r,photo,data};
+}
+
+/* Annulation. Tant que la demande n'a pas démarré, elle n'est pas facturée — mais c'est fal
+   qui le dit, pas nous : on n'annonce « rien ne sera facturé » que si la demande était
+   encore en file ET que fal a accepté l'annulation. Si l'appel est déjà terminé, la demande
+   est GARDÉE : elle est payée, autant récupérer son image. */
+async function iaCancelJob(job){
+  const enFile=job.etat==='IN_QUEUE';
+  let d;
+  try{
+    d=await iaCall({action:'cancel',model:job.model,requestId:job.reqId,cancelUrl:job.cancelUrl});
+  }catch(e){
+    return {issue:'erreur',msg:'Annulation impossible : '+((e&&e.message)||'erreur')+'. La demande reste suivie.'};
+  }
+  if(d.status==='ALREADY_COMPLETED'){
+    return {issue:'tard',msg:'Trop tard : l’appel est déjà terminé chez fal.ai, il sera facturé. Son image reste récupérable — la demande est gardée et sera reprise.'};
+  }
+  job.annule=true;
+  await iaJobDrop(job.id);
+  if(d.status==='NOT_FOUND')return {issue:'annule',msg:'Demande inconnue chez fal.ai : il n’y avait rien à annuler, elle a été retirée de la liste.'};
+  if(enFile){
+    iaUncountCall();
+    return {issue:'annule',msg:'Demande annulée avant son démarrage : elle ne sera pas facturée.'};
+  }
+  return {issue:'annule',msg:'Annulation demandée. L’appel avait déjà démarré : il sera facturé, mais son image ne sera pas récupérée.'};
+}
+
+/* Retoucher une photo de bout en bout : dépôt, suivi, récupération, pose. Les deux chemins
+   du CRM — une photo seule et la série — passent par ici. */
+async function runIaEdit(photo,consigne,modelId,opts){
+  opts=opts||{};
+  const r=opts.r||iaRealOf(photo);
+  if(!r)throw new Error('cette photo n’appartient à aucune réalisation');
+  const job=await iaSubmitJob(r,photo,consigne,modelId,opts.from);
+  if(opts.onJob)opts.onJob(job);
+  return await iaCollectJob(job,opts.onEtat);
+}
+
+/* Dernière erreur de retouche, gardée hors du panneau : le panneau est reconstruit à chaque
+   changement, un message posé dedans disparaîtrait aussitôt. Un toast s'efface en trois
+   secondes — trop court pour lire pourquoi un appel a échoué. */
+let _iaLastError=null;
+async function applyIaToPhoto(r,photo,consigne,modelId,btn,from){
+  const setBtn=t=>{if(btn){btn.disabled=t!==null;btn.textContent=t||'✨ Retoucher cette photo';}};
+  /* Le plafond bloque AVANT tout appel : rien n'est envoyé, donc rien n'est facturé. */
+  if(iaPlafondAtteint()){
+    const st=iaSettings();
+    _iaLastError='Plafond du mois atteint ('+iaSpend()+' / '+st.plafondMois+' retouches). Aucun appel n’a été envoyé, rien n’a été facturé. Relevez le plafond dans ⚙ Réglages, ou attendez le mois prochain.';
+    buildEditorControls();
+    toast('Plafond du mois atteint — rien n’a été envoyé');
+    return;
+  }
+  _iaLastError=null;
+  setBtn('Dépôt de la demande…');
+  try{
+    await runIaEdit(photo,consigne,modelId,{r,from,
+      /* Le suivi s'écrit là où on vient de cliquer : sur le bouton et juste dessous. On ne
+         reconstruit PAS le panneau à chaque changement d'état — ça détacherait le bouton
+         dont cette retouche tient la référence. */
+      onJob:job=>{_iaEnCours={job};iaWaitPaint();},
+      onEtat:job=>{setBtn(iaEtatTexte(job));iaWaitPaint();}});
+    if(_ed&&_ed.p===photo){_ed.img=null;await reloadEditorImage();}
+    toast('Retouche appliquée — l’original reste disponible');
+  }catch(e){
+    if(e&&e.annule){ toast('Demande annulée'); }
+    else{
+      console.error('retouche IA',e);
+      _iaLastError=(e&&e.message)||'erreur inconnue';
+      toast('Échec de la retouche — le détail reste affiché');
+    }
+  }finally{ _iaEnCours=null; _iaFrom=null; setBtn(null); buildEditorControls(); }
+}
+
+/* Ce qui se passe pendant l'attente, écrit sous le bouton, avec de quoi annuler. Sans ça,
+   la file remplacerait « ça a expiré » par « il ne se passe rien », ce qui n'est pas mieux. */
+let _iaEnCours=null;   /* demande en vol depuis l'éditeur : {job} */
+function iaWaitPaint(){
+  const sub=document.querySelector('#ed-controls .ia-sub');
+  if(!sub)return;
+  const vieux=document.querySelector('#ed-controls .ia-annuler');
+  if(!_iaEnCours){ if(vieux)vieux.remove(); sub.textContent=''; return; }
+  /* Le bouton porte déjà l'état et le temps écoulé : répéter la même phrase juste dessous
+     n'apprendrait rien. Cette ligne-ci dit ce qu'on ne peut pas deviner — qu'on a le droit
+     de partir. */
+  sub.textContent='Vous pouvez fermer cette page : la demande est enregistrée chez fal.ai et sera reprise à la réouverture.';
+  if(vieux)return;
+  const b=document.createElement('button');
+  b.className='mini ia-annuler';b.type='button';b.textContent='Annuler cette demande';
+  b.addEventListener('click',async()=>{
+    if(!_iaEnCours)return;
+    b.disabled=true;b.textContent='Annulation…';
+    const res=await iaCancelJob(_iaEnCours.job);
+    _iaLastError=res.msg;
+    toast(res.issue==='annule'?'Demande annulée':'Trop tard pour annuler');
+    buildEditorControls();
+  });
+  sub.parentNode.insertBefore(b,sub.nextSibling);
+}
+
+/* Pose du résultat sur la photo. UNE seule écriture de cette règle : la retouche d'une
+   photo et la retouche d'une série doivent produire exactement le même état, sinon la
+   série finirait par diverger sans que rien ne le signale. */
+async function iaStoreResult(r,photo,data,consigne,modelId,from){
+  /* Une retouche ne remplace plus la précédente : elle s'ajoute. Chacune garde son image,
+     son modèle, sa consigne et la version dont elle est sortie. */
+  const vid='v'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  const key='ra_'+photo.id+'_'+vid;
+  await photoStore.save(key,dataUriToBlob(data.imageDataUri));
+  _imgCache.delete(key);
+  const actif=photoActiveId(photo);
+  const src=(from&&(from==='orig'||photoVersion(photo,from)))?from:actif;
+  /* Les réglages du moment sont maintenant DANS l'image renvoyée : on les laisse à la
+     version qui était affichée, et la nouvelle repart de réglages neutres. */
+  if(!photo.edits)photo.edits={};
+  photo.edits[actif]=JSON.parse(JSON.stringify(photo.edit||blankEdit()));
+  photoVersions(photo).push({id:vid,key,model:modelId,prompt:consigne,
+    params:Object.assign({},iaParamsFor(modelId)),from:src,createdAt:Date.now(),label:''});
+  photo.edits[vid]=blankEdit();
+  photo.active=vid;
+  photo.edit=blankEdit();
+  photoTouch(photo,'ia',iaModelLabel(modelId)+(consigne?' · « '+consigne+' »':'')
+    +(src==='orig'?'':' · à partir de '+photoVersionLabel(photo,src)));
+  if(consigne&&consigne.length>3&&library.iaPrompts.indexOf(consigne)<0){
+    library.iaPrompts.unshift(consigne);
+    library.iaPrompts=library.iaPrompts.slice(0,8);
+    saveLibraryDebounced();
+  }
+  r.updatedAt=Date.now();saveRealisations();
+  _iaBalance=null; /* une retouche vient d'être facturée : le solde affiché n'est plus bon */
+}
+
+/* ============ RETOUCHE D'UNE SÉRIE ============
+   Écrire la consigne une fois et la passer sur tout un chantier. Trois garde-fous, parce
+   que chaque photo est un appel facturé : le nombre et le coût sont annoncés AVANT de
+   lancer, le plafond mensuel arrête l'envoi, et on peut interrompre en cours. */
+let _iaSerie=null;         /* série en cours : {total,done,nom,stop,echecs} */
+let _iaSerieReport=null;   /* bilan de la dernière série, affiché jusqu'à ce qu'on le masque */
+
+function iaSerieCandidats(r,portee,selection){
+  const toutes=(r.photos||[]);
+  if(portee==='sel')return toutes.filter(p=>selection.has(p.id));
+  if(portee==='toutes')return toutes.slice();
+  return toutes.filter(p=>!photoVersions(p).length);
+}
+function openIaSerieDialog(r,selection){
+  ensureIaModels();
+  const sel=selection||new Set();
+  const modeles=IA_CATALOGUE.concat(iaCustomModels());
+  const choisi=(library.iaLastModel&&modeles.some(m=>m.id===library.iaLastModel))?library.iaLastModel:iaSettings().modeleDefaut;
+  const nSel=(r.photos||[]).filter(p=>sel.has(p.id)).length;
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Retoucher plusieurs photos</h3>
+    <p class="msub">Une seule consigne, envoyée photo par photo. Chaque photo garde son original : la version IA se pose à côté, et reste annulable photo par photo.</p>
+    <div class="ia-portee-wrap"><span class="lbl">Sur quelles photos</span>
+      <div class="ia-portee">
+        ${nSel?`<label><input type="radio" name="ia-portee" value="sel" checked> La sélection (${nSel})</label>`:''}
+        <label><input type="radio" name="ia-portee" value="neuves"${nSel?'':' checked'}> Celles qui n’ont pas encore de version IA (${iaSerieCandidats(r,'neuves',sel).length})</label>
+        <label><input type="radio" name="ia-portee" value="toutes"> Toutes les photos (${(r.photos||[]).length})</label>
+      </div>
+    </div>
+    <label class="fld"><span class="lbl">Votre consigne</span>
+      <textarea id="serie-consigne" rows="4" placeholder="ex. Équilibre la lumière, garde les matériaux et l’architecture tels quels."></textarea></label>
+    <div class="ia-chips" id="serie-presets"></div>
+    <label class="fld"><span class="lbl">Modèle</span><select id="serie-modele">
+      ${modeles.map(m=>`<option value="${esc(m.id)}"${m.id===choisi?' selected':''}>${esc(m.label||m.id)}</option>`).join('')}
+    </select></label>
+    <label class="fld"><span class="lbl">À partir de</span><select id="serie-depart">
+      <option value="orig" selected>La photo d’origine de chacune (recommandé)</option>
+      <option value="active">La version affichée de chacune</option>
+    </select></label>
+    <p class="ias-note">Repartir des versions affichées enchaîne une retouche sur une image déjà redessinée : utile pour affiner, mais sur toute une série l’écart au réel s’accumule sans se voir.</p>
+    <p class="msub" id="serie-recap"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="mini" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="serie-go">✨ Lancer</button>
+    </div>`);
+  const ta=$('serie-consigne'), recap=$('serie-recap'), go=$('serie-go');
+  const pres=$('serie-presets');
+  IA_PRESETS.forEach(x=>{
+    const b=document.createElement('button');b.type='button';b.className='ia-chip';b.textContent=x.t;
+    b.addEventListener('click',()=>{ta.value=x.v;ta.focus();maj();});
+    pres.appendChild(b);
+  });
+  (library.iaPrompts||[]).slice(0,4).forEach(v=>{
+    const b=document.createElement('button');b.type='button';b.className='ia-chip recent';
+    b.textContent=v.length>34?v.slice(0,32)+'…':v;b.title=v;
+    b.addEventListener('click',()=>{ta.value=v;ta.focus();maj();});
+    pres.appendChild(b);
+  });
+  const portee=()=>(document.querySelector('input[name="ia-portee"]:checked')||{}).value||'neuves';
+  const maj=()=>{
+    const liste=iaSerieCandidats(r,portee(),sel);
+    const st=iaSettings(), fait=iaSpend();
+    const cout=liste.length*(parseFloat(st.coutUnitaire)||0);
+    const reste=st.plafondMois>0?Math.max(0,st.plafondMois-fait):Infinity;
+    let t=liste.length+' photo(s)'+(cout?' · environ '+cout.toFixed(2).replace('.',',')+' $':'')
+      +' · ce mois-ci '+fait+(st.plafondMois?' / '+st.plafondMois+' retouches':' retouche(s)');
+    if(!liste.length)t='Aucune photo dans cette portée. Choisissez « Toutes les photos » pour refaire celles qui ont déjà une version IA.';
+    else if(reste===0)t='Plafond du mois atteint ('+fait+' / '+st.plafondMois+'). Rien ne sera envoyé, donc rien ne sera facturé. Relevez le plafond dans ⚙ Réglages.';
+    else if(reste<liste.length)t+=' — attention : le plafond sera atteint après '+reste+' photo(s), les suivantes ne partiront pas.';
+    recap.textContent=t;
+    go.disabled=!liste.length||reste===0;
+    go.textContent='✨ Lancer sur '+liste.length+' photo(s)';
+  };
+  document.querySelectorAll('input[name="ia-portee"]').forEach(el=>el.addEventListener('change',maj));
+  ta.addEventListener('input',maj);
+  maj();
+  go.addEventListener('click',()=>{
+    const c=(ta.value||'').trim();
+    if(!c){toast('Écrivez la consigne, ou touchez une consigne toute prête');ta.focus();return;}
+    const liste=iaSerieCandidats(r,portee(),sel);
+    if(!liste.length)return;
+    runIaSerie(r,liste,c,$('serie-modele').value,$('serie-depart').value);
+  });
+}
+function iaSeriePaint(){
+  if(!_iaSerie)return;
+  const e=$('serie-etat');
+  if(e)e.textContent='Photo '+Math.min(_iaSerie.done+1,_iaSerie.total)+' / '+_iaSerie.total+' · '+_iaSerie.nom
+    +(_iaSerie.job?' — '+iaEtatTexte(_iaSerie.job):'');
+  const a=$('serie-annul'); if(a)a.textContent=_iaSerie.annulMsg||'';
+  const b=document.querySelector('#modal .rz-bar i'); if(b)b.style.width=Math.round(_iaSerie.done/_iaSerie.total*100)+'%';
+  const ul=$('serie-live');
+  if(ul&&ul.childElementCount!==_iaSerie.echecs.length){
+    ul.innerHTML='';
+    _iaSerie.echecs.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+  }
+}
+async function runIaSerie(r,photos,consigne,modelId,depart){
+  _iaSerie={total:photos.length,done:0,nom:(photos[0].name||'photo'),stop:false,echecs:[],job:null,annulMsg:''};
+  _iaSerieReport=null;
+  openModal(`<h3>Retouche en cours</h3>
+    <p class="msub">Une photo à la fois. L’original de chacune est conservé.</p>
+    <p class="msub" id="serie-etat"></p>
+    <div class="rz-bar"><i style="width:0%"></i></div>
+    <p class="msub" id="serie-annul"></p>
+    <ul class="rz-refus" id="serie-live"></ul>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button class="mini" id="serie-stop">Interrompre</button>
+    </div>`);
+  const stopBtn=$('serie-stop');
+  stopBtn.addEventListener('click',async()=>{
+    if(!_iaSerie)return;
+    _iaSerie.stop=true;
+    stopBtn.disabled=true;stopBtn.textContent='Arrêt en cours…';
+    /* La file change ce qu'on peut promettre. Avant, un appel parti était facturé quoi qu'il
+       arrive : on s'arrêtait donc APRÈS la photo en cours. Maintenant, tant que la demande
+       n'a pas démarré, l'annuler évite vraiment la dépense — et si elle a démarré, elle est
+       facturée, donc on garde son image plutôt que de la jeter. */
+    const j=_iaSerie.job;
+    if(j&&j.etat==='IN_QUEUE'){
+      const res=await iaCancelJob(j);
+      if(_iaSerie)_iaSerie.annulMsg=res.msg;
+    }else if(j){
+      _iaSerie.annulMsg='La photo en cours a déjà démarré chez fal.ai : elle sera facturée, on garde donc son image.';
+    }
+    iaSeriePaint();
+  });
+  iaSeriePaint();
+  let ok=0,plafond=false;
+  for(const p of photos){
+    if(_iaSerie.stop)break;
+    if(iaPlafondAtteint()){plafond=true;break;}
+    _iaSerie.nom=p.name||'photo';iaSeriePaint();
+    try{
+      await runIaEdit(p,consigne,modelId,{r,
+        from:(depart==='active')?photoActiveId(p):'orig',
+        onJob:job=>{if(_iaSerie){_iaSerie.job=job;iaSeriePaint();}},
+        onEtat:()=>iaSeriePaint()});
+      ok++;
+    }catch(e){
+      /* Une demande annulée à la demande n'est pas un échec : ne pas la lister comme tel. */
+      if(!(e&&e.annule)){
+        console.error('retouche IA série',e);
+        _iaSerie.echecs.push({name:p.name||'photo',why:(e&&e.message)||'erreur inconnue'});
+      }
+    }
+    if(!_iaSerie)break;
+    _iaSerie.job=null;_iaSerie.done++;iaSeriePaint();
+  }
+  const bilan={ok,total:photos.length,echecs:_iaSerie.echecs.slice(),
+    interrompu:_iaSerie.stop&&_iaSerie.done<photos.length,plafond,
+    /* Une demande partie mais pas encore récupérée n'est pas perdue : elle est reprise. */
+    enVol:iaJobs().length};
+  _iaSerie=null;
+  _iaSerieReport=bilan;
+  closeModal();
+  saveRealisations();renderRealisations();
+  toast(ok+' photo(s) retouchée(s)'+(bilan.echecs.length?' · '+bilan.echecs.length+' échec(s)':''));
+}
+/* ---- Republier plusieurs réalisations d'un coup ----
+   Même forme que la retouche en série : on annonce, on montre où on en est, on peut
+   interrompre, et un échec sur l'une n'arrête pas les autres. */
+let _pubLot=null;
+let _pubLotReport=null;   /* bilan de la dernière republication en lot, affiché sur le tableau de bord */
+function buildPubLotPanel(){
+  if(!_pubLotReport)return null;
+  const b=_pubLotReport;
+  const box=document.createElement('div');box.className='ia-erreur pub-lot'+(b.echecs.length?'':' ia-ok');
+  const t=document.createElement('p');
+  t.textContent='🌐 Republication : '+b.ok+' réalisation(s) sur '+b.total+' remises à jour sur le site.'
+    +(b.interrompu?' Interrompu à votre demande.':'')
+    +(b.echecs.length?' '+b.echecs.length+' n’ont pas pu être republiées :':' Le site est à jour.');
+  box.appendChild(t);
+  if(b.echecs.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    b.echecs.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.titre;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+  f.addEventListener('click',()=>{_pubLotReport=null;renderDashboard();});
+  box.appendChild(f);
+  return box;
+}
+async function republierToutes(){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  const liste=(realisations||[]).filter(realisationEnAttente);
+  if(!liste.length){toast('Tout est déjà à jour sur le site');return;}
+  const total=liste.reduce((a,r)=>a+realisationARepublier(r),0);
+  askConfirm('Republier '+liste.length+' réalisation(s) sur le site ? '+total+' photo(s) seront renvoyées.',async()=>{
+    _pubLot={n:0,total:liste.length,stop:false,echecs:[]};
+    openModal(`<h3>Republication en cours</h3>
+      <p class="msub">Une réalisation à la fois. Le site n'est modifié qu'au fur et à mesure.</p>
+      <p class="msub" id="lot-etat"></p>
+      <div class="rz-bar"><i style="width:0%"></i></div>
+      <ul class="rz-refus" id="lot-echecs"></ul>
+      <p class="msub">Vous pouvez fermer cette fenêtre ou changer d'onglet : la republication continue en arrière-plan, et le bilan restera affiché sur le tableau de bord à la fin.</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="mini" id="lot-stop">Interrompre</button>
+        <button class="btn btn-onlight" id="lot-fond">Continuer en arrière-plan</button>
+      </div>`);
+    const stop=$('lot-stop');
+    stop.addEventListener('click',()=>{
+      if(!_pubLot)return;
+      _pubLot.stop=true;stop.disabled=true;stop.textContent='Arrêt après celle-ci…';
+    });
+    /* Fermer la fenêtre n'arrête RIEN — la boucle plus bas ne dépend d'aucun élément de ce
+       modal (tous les accès DOM de `peindre()` sont gardés). Un bouton dédié, en plus du
+       clic sur le fond, pour que ce soit visible sans avoir à le deviner. */
+    const fond=$('lot-fond');
+    if(fond)fond.addEventListener('click',closeModal);
+    const peindre=()=>{
+      const e=$('lot-etat');
+      if(e&&_pubLot)e.textContent='Réalisation '+Math.min(_pubLot.n+1,_pubLot.total)+' sur '+_pubLot.total+' · '+(_pubLot.nom||'');
+      const b=document.querySelector('#modal .rz-bar i');
+      if(b&&_pubLot)b.style.width=Math.round(_pubLot.n/_pubLot.total*100)+'%';
+      const ul=$('lot-echecs');
+      if(ul&&_pubLot&&ul.childElementCount!==_pubLot.echecs.length){
+        ul.innerHTML='';
+        _pubLot.echecs.forEach(x=>{
+          const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+          li.querySelector('b').textContent=x.titre;li.querySelector('span').textContent=x.why;
+          ul.appendChild(li);
+        });
+      }
+    };
+    let ok=0;
+    for(const r of liste){
+      if(_pubLot.stop)break;
+      _pubLot.nom=r.title||'Réalisation sans titre';peindre();
+      _pubLastError=null;
+      await publishRealisation(r);
+      /* publishRealisation garde son message d'échec à l'écran : on le récupère ici pour
+         en faire un bilan, au lieu de le laisser écraser par la réalisation suivante. */
+      if(_pubLastError)_pubLot.echecs.push({titre:_pubLot.nom,why:_pubLastError.replace(/^Publication interrompue : /,'')});
+      else ok++;
+      _pubLot.n++;peindre();
+    }
+    const bilan={ok,total:liste.length,echecs:_pubLot.echecs.slice(),interrompu:_pubLot.stop&&_pubLot.n<liste.length};
+    _pubLot=null;
+    closeModal();
+    /* Le bilan s'affiche LÀ OÙ LE GESTE A ÉTÉ FAIT — le tableau de bord — et y reste
+       jusqu'à ce qu'on le masque. Le laisser dans la fiche d'une réalisation obligerait à
+       aller le chercher dans celle qui a échoué, c'est-à-dire à deviner laquelle. */
+    _pubLotReport=bilan;
+    _pubLastError=null;
+    renderDashboard();renderRealisations();
+    toast(bilan.ok+' réalisation(s) republiée(s)'
+      +(bilan.echecs.length?' · '+bilan.echecs.length+' échec(s)':'')
+      +(bilan.interrompu?' · interrompu':''));
+  });
+}
+
+/* Bilan de la série : il reste à l'écran. Un toast de trois secondes ne suffit pas à lire
+   pourquoi trois photos sur douze n'ont pas abouti. */
+function buildIaSeriePanel(){
+  if(!_iaSerieReport)return null;
+  const b=_iaSerieReport;
+  const box=document.createElement('div');box.className='ia-erreur rz-bilan-serie'+(b.echecs.length||b.plafond?'':' ia-ok');
+  const t=document.createElement('p');
+  t.textContent='✨ Série terminée : '+b.ok+' photo(s) retouchée(s) sur '+b.total+'.'
+    +(b.interrompu?' Interrompu à votre demande.':'')
+    +(b.plafond?' Arrêté sur le plafond du mois : rien n’a été envoyé au-delà, donc rien n’a été facturé.':'')
+    +(b.enVol?' '+b.enVol+' demande(s) sont encore en cours chez fal.ai : elles sont déjà payées et seront récupérées automatiquement.':'')
+    +(b.echecs.length?'':' Les originaux restent disponibles : chaque photo peut revenir en arrière depuis son éditeur.');
+  box.appendChild(t);
+  if(b.echecs.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    b.echecs.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+  f.addEventListener('click',()=>{_iaSerieReport=null;renderRealisations();});
+  box.appendChild(f);
+  return box;
+}
+
+/* ============ REPRISE : ce qui a été lancé et pas récupéré ============
+   Une demande déposée dans la file est payée. Si la page se ferme entre le dépôt et la
+   récupération — onglet fermé, téléphone verrouillé, réseau coupé, session expirée —,
+   l'image existe quand même chez fal.ai. Elle est reprise ici, toute seule, à la
+   réouverture : on ne demande pas la permission de récupérer ce qui est déjà payé. */
+let _iaReprise=null;   /* {en,total,done,ok,echecs,job} */
+
+function iaReprisePaint(){
+  const n=document.getElementById('ia-reprise-etat');
+  if(n){
+    n.textContent=(_iaReprise&&_iaReprise.job)
+      ?(Math.min(_iaReprise.done+1,_iaReprise.total)+' / '+_iaReprise.total+' · '+_iaReprise.job.photoName+' — '+iaEtatTexte(_iaReprise.job))
+      :'';
+    return;
+  }
+  /* Le bandeau n'est pas à l'écran (autre onglet ouvert) : on ne redessine l'onglet
+     Réalisations que s'il est visible, sinon on repeindrait dans le vide à chaque sondage. */
+  const host=document.getElementById('rz-body');
+  if(host&&host.offsetParent!==null)renderRealisations();
+}
+
+async function iaReprendre(){
+  const jobs=iaJobs().slice();
+  if(!jobs.length||(_iaReprise&&_iaReprise.en))return;
+  _iaReprise={en:true,total:jobs.length,done:0,ok:0,echecs:[],job:null};
+  renderRealisations();
+  for(const j of jobs){
+    if(!iaJobs().some(x=>x.id===j.id))continue;   /* retirée entre-temps */
+    _iaReprise.job=j;iaReprisePaint();
+    try{
+      await iaCollectJob(j,()=>iaReprisePaint());
+      _iaReprise.ok++;
+    }catch(e){
+      console.error('reprise retouche IA',e);
+      _iaReprise.echecs.push({name:j.photoName||'photo',why:(e&&e.message)||'erreur inconnue'});
+    }
+    _iaReprise.done++;_iaReprise.job=null;iaReprisePaint();
+  }
+  _iaReprise.en=false;
+  saveRealisations();renderRealisations();
+  if(_iaReprise.ok)toast(_iaReprise.ok+' retouche(s) récupérée(s)');
+}
+
+/* Au démarrage on ne demande rien, on récupère : ce sont des images déjà payées. Le délai
+   laisse la page finir de se dessiner avant de lancer les appels. */
+function iaRepriseAuto(){
+  try{ if(iaJobs().length)setTimeout(()=>{iaReprendre();},1200); }catch(e){}
+}
+
+function iaJobAge(j){
+  const m=Math.round((Date.now()-(j.at||Date.now()))/60000);
+  return m<1?'à l’instant':(m<60?('il y a '+m+' min'):('il y a '+Math.floor(m/60)+' h'));
+}
+
+/* Le bandeau. Il dit trois choses selon le moment : ce qu'on est en train de récupérer, ce
+   qui reste à récupérer, et ce que la reprise a donné. */
+function buildIaReprisePanel(){
+  const enAttente=iaJobs();
+  if(!_iaReprise&&!enAttente.length)return null;
+  const enCours=!!(_iaReprise&&_iaReprise.en);
+  const fini=_iaReprise&&!_iaReprise.en;
+  const box=document.createElement('div');
+  box.className='ia-erreur rz-reprise-ia'+((fini&&!_iaReprise.echecs.length&&!enAttente.length)?' ia-ok':'');
+
+  const t=document.createElement('p');
+  if(enCours){
+    t.textContent='⏳ Reprise des retouches déjà lancées chez fal.ai. Elles sont payées : on récupère leur image.';
+  }else if(fini){
+    t.textContent='✨ Reprise terminée : '+_iaReprise.ok+' retouche(s) récupérée(s) sur '+_iaReprise.total+'.'
+      +(enAttente.length?' '+enAttente.length+' demande(s) restent en cours chez fal.ai.':'');
+  }else{
+    t.textContent=enAttente.length+' retouche(s) déposée(s) chez fal.ai et pas encore récupérée(s). Elles sont déjà payées : leur image est encore là.';
+  }
+  box.appendChild(t);
+
+  const etat=document.createElement('p');etat.id='ia-reprise-etat';etat.className='msub';
+  box.appendChild(etat);
+
+  const liste=(fini?_iaReprise.echecs:[]);
+  if(liste.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    liste.forEach(x=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=x.name;li.querySelector('span').textContent=x.why;
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+  if(!enCours&&enAttente.length){
+    const ul=document.createElement('ul');ul.className='rz-refus';
+    enAttente.slice(0,8).forEach(j=>{
+      const li=document.createElement('li');li.innerHTML='<b></b> — <span></span>';
+      li.querySelector('b').textContent=j.photoName||'photo';
+      li.querySelector('span').textContent=iaModelLabel(j.model)+' · déposée '+iaJobAge(j);
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+
+  const acts=document.createElement('div');acts.className='ed-acts';acts.style.marginTop='10px';
+  if(!enCours&&enAttente.length){
+    const go=document.createElement('button');go.className='mini rz-reprise-go';go.type='button';
+    go.textContent='↻ Reprendre maintenant';
+    go.addEventListener('click',()=>iaReprendre());
+    acts.appendChild(go);
+    const del=document.createElement('button');del.className='mini rz-reprise-drop';del.type='button';
+    del.textContent='Abandonner ces demandes';
+    del.addEventListener('click',()=>askConfirm(
+      'Abandonner '+enAttente.length+' demande(s) ? Elles resteront facturées par fal.ai et leur image sera définitivement perdue.',
+      async()=>{library.iaJobs=[];await saveLibrary();_iaReprise=null;renderRealisations();toast('Demandes abandonnées');}));
+    acts.appendChild(del);
+  }
+  if(fini){
+    const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
+    f.addEventListener('click',()=>{_iaReprise=null;renderRealisations();});
+    acts.appendChild(f);
+  }
+  if(acts.childElementCount)box.appendChild(acts);
+  return box;
+}
+
+async function reloadEditorImage(){
+  if(!_ed)return;
+  const img=await loadPhotoImage(_ed.p.id,{thumb:false});
+  if(!_ed)return;
+  _ed.img=img;_glTexKey='';
+  await edLoadAlt();
+  if(!_ed)return;
+  edPaintHint();edPaint();
+}
+
+/* ---- Panneau ----
+   Trois cartes, dans l'ordre où on se pose les questions : ce que je veux obtenir, avec
+   quel modèle, et ce qui existe déjà pour cette photo. Le geste principal — envoyer la
+   consigne — est un bouton pleine largeur en bas de la première carte : sur téléphone, il
+   tombe sous le pouce sans qu'on ait à le chercher. */
+
+/* Consignes toutes prêtes : sur un téléphone, taper trois lignes de français est le vrai
+   frein. Ce sont les cinq défauts qu'on retrouve sur presque toutes les photos de chantier
+   prises au téléphone. */
+const IA_PRESETS=[
+  {t:'Lumière équilibrée',v:'Équilibre la lumière de la pièce : éclaircis les zones sombres, retiens les hautes lumières près des fenêtres, garde une ambiance naturelle. Ne modifie ni les matériaux, ni le mobilier, ni l’architecture.'},
+  {t:'Couleurs fidèles',v:'Corrige la dominante de couleur due à l’éclairage artificiel : blancs neutres, bois et textiles rendus fidèlement. Aucun autre changement.'},
+  {t:'Désencombrer',v:'Retire les objets du quotidien qui traînent (câbles, produits ménagers, papiers, poubelle, chiffons) sans toucher au mobilier ni à l’architecture.'},
+  {t:'Fenêtres dégagées',v:'Rends la vue par les fenêtres lisible : extérieur clair et légèrement nuageux, sans surexposition, en gardant une lumière cohérente avec celle de la pièce.'},
+  {t:'Netteté et matières',v:'Accentue légèrement la netteté des arêtes et le grain des matières (bois, pierre, textile), sans effet artificiel ni halo.'},
+];
+
+function buildIaPanel(host){
+  const p=_ed.p, r=_ed.r;
+  ensureIaModels();
+
+  /* ---------- Carte 1 : la consigne ---------- */
+  const card=document.createElement('div');card.className='ia-card';
+  const erreurHost=document.createElement('div');host.appendChild(erreurHost);
+  const head=document.createElement('div');head.className='ia-card-h';
+  head.innerHTML='<span class="ttl">✨ Votre consigne</span>';
+  const solde=document.createElement('span');solde.className='ia-solde';
+  solde.innerHTML='<span>Solde <b>…</b></span><button type="button" title="Rafraîchir le solde">↻</button>';
+  const soldeVal=solde.querySelector('b'), soldeBtn=solde.querySelector('button');
+  head.appendChild(solde);
+  card.appendChild(head);
+
+  /* Ce qui a raté reste écrit, jusqu'au prochain essai. Avec le détail exact renvoyé par le
+     fournisseur, pas un « échec » vague. */
+  if(_iaLastError){
+    const err=document.createElement('div');err.className='ia-erreur';
+    const txt=document.createElement('p');txt.textContent=_iaLastError;
+    err.appendChild(txt);
+    const ferme=document.createElement('button');ferme.className='mini';ferme.type='button';
+    ferme.textContent='Masquer ce message';
+    ferme.addEventListener('click',()=>{_iaLastError=null;buildEditorControls();});
+    err.appendChild(ferme);
+    erreurHost.appendChild(err);
+  }
+  if(_ed.altErr){
+    const w=document.createElement('p');w.className='ia-warn';w.textContent=_ed.altErr;
+    card.appendChild(w);
+  }
+
+  const ta=document.createElement('textarea');
+  ta.className='ia-prompt';ta.rows=3;
+  ta.placeholder='Décrivez ce que vous voulez obtenir — ou touchez une consigne toute prête ci-dessous.';
+  ta.value=((photoVersion(p,photoActiveId(p))||{}).prompt)||'';
+  card.appendChild(ta);
+
+  const chips=document.createElement('div');chips.className='ia-chips';
+  IA_PRESETS.forEach(pr=>{
+    const b=document.createElement('button');b.className='ia-chip';b.type='button';
+    b.textContent=pr.t;b.title=pr.v;
+    b.addEventListener('click',()=>{ta.value=pr.v;ta.focus();});
+    chips.appendChild(b);
+  });
+  card.appendChild(chips);
+
+  if(library.iaPrompts.length){
+    const lbl=document.createElement('p');lbl.className='ia-chips-lbl';lbl.textContent='Déjà utilisées';
+    card.appendChild(lbl);
+    const recent=document.createElement('div');recent.className='ia-chips';
+    library.iaPrompts.forEach(txt=>{
+      const b=document.createElement('button');b.className='ia-chip recent mini';b.type='button';
+      b.textContent=txt.length>34?txt.slice(0,32)+'…':txt;b.title=txt;
+      b.addEventListener('click',()=>{ta.value=txt;ta.focus();});
+      recent.appendChild(b);
+    });
+    card.appendChild(recent);
+  }
+
+  /* À PARTIR DE QUOI. C'était le manque : l'envoi repartait toujours de l'originale, sans
+     rien demander. Par défaut on retouche ce qu'on regarde — et on peut choisir autre
+     chose, y compris pour reprendre une retouche mise de côté. */
+  /* Sans aucune retouche, la liste n'a qu'une entrée : un choix qui n'en est pas un, et qui
+     laisse croire qu'une version manque. On ne la montre qu'à partir de deux. */
+  const srcRow=document.createElement('label');srcRow.className='fld ia-src';
+  if(!photoVersions(p).length)srcRow.style.display='none';
+  srcRow.innerHTML='<span class="lbl">À partir de</span>';
+  const srcSel=document.createElement('select');srcSel.className='ia-src-sel';
+  const srcOptions=[{id:'orig',t:photoVersionLabel(p,'orig')}]
+    .concat(photoVersions(p).map(v=>({id:v.id,t:photoVersionLabel(p,v.id)})));
+  const srcActif=iaFromId(p);
+  srcOptions.forEach(o=>{
+    const el=document.createElement('option');el.value=o.id;
+    el.textContent=o.t+(o.id===photoActiveId(p)?' (affichée)':'');
+    if(o.id===srcActif)el.selected=true;
+    srcSel.appendChild(el);
+  });
+  srcRow.appendChild(srcSel);
+  card.appendChild(srcRow);
+  const srcNote=document.createElement('p');srcNote.className='ia-field-desc';
+  const majSrcNote=()=>{
+    srcNote.textContent=srcSel.value==='orig'
+      ? 'Le modèle repart de la photo telle qu’elle a été importée, avec vos réglages en cours.'
+      : 'Le modèle repart d’une image qu’il a déjà redessinée : c’est ce qu’il faut pour affiner un résultat, mais enchaîner les passages éloigne peu à peu du réel.';
+  };
+  srcSel.addEventListener('change',()=>{_iaFrom=srcSel.value;majSrcNote();});
+  majSrcNote();
+  if(!photoVersions(p).length)srcNote.style.display='none';
+  card.appendChild(srcNote);
+
+  const go=document.createElement('button');go.className='ia-go btn-primary';
+  const bloque=iaPlafondAtteint();
+  go.textContent=bloque?'Plafond du mois atteint':'✨ Retoucher cette photo';
+  go.disabled=bloque;
+  card.appendChild(go);
+
+  const sub=document.createElement('p');sub.className='ia-sub';
+  card.appendChild(sub);
+
+  /* Le solde n'est qu'une commodité : quand sa lecture échoue, on le dit sans laisser croire
+     que la retouche est cassée — ce sont deux droits différents sur la clé du fournisseur. */
+  const warn=document.createElement('p');warn.className='ia-warn';warn.style.display='none';
+  card.appendChild(warn);
+  const paintSolde=async(force)=>{
+    soldeVal.textContent='…';warn.style.display='none';
+    try{
+      const b=await iaLoadBalance(force);
+      solde.classList.remove('nc');solde.removeAttribute('title');soldeBtn.textContent='↻';
+      soldeVal.textContent=(b.balance==null?'—':(Math.round(b.balance*100)/100)+' '+(b.currency||''));
+      solde.classList.toggle('bas',typeof b.balance==='number'&&b.balance<1);
+      return;
+    }catch(e){
+      solde.style.display='';
+      /* Deux situations, deux tons. Aucune clé ADMIN configurée n'est pas une panne : c'est
+         un état, et il ne mérite pas une alerte permanente sous le bouton principal. Mais se
+         taire complètement laissait sans réponse la question « où sont mes crédits ? » —
+         l'endroit où on les cherche devenait vide, sans un mot. La pastille reste donc, elle
+         ne prétend rien (« non lu »), et un appui donne la marche à suivre.
+         `_iaBalance` porte le drapeau, y compris quand la réponse vient du cache. */
+      if(_iaBalance&&_iaBalance.adminManquante){
+        warn.style.display='none';
+        soldeVal.textContent='non lu';
+        solde.classList.add('nc');solde.title='Pourquoi le solde n’est pas affiché';
+        soldeBtn.textContent='?';
+        return;
+      }
+      /* Toute autre panne — clé ADMIN présente mais refusée, expirée, réseau coupé — se dit.
+         Six lignes de gris noyaient le bouton : une phrase, et le détail à la demande. La
+         RAISON, elle, reste à l'écran : elle avait été mise dans une infobulle,
+         inatteignable au doigt, et le dépôt en a fait une règle. */
+      solde.classList.add('nc');soldeBtn.textContent='↻';
+      soldeVal.textContent='n/c';
+      warn.style.display='';warn.innerHTML='';
+      const t=document.createElement('span');
+      t.textContent='Solde indisponible : le lire demande une clé fal.ai de portée ADMIN. La retouche n’est pas concernée — vous pouvez lancer. ';
+      warn.appendChild(t);
+      const pk=document.createElement('button');pk.className='mini';pk.type='button';pk.textContent='Comment l’afficher';
+      pk.addEventListener('click',()=>iaExpliquerSolde((e&&e.message)||''));
+      warn.appendChild(pk);
+    }
+  };
+  soldeBtn.addEventListener('click',()=>{
+    if(solde.classList.contains('nc')&&soldeBtn.textContent==='?')iaExpliquerSolde('');
+    else paintSolde(true);
+  });
+  /* L'ordre à l'écran suit l'ordre de l'action : avec QUEL modèle, puis QUOI lui demander,
+     puis lancer. La carte du modèle est donc posée en premier — plus bas, une fois
+     construite — et celle-ci vient après, son gros bouton en dernier élément de l'écran.
+     Avant, le bouton était au milieu et le choix du modèle après : on lançait sans avoir
+     vu avec quoi. */
+  paintSolde(false);
+
+  /* ---------- Carte 2 : le modèle et ses réglages ---------- */
+  const cardM=document.createElement('div');cardM.className='ia-card';
+  const headM=document.createElement('div');headM.className='ia-card-h';
+  headM.innerHTML='<span class="ttl">Modèle</span>';
+  const gear=document.createElement('button');gear.className='mini';gear.type='button';gear.textContent='⚙ Mes modèles';
+  gear.addEventListener('click',openIaModelsPanel);
+  headM.appendChild(gear);
+  cardM.appendChild(headM);
+
+  const modelRow=document.createElement('div');modelRow.className='ia-model-row';
+  modelRow.innerHTML='<select class="ia-model-sel"></select>';
+  const sel=modelRow.querySelector('select');
+  const favBtn=document.createElement('button');
+  favBtn.className='ia-model-fav';favBtn.type='button';
+  modelRow.appendChild(favBtn);
+  /* Tout le catalogue est dans la liste, rangé par usage. Aucune raison de cacher des
+     modèles derrière un panneau de réglages : c'est le choix principal de cet écran.
+     Les modèles ajoutés à la main apparaissent à part, et la dernière ligne permet de
+     coller n'importe quel identifiant de fal.ai/models. */
+  const perso=iaCustomModels();
+  const connu=id=>IA_CATALOGUE.some(m=>m.id===id)||perso.some(m=>m.id===id);
+  const cats=[];
+  IA_CATALOGUE.forEach(m=>{if(cats.indexOf(m.cat)<0)cats.push(m.cat);});
+  /* La liste se reconstruit à chaque étoile posée ou retirée : le groupe des favoris doit
+     suivre immédiatement, sinon l'étoile ne prouve rien. La sélection est conservée. */
+  const peindreListe=()=>{
+    const garde=sel.value;
+    const favs=iaFavoris().filter(connu);
+    sel.innerHTML=
+      (favs.length?`<optgroup label="★ Favoris">${favs.map(id=>`<option value="${esc(id)}">${esc(iaModelLabel(id))}</option>`).join('')}</optgroup>`:'')
+      +cats.map(c=>`<optgroup label="${esc(c)}">`+
+        IA_CATALOGUE.filter(m=>m.cat===c).map(m=>`<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('')+
+        '</optgroup>').join('')
+      +(perso.length?`<optgroup label="Mes modèles">${perso.map(m=>`<option value="${esc(m.id)}">${esc(m.label||m.id)}</option>`).join('')}</optgroup>`:'')
+      +'<optgroup label="Autre"><option value="__coller">＋ Coller un identifiant fal.ai…</option></optgroup>';
+    if(garde&&connu(garde))sel.value=garde;
+  };
+  peindreListe();
+  const peindreEtoile=()=>{
+    const f=iaEstFavori(sel.value);
+    favBtn.textContent=f?'★':'☆';
+    favBtn.setAttribute('aria-pressed',f?'true':'false');
+    favBtn.title=f?'Retirer des favoris':'Mettre en favori — il remontera en tête de la liste';
+    favBtn.setAttribute('aria-label',favBtn.title);
+  };
+  favBtn.addEventListener('click',()=>{
+    if(!connu(sel.value))return;
+    const ajoute=iaToggleFavori(sel.value);
+    peindreListe();peindreEtoile();
+    toast(ajoute?'« '+iaModelLabel(sel.value)+' » ajouté aux favoris':'« '+iaModelLabel(sel.value)+' » retiré des favoris');
+  });
+  if(library.iaLastModel&&connu(library.iaLastModel))sel.value=library.iaLastModel;
+  if(!sel.value&&connu(iaSettings().modeleDefaut))sel.value=iaSettings().modeleDefaut;
+  if(!sel.value)sel.value=IA_CATALOGUE[0].id;
+  peindreEtoile();
+  cardM.appendChild(modelRow);
+  const note=document.createElement('p');note.className='ia-model-note';
+  cardM.appendChild(note);
+
+  /* Réglages du modèle, générés depuis son schéma. Repliés : la consigne suffit dans la
+     plupart des cas, mais tout ce que fal.ai propose est là pour qui veut y aller. */
+  const det=document.createElement('details');det.className='ia-params';
+  det.innerHTML='<summary>Réglages avancés du modèle</summary><div class="ia-params-body">Chargement…</div>';
+  cardM.appendChild(det);
+  const body=det.querySelector('.ia-params-body');
+  host.appendChild(cardM);
+  host.appendChild(card);
+
+  /* Tous les modèles ne prennent pas de consigne : un agrandisseur travaille seul. Le
+     panneau le dit au lieu d'exiger un texte qui serait ignoré. */
+  let prendPrompt=true;
+  const paintModel=async()=>{
+    const m=library.iaModels.find(x=>x.id===sel.value)||IA_CATALOGUE.find(x=>x.id===sel.value);
+    note.textContent=(m&&m.note)?m.note:'';
+    sub.textContent='Appel facturé par fal.ai · l’original est conservé, la retouche s’ajoute à côté.';
+    body.textContent='Lecture des réglages proposés par le modèle…';
+    try{
+      const sc=await iaSchema(sel.value);
+      prendPrompt=!!(sc.properties&&sc.properties.prompt);
+      ta.disabled=!prendPrompt;
+      ta.placeholder=prendPrompt
+        ? 'Décrivez ce que vous voulez obtenir — ou touchez une consigne toute prête ci-dessous.'
+        : 'Ce modèle ne prend pas de consigne : il travaille seul.';
+      if(!prendPrompt)ta.value='';
+      chips.style.display=prendPrompt?'':'none';
+      body.innerHTML='';
+      const saved=iaParamsFor(sel.value);
+      const noms=Object.keys(sc.properties||{}).filter(n=>IA_HIDDEN_PARAMS.indexOf(n)<0);
+      if(!noms.length){body.textContent='Ce modèle n’expose aucun réglage supplémentaire.';return;}
+      noms.forEach(nom=>{
+        const spec=sc.properties[nom];
+        const t=iaFieldType(spec), enums=iaFieldEnum(spec);
+        const val=iaValue(sel.value,nom,spec);
+        const row=document.createElement('div');row.className='ia-field';
+        const lab=document.createElement('label');
+        lab.textContent=spec.title||nom;
+        row.appendChild(lab);
+        let input;
+        if(t==='enum'&&enums){
+          input=document.createElement('select');
+          input.innerHTML=enums.map(v=>`<option value="${esc(String(v))}"${String(v)===String(val)?' selected':''}>${esc(String(v))}</option>`).join('');
+        }else if(t==='boolean'){
+          input=document.createElement('input');input.type='checkbox';input.checked=!!val;
+        }else if(t==='integer'||t==='number'){
+          input=document.createElement('input');input.type='number';
+          if(spec.minimum!=null)input.min=spec.minimum;
+          if(spec.maximum!=null)input.max=spec.maximum;
+          if(t==='integer')input.step=1;
+          input.value=(val==null?'':val);
+        }else if(t==='string'){
+          const long=(spec.maxLength||0)>500;
+          input=document.createElement(long?'textarea':'input');
+          if(long)input.rows=2; else input.type='text';
+          input.value=(val==null?'':val);
+        }else{
+          const skip=document.createElement('p');skip.className='ia-field-skip';
+          skip.textContent='(réglage « '+nom+' » non géré par le CRM)';
+          row.appendChild(skip);body.appendChild(row);return;
+        }
+        input.className='ia-input';
+        const record=()=>{
+          let v;
+          if(t==='boolean')v=input.checked;
+          else if(t==='integer')v=input.value===''?null:parseInt(input.value,10);
+          else if(t==='number')v=input.value===''?null:parseFloat(input.value);
+          else v=input.value;
+          if(v===null||v===''||v===spec.default)delete saved[nom]; else saved[nom]=v;
+          saveLibraryDebounced();
+        };
+        input.addEventListener('change',record);
+        row.appendChild(input);
+        if(spec.description){
+          const d=document.createElement('p');d.className='ia-field-desc';
+          d.textContent=spec.description.length>150?spec.description.slice(0,148)+'…':spec.description;
+          row.appendChild(d);
+        }
+        body.appendChild(row);
+      });
+      const reset=document.createElement('button');reset.className='mini';reset.type='button';
+      reset.textContent='↺ Valeurs par défaut du modèle';
+      reset.addEventListener('click',()=>{library.iaParams[sel.value]={};saveLibraryDebounced();paintModel();});
+      body.appendChild(reset);
+    }catch(e){
+      body.textContent='Réglages indisponibles : '+((e&&e.message)||'erreur');
+    }
+  };
+  sel.addEventListener('change',()=>{
+    if(sel.value==='__coller'){
+      sel.value=library.iaLastModel||IA_CATALOGUE[0].id;
+      peindreEtoile();
+      iaAskCustomModel();
+      return;
+    }
+    library.iaLastModel=sel.value;saveLibraryDebounced();peindreEtoile();paintModel();
+  });
+  paintModel();
+
+  go.addEventListener('click',()=>{
+    const c=(ta.value||'').trim();
+    if(prendPrompt&&!c){toast('Écrivez d’abord ce que vous voulez, ou touchez une consigne toute prête');ta.focus();return;}
+    const src=srcSel.value;
+    const lancer=()=>applyIaToPhoto(r,p,c,sel.value,go,src);
+    if(iaSettings().confirmer){
+      /* Ce qu'on veut savoir avant d'engager une dépense : quelle version part, à quel
+         modèle, combien ça coûte, et où on en est du plafond. Le coût est une ESTIMATION
+         (coût unitaire réglé dans ⚙ Réglages) — fal.ai ne donne pas le prix réel appel par
+         appel, et le taire ferait prendre ce chiffre pour une facture. */
+      const cu=parseFloat(iaSettings().coutUnitaire)||0;
+      askConfirm('Envoyer « '+photoVersionLabel(p,src)+' » au modèle « '+iaModelLabel(sel.value)+' » ?'
+        +(cu?'\n\nCoût estimé : environ '+cu.toFixed(2).replace('.',',')+' $ pour cette photo. Estimation, pas le prix réel facturé par fal.ai.':'\n\nCet appel est facturé par fal.ai.')
+        +'\n'+iaMoisResume().texte+'.'
+        +'\n\nLe résultat s’ajoutera aux versions existantes, sans en écraser aucune.',lancer);
+    }else lancer();
+  });
+
+  /* ---------- Carte 3 : les versions de cette photo ---------- */
+  if(photoVersions(p).length){
+    const box=document.createElement('div');box.className='ia-card ia-state ia-versions';
+    const h=document.createElement('div');h.className='ia-card-h';
+    h.innerHTML='<span class="ttl">Versions de cette photo</span>';
+    box.appendChild(h);
+    const intro=document.createElement('p');intro.className='msub';
+    intro.textContent='Celle qui est choisie s’affiche, s’exporte et part sur le site. Les autres restent là : rien n’est écrasé.';
+    box.appendChild(intro);
+
+    const strip=document.createElement('div');strip.className='ia-vers';
+    const actif=photoActiveId(p);
+    [{id:'orig'}].concat(photoVersions(p)).forEach(v=>{
+      const b=document.createElement('button');b.type='button';
+      b.className='ia-ver'+(v.id===actif?' on':'');
+      b.dataset.ver=v.id;
+      b.textContent=photoVersionLabel(p,v.id);
+      /* Laquelle est SUR LE SITE : c'est la question qu'on se pose devant cette pile, et
+         elle n'avait aucune réponse. La version affichée n'est pas forcément la publiée.
+         Le repère est posé en CSS (`::after`) : le nom de la version reste le nom de la
+         version, et rien d'autre. */
+      if(p.pub&&p.pub.sig&&(p.pub.v||'orig')===v.id){b.dataset.enligne='1';b.title='C’est cette version qui est sur le site public';}
+      b.addEventListener('click',async()=>{
+        if(!photoSetActive(p,v.id))return;
+        _iaFrom=null;edTouch();buildEditorControls();await reloadEditorImage();
+        toast('Version affichée : '+photoVersionLabel(p,v.id));
+      });
+      strip.appendChild(b);
+    });
+    box.appendChild(strip);
+
+    /* Le détail de la version affichée : de quoi elle sort, avec quel modèle, quelle
+       consigne. Sans ça, « Retouche 3 » ne veut rien dire au bout de trois jours. */
+    const v=photoVersion(p,actif);
+    const meta=document.createElement('p');meta.className='ia-ver-meta';
+    if(p.pub&&p.pub.sig){
+      /* Classe propre : `.ia-ver-meta` désigne la PROVENANCE de la version affichée. Deux
+         informations différentes ne doivent pas porter le même nom. */
+      const etat=document.createElement('p');etat.className='ia-ver-site';
+      const memeVer=(p.pub.v||'orig')===actif;
+      etat.innerHTML=memeVer
+        ? '🌐 <b>Sur le site :</b> cette version'+(p.pub.sig===photoPubSig(p)?'.':' — mais vos réglages ont changé depuis : republiez pour les envoyer.')
+        : '🌐 <b>Sur le site :</b> « '+esc(p.pub.vlabel||'?')+' ». Republiez pour mettre « '+esc(photoVersionLabel(p,actif))+' » en ligne.';
+      box.appendChild(etat);
+    }
+    if(v){
+      meta.innerHTML='<b>'+esc(iaModelLabel(v.model))+'</b>'
+        +(v.from&&v.from!=='orig'?' · à partir de '+esc(photoVersionLabel(p,v.from)):' · à partir de la photo d’origine')
+        +(v.createdAt?' · '+new Date(v.createdAt).toLocaleDateString('fr-FR'):'');
+    }else{
+      meta.textContent='La photo telle qu’elle a été importée. '+photoVersions(p).length+' retouche(s) de côté.';
+    }
+    box.appendChild(meta);
+    if(v&&v.prompt){
+      const echo=document.createElement('p');echo.className='ia-prompt-echo';
+      echo.textContent='« '+v.prompt+' »';
+      box.appendChild(echo);
+    }
+
+    if(v){
+      const acts=document.createElement('div');acts.className='ed-acts';acts.style.marginTop='10px';
+      const ren=document.createElement('button');ren.className='mini';ren.type='button';ren.textContent='✎ Renommer';
+      ren.addEventListener('click',()=>iaAskRenameVersion(p,v.id));
+      acts.appendChild(ren);
+      const del=document.createElement('button');del.className='mini';del.type='button';del.textContent='🗑 Supprimer cette version';
+      del.addEventListener('click',()=>askConfirm(
+        'Supprimer « '+photoVersionLabel(p,v.id)+' » ? Son image est perdue — elle a été facturée, et la refaire coûtera un nouvel appel. La photo d’origine et les autres versions ne sont pas touchées.',
+        async()=>{
+          await photoDeleteVersion(p,v.id);
+          edTouch();buildEditorControls();await reloadEditorImage();
+          toast('Version supprimée');
+        }));
+      acts.appendChild(del);
+      box.appendChild(acts);
+    }
+    /* La pile passe AVANT la carte du modèle : dès qu'une photo a plusieurs versions, c'est
+       elle qu'on vient regarder et sur laquelle on agit ; le modèle est un réglage. */
+    host.insertBefore(box,cardM);
+  }
+
+  /* Ce qu'on a dépensé, et par où le régler : au même endroit, sinon le plafond est une
+     règle invisible. */
+  const pied=document.createElement('div');pied.className='ia-pied';
+  const res=iaMoisResume();
+  const compteur=document.createElement('span');
+  compteur.textContent=res.texte+(iaPlafondAtteint()?' — plafond atteint':'');
+  if(iaPlafondAtteint())compteur.className='rz-warn';
+  pied.appendChild(compteur);
+  const reg=document.createElement('button');reg.className='mini';reg.type='button';
+  reg.textContent='⚙ Réglages';
+  reg.addEventListener('click',openIaSettingsPanel);
+  pied.appendChild(reg);
+  host.appendChild(pied);
+}
+
+/* Dépense du mois : le nombre d'appels est compté pour de vrai ; le montant est une
+   ESTIMATION à partir du coût unitaire que vous réglez — le fournisseur ne nous donne pas
+   le prix réel appel par appel. Le plafond bloque sur le NOMBRE, qui lui est exact. */
+function iaMoisResume(){
+  const st=iaSettings(), n=iaSpend();
+  const cout=(n*(parseFloat(st.coutUnitaire)||0));
+  return {n,plafond:st.plafondMois|0,cout,
+    texte:'Ce mois-ci : '+n+(st.plafondMois?' / '+st.plafondMois:'')+' retouche(s)'
+      +(cout?' · environ '+cout.toFixed(2).replace('.',',')+' $':'')};
+}
+/* ---- CONSOMMATION DE LA RÉDACTION DE TEXTE (Anthropic) ----
+   Anthropic n'expose AUCUN solde de crédits restant : ni la fonction serveur, ni son API
+   d'administration, qui ne donne que la consommation passée — et qui exige de surcroît une
+   clé d'administration réservée aux comptes d'organisation. Le seul chiffre honnête qu'on
+   puisse afficher est donc ce que CETTE application a réellement dépensé.
+   Ce n'est pas une estimation : la fonction serveur renvoie les jetons facturés par appel
+   et leur coût, calculé au tarif du modèle qu'elle utilise. Un forfait moyen inventé ici
+   dériverait au premier changement de modèle. */
+const TXT_DEFAULTS={plafondMois:0};   /* en dollars ; 0 = pas de plafond */
+function txtSettings(){
+  library.txtSettings=Object.assign({},TXT_DEFAULTS,library.txtSettings||{});
+  return library.txtSettings;
+}
+function txtMoisKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
+function txtUsage(){
+  library.txtUsage=library.txtUsage||{};
+  const k=txtMoisKey();
+  if(!library.txtUsage[k])library.txtUsage[k]={n:0,cout:0,entree:0,sortie:0};
+  return library.txtUsage[k];
+}
+/* Appelé APRÈS une réponse réussie, avec ce que le serveur a facturé. Un appel qui échoue
+   n'est pas facturé et ne doit donc rien ajouter — sauf le crédit épuisé, qui n'appelle
+   même pas le modèle. */
+function txtCompter(usage){
+  const u=txtUsage();
+  u.n++;
+  u.cout+=Number((usage&&usage.cout)||0);
+  u.entree+=Number((usage&&usage.entree)||0);
+  u.sortie+=Number((usage&&usage.sortie)||0);
+  saveLibraryDebounced();
+}
+function txtMoisResume(){
+  const u=txtUsage(), st=txtSettings();
+  const sous=(x)=>x.toFixed(x<1?4:2).replace('.',',');
+  return {n:u.n,cout:u.cout,plafond:+st.plafondMois||0,
+    texte:u.n?('Ce mois-ci : '+u.n+' rédaction(s) · '+sous(u.cout)+' $ réellement facturés'
+      +(st.plafondMois>0?' sur un plafond de '+sous(+st.plafondMois)+' $':''))
+      :'Aucune rédaction ce mois-ci.'};
+}
+function txtPlafondAtteint(){
+  const st=txtSettings();
+  return st.plafondMois>0&&txtUsage().cout>=+st.plafondMois;
+}
+/* Douze mois glissants, du plus récent au plus ancien : de quoi voir si la dépense monte. */
+function txtHistorique(){
+  library.txtUsage=library.txtUsage||{};
+  return Object.keys(library.txtUsage).sort().reverse().slice(0,12)
+    .map(k=>Object.assign({mois:k},library.txtUsage[k]));
+}
+/* Le message d'une erreur de rédaction, en français, avec quoi faire. Le crédit épuisé est
+   le seul cas que Raphaël peut lever lui-même : il est nommé, avec le chemin exact. */
+function txtErreurLisible(data,e){
+  const code=(data&&data.code)||'';
+  if(code==='credits_epuises')
+    return 'Les crédits Anthropic du compte sont épuisés — rien n’a été facturé. '
+      +'Rechargez sur console.anthropic.com → Plans & Billing, puis réessayez. '
+      +'Aucune clé à changer, rien à redéployer.';
+  if(code==='trop_de_demandes')
+    return 'Trop de demandes d’affilée : attendez une minute, puis réessayez. Rien n’a été facturé.';
+  return (e&&e.message)||'erreur';
+}
+
+function iaPlafondAtteint(){
+  const st=iaSettings();
+  return st.plafondMois>0&&iaSpend()>=st.plafondMois;
+}
+
+/* La vue de consommation de la rédaction IA. Elle ne montre PAS un solde de crédits :
+   Anthropic n'en publie aucun, et prétendre en afficher un serait un chiffre inventé. Elle
+   montre ce que cette application a réellement dépensé, appel par appel, cumulé par mois —
+   plus le plafond, qui est le seul vrai levier. Le lien vers la page de facturation est là
+   pour aller voir le solde à la source. */
+function openTxtUsagePanel(){
+  const st=txtSettings(), r=txtMoisResume(), hist=txtHistorique();
+  const sous=x=>Number(x||0).toFixed(Number(x||0)<1?4:2).replace('.',',');
+  const lignes=hist.filter(m=>m.n).map(m=>{
+    const [a,mo]=m.mois.split('-');
+    const nom=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'][(+mo)-1]||m.mois;
+    return `<div class="lib-item"><span class="txt-mois">${esc(nom)} ${esc(a)}</span>
+      <span class="site-cat-n">${m.n}</span>
+      <span class="txt-cout">${sous(m.cout)} $</span></div>`;
+  }).join('')||'<p class="ias-note" style="margin:0">Aucune rédaction enregistrée pour l’instant.</p>';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Rédaction IA — ce qu’elle a coûté</h3>
+    <p class="msub">Le bouton « ✨ Rédiger un texte » et le « Embellir » des devis passent par Claude. <b>Anthropic ne publie pas de solde de crédits</b> — ni ici, ni dans son API. Ce tableau montre donc ce que <b>cette application</b> a réellement fait facturer, d’après les jetons que le serveur renvoie à chaque appel. Ce n’est pas une moyenne : c’est le compte exact.</p>
+    <div class="txt-total ${r.plafond&&r.cout>=r.plafond?'ko':'ok'}">${esc(r.texte)}</div>
+    <div class="ed-eyebrow" style="margin-top:14px">Plafond mensuel</div>
+    <p class="ias-note">Au-delà, plus aucune rédaction n’est envoyée — donc plus rien n’est facturé. <b>0 = pas de plafond.</b></p>
+    <label class="fld"><span class="lbl">Plafond, en dollars par mois</span>
+      <input type="number" id="txt-plafond" min="0" step="0.5" value="${esc(String(st.plafondMois||0))}"></label>
+    <div class="ed-eyebrow" style="margin-top:14px">Par mois — ce que le CRM a demandé</div>
+    <div id="txt-hist">${lignes}</div>
+    <div class="ed-eyebrow" style="margin-top:14px">Dépense réelle du compte Anthropic</div>
+    <p class="ias-note">Le compteur ci-dessus ne voit que les appels du CRM. Celui-ci lit la dépense de <b>tout le compte</b>, quelle qu’en soit l’origine. Il demande une clé d’administration, déposée une fois dans les secrets du serveur.</p>
+    <div id="anth-cout"></div>
+    <p class="ias-note" style="margin-top:12px">Pour voir le solde réel et le recharger, il faut passer par le compte Anthropic : <b>console.anthropic.com → Plans &amp; Billing</b>. Aucune clé n’est à changer ensuite, et rien n’est à redéployer.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+      <button class="mini danger" id="txt-vider">Remettre le compteur à zéro</button>
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+  peindreCoutAnthropic();
+  const champ=document.getElementById('txt-plafond');
+  champ.addEventListener('change',()=>{
+    const v=parseFloat(champ.value);
+    /* Une valeur absurde ne s'enregistre pas en silence : on dit pourquoi et on remet. */
+    if(!(v>=0)||v>10000){toast('Entrez un montant entre 0 et 10 000 $ (0 = pas de plafond)');champ.value=String(st.plafondMois||0);return;}
+    txtSettings().plafondMois=v;saveLibraryDebounced();
+    toast(v?('Plafond réglé à '+sous(v)+' $ par mois'):'Plafond retiré');
+    openTxtUsagePanel();
+  });
+  document.getElementById('txt-vider').addEventListener('click',()=>askConfirm(
+    'Remettre à zéro le compteur de rédactions ? Cela n’annule aucune dépense chez Anthropic — cela efface seulement ce que l’application a compté.',
+    ()=>{library.txtUsage={};saveLibrary();openTxtUsagePanel();toast('Compteur remis à zéro');}));
+}
+
+/* ---- DÉPENSE RÉELLE CÔTÉ ANTHROPIC ----
+   Le compteur du CRM ne voit que ce que le CRM a demandé. Cette lecture-ci donne la
+   dépense de TOUT le compte Anthropic, quelle qu'en soit l'origine. Elle passe par une
+   fonction serveur : la clé d'administration donne accès à toute l'organisation et ne doit
+   jamais atteindre le navigateur.
+   Elle ne donne toujours PAS de solde restant — Anthropic n'en publie aucun. */
+let _coutAnth=null, _coutAnthEnCours=false;
+async function chargerCoutAnthropic(mois){
+  if(_coutAnthEnCours)return;
+  _coutAnthEnCours=true;peindreCoutAnthropic();
+  try{
+    const token=await sessionToken();
+    if(!token)throw new Error('session expirée, reconnectez-vous');
+    const res=await fetch(SB_URL+'/functions/v1/cout-anthropic',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SB_KEY},
+      body:JSON.stringify({mois:mois||3})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok&&!data.code)throw new Error(data.error||('HTTP '+res.status));
+    _coutAnth=data;
+  }catch(e){
+    console.error('coût Anthropic',e);
+    _coutAnth={disponible:false,code:'erreur',detail:(e&&e.message)||'erreur'};
+  }finally{_coutAnthEnCours=false;peindreCoutAnthropic();}
+}
+function moisLisible(cle){
+  const [a,m]=String(cle||'').split('-');
+  const noms=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return (noms[(+m)-1]||cle)+' '+a;
+}
+/* Les quatre états, écrits une fois : on cherche, la clé manque, la clé est refusée, ou on
+   a les chiffres. Un cinquième état — « rien dépensé » — se lit dans le dernier. */
+function peindreCoutAnthropic(){
+  const box=document.getElementById('anth-cout');
+  if(!box)return;
+  const sous=x=>Number(x||0).toFixed(Number(x||0)<1?4:2).replace('.',',');
+  if(_coutAnthEnCours){box.innerHTML='<p class="ias-note" style="margin:0">Lecture en cours…</p>';return;}
+  if(!_coutAnth){
+    box.innerHTML='<button class="mini" id="anth-lire">Lire la dépense du compte</button>';
+    document.getElementById('anth-lire').addEventListener('click',()=>chargerCoutAnthropic(3));
+    return;
+  }
+  const d=_coutAnth;
+  if(d.disponible){
+    const lignes=d.mois.filter(m=>m.total>0).map(m=>
+      `<div class="lib-item"><span class="txt-mois">${esc(moisLisible(m.mois))}</span>
+        <span class="txt-cout">${sous(m.total)} $</span></div>`).join('');
+    box.innerHTML=`<div class="txt-total ok">Compte Anthropic — ${sous(d.total)} $ dépensés depuis le ${esc(d.depuis)}</div>`
+      +(lignes||'<p class="ias-note">Aucune dépense sur la période.</p>')
+      +'<p class="ias-note">Tous usages confondus, pas seulement ceux du CRM. <b>Ce n’est pas un solde restant</b> : Anthropic n’en publie aucun.</p>'
+      +'<button class="mini" id="anth-relire">Relire</button>';
+    document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
+    return;
+  }
+  if(d.code==='cle_absente'){
+    box.innerHTML='<div class="txt-total ko">Clé d’administration absente — la dépense du compte ne peut pas être lue.</div>'
+      +'<ol class="anth-pas">'
+      +'<li>Ouvrez <b>console.anthropic.com</b> → Settings → <b>Admin keys</b>, et créez une clé (elle commence par <code>sk-ant-admin01-</code>).</li>'
+      +'<li>Ouvrez les secrets du projet Supabase : <b>Edge Functions → Secrets</b>.</li>'
+      +'<li>Ajoutez un secret nommé exactement <b>ANTHROPIC_ADMIN_KEY</b>, collez la clé, enregistrez.</li>'
+      +'<li>Revenez ici et appuyez sur « Réessayer ». Rien n’est à redéployer, et <b>ANTHROPIC_API_KEY n’est pas touchée</b>.</li>'
+      +'</ol>'
+      +'<button class="mini" id="anth-relire">Réessayer</button>';
+    document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
+    return;
+  }
+  if(d.code==='cle_refusee'){
+    box.innerHTML='<div class="txt-total ko">La clé déposée est refusée par Anthropic (HTTP '+esc(String(d.statut||''))+').</div>'
+      +'<p class="ias-note">Deux causes possibles, et une seule se répare : soit la clé n’est pas une clé <b>d’administration</b> (une clé d’API ordinaire ne suffit pas — il faut <code>sk-ant-admin01-</code>), soit le compte est un compte <b>individuel</b>, auquel cas Anthropic ne donne accès à ces chiffres par aucune clé. Dans ce second cas, la dépense se consulte uniquement sur console.anthropic.com.</p>'
+      +'<button class="mini" id="anth-relire">Réessayer</button>';
+    document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
+    return;
+  }
+  box.innerHTML='<div class="txt-total ko">Lecture impossible : '+esc(String(d.detail||'erreur'))+'</div>'
+    +'<button class="mini" id="anth-relire">Réessayer</button>';
+  document.getElementById('anth-relire').addEventListener('click',()=>{_coutAnth=null;chargerCoutAnthropic(3);});
+}
+
+function openIaSettingsPanel(){
+  const st=iaSettings();
+  const opt=(v,t)=>`<option value="${v}"${st.resolution===v?' selected':''}>${t}</option>`;
+  const modeles=IA_CATALOGUE.concat(iaCustomModels());
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Réglages — Photos & retouche IA</h3>
+    <p class="msub">Ces valeurs s’appliquent à toutes les photos. Les réglages propres à un modèle restent dans « Réglages avancés », dans l’onglet Retouche.</p>
+
+    <div class="ed-eyebrow">Qualité demandée au modèle</div>
+    <label class="fld"><span class="lbl">Résolution de sortie</span>
+      <select id="ias-reso">
+        ${opt('modele','Laisser le modèle décider')}
+        ${opt('1K','1K — la plus rapide et la moins chère')}
+        ${opt('2K','2K — recommandé (les photos sont publiées en 1600 px)')}
+        ${opt('4K','4K — la plus lourde, parfois plus chère')}
+      </select></label>
+    <p class="ias-note">Une sortie 1K republiée en 1600 px est agrandie, donc molle. Si le modèle choisi ne propose pas cette résolution, il garde la sienne. <b>4K ne sert à rien aujourd’hui</b> : la photo part au modèle en 1600 px et est publiée en 1600 px — la sortie serait réduite, pour un coût à peu près doublé.</p>
+
+    <div class="ed-eyebrow">File d’attente</div>
+    <div class="row3">
+      <label class="fld"><span class="lbl">Vérifier l’avancement toutes les (secondes)</span>
+        <input type="number" min="1" max="60" step="1" id="ias-sondage" value="${st.sondageSec}"></label>
+      <label class="fld"><span class="lbl">Attendre au plus (minutes)</span>
+        <input type="number" min="1" max="120" step="1" id="ias-attente" value="${st.attenteMaxMin}"></label>
+    </div>
+    <p class="ias-note">La retouche est <b>déposée</b> dans la file de fal.ai : l’appel ne peut plus expirer, et fermer la page ne le perd plus. Passé le délai ci-dessus, le CRM cesse seulement de <b>regarder</b> — la demande continue chez fal.ai et sera récupérée à la prochaine ouverture de l’onglet Réalisations.</p>
+
+    <div class="ed-eyebrow">Dépense</div>
+    <div class="row3">
+      <label class="fld"><span class="lbl">Plafond du mois (retouches)</span>
+        <input type="number" min="0" step="1" id="ias-plafond" value="${st.plafondMois}"></label>
+      <label class="fld"><span class="lbl">Coût estimé par retouche ($)</span>
+        <input type="number" min="0" step="0.01" id="ias-cout" value="${st.coutUnitaire}"></label>
+    </div>
+    <p class="ias-note">0 = pas de plafond. Au-delà du plafond, l’envoi est <b>bloqué</b> : rien n’est facturé. Le montant affiché est une estimation à partir du coût unitaire ci-dessus, pas le prix réel facturé par fal.ai.</p>
+    <p class="ias-note"><b>${esc(iaMoisResume().texte)}</b></p>
+
+    <div class="ed-eyebrow">Confort</div>
+    <label class="fld"><span class="lbl">Modèle proposé par défaut</span>
+      <select id="ias-modele">${modeles.map(m=>`<option value="${esc(m.id)}"${st.modeleDefaut===m.id?' selected':''}>${esc(m.label||m.id)}</option>`).join('')}</select></label>
+    <label class="fld"><span class="lbl">Événements gardés dans l’historique d’une photo</span>
+      <input type="number" min="1" max="200" step="1" id="ias-hist" value="${st.histMax}"></label>
+    <label class="ias-check"><input type="checkbox" id="ias-confirm" ${st.confirmer?'checked':''}>
+      <span>Demander confirmation avant chaque envoi facturé</span></label>
+
+    <p id="ias-msg" class="ias-msg"></p>
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap">
+      <button class="mini" onclick="iaSettingsReset()">↺ Valeurs par défaut</button>
+      <button class="btn btn-primary" id="ias-save">Enregistrer</button>
+    </div>`);
+  $('ias-save').addEventListener('click',()=>{
+    const msg=$('ias-msg');
+    const plafond=parseInt($('ias-plafond').value,10);
+    const cout=parseFloat($('ias-cout').value);
+    const hist=parseInt($('ias-hist').value,10);
+    const sondage=parseInt($('ias-sondage').value,10);
+    const attente=parseInt($('ias-attente').value,10);
+    /* Une valeur invalide est refusée À L'ÉCRAN : sans ça on enregistrerait NaN et le
+       plafond ne bloquerait plus rien, sans que personne ne le voie. */
+    if(!isFinite(plafond)||plafond<0){msg.textContent='Le plafond doit être un nombre positif (0 = pas de plafond).';return;}
+    if(!isFinite(cout)||cout<0){msg.textContent='Le coût par retouche doit être un nombre positif.';return;}
+    if(!isFinite(hist)||hist<1||hist>200){msg.textContent='Le nombre d’événements gardés doit être entre 1 et 200.';return;}
+    if(!isFinite(sondage)||sondage<1||sondage>60){msg.textContent='L’intervalle de vérification doit être entre 1 et 60 secondes.';return;}
+    if(!isFinite(attente)||attente<1||attente>120){msg.textContent='Le temps d’attente doit être entre 1 et 120 minutes.';return;}
+    const s2=iaSettings();
+    s2.resolution=$('ias-reso').value;
+    s2.plafondMois=plafond;s2.coutUnitaire=cout;s2.histMax=hist;
+    s2.sondageSec=sondage;s2.attenteMaxMin=attente;
+    s2.modeleDefaut=$('ias-modele').value;
+    s2.confirmer=$('ias-confirm').checked;
+    saveLibrary();
+    closeModal();
+    if(_ed)buildEditorControls();
+    toast('Réglages de la retouche enregistrés');
+  });
+}
+function iaSettingsReset(){
+  askConfirm('Rétablir les réglages de la retouche sur leurs valeurs par défaut ?',()=>{
+    library.iaSettings=Object.assign({},IA_DEFAULTS);
+    saveLibrary();openIaSettingsPanel();
+    if(_ed)buildEditorControls();
+    toast('Réglages rétablis');
+  });
+}
+
+/* Coller un identifiant. On le VÉRIFIE avant de l'ajouter : le schéma du modèle est public,
+   s'il ne répond pas, l'identifiant est faux — autant le dire tout de suite plutôt qu'au
+   moment de lancer une retouche facturée. */
+function iaAskCustomModel(){
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Ajouter un modèle de fal.ai</h3>
+    <p class="msub">Ouvrez <b>fal.ai/models</b>, choisissez un modèle d’édition d’image et copiez son identifiant (il ressemble à <code>fal-ai/…</code>). Le CRM lit tout seul les réglages qu’il propose.</p>
+    <label class="fld"><span class="lbl">Identifiant du modèle</span>
+      <input type="text" id="ia-custom-id" placeholder="fal-ai/mon-modele/edit"></label>
+    <label class="fld"><span class="lbl">Nom affiché (optionnel)</span>
+      <input type="text" id="ia-custom-label" placeholder="laissez vide pour reprendre l’identifiant"></label>
+    <p id="ia-custom-msg" class="msub"></p>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="ia-custom-go">Vérifier et ajouter</button>
+      <button class="btn btn-onlight" onclick="closeModal()">Annuler</button>
+    </div>`);
+  const go=$('ia-custom-go'), msg=$('ia-custom-msg');
+  go.addEventListener('click',async()=>{
+    const id=($('ia-custom-id').value||'').trim();
+    if(!id){msg.textContent='Collez d’abord un identifiant.';return;}
+    ensureIaModels();
+    if(library.iaModels.some(m=>m.id===id)||IA_CATALOGUE.some(m=>m.id===id)){
+      msg.textContent='Ce modèle est déjà dans la liste.';return;
+    }
+    go.disabled=true;msg.textContent='Vérification auprès de fal.ai…';
+    try{
+      const sc=await iaSchema(id);
+      const props=sc.properties||{};
+      if(!('image_urls' in props)&&!('image_url' in props)){
+        msg.textContent='Ce modèle n’accepte pas d’image en entrée : il ne sert pas à retoucher une photo.';
+        go.disabled=false;return;
+      }
+      library.iaModels.push({id,label:($('ia-custom-label').value||'').trim()||id,note:sc.title||''});
+      library.iaLastModel=id;saveLibraryDebounced();
+      closeModal();buildEditorControls();
+      toast('Modèle ajouté');
+    }catch(e){
+      msg.textContent='Identifiant introuvable chez fal.ai : '+((e&&e.message)||'erreur');
+      go.disabled=false;
+    }
+  });
+}
+
+/* Panneau « Mes modèles ».
+   Le catalogue vit dans la liste déroulante de l'onglet Retouche : l'y ajouter depuis ici
+   n'aurait aucun effet visible. Ce panneau ne sert donc qu'à UNE chose : gérer les modèles
+   que vous ajoutez vous-même depuis fal.ai/models. */
+function iaCustomModels(){
+  ensureIaModels();
+  return library.iaModels.filter(m=>m.id&&!IA_CATALOGUE.some(c=>c.id===m.id));
+}
+function openIaModelsPanel(){
+  const perso=iaCustomModels();
+  const rows=perso.map(m=>`<div class="lib-item">
+      <input type="text" value="${esc(m.label||'')}" placeholder="Nom affiché" oninput="iaModelEdit('${esc(m.id)}','label',this.value)">
+      <input type="text" value="${esc(m.note||'')}" placeholder="note (prix, usage)" oninput="iaModelEdit('${esc(m.id)}','note',this.value)">
+      <code class="ia-model-id">${esc(m.id)}</code>
+      <button class="mini" onclick="iaModelDel('${esc(m.id)}')">✕</button>
+    </div>`).join('');
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Mes modèles</h3>
+    <p class="msub">Les ${IA_CATALOGUE.length} modèles du catalogue sont déjà proposés dans la liste de l’onglet Retouche — rien à faire pour les utiliser. Ce panneau sert aux modèles que vous ajoutez vous-même : ouvrez <b>fal.ai/models</b>, copiez l’identifiant d’un modèle d’édition d’image et collez-le ici.</p>
+    <div id="ia-model-rows">${rows||'<p class="rz-empty">Aucun modèle ajouté à la main pour l’instant.</p>'}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="mini" onclick="closeModal();iaAskCustomModel();">＋ Ajouter un modèle de fal.ai</button>
+      ${perso.length?'<button class="mini" onclick="iaModelReset()">↺ Tout retirer</button>':''}
+      <button class="btn btn-primary" onclick="closeModal()">Terminer</button>
+    </div>`);
+}
+function iaModelEdit(id,k,v){
+  ensureIaModels();
+  const m=library.iaModels.find(x=>x.id===id);
+  if(m){m[k]=v;saveLibraryDebounced();}
+}
+function iaModelDel(id){
+  ensureIaModels();
+  const m=library.iaModels.find(x=>x.id===id);if(!m)return;
+  askConfirm('Retirer « '+(m.label||m.id)+' » de vos modèles ? Le catalogue n’est pas touché.',()=>{
+    library.iaModels=library.iaModels.filter(x=>x.id!==id);
+    if(library.iaLastModel===id)library.iaLastModel=iaSettings().modeleDefaut;
+    saveLibraryDebounced();openIaModelsPanel();
+    if(_ed)buildEditorControls();
+    toast('Modèle retiré');
+  });
+}
+function iaModelReset(){
+  askConfirm('Retirer tous les modèles que vous avez ajoutés à la main ? Le catalogue reste disponible.',()=>{
+    library.iaModels=[];
+    library.iaLastModel=iaSettings().modeleDefaut;
+    saveLibraryDebounced();openIaModelsPanel();
+    if(_ed)buildEditorControls();
+    toast('Modèles retirés');
+  });
+}
+
+/* ============ PUBLICATION VERS LE SITE PUBLIC ============
+   Le site vitrine est un dépôt SÉPARÉ (rnab26/melissa-nabet-site), servi sur son propre
+   domaine GitHub Pages. Aucun visiteur du site ne passe par le CRM.
+
+   Le seul point de contact est le bucket Supabase `galerie`, public en lecture et qui ne
+   contient QUE ce qui a été explicitement publié depuis ici. Le site ne porte aucune clé
+   d'accès : il lit des URLs publiques, rien d'autre. Le bucket `client-docs` (documents,
+   photos non publiées) reste privé et hors de portée.
+
+   Publier écrit des copies redimensionnées, retouches appliquées. Les originaux ne
+   quittent jamais le stockage privé. */
+let _pubLastError=null; /* dernière panne de publication, affichée jusqu'à la prochaine tentative */
+let _pubEnAttente=0;    /* nombre de photos qui partiraient si on republiait maintenant */
+const GALLERY_BUCKET='galerie';
+const PUB_FULL=1600, PUB_FULL_Q=0.85, PUB_THUMB=700, PUB_THUMB_Q=0.8;
+function galleryPublicUrl(path){return SB_URL+'/storage/v1/object/public/'+GALLERY_BUCKET+'/'+path;}
+function manifestPath(){return ownerId+'/manifest.json';}
+/* Adresse FIXE de l'image d'aperçu : la page publique la cite en dur dans ses balises de
+   partage. Changer ce chemin oblige à changer `site-vitrine/index.html` en même temps. */
+function shareImagePath(){return ownerId+'/share.jpg';}
+
+/* Lecture du manifeste par l'API authentifiée, PAS par l'URL publique. Deux raisons, et
+   les deux sont des pertes de données silencieuses :
+   - l'URL publique passe par un CDN qui peut renvoyer une version périmée ; on
+     réécrirait alors le manifeste à partir d'un état ancien, effaçant du site les
+     réalisations publiées entre-temps ;
+   - une simple coupure réseau renverrait "pas de manifeste", et repartir d'un manifeste
+     vide dépublierait tout le reste.
+   Un manifeste absent (première publication) est le SEUL cas où l'on part de zéro ;
+   toute autre erreur interrompt la publication au lieu d'écraser.
+
+   CE QUE L'API « AUTHENTIFIÉE » NE GARANTIT PAS, EN PRATIQUE : sur ce projet, le CDN
+   devant Supabase Storage met en cache la réponse de CET ENDPOINT AUSSI (vérifié : un
+   GET authentifié juste après une écriture répond `cf-cache-status: HIT`, ni un
+   paramètre d'URL différent ni un en-tête `Cache-Control: no-cache` côté requête ne le
+   contourne). Deux publications rapprochées (moins d'une minute d'écart — le temps
+   d'une « republication en lot ») pouvaient donc lire une version PÉRIMÉE : la seconde
+   écrasait alors le titre (ou toute autre fiche) que la première venait tout juste de
+   corriger, en silence. C'est ce qui s'est produit : une réalisation renommée puis
+   republiée gardait l'ancien titre sur le site, malgré une republication qui semblait
+   avoir réussi.
+   _dernierEcritAt retient l'horodatage de la dernière écriture RÉUSSIE par CETTE session
+   (pas par une autre — on ne peut rien garantir sur ce qu'une autre session écrit en
+   parallèle, comme avant). Si la lecture renvoie un manifeste plus vieux que ça, c'est
+   forcément le cache qui répond : on réessaie, avec un court délai, avant de continuer —
+   plutôt que d'écrire par-dessus notre propre changement récent. */
+let _dernierManifesteEcritAt=null;
+function _attendre(ms){return new Promise(r=>setTimeout(r,ms));}
+async function readManifest(){
+  const ESSAIS=6,DELAI_MS=1500;
+  for(let essai=0;essai<ESSAIS;essai++){
+    const {data,error}=await sb.storage.from(GALLERY_BUCKET).download(manifestPath());
+    if(error){
+      const msg=((error&&(error.message||error.error))||'').toLowerCase();
+      const code=(error&&(error.statusCode||error.status))||0;
+      if(String(code)==='404'||msg.includes('not found')||msg.includes('does not exist'))return emptyManifest();
+      throw new Error('manifeste illisible : '+((error&&error.message)||'erreur'));
+    }
+    if(!data)return emptyManifest();
+    let m=null;
+    try{m=JSON.parse(await data.text());}catch(e){throw new Error('manifeste illisible (format)');}
+    if(!m||!Array.isArray(m.realisations))throw new Error('manifeste illisible (contenu)');
+    /* Comparaison de chaînes ISO 8601 : valide tant que les deux dates sont au même
+       format (toujours le cas ici, `toISOString()` des deux côtés). */
+    if(!_dernierManifesteEcritAt||!m.updatedAt||m.updatedAt>=_dernierManifesteEcritAt)return m;
+    if(essai<ESSAIS-1)await _attendre(DELAI_MS);
+    else return m; // dernier essai : on continue avec ce qu'on a plutôt que de bloquer la publication
+  }
+}
+/* L'ORDRE DES PROJETS SUR LE SITE.
+   Il était subi : le dernier publié passait en tête, point. Chez tous les architectes, cet
+   ordre est CHOISI — c'est la première chose qu'on règle sur un portfolio. Il vit dans le
+   manifeste, donc le changer ne renvoie aucune photo et ne coûte rien.
+   Un projet jamais classé reste en tête, du plus récemment publié au plus ancien : c'est
+   exactement ce que faisait le site avant, donc rien ne bouge tant qu'on n'y touche pas. */
+function siteOrdreProjets(){
+  const st=siteSettings();
+  const ordre=Array.isArray(st.ordre)?st.ordre:[];
+  const classes=[],libres=[];
+  (realisations||[]).filter(r=>r.published).forEach(r=>{(ordre.indexOf(r.id)>=0?classes:libres).push(r);});
+  classes.sort((a,b)=>ordre.indexOf(a.id)-ordre.indexOf(b.id));
+  libres.sort((a,b)=>(b.publishedAt||0)-(a.publishedAt||0));
+  return libres.concat(classes);
+}
+/* Appliqué DANS writeManifest et nulle part ailleurs : publication, republication, retour
+   en arrière, dépublication, mise à jour des infos — tous passent par ici. Un appelant qui
+   l'oublierait remettrait silencieusement le site dans le désordre. */
+function ordonnerManifeste(man){
+  const voulu=siteOrdreProjets().map(r=>r.id);
+  if(!voulu.length||!Array.isArray(man.realisations))return man;
+  const rang=id=>{const i=voulu.indexOf(id);return i<0?voulu.length:i;};
+  /* Tri stable : une fiche que le CRM ne connaît pas (publiée depuis un autre appareil)
+     garde sa place relative au lieu d'être jetée en vrac. */
+  man.realisations=man.realisations.map((f,i)=>({f,i}))
+    .sort((a,b)=>(rang(a.f.id)-rang(b.f.id))||(a.i-b.i)).map(x=>x.f);
+  return man;
+}
+async function writeManifest(man){
+  ordonnerManifeste(man);
+  /* Horodatage posé ICI, juste avant l'envoi — pas celui que l'appelant a pu fixer plus
+     tôt — pour que `_dernierManifesteEcritAt` corresponde exactement à ce qui part
+     vraiment, et que `readManifest` sache reconnaître une réponse plus vieille que CETTE
+     écriture précise, même si l'appelant a mis du temps entre le calcul de `man` et l'appel. */
+  man.updatedAt=new Date().toISOString();
+  const blob=new Blob([JSON.stringify(man)],{type:'application/json'});
+  /* cacheControl court : le site doit refléter une republication en quelques secondes.
+     Raccourci de 60s à 5s le 18 sept. 2026 : le CDN devant Supabase Storage met en cache
+     CETTE réponse aussi (voir le commentaire de `readManifest`), et 60s de fenêtre
+     suffisaient pour qu'une republication en lot écrase silencieusement la précédente. */
+  const {error}=await sb.storage.from(GALLERY_BUCKET).upload(manifestPath(),blob,{contentType:'application/json',cacheControl:'5',upsert:true});
+  if(error)throw error;
+  _dernierManifesteEcritAt=man.updatedAt;
+}
+/* ---- Synchro live du TEXTE d'une fiche déjà publiée ----------------------------------
+   Le reproche : pour corriger un titre ou une ligne de texte, il fallait rouvrir l'écran
+   de republication, retrier quelles photos garder ou renvoyer, puis confirmer — alors que
+   rien, dans une simple correction de texte, ne touche une image. Une fois qu'un projet
+   est en ligne, tout changement de texte (titre, année, lieu, surface, mission, catégorie,
+   texte de présentation, « personnelle ») part donc tout seul, sans bouton ni confirmation,
+   quelques secondes après la dernière frappe. Les photos, elles, gardent leur geste
+   explicite : plus lourd à envoyer, et plus difficile à annuler qu'une phrase. */
+let _publishingIds=new Set();     /* republication complète en cours pour ce projet : la synchro attend son tour */
+let _ficheSyncEnCours=new Set();
+let _ficheSyncTimers={};
+function scheduleFicheSync(r){
+  if(!r||!r.published)return;    /* rien en ligne à corriger tant que la première publication (avec ses photos) n'a pas eu lieu */
+  clearTimeout(_ficheSyncTimers[r.id]);
+  _ficheSyncTimers[r.id]=setTimeout(()=>syncRealisationFicheEnLigne(r),1200);
+}
+async function syncRealisationFicheEnLigne(r){
+  if(!r||!r.published)return;
+  if(!(sb&&sbUser&&ownerId))return;             // pas connecté : le badge « à republier » reste le filet de secours
+  if(_publishingIds.has(r.id)){scheduleFicheSync(r);return;}   // une republication complète est en cours sur CE projet : on repasse après
+  if(_ficheSyncEnCours.has(r.id))return;          // déjà en train d'écrire pour ce projet
+  _ficheSyncEnCours.add(r.id);
+  try{
+    const man=await readManifest();
+    const entree=man.realisations.find(x=>x.id===r.id);
+    if(!entree)return;   // pas (encore) connu du site : la publication normale, avec ses photos, s'en chargera
+    const champs=ficheTexteChamps(r);
+    Object.assign(entree,champs);
+    /* Un champ facultatif redevenu vide doit disparaître de la fiche, pas y laisser une
+       ancienne valeur : `ficheTexteChamps` omet déjà les champs vides à l'écriture. */
+    ['lieu','surface','mission','categorie','texte','personnelle'].forEach(k=>{if(!(k in champs))delete entree[k];});
+    man.updatedAt=new Date().toISOString();
+    await writeManifest(man);
+    /* Le texte est en ligne : le badge « à republier » ne doit plus le dire pour autant que
+       les photos, elles, sont déjà à jour — exactement ce que `realisationFicheSig` compare. */
+    if(r.pub)r.pub=Object.assign({},r.pub,{fiche:realisationFicheSig(r)});
+    saveRealisationsDebounced();renderRealisations();
+  }catch(e){
+    /* Pas de modale — juste un toast : `realisationEnAttente` reste vrai (rien n'a changé
+       côté `r.pub`), donc le badge « à republier » et le bouton « Republier » restent le
+       filet de secours manuel visible si la synchro automatique n'a pas pu passer. */
+    console.error('synchro fiche en ligne',e);
+    toast('Texte pas encore en ligne (connexion) — le badge « à republier » le rappellera');
+    renderRealisations();
+  }finally{
+    _ficheSyncEnCours.delete(r.id);
+  }
+}
+/* ---- Ce que le site public dit de lui-même ----
+   Tout est VIDE par défaut, et rien ne part en ligne tant que ce n'est pas rempli ici :
+   une adresse e-mail ou un numéro sur une page publique, c'est une décision, pas un
+   réglage technique. Les coordonnées du devis ne sont donc jamais recopiées toutes
+   seules — il y a un bouton pour le faire en un geste, et c'est le geste qui vaut accord. */
+/* Les quatre directions visuelles du site public. Ce tableau ne sert QU'À CHOISIR : la
+   mise en forme vit dans `site-vitrine/index.html`, qui applique le thème par son
+   identifiant. Ajouter une direction ici sans l'écrire là-bas donnerait un site qui
+   retombe sur le thème par défaut — sans rien casser, mais sans rien changer non plus. */
+const SITE_THEMES=[
+  {id:'index',nom:'Index',ref:'D’après Pierre Yovanovitch et Studio KO',
+   note:'Les projets listés par leur nom, comme un sommaire. Le mieux quand il y en a beaucoup, classés par type.',
+   fond:'#f4f4f4',encre:'#212121'},
+  {id:'epure',nom:'Épure',ref:'D’après David Chipperfield Architects',
+   note:'Blanc pur, aucune couleur, grille dense. Les photos sont la seule matière.',
+   fond:'#ffffff',encre:'#111111'},
+  {id:'atelier',nom:'Atelier',ref:'D’après Norm Architects',
+   note:'Fond crème chaud, titres en garamond, une grande image à la fois. Rythme lent.',
+   fond:'#f5f1e5',encre:'#383839'},
+  {id:'nuit',nom:'Nuit',ref:'D’après Vincent Van Duysen',
+   note:'Fond très sombre, photo plein cadre. Spectaculaire, mais une photo moyenne s’y voit tout de suite.',
+   fond:'#0f0f0f',encre:'#d8d5d0'},
+];
+/* `atelier` par défaut : c'est l'habillage que le site portait avant qu'on puisse choisir.
+   Un manifeste publié avant cette version n'a pas de thème — il ne doit pas changer d'allure
+   tout seul. */
+/* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
+   libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
+const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,
+  menuRealisations:'',menuPersonnelles:'',menuBoutique:'',menuJournal:'',menuApropos:'',
+  whatsapp:'actif',waTexte:'',cartesPar:2,cartesAlign:'gauche',cartesGras:false};
+/* Les entrées du menu du site. Vides, ce sont les mots par défaut de la page (traduits) ;
+   remplies, ce sont les mots de Melissa — et ils se traduisent comme ses autres textes. */
+const SITE_MENU=[
+  {cle:'menuRealisations',id:'site-menu-real',defaut:'Réalisations',
+   aide:'La liste des projets, en haut du site.'},
+  {cle:'menuPersonnelles',id:'site-menu-perso',defaut:'Réalisations personnelles',
+   aide:'N’apparaît que si au moins un projet est marqué « personnelle » et publié.'},
+  {cle:'menuBoutique',id:'site-menu-bout',defaut:'À la vente',
+   aide:'N’apparaît que si des produits sont publiés.'},
+  {cle:'menuJournal',id:'site-menu-jour',defaut:'Journal',
+   aide:'N’apparaît que si le journal contient une entrée.'},
+  {cle:'menuApropos',id:'site-menu-apro',defaut:'À propos',
+   aide:'Descend directement au bas du site. N’apparaît que si le texte ou une coordonnée est rempli.'},
+];
+/* Le bandeau d'accueil montre deux photos qui se suivent, projet après projet, tirés au
+   hasard. Sa durée d'affichage est un réglage : trop court on n'a pas le temps de regarder,
+   trop long le site paraît figé. Les bornes évitent les valeurs absurdes (0,5 s clignote,
+   dix minutes n'est plus un diaporama). */
+const BANDEAU_SEC_MIN=3, BANDEAU_SEC_MAX=60, BANDEAU_SEC_DEFAUT=7;
+function bandeauSec(){
+  const n=parseFloat(siteSettings().diaporamaSec);
+  return (isFinite(n)&&n>=BANDEAU_SEC_MIN&&n<=BANDEAU_SEC_MAX)?n:BANDEAU_SEC_DEFAUT;
+}
+/* Une ou deux photos par vue. Rien d'autre : à trois, sur un bandeau large de 1200 px,
+   chaque photo tombe sous 400 px — ce n'est plus une image d'accueil, c'est une planche
+   contact. Sur téléphone, le site ramène de toute façon à une seule. */
+function bandeauPar(){
+  const n=parseInt(siteSettings().diaporamaPar,10);
+  return (n===1||n===2)?n:2;
+}
+/* Combien de cartes de présentation par ligne. Raphaël veut décider lui-même — « bandeau
+   ou deux, c'est moi qui gère » — donc pas de plafond caché comme le bandeau d'accueil :
+   1 à 5. Au-delà, une carte de texte devient illisible sur la largeur qui lui reste, et le
+   site retombe de toute façon à une seule colonne sur téléphone, quel que soit ce réglage.
+   Une carte peut occuper DEUX colonnes (`large`) et on peut glisser des ESPACES VIDES
+   (`vide`) entre elles : c'est ce qui permet de poser une carte à gauche, un trou, une
+   carte à droite — sans quoi la grille les tasse toujours les unes contre les autres. */
+const CARTES_PAR_MAX=5;
+function cartesPar(){
+  const n=parseInt(siteSettings().cartesPar,10);
+  return (n>=1&&n<=CARTES_PAR_MAX)?n:2;
+}
+/* L'alignement vaut pour TOUT le bloc « À propos » — le texte comme les cartes. Deux
+   réglages séparés donneraient un texte centré au-dessus de cartes à gauche : personne ne
+   veut ça, et ça fait un bouton de plus à comprendre. */
+function cartesAlign(){
+  const a=siteSettings().cartesAlign;
+  return (a==='centre'||a==='droite')?a:'gauche';
+}
+function cartesGras(){
+  return !!siteSettings().cartesGras;
+}
+/* Trois langues, décidées sur la fiche d'identité du site. Le français n'est pas une langue
+   comme les autres ici : c'est la langue de REPLI. Un texte non traduit s'affiche en
+   français plutôt que de laisser un blanc — et jamais dans une traduction automatique, qui
+   parlerait au nom de Melissa sans qu'elle l'ait relue. */
+const SITE_LANGUES=[{code:'fr',nom:'Français',dir:'ltr'},{code:'en',nom:'English',dir:'ltr'},{code:'he',nom:'עברית',dir:'rtl'}];
+/* Les champs qui changent d'une langue à l'autre. Le reste (e-mail, téléphone, Instagram,
+   dates) est commun : le traduire n'aurait aucun sens. */
+const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'];
+function siteLanguesActives(){
+  const st=siteSettings();
+  const l=Array.isArray(st.langues)?SITE_LANGUES.map(x=>x.code).filter(c=>st.langues.indexOf(c)>=0):['fr'];
+  return l.indexOf('fr')<0?['fr'].concat(l):l;
+}
+/* Le français reste dans les champs d'origine (`sousTitre`, `apropos`) : aucune migration
+   de données, et le code qui les lit déjà continue de marcher. Les autres langues vivent à
+   part, dans `i18n`. */
+function siteTexte(cle,lang){
+  const st=siteSettings();
+  if(lang==='fr')return st[cle]||'';
+  return ((st.i18n||{})[lang]||{})[cle]||'';
+}
+function siteSetTexte(cle,lang,val){
+  const st=siteSettings();
+  if(lang==='fr'){st[cle]=val;return;}
+  if(!st.i18n||typeof st.i18n!=='object')st.i18n={};
+  if(!st.i18n[lang]||typeof st.i18n[lang]!=='object')st.i18n[lang]={};
+  st.i18n[lang][cle]=val;
+}
+function siteJournal(){
+  const st=siteSettings();
+  if(!Array.isArray(st.journal))st.journal=[];
+  st.journal.forEach(j=>{
+    if(!j.id)j.id=uid();
+    ['date','titre','texte'].forEach(k=>{if(typeof j[k]!=='string')j[k]='';});
+    if(!j.i18n||typeof j.i18n!=='object')j.i18n={};
+  });
+  return st.journal;
+}
+function journalTexte(j,cle,lang){return lang==='fr'?(j[cle]||''):(((j.i18n||{})[lang]||{})[cle]||'');}
+function journalSetTexte(j,cle,lang,val){
+  if(lang==='fr'){j[cle]=val;return;}
+  if(!j.i18n[lang]||typeof j.i18n[lang]!=='object')j.i18n[lang]={};
+  j.i18n[lang][cle]=val;
+}
+/* Les cartes de présentation de la section « À propos » (services, prestations…) — un
+   titre et un texte par carte, réordonnables. Structurées plutôt qu'en code collé : le
+   site les habille avec son thème, pas avec ce qu'on aurait collé dedans. Même mécanique
+   que le journal, à dessein — une seule façon d'écrire « une liste de blocs texte
+   réordonnable, traduisible » dans ce dépôt. */
+function siteCartes(){
+  const st=siteSettings();
+  if(!Array.isArray(st.cartes))st.cartes=[];
+  st.cartes.forEach(c=>{
+    if(!c.id)c.id=uid();
+    ['titre','texte'].forEach(k=>{if(typeof c[k]!=='string')c[k]='';});
+    if(!c.i18n||typeof c.i18n!=='object')c.i18n={};
+    /* Un espace vide est une entrée comme une autre : c'est ce qui lui donne une PLACE dans
+       l'ordre. Le représenter autrement (un compteur de trous, par exemple) obligerait à
+       raccorder deux listes à chaque déplacement. */
+    c.vide=!!c.vide;
+    const l=parseInt(c.large,10);
+    c.large=(l===2)?2:1;
+  });
+  return st.cartes;
+}
+function carteTexte(c,cle,lang){return lang==='fr'?(c[cle]||''):(((c.i18n||{})[lang]||{})[cle]||'');}
+function carteSetTexte(c,cle,lang,val){
+  if(lang==='fr'){c[cle]=val;return;}
+  if(!c.i18n[lang]||typeof c.i18n[lang]!=='object')c.i18n[lang]={};
+  c.i18n[lang][cle]=val;
+}
+/* Complète EN PLACE, sans remplacer l'objet. La version précédente réaffectait
+   `library.site` à chaque appel : deux appels imbriqués — garder le résultat du premier
+   puis appeler une fonction qui rappelle celle-ci — laissaient écrire dans un objet
+   devenu orphelin, jamais sauvegardé, sans que rien ne le signale. */
+/* La liste des catégories, dans l'ordre où elles s'afficheront sur le site.
+   Deux garanties, et ce sont elles qui comptent :
+   - une catégorie déjà portée par une réalisation est TOUJOURS dans la liste, même si elle
+     vient de l'ancien champ libre — sinon un projet perdrait son rangement en silence ;
+   - la liste ne se vide jamais complètement : sans catégorie, plus rien à choisir. */
+function siteCategories(){
+  const st=siteSettings();
+  if(!Array.isArray(st.categories))st.categories=SITE_CATS_DEFAUT.slice();
+  st.categories=st.categories.map(c=>String(c||'').trim()).filter(Boolean).filter((c,i,t)=>t.indexOf(c)===i);
+  (realisations||[]).forEach(r=>{
+    const c=(r.categorie||'').trim();
+    if(c&&st.categories.indexOf(c)<0)st.categories.push(c);
+  });
+  if(!st.categories.length)st.categories=SITE_CATS_DEFAUT.slice();
+  return st.categories;
+}
+function siteSettings(){
+  if(!library.site||typeof library.site!=='object')library.site={};
+  const s=library.site;
+  Object.keys(SITE_DEFAULTS).forEach(k=>{if(s[k]===undefined)s[k]=SITE_DEFAULTS[k];});
+  return s;
+}
+function siteInfos(){
+  const st=siteSettings();
+  const b=library.branding||{};
+  const o={title:(b.companyName||'Melissa Nabet').trim(),subtitle:(st.sousTitre||'').trim()};
+  /* Un thème inconnu du catalogue ne part pas : il ferait retomber le site sur son défaut
+     sans que rien ne l'explique. */
+  if(SITE_THEMES.some(t=>t.id===st.theme))o.theme=st.theme;
+  if(st.mouvement==='aucun'||st.mouvement==='discret')o.mouvement=st.mouvement;
+  /* Le bandeau d'accueil : son état et sa durée. Toujours envoyés — ce ne sont pas des
+     coordonnées qu'on pourrait vouloir laisser vides, ils ont toujours une valeur. */
+  o.diaporama=(st.diaporama==='aucun')?'aucun':'actif';
+  o.diaporamaSec=bandeauSec();
+  o.diaporamaPar=bandeauPar();
+  /* Le bouton WhatsApp : il a toujours un état, ce n'est pas une coordonnée qu'on pourrait
+     laisser vide. Le NUMÉRO, lui, vient de `tel` — sans numéro, le site n'affiche rien. */
+  o.whatsapp=(st.whatsapp==='aucun')?'aucun':'actif';
+  ['apropos','email','tel','instagram','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'].forEach(k=>{
+    const v=(st[k]||'').trim();
+    if(v)o[k]=v;
+  });
+  /* Langues et traductions : purement ADDITIF. `subtitle` et `apropos` restent le français,
+     tels qu'ils sont lus aujourd'hui ; les autres langues arrivent à côté, dans `i18n`.
+     Un champ vide ne part pas : le site sait retomber sur le français, une chaîne vide
+     publiée l'en empêcherait. */
+  const langues=siteLanguesActives();
+  if(langues.length>1){
+    o.langues=langues;
+    const i18n={};
+    langues.filter(l=>l!=='fr').forEach(l=>{
+      const bloc={};
+      SITE_TRADUISIBLES.forEach(k=>{
+        const v=siteTexte(k,l).trim();
+        if(v)bloc[k==='sousTitre'?'subtitle':k]=v;
+      });
+      if(Object.keys(bloc).length)i18n[l]=bloc;
+    });
+    if(Object.keys(i18n).length)o.i18n=i18n;
+  }
+  /* L'ordre des catégories part en ligne : le filtre du site suit l'ordre défini ici, pas
+     l'alphabet. « Commercial, Habitation, Bureaux » est un ordre voulu, pas un hasard. */
+  const cats=siteCategories();
+  if(cats.length)o.categories=cats.slice();
+  const catsProd=produitCategories();
+  if(catsProd.length)o.categoriesProduits=catsProd.slice();
+  const journal=siteJournal()
+    .filter(j=>langues.some(l=>journalTexte(j,'titre',l).trim()||journalTexte(j,'texte',l).trim()))
+    .map(j=>{
+      const e={id:j.id,date:(j.date||'').trim(),titre:(j.titre||'').trim(),texte:(j.texte||'').trim()};
+      const tr={};
+      langues.filter(l=>l!=='fr').forEach(l=>{
+        const bloc={};
+        ['titre','texte'].forEach(k=>{const v=journalTexte(j,k,l).trim();if(v)bloc[k]=v;});
+        if(Object.keys(bloc).length)tr[l]=bloc;
+      });
+      if(Object.keys(tr).length)e.i18n=tr;
+      return e;
+    });
+  if(journal.length)o.journal=journal;
+  const cartes=siteCartes()
+    /* Un espace vide n'a AUCUN texte : le filtre sur le texte le supprimerait, et la mise
+       en page voulue s'effondrerait en silence à la première mise à jour du site. */
+    .filter(c=>c.vide||langues.some(l=>carteTexte(c,'titre',l).trim()||carteTexte(c,'texte',l).trim()))
+    .map(c=>{
+      if(c.vide)return {id:c.id,vide:1,large:c.large===2?2:1};
+      const e={id:c.id,titre:(c.titre||'').trim(),texte:(c.texte||'').trim()};
+      if(c.large===2)e.large=2;
+      const tr={};
+      langues.filter(l=>l!=='fr').forEach(l=>{
+        const bloc={};
+        ['titre','texte'].forEach(k=>{const v=carteTexte(c,k,l).trim();if(v)bloc[k]=v;});
+        if(Object.keys(bloc).length)tr[l]=bloc;
+      });
+      if(Object.keys(tr).length)e.i18n=tr;
+      return e;
+    });
+  /* Une grille faite QUE de trous n'est pas une mise en page, c'est du vide publié. */
+  if(cartes.length&&cartes.every(c=>c.vide))cartes.length=0;
+  if(cartes.length)o.cartes=cartes;
+  /* Toujours envoyés, comme le bandeau d'accueil : ce ne sont pas des coordonnées qu'on
+     voudrait laisser vides, ils ont toujours une valeur (leur défaut y compris). */
+  o.cartesPar=cartesPar();
+  o.cartesAlign=cartesAlign();
+  o.cartesGras=cartesGras();
+  return o;
+}
+function emptyManifest(){
+  return {version:1,updatedAt:new Date().toISOString(),site:siteInfos(),realisations:[]};
+}
+/* Mettre à jour la présentation du site sans republier une réalisation : sinon, corriger
+   une faute dans le texte « À propos » obligerait à republier un chantier. */
+async function pushSiteInfos(btn){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  const dire=t=>{const el=document.getElementById('site-msg');if(el)el.textContent=t;};
+  if(btn){btn.disabled=true;btn.textContent='Envoi…';}
+  try{
+    const man=await readManifest();
+    man.site=siteInfos();
+    man.updatedAt=new Date().toISOString();
+    await writeManifest(man);
+    dire('Mis à jour sur le site. Comptez une minute avant de voir le changement en ligne.');
+    toast('Site mis à jour');
+  }catch(e){
+    console.error('infos du site',e);
+    dire('Échec : '+((e&&e.message)||'erreur')+'. Rien n’a été modifié en ligne.');
+  }finally{ if(btn){btn.disabled=false;btn.textContent='Mettre à jour le site';} }
+}
+/* Langue actuellement ÉCRITE dans le panneau (pas celle du site : celle des champs).
+   Une seule à la fois — trois colonnes de texte côte à côte sont illisibles sur un
+   téléphone, et c'est depuis un téléphone que ce panneau sert le plus. */
+let _siteLangEdit='fr';
+function openSitePanel(){
+  const st=siteSettings(), b=library.branding||{};
+  const nb=(realisations||[]).filter(r=>r.published).length;
+  const actives=siteLanguesActives();
+  if(actives.indexOf(_siteLangEdit)<0)_siteLangEdit='fr';
+  const LE=_siteLangEdit;
+  const rtl=(SITE_LANGUES.find(l=>l.code===LE)||{}).dir==='rtl'?' dir="rtl"':'';
+  const suff=LE==='fr'?'':' — '+((SITE_LANGUES.find(l=>l.code===LE)||{}).nom||LE);
+  /* Dire ce qui se passera en ligne : un champ laissé vide dans une autre langue n'est pas
+     un trou, c'est le français qui s'affichera. */
+  const repli=(val,fr)=>(LE!=='fr'&&!(val||'').trim()&&(fr||'').trim())
+    ?'<p class="site-repli">Non traduit — le français s’affichera.</p>':'';
+  /* Pourquoi le site n'affiche aucune section : dit ici, avec SES chiffres, plutôt que
+     laissé à deviner. Un filtre à une seule case n'est pas un filtre — le site ne l'affiche
+     donc pas, et il faut au moins deux catégories différentes pour qu'il apparaisse. */
+  const etatSections=(()=>{
+    const pub=(realisations||[]).filter(r=>r.published);
+    const cats=[...new Set(pub.map(r=>(r.categorie||'').trim()).filter(Boolean))];
+    const sans=pub.filter(r=>!(r.categorie||'').trim()).length;
+    const orphelines=sans?' <b>'+sans+'</b> réalisation(s) publiée(s) n’ont pas de catégorie : elles restent visibles, mais dans aucune section.':'';
+    if(!pub.length)return {ok:false,html:'Aucune réalisation publiée pour l’instant : le site n’affiche donc aucune section.'};
+    if(cats.length>=2)return {ok:true,html:'Le site affiche <b>'+cats.length+'</b> sections : '+cats.map(esc).join(', ')+'.'+orphelines};
+    if(cats.length===1)return {ok:false,html:'Une seule catégorie publiée (« '+esc(cats[0])+' ») : le site n’affiche pas de sections, un choix unique n’est pas un choix. Il en faut <b>au moins deux</b>.'+orphelines};
+    return {ok:false,html:'<b>'+pub.length+'</b> réalisation(s) publiée(s), <b>aucune</b> catégorie renseignée — c’est pour ça qu’aucune section n’apparaît. Ouvrez une réalisation, remplissez son champ « Catégorie » (Commercial, Habitation, Bureaux, Réalisation sur mesure…), puis republiez-la.'};
+  })();
+  /* La liste des catégories, modifiable ici. Le compteur dit combien de réalisations
+     portent chacune : supprimer n'est jamais un geste aveugle. */
+  const listeCats=siteCategories();
+  const compteCat=c=>(realisations||[]).filter(r=>(r.categorie||'')===c).length;
+  const listeCatsHtml=listeCats.map((c,i)=>`<div class="lib-item" data-cat="${i}">
+      <input type="text" value="${esc(c)}" data-cat-nom placeholder="Nom de la section" style="flex:2">
+      <span class="site-cat-n">${compteCat(c)}</span>
+      <button class="mini" data-cat-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+      <button class="mini" data-cat-move="1" ${i===listeCats.length-1?'disabled':''} title="Descendre">↓</button>
+      <button class="mini danger" data-cat-del title="Supprimer">×</button></div>`).join('');
+  /* L'ordre des projets EN LIGNE, tel qu'il sera après la prochaine mise à jour. Le
+     compteur de photos et la date situent chaque ligne : deux chantiers peuvent porter des
+     titres proches. */
+  const ordreListe=siteOrdreProjets();
+  const ordreHtml=ordreListe.map((r,i)=>`<div class="lib-item" data-ordre="${i}">
+      <span class="site-rang">${i+1}</span>
+      <span class="site-ordre-nom">${esc(r.title||'Sans titre')}<i>${esc([r.date,r.categorie].filter(Boolean).join(' · ')||'—')}</i></span>
+      <button class="mini" data-ordre-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+      <button class="mini" data-ordre-move="1" ${i===ordreListe.length-1?'disabled':''} title="Descendre">↓</button>
+    </div>`).join('')||'<p class="ias-note" style="margin:0">Aucune réalisation publiée pour l’instant : il n’y a rien à classer. Publiez un projet depuis l’onglet Réalisations.</p>';
+  const listeCatsProd=produitCategories();
+  const compteProd=c=>(produits||[]).filter(x=>(x.categorie||'')===c).length;
+  const listeCatsProdHtml=listeCatsProd.map((c,i)=>`<div class="lib-item" data-catprod="${i}">
+      <input type="text" value="${esc(c)}" data-catprod-nom placeholder="Nom du rayon" style="flex:2">
+      <span class="site-cat-n">${compteProd(c)}</span>
+      <button class="mini" data-catprod-move="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+      <button class="mini" data-catprod-move="1" ${i===listeCatsProd.length-1?'disabled':''} title="Descendre">↓</button>
+      <button class="mini danger" data-catprod-del title="Supprimer">×</button></div>`).join('');
+  const jrn=siteJournal();
+  const journalHtml=jrn.map((j,i)=>`<div class="site-entree" data-i="${i}">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <input type="text" data-j="date" value="${esc(j.date)}" placeholder="Date — ex. Septembre 2026"${LE==='fr'?'':' disabled title="Commune aux langues"'}>
+        <button class="mini" data-jmove="-1" ${i===0?'disabled':''} title="Monter">↑</button>
+        <button class="mini" data-jmove="1" ${i===jrn.length-1?'disabled':''} title="Descendre">↓</button>
+        <button class="mini danger" data-jdel title="Supprimer">×</button>
+      </div>
+      <input type="text" data-j="titre" value="${esc(journalTexte(j,'titre',LE))}"${rtl} placeholder="Titre" style="margin-bottom:6px">
+      <textarea rows="3" data-j="texte"${rtl} placeholder="Texte">${esc(journalTexte(j,'texte',LE))}</textarea>
+      ${repli(journalTexte(j,'titre',LE),j.titre)||repli(journalTexte(j,'texte',LE),j.texte)}
+    </div>`).join('')||'<p class="ias-note" style="margin:0">Aucune entrée pour l’instant.</p>';
+  /* Les cartes de la section « À propos » : ordre = position à l'écran (gauche à droite,
+     puis ligne suivante) — monter/descendre EST le geste « déplacer à gauche/à droite ». */
+  const crt=siteCartes();
+  /* Les mêmes commandes sur une carte et sur un espace vide : ordre, largeur, suppression.
+     Un espace qu'on ne pourrait pas déplacer ni élargir ne servirait à rien. */
+  const cBarre=(c,i,n)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+        <span class="drag-handle carte-drag-handle" title="Glisser pour réordonner">⠿</span>
+        <span class="site-rang">${i+1}</span>
+        <button class="mini" data-cmove="-1" ${i===0?'disabled':''} title="Vers la gauche">↑</button>
+        <button class="mini" data-cmove="1" ${i===n-1?'disabled':''} title="Vers la droite">↓</button>
+        <button class="mini" data-clarge aria-pressed="${c.large===2?'true':'false'}" title="Occuper deux colonnes">${c.large===2?'⬛⬛ 2 colonnes':'⬛ 1 colonne'}</button>
+        <button class="mini danger" data-cdel title="Supprimer">×</button>
+      </div>`;
+  const cartesHtml=crt.map((c,i)=>c.vide
+    ? `<div class="site-entree site-entree-vide" data-ci="${i}" data-idx="${i}">
+      ${cBarre(c,i,crt.length)}
+      <p class="ias-note" style="margin:0">Espace vide — la place reste libre à cet endroit de la grille. Sur téléphone, il n’apparaît pas (une seule colonne).</p>
+    </div>`
+    : `<div class="site-entree" data-ci="${i}" data-idx="${i}">
+      ${cBarre(c,i,crt.length)}
+      <input type="text" data-c="titre" value="${esc(carteTexte(c,'titre',LE))}"${rtl} placeholder="Titre — ex. Rénovation complète" style="margin-bottom:6px">
+      <textarea rows="3" data-c="texte"${rtl} placeholder="Description courte">${esc(carteTexte(c,'texte',LE))}</textarea>
+      ${repli(carteTexte(c,'titre',LE),c.titre)||repli(carteTexte(c,'texte',LE),c.texte)}
+    </div>`).join('')||'<p class="ias-note" style="margin:0">Aucune carte pour l’instant.</p>';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Le site public</h3>
+    <p class="msub">Ce que le site dit de lui-même, en dehors des projets. <b>Tout ce qui est rempli ici devient public</b> — laissez vide ce que vous ne voulez pas montrer. Les projets, eux, ne partent en ligne que par « Publier sur le site », réalisation par réalisation (${nb} en ligne).</p>
+    <div class="ed-eyebrow">Allure du site</div>
+    <p class="ias-note">Change la typographie, les couleurs et la mise en page. Les projets, les textes et les photos ne bougent pas.</p>
+    <div class="site-themes" id="site-themes">${SITE_THEMES.map(t=>`
+      <button type="button" class="site-theme" data-theme="${esc(t.id)}" aria-pressed="${st.theme===t.id?'true':'false'}">
+        <span class="st-pastille" style="background:${esc(t.fond)};color:${esc(t.encre)}">Aa</span>
+        <span class="st-txt"><b>${esc(t.nom)}</b><i>${esc(t.ref)}</i><em>${esc(t.note)}</em></span>
+      </button>`).join('')}</div>
+    <p class="site-enligne" id="site-enligne">Lecture de ce qui est en ligne…</p>
+    <div class="ed-eyebrow" style="margin-top:14px">Mouvement</div>
+    <div class="site-mvt" id="site-mvt">
+      <button type="button" class="mini" data-mvt="discret" aria-pressed="${st.mouvement!=='aucun'?'true':'false'}">Discret — les images apparaissent en douceur</button>
+      <button type="button" class="mini" data-mvt="aucun" aria-pressed="${st.mouvement==='aucun'?'true':'false'}">Aucun — net et immédiat</button>
+    </div>
+    <div class="ed-eyebrow" style="margin-top:14px">Bandeau d’accueil</div>
+    <p class="ias-note">Une grande image en haut du site, qui fait défiler vos projets : <b>des photos qui se suivent</b> dans un même chantier, puis les suivantes, projets tirés au hasard. Un appui dessus ouvre le projet montré. Des flèches ‹ › permettent de défiler à la main (et le doigt, en glissant). Sur téléphone, les photos passent toujours une par une.</p>
+    <div class="site-mvt" id="site-diapo">
+      <button type="button" class="mini" data-diapo="actif" aria-pressed="${st.diaporama!=='aucun'?'true':'false'}">Affiché — les projets défilent en fondu</button>
+      <button type="button" class="mini" data-diapo="aucun" aria-pressed="${st.diaporama==='aucun'?'true':'false'}">Masqué — le site commence par la liste</button>
+    </div>
+    <div class="site-mvt" id="site-diapo-par" style="margin-top:9px">
+      <button type="button" class="mini" data-par="2" aria-pressed="${bandeauPar()===2?'true':'false'}">Deux photos côte à côte</button>
+      <button type="button" class="mini" data-par="1" aria-pressed="${bandeauPar()===1?'true':'false'}">Une seule photo, en grand</button>
+    </div>
+    <label class="fld" style="margin-top:9px"><span class="lbl">Temps d’affichage de chaque vue (secondes)</span>
+      <input type="number" id="site-diapo-sec" min="${BANDEAU_SEC_MIN}" max="${BANDEAU_SEC_MAX}" step="1" value="${bandeauSec()}"></label>
+    <p class="ias-note" id="site-diapo-msg"></p>
+    <div class="ed-eyebrow" style="margin-top:14px">Bouton WhatsApp</div>
+    <p class="ias-note">Un bouton présent partout sur le site, qui ouvre WhatsApp sur votre numéro. Il <b>n’apparaît que si le téléphone ci-dessus est rempli</b> — un bouton de contact sans destinataire est pire que pas de bouton.</p>
+    <div class="site-mvt" id="site-wa">
+      <button type="button" class="mini" data-wa="actif" aria-pressed="${st.whatsapp!=='aucun'?'true':'false'}">Affiché</button>
+      <button type="button" class="mini" data-wa="aucun" aria-pressed="${st.whatsapp==='aucun'?'true':'false'}">Masqué</button>
+    </div>
+    <label class="fld" style="margin-top:9px"><span class="lbl">Message déjà écrit quand on clique (facultatif)${esc(suff)}</span>
+      <input type="text" id="site-wa-txt"${rtl} value="${esc(siteTexte('waTexte',LE))}" placeholder="Bonjour, j’ai vu votre site et j’aimerais…">
+      ${repli(siteTexte('waTexte',LE),siteTexte('waTexte','fr'))}</label>
+    <div class="ed-eyebrow" style="margin-top:14px">Menu du site</div>
+    <p class="ias-note">Les entrées de la barre en haut du site. Laissez vide pour garder le mot par défaut — celui-ci se traduit tout seul dans les autres langues, un mot que vous écrivez ici ne se traduit que si vous le traduisez.</p>
+    ${SITE_MENU.map(m=>`<label class="fld"><span class="lbl">${esc(m.defaut)}</span>
+      <input type="text" id="${m.id}" value="${esc(siteTexte(m.cle,LE))}" placeholder="${esc(m.defaut)}">
+      <span class="ias-note" style="margin-top:3px;display:block">${esc(m.aide)}</span></label>`).join('')}
+    <div class="ed-eyebrow" style="margin-top:14px">Sections du site</div>
+    <p class="ias-note">Les sections du site (« Commercial », « Habitation »…) ne sont pas un réglage à activer : ce sont les <b>catégories</b> des réalisations publiées. Chacune porte la sienne, dans sa fiche.</p>
+    <div class="site-sections ${etatSections.ok?'ok':'ko'}">${etatSections.html}</div>
+    <div id="site-cats">${listeCatsHtml}</div>
+    <button class="add-btn" id="site-cat-add">+ Ajouter une catégorie</button>
+    <div class="ed-eyebrow" style="margin-top:14px">Ordre des projets sur le site</div>
+    <p class="ias-note">L’ordre d’affichage en ligne, du premier au dernier. Le changer ne renvoie aucune photo : c’est instantané et gratuit. Sans réglage, le dernier projet publié passe en tête.</p>
+    <div id="site-ordre">${ordreHtml}</div>
+    ${ordreListe.length>1?'<button class="mini" id="site-ordre-reset">Remettre par date de publication</button>':''}
+    <div class="ed-eyebrow" style="margin-top:14px">Catégories de la boutique</div>
+    <p class="ias-note">Les rayons de la section « À la vente ». Même logique que les sections des réalisations : un produit choisit la sienne dans un menu.</p>
+    <div id="site-cats-prod">${listeCatsProdHtml}</div>
+    <button class="add-btn" id="site-catprod-add">+ Ajouter une catégorie de produit</button>
+    <div class="ed-eyebrow" style="margin-top:14px">Langues du site</div>
+    <p class="ias-note">Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.</p>
+    <div class="site-langues" id="site-langues">${SITE_LANGUES.map(l=>`
+      <label class="site-chk"><input type="checkbox" data-langue="${l.code}" ${actives.indexOf(l.code)>=0?'checked':''} ${l.code==='fr'?'disabled':''}> ${esc(l.nom)}</label>`).join('')}</div>
+    ${actives.length>1?`<div class="site-onglets" id="site-onglets">${
+      SITE_LANGUES.filter(l=>actives.indexOf(l.code)>=0).map(l=>
+        `<button type="button" class="site-onglet${l.code===LE?' on':''}" data-lang="${l.code}">${esc(l.nom)}</button>`).join('')
+      }<span class="site-onglets-note">langue en cours d’écriture</span></div>`:''}
+    <label class="fld" style="margin-top:14px"><span class="lbl">Sous-titre, sous le nom${suff}</span>
+      <input type="text" id="site-sub" maxlength="60"${rtl} value="${esc(siteTexte('sousTitre',LE))}" placeholder="${LE==='fr'?'ex. Architecture d’intérieur':esc(st.sousTitre||'—')}"></label>
+    ${repli(siteTexte('sousTitre',LE),st.sousTitre)}
+    <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page${suff}</span>
+      <textarea id="site-apropos" rows="4" maxlength="700"${rtl} placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(siteTexte('apropos',LE))}</textarea></label>
+    ${repli(siteTexte('apropos',LE),st.apropos)}
+    <div class="ed-eyebrow" style="margin-top:14px">Cartes de présentation${suff}</div>
+    <p class="ias-note">Vos services ou prestations, en cartes — un titre et une courte description chacune. L’ordre ci-dessous est <b>la place sur le site</b> : de gauche à droite, puis ligne suivante. Poignée « ⠿ » ou flèches ↑ ↓ pour déplacer. Sans carte, rien de plus ne s’affiche sous le texte « À propos ».</p>
+    <div class="site-mvt" id="site-cartes-par">
+      ${Array.from({length:CARTES_PAR_MAX},(_,k)=>k+1).map(n=>`<button type="button" class="mini" data-cartespar="${n}" aria-pressed="${cartesPar()===n?'true':'false'}">${n} par ligne</button>`).join('')}
+    </div>
+    <p class="ias-note" style="margin-top:6px">Sur téléphone, toujours une seule colonne — quel que soit ce réglage. Les espaces vides y disparaissent, et une carte « 2 colonnes » y tient toute la largeur.</p>
+    <div class="ed-eyebrow" style="margin-top:14px">Alignement du texte « À propos »</div>
+    <p class="ias-note">Vaut pour le paragraphe « À propos » <b>et</b> pour les cartes.</p>
+    <div class="site-mvt" id="site-cartes-align" style="margin-top:6px">
+      <button type="button" class="mini" data-cartesalign="gauche" aria-pressed="${cartesAlign()==='gauche'?'true':'false'}">À gauche</button>
+      <button type="button" class="mini" data-cartesalign="centre" aria-pressed="${cartesAlign()==='centre'?'true':'false'}">Centré</button>
+      <button type="button" class="mini" data-cartesalign="droite" aria-pressed="${cartesAlign()==='droite'?'true':'false'}">À droite</button>
+    </div>
+    <label class="site-chk" style="margin-top:9px;display:flex"><input type="checkbox" id="site-cartes-gras" ${cartesGras()?'checked':''}> Titres en gras</label>
+    <div id="site-cartes">${cartesHtml}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="add-btn" id="site-cartes-add">+ Ajouter une carte</button>
+      <button class="add-btn" id="site-cartes-vide">+ Laisser un espace vide</button>
+    </div>
+    <div class="ed-eyebrow" style="margin-top:14px">Journal${suff}</div>
+    <p class="ias-note">Des notes datées, affichées après les projets. Sans entrée, la section n’apparaît pas du tout sur le site.</p>
+    ${journalHtml}
+    <button class="add-btn" id="site-journal-add">+ Ajouter une entrée</button>
+    <div class="ed-eyebrow" style="margin-top:14px">Vous joindre</div>
+    <p class="ias-note">Ces coordonnées deviennent visibles par n'importe quel visiteur. Laissez un champ vide et il n'apparaît pas du tout.</p>
+    <div class="row2">
+      <label class="fld"><span class="lbl">E-mail de contact</span>
+        <input type="email" id="site-email" value="${esc(st.email||'')}" placeholder="vide = pas d’e-mail affiché"></label>
+      <label class="fld"><span class="lbl">Téléphone / WhatsApp</span>
+        <input type="text" id="site-tel" value="${esc(st.tel||'')}" placeholder="vide = pas de numéro affiché"></label>
+    </div>
+    <label class="fld"><span class="lbl">Instagram (facultatif)</span>
+      <input type="text" id="site-insta" value="${esc(st.instagram||'')}" placeholder="@nomducompte"></label>
+    <button class="mini" id="site-copier">Reprendre les coordonnées du devis</button>
+    ${(b.email||b.phone)?'<p class="ias-note" style="margin-top:6px">Celles de vos devis : '+esc([b.email,b.phone].filter(Boolean).join(' · '))+'</p>':'<p class="ias-note" style="margin-top:6px">Vos devis ne portent aucune coordonnée à reprendre.</p>'}
+    <p class="ias-msg" id="site-msg"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="mini" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-primary" id="site-push">Mettre à jour le site</button>
+    </div>`);
+  const champs=Object.assign({sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta',waTexte:'site-wa-txt'},
+    Object.fromEntries(SITE_MENU.map(m=>[m.cle,m.id])));
+  Object.entries(champs).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    const traduisible=SITE_TRADUISIBLES.indexOf(k)>=0;
+    el.addEventListener('input',()=>{
+      if(traduisible)siteSetTexte(k,LE,el.value);else siteSettings()[k]=el.value;
+      saveLibraryDebounced();
+    });
+  });
+  document.querySelectorAll('#site-onglets .site-onglet').forEach(b=>{
+    b.addEventListener('click',()=>{_siteLangEdit=b.dataset.lang;openSitePanel();});
+  });
+  document.querySelectorAll('#site-langues input[data-langue]').forEach(c=>{
+    c.addEventListener('change',()=>{
+      const st=siteSettings(), code=c.dataset.langue;
+      const l=siteLanguesActives().filter(x=>x!==code);
+      st.langues=c.checked?SITE_LANGUES.map(x=>x.code).filter(x=>l.indexOf(x)>=0||x===code):l;
+      if(st.langues.indexOf('fr')<0)st.langues.unshift('fr');
+      saveLibraryDebounced();openSitePanel();rappel();
+    });
+  });
+  /* Renommer une catégorie DOIT suivre sur les réalisations qui la portent : sans ça, le
+     projet garde l'ancien mot, disparaît de sa section et réapparaît dans une section
+     fantôme — une perte de rangement parfaitement silencieuse. */
+  document.querySelectorAll('#site-cats [data-cat]').forEach(ligne=>{
+    const i=+ligne.dataset.cat, avant=siteCategories()[i];
+    const champ=ligne.querySelector('[data-cat-nom]');
+    champ.addEventListener('change',()=>{
+      const neuf=champ.value.trim(), liste=siteCategories();
+      if(!neuf){champ.value=avant;return;}                       /* un nom vide n'est pas un nom */
+      if(liste.some((c,j)=>j!==i&&c===neuf)){toast('Cette catégorie existe déjà');champ.value=avant;return;}
+      liste[i]=neuf;
+      (realisations||[]).forEach(r=>{if((r.categorie||'')===avant){r.categorie=neuf;r.updatedAt=Date.now();}});
+      saveRealisations();store.set(K_LIB,library);renderRealisations();openSitePanel();rappel();
+    });
+    ligne.querySelectorAll('[data-cat-move]').forEach(b=>b.addEventListener('click',()=>{
+      const liste=siteCategories(), j=i+(+b.dataset.catMove);
+      if(j<0||j>=liste.length)return;
+      const t=liste[i];liste[i]=liste[j];liste[j]=t;
+      saveLibraryDebounced();openSitePanel();rappel();
+    }));
+    ligne.querySelector('[data-cat-del]').addEventListener('click',()=>{
+      const liste=siteCategories(), mort=liste[i], n=compteCat(mort);
+      askConfirm('Supprimer la catégorie « '+mort+' » ?'
+        +(n?' '+n+' réalisation(s) la portent : elles resteront en ligne, mais rangées dans aucune section.':'')
+        +' Le site ne changera qu’après « Mettre à jour le site ».',()=>{
+        const l=siteCategories();
+        l.splice(l.indexOf(mort),1);
+        (realisations||[]).forEach(r=>{if((r.categorie||'')===mort){r.categorie='';r.updatedAt=Date.now();}});
+        saveRealisations();store.set(K_LIB,library);renderRealisations();openSitePanel();
+      });
+    });
+  });
+  /* Ce qui est CHOISI ici et ce qui est EN LIGNE sont deux choses différentes tant qu'on
+     n'a pas cliqué « Mettre à jour le site ». Raphaël a cru son choix appliqué alors que le
+     manifeste portait encore l'ancien : la page le dit maintenant, en lisant le manifeste
+     réel plutôt qu'en supposant. */
+  (async()=>{
+    const zone=document.getElementById('site-enligne');
+    if(!zone)return;
+    const nom=id=>{const t=SITE_THEMES.find(x=>x.id===id);return t?t.nom:(id||'aucun');};
+    if(!(sb&&sbUser&&ownerId)){zone.textContent='Connexion requise pour lire ce qui est en ligne.';return;}
+    try{
+      const man=await readManifest();
+      const enLigne=(man.site&&man.site.theme)||'atelier';
+      const choisi=siteSettings().theme||'atelier';
+      if(enLigne===choisi){zone.className='site-enligne ok';zone.textContent='En ligne actuellement : « '+nom(enLigne)+' ». C’est bien ce qui est choisi ici.';}
+      else{zone.className='site-enligne ko';
+        zone.textContent='Attention : le site affiche « '+nom(enLigne)+' », pas « '+nom(choisi)+' ». Votre choix ne sera en ligne qu’après « Mettre à jour le site », en bas de ce panneau.';}
+    }catch(e){zone.textContent='Impossible de lire ce qui est en ligne pour l’instant.';}
+  })();
+  const cadd=document.getElementById('site-cat-add');
+  if(cadd)cadd.addEventListener('click',()=>{
+    const liste=siteCategories();
+    let n='Nouvelle section', k=2;
+    while(liste.indexOf(n)>=0)n='Nouvelle section '+(k++);
+    liste.push(n);saveLibraryDebounced();openSitePanel();
+    const dernier=document.querySelector('#site-cats [data-cat]:last-child [data-cat-nom]');
+    if(dernier){dernier.focus();dernier.select();}
+  });
+  /* Monter/descendre écrit la liste ENTIÈRE des projets publiés dans le réglage : un ordre
+     partiel se réinterpréterait à chaque publication et personne ne saurait plus pourquoi
+     le site a bougé tout seul. */
+  document.querySelectorAll('#site-ordre [data-ordre-move]').forEach(bt=>bt.addEventListener('click',()=>{
+    const i=+bt.closest('[data-ordre]').dataset.ordre, d=+bt.dataset.ordreMove, k=i+d;
+    const liste=siteOrdreProjets().map(r=>r.id);
+    if(k<0||k>=liste.length)return;
+    const t=liste[i];liste[i]=liste[k];liste[k]=t;
+    siteSettings().ordre=liste;
+    saveLibraryDebounced();openSitePanel();rappel();
+  }));
+  const ordreReset=document.getElementById('site-ordre-reset');
+  if(ordreReset)ordreReset.addEventListener('click',()=>{
+    siteSettings().ordre=null;
+    saveLibraryDebounced();openSitePanel();rappel();
+  });
+  /* Mêmes règles que pour les catégories de réalisations : renommer suit sur les produits,
+     supprimer annonce combien sont concernés, un doublon est refusé. */
+  document.querySelectorAll('#site-cats-prod [data-catprod]').forEach(ligne=>{
+    const i=+ligne.dataset.catprod, avant=produitCategories()[i];
+    const champ=ligne.querySelector('[data-catprod-nom]');
+    champ.addEventListener('change',()=>{
+      const neuf=champ.value.trim(), liste=produitCategories();
+      if(!neuf){champ.value=avant;return;}
+      if(liste.some((c,j)=>j!==i&&c===neuf)){toast('Ce rayon existe déjà');champ.value=avant;return;}
+      liste[i]=neuf;
+      (produits||[]).forEach(x=>{if((x.categorie||'')===avant){x.categorie=neuf;x.updatedAt=Date.now();}});
+      saveProduits();store.set(K_LIB,library);renderBoutique();openSitePanel();rappel();
+    });
+    ligne.querySelectorAll('[data-catprod-move]').forEach(b=>b.addEventListener('click',()=>{
+      const liste=produitCategories(), j=i+(+b.dataset.catprodMove);
+      if(j<0||j>=liste.length)return;
+      const t=liste[i];liste[i]=liste[j];liste[j]=t;
+      saveLibraryDebounced();openSitePanel();rappel();
+    }));
+    ligne.querySelector('[data-catprod-del]').addEventListener('click',()=>{
+      const liste=produitCategories(), mort=liste[i], n=compteProd(mort);
+      askConfirm('Supprimer le rayon « '+mort+' » ?'
+        +(n?' '+n+' produit(s) y sont rangés : ils resteront en vente, mais dans aucun rayon.':'')
+        +' Le site ne changera qu’après « Mettre à jour le site ».',()=>{
+        const l=produitCategories();
+        l.splice(l.indexOf(mort),1);
+        (produits||[]).forEach(x=>{if((x.categorie||'')===mort){x.categorie='';x.updatedAt=Date.now();}});
+        saveProduits();store.set(K_LIB,library);renderBoutique();openSitePanel();
+      });
+    });
+  });
+  const cpadd=document.getElementById('site-catprod-add');
+  if(cpadd)cpadd.addEventListener('click',()=>{
+    const liste=produitCategories();
+    let n='Nouveau rayon', k=2;
+    while(liste.indexOf(n)>=0)n='Nouveau rayon '+(k++);
+    liste.push(n);saveLibraryDebounced();openSitePanel();
+  });
+  const jadd=document.getElementById('site-journal-add');
+  if(jadd)jadd.addEventListener('click',()=>{
+    siteJournal().push({id:uid(),date:'',titre:'',texte:'',i18n:{}});
+    saveLibraryDebounced();openSitePanel();
+  });
+  document.querySelectorAll('.site-entree').forEach(bloc=>{
+    const i=+bloc.dataset.i, j=siteJournal()[i];
+    if(!j)return;
+    bloc.querySelectorAll('[data-j]').forEach(ch=>{
+      ch.addEventListener('input',()=>{
+        const k=ch.dataset.j;
+        if(k==='date')j.date=ch.value;else journalSetTexte(j,k,LE,ch.value);
+        saveLibraryDebounced();
+      });
+    });
+    bloc.querySelectorAll('[data-jmove]').forEach(bt=>bt.addEventListener('click',()=>{
+      const a=siteJournal(), d=+bt.dataset.jmove, k=i+d;
+      if(k<0||k>=a.length)return;
+      const t=a[i];a[i]=a[k];a[k]=t;
+      saveLibraryDebounced();openSitePanel();
+    }));
+    const del=bloc.querySelector('[data-jdel]');
+    if(del)del.addEventListener('click',()=>askConfirm('Supprimer cette entrée du journal ? Elle disparaîtra du site à la prochaine mise à jour.',()=>{
+      siteJournal().splice(i,1);store.set(K_LIB,library);openSitePanel();
+    }));
+  });
+  const cartesAdd=document.getElementById('site-cartes-add');
+  if(cartesAdd)cartesAdd.addEventListener('click',()=>{
+    siteCartes().push({id:uid(),titre:'',texte:'',i18n:{},vide:false,large:1});
+    saveLibraryDebounced();openSitePanel();
+  });
+  const cartesVide=document.getElementById('site-cartes-vide');
+  if(cartesVide)cartesVide.addEventListener('click',()=>{
+    siteCartes().push({id:uid(),titre:'',texte:'',i18n:{},vide:true,large:1});
+    saveLibraryDebounced();openSitePanel();
+    document.getElementById('site-msg').textContent='Espace ajouté à la fin. Déplacez-le avec ↑ ↓ pour ouvrir un trou là où vous le voulez.';
+  });
+  document.querySelectorAll('.site-entree[data-ci]').forEach(bloc=>{
+    const i=+bloc.dataset.ci, c=siteCartes()[i];
+    if(!c)return;
+    bloc.querySelectorAll('[data-c]').forEach(ch=>{
+      ch.addEventListener('input',()=>{
+        carteSetTexte(c,ch.dataset.c,LE,ch.value);
+        saveLibraryDebounced();
+      });
+    });
+    /* Les flèches font ce que fait le glisser — et elles, elles marchent au pouce sur un
+       téléphone, où viser une poignée de 15 px pendant qu'on fait défiler est perdu d'avance. */
+    bloc.querySelectorAll('[data-cmove]').forEach(b=>b.addEventListener('click',()=>{
+      const a=siteCartes(), j=i+(+b.dataset.cmove);
+      if(j<0||j>=a.length)return;
+      const t=a[i];a[i]=a[j];a[j]=t;
+      saveLibraryDebounced();openSitePanel();
+    }));
+    const clarge=bloc.querySelector('[data-clarge]');
+    if(clarge)clarge.addEventListener('click',()=>{
+      c.large=(c.large===2)?1:2;
+      saveLibraryDebounced();openSitePanel();
+    });
+    const cdel=bloc.querySelector('[data-cdel]');
+    if(cdel)cdel.addEventListener('click',()=>askConfirm(
+      c.vide?'Retirer cet espace vide ? Les cartes qui suivent remonteront d’une place.'
+            :'Supprimer cette carte ? Elle disparaîtra du site à la prochaine mise à jour.',
+      ()=>{siteCartes().splice(i,1);store.set(K_LIB,library);openSitePanel();}));
+  });
+  attachDragReorder(document.getElementById('site-cartes'),'.site-entree','.carte-drag-handle',newOrder=>{
+    const a=siteCartes();
+    const reordonnees=newOrder.map(i=>a[i]);
+    a.length=0;a.push(...reordonnees);
+    saveLibraryDebounced();openSitePanel();
+  });
+  document.querySelectorAll('#site-cartes-par [data-cartespar]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().cartesPar=parseInt(b.dataset.cartespar,10);saveLibraryDebounced();
+      document.querySelectorAll('#site-cartes-par [data-cartespar]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-cartes-align [data-cartesalign]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().cartesAlign=b.dataset.cartesalign;saveLibraryDebounced();
+      document.querySelectorAll('#site-cartes-align [data-cartesalign]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  const cgras=document.getElementById('site-cartes-gras');
+  if(cgras)cgras.addEventListener('change',()=>{
+    siteSettings().cartesGras=cgras.checked;saveLibraryDebounced();rappel();
+  });
+  /* Un choix ne vaut rien tant qu'il n'est pas EN LIGNE : le dire ici évite de croire que
+     cliquer sur une direction a changé le site. */
+  const rappel=()=>{document.getElementById('site-msg').textContent='Choix enregistré. Il ne sera en ligne qu’après « Mettre à jour le site ».';};
+  document.querySelectorAll('#site-themes .site-theme').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().theme=b.dataset.theme;saveLibraryDebounced();
+      document.querySelectorAll('#site-themes .site-theme').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-mvt [data-mvt]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().mouvement=b.dataset.mvt;saveLibraryDebounced();
+      document.querySelectorAll('#site-mvt [data-mvt]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-wa [data-wa]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().whatsapp=b.dataset.wa;saveLibraryDebounced();
+      document.querySelectorAll('#site-wa [data-wa]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-diapo-par [data-par]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().diaporamaPar=parseInt(b.dataset.par,10);saveLibraryDebounced();
+      document.querySelectorAll('#site-diapo-par [data-par]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  document.querySelectorAll('#site-diapo [data-diapo]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      siteSettings().diaporama=b.dataset.diapo;saveLibraryDebounced();
+      document.querySelectorAll('#site-diapo [data-diapo]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+      rappel();
+    });
+  });
+  const dsec=document.getElementById('site-diapo-sec');
+  dsec.addEventListener('change',()=>{
+    const n=parseFloat(dsec.value);
+    const msg=document.getElementById('site-diapo-msg');
+    /* Une valeur refusée doit dire POURQUOI et se remettre d'aplomb toute seule : sinon on
+       repart avec un champ rouge et un réglage qu'on croit changé. */
+    if(!isFinite(n)||n<BANDEAU_SEC_MIN||n>BANDEAU_SEC_MAX){
+      dsec.value=bandeauSec();
+      msg.textContent='Entre '+BANDEAU_SEC_MIN+' et '+BANDEAU_SEC_MAX+' secondes. Valeur remise à '+bandeauSec()+' s.';
+      return;
+    }
+    siteSettings().diaporamaSec=n;saveLibraryDebounced();
+    msg.textContent='';
+    rappel();
+  });
+  const cop=document.getElementById('site-copier');
+  cop.addEventListener('click',()=>{
+    if(!(b.email||b.phone)){document.getElementById('site-msg').textContent='Aucune coordonnée dans les réglages du devis à reprendre.';return;}
+    if(b.email){siteSettings().email=b.email;document.getElementById('site-email').value=b.email;}
+    if(b.phone){siteSettings().tel=b.phone;document.getElementById('site-tel').value=b.phone;}
+    saveLibraryDebounced();
+    document.getElementById('site-msg').textContent='Coordonnées reprises. Elles ne sont pas encore en ligne : « Mettre à jour le site » pour ça.';
+  });
+  document.getElementById('site-push').addEventListener('click',e=>pushSiteInfos(e.target));
+}
+
+/* ---- AVANT DE PUBLIER : ce qui est en ligne, et ce qui va partir ----
+   Le reproche exact : « je ne sais pas quand je fais republier, ça republie les anciennes
+   photos ». Republier était un saut dans le noir. Cet écran montre, photo par photo, ce que
+   le visiteur voit AUJOURD'HUI et ce qu'il verra après — et rien ne part sans un appui. */
+/* Écarter (ou remettre) une photo SANS quitter l'écran de publication : on met à jour, on
+   enregistre, et on rouvre la fenêtre pour que les compteurs, les pastilles et le bouton
+   disent la vérité. Rien n'est envoyé : le site ne bouge qu'à la confirmation. */
+function pubSetHorsSite(r,p,hors){
+  if(!!p.horsSite===!!hors)return;
+  if(hors&&photosPubliees(r).length<=1){
+    toast('Il faut au moins une photo sur le site : retirez plutôt la réalisation entière.');
+    return;
+  }
+  p.horsSite=!!hors;
+  photoTouch(p,hors?'horssite':'sursite','');
+  r.updatedAt=Date.now();
+  saveRealisations();renderRealisations();
+  toast(hors?'Photo retirée du site':'Photo remise sur le site');
+  askPublishRealisation(r);
+}
+async function askPublishRealisation(r){
+  if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
+  if(!photosPubliees(r).length){toast('Toutes les photos sont écartées du site : il n’y a rien à publier');return;}
+  if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
+  const plan=realisationPublishPlan(r);
+  /* Publiée avant que le CRM ne garde trace des versions : on ne peut pas dire ce qui est en
+     ligne, on ne va donc pas le prétendre. Une réécriture complète remet le suivi d'aplomb. */
+  const ancienne=r.published&&(r.photos||[]).some(p=>!p.pub||!p.pub.sig);
+  const n=plan.change;
+  const chips=[];
+  if(plan.nouvelles)chips.push('<span class="pub-chip neuf">'+plan.nouvelles+' nouvelle(s)</span>');
+  if(plan.changees)chips.push('<span class="pub-chip chg">'+plan.changees+' modifiée(s)</span>');
+  if(plan.retirees)chips.push('<span class="pub-chip ret">'+plan.retirees+' retirée(s) du site</span>');
+  if(plan.ordre)chips.push('<span class="pub-chip chg">ordre modifié</span>');
+  if(plan.fiche)chips.push('<span class="pub-chip chg">fiche du projet modifiée</span>');
+  if(plan.videosNouvelles)chips.push('<span class="pub-chip neuf">'+plan.videosNouvelles+' vidéo(s) nouvelle(s)</span>');
+  if(plan.videosRetirees)chips.push('<span class="pub-chip ret">'+plan.videosRetirees+' vidéo(s) retirée(s)</span>');
+  if(plan.inchangees)chips.push('<span class="pub-chip">'+plan.inchangees+' inchangée(s)</span>');
+  if(plan.ecartees)chips.push('<span class="pub-chip ret">'+plan.ecartees+' écartée(s), non publiée(s)</span>');
+
+  openModal('<button class="modal-x" onclick="closeModal()">×</button>'
+    +'<h3>'+(r.published?'Republier':'Publier')+' « '+esc(r.title)+' »</h3>'
+    +'<p class="msub">'+(r.published
+      ? 'À gauche, ce que le visiteur voit en ce moment. À droite, ce qui partira. Rien n’est envoyé tant que vous n’avez pas confirmé.'
+      : 'Ces photos vont devenir publiques sur le site vitrine. Rien n’est envoyé tant que vous n’avez pas confirmé.')+'</p>'
+    +'<div class="pub-resume">'+chips.join('')+'</div>'
+    +'<p class="pub-note"><b>'+plan.photos.length+' photo(s) sur '+((r.photos||[]).length)+'</b> partiront sur le site'
+      +(plan.ecartees?' — les '+plan.ecartees+' autres sont écartées ; elles sont listées en bas, avec de quoi les remettre.':'.')
+      +' Pour en retirer une, « 🚫 Retirer du site » sur sa ligne ci-dessous.</p>'
+    +(plan.couvEcartee?'<p class="pub-note">La photo choisie comme couverture est écartée du site : c’est la première photo publiée qui servira de couverture.</p>':'')
+    +(ancienne?'<p class="pub-note">Cette réalisation a été mise en ligne avant que le CRM ne garde trace des versions : on ne peut pas montrer ici ce qui y est en ce moment. Les photos concernées seront réécrites une fois à la prochaine publication, puis le suivi sera exact.</p>':'')
+    +'<div class="pub-choix" id="pub-choix" hidden>'
+      +'<span>Vous pouvez ne mettre à jour que le texte et les informations du projet, en laissant les photos telles qu’elles sont en ligne.</span>'
+      +'<div><button type="button" class="mini" id="pub-aucune">Photos inchangées</button>'
+      +'<button type="button" class="mini" id="pub-toutes">Tout envoyer</button></div></div>'
+    +'<div class="pub-liste" id="pub-liste"></div>'
+    +'<p class="pub-note" id="pub-note"></p>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">'
+    +'<button class="mini" onclick="closeModal()">Annuler</button>'
+    +(plan.rien&&r.published?'<button class="mini" id="pub-force">Republier quand même</button>':'')
+    +'<button class="btn btn-primary" id="pub-go">'
+      +(r.published?(n?('Republier ('+n+' photo'+(n>1?'s':'')+')'):'Mettre le site à jour'):'Publier sur le site')
+    +'</button></div>');
+
+  const liste=document.getElementById('pub-liste');
+  const note=document.getElementById('pub-note');
+  const bouges=plan.photos.filter(x=>x.etat!=='inchangee');
+  /* Seule une photo DÉJÀ en ligne, dont on sait quels fichiers y sont, peut être laissée
+     en l'état. Les autres n'ont rien à garder. */
+  const peutGarder=x=>x.etat!=='nouvelle'&&!!(x.p.pub&&x.p.pub.full&&x.p.pub.thumb);
+  if(plan.rien){
+    liste.innerHTML='<p class="pub-vide">Rien n’a changé depuis la dernière publication : le site montre déjà ces '
+      +plan.photos.length+' photo(s), dans cet ordre.<br>Publier maintenant n’enverrait rien de nouveau.</p>';
+  }
+  const montrer=(bouges.length?bouges:plan.photos).slice(0,40);
+  montrer.forEach(x=>{
+    const p=x.p;
+    const ligne=document.createElement('div');
+    ligne.className='pub-ligne'+(x.etat==='inchangee'?' inch':'');
+    ligne.dataset.pid=p.id;
+    ligne.innerHTML='<div class="pub-h"><b>'+esc(p.name||'Photo sans titre')+'</b>'
+      +'<span class="pub-why">'+esc(x.etat==='nouvelle'?'pas encore en ligne'
+        :(x.etat==='inchangee'?'déjà en ligne à l’identique':x.pourquoi))+'</span></div>'
+      +'<div class="pub-paire">'
+      +'<div class="pub-cote"><span class="pub-lbl">En ligne</span><div class="pub-vue" data-avant><span>…</span></div></div>'
+      +'<div class="pub-fleche">→</div>'
+      +'<div class="pub-cote"><span class="pub-lbl">Va partir</span><div class="pub-vue" data-apres><span>…</span></div>'
+      +'<span class="pub-ver" data-verlbl>'+esc(photoVersionLabel(p,photoActiveId(p)))+'</span>'
+      +(photoVersions(p).length?'<button type="button" class="pub-chver" data-chver>Changer la version…</button>':'')
+      +'</div>'
+      +'</div>'
+      /* Deux choses DIFFÉRENTES, et les confondre était le défaut :
+         - « Envoyer cette photo » = renvoyer le fichier, ou laisser en ligne celui qui y est
+           déjà (réservé à une photo déjà publiée : sinon le site pointerait sur du vide) ;
+         - « Retirer du site » = cette photo n'a rien à faire sur la page publique. Ce
+           geste-là manquait ici, il n'existait qu'au fond du menu ⋯ d'une vignette — donc
+           impossible d'écarter quoi que ce soit au moment de publier, et impossible tout
+           court à la première publication. */
+      +'<div class="pub-actes">'
+      +(peutGarder(x)
+        ? '<label class="pub-envoi"><input type="checkbox" data-envoi checked> Envoyer cette photo</label>'
+        : (x.etat==='nouvelle'?'<span class="pub-envoi off">Première mise en ligne : le fichier doit partir.</span>':''))
+      +'<button type="button" class="pub-hors" data-hors>🚫 Retirer du site</button>'
+      +'</div>';
+    liste.appendChild(ligne);
+    ligne.querySelector('[data-hors]').addEventListener('click',()=>pubSetHorsSite(r,p,true));
+    /* Ce qui est en ligne : l'image PUBLIQUE, à son adresse réelle. C'est la seule preuve
+       honnête — un rendu local montrerait ce que le CRM croit avoir publié. */
+    const avant=ligne.querySelector('[data-avant]');
+    if(p.pub&&p.pub.thumb){
+      const im=document.createElement('img');im.alt='';im.loading='lazy';
+      im.onload=()=>{avant.innerHTML='';avant.appendChild(im);};
+      im.onerror=()=>{avant.innerHTML='<span>introuvable en ligne</span>';};
+      im.src=galleryPublicUrl(ownerId+'/'+p.pub.thumb);
+    }else avant.innerHTML='<span>'+(r.published?'version inconnue':'rien')+'</span>';
+    /* Ce qui va partir : rendu ici, avec exactement la version retenue et ses réglages. */
+    const apres=ligne.querySelector('[data-apres]');
+    const im2=document.createElement('img');im2.alt='';im2.style.display='none';
+    apres.appendChild(im2);
+    renderThumbInto(p,im2,apres.querySelector('span'));
+    /* Choisir une autre version SANS quitter cette fenêtre : le reproche exact était de
+       devoir fermer, aller changer la version retenue sur la fiche, puis revenir publier.
+       `photoSetActive` est la même fonction que celle de l'éditeur — une seule mécanique
+       pour « quelle version compte », que ce soit affiché, exporté ou publié. */
+    if(photoVersions(p).length){
+      const chBtn=ligne.querySelector('[data-chver]');
+      const verLbl=ligne.querySelector('[data-verlbl]');
+      apres.classList.add('pub-choisissable');
+      apres.title='Choisir une autre version à publier';
+      let panel=null;
+      const fermer=()=>{if(panel){panel.remove();panel=null;}chBtn.textContent='Changer la version…';};
+      const ouvrir=()=>{
+        if(panel){fermer();return;}
+        chBtn.textContent='Annuler';
+        panel=document.createElement('div');panel.className='pub-verpick';
+        ligne.appendChild(panel);
+        const actif=photoActiveId(p);
+        [{id:'orig'}].concat(photoVersions(p)).forEach(v=>{
+          const b=document.createElement('button');b.type='button';
+          b.className='pub-verb'+(v.id===actif?' on':'');
+          const box=document.createElement('div');box.className='pub-verb-im';
+          const im=document.createElement('img');im.alt='';im.style.display='none';
+          box.appendChild(im);b.appendChild(box);
+          const lab=document.createElement('span');lab.textContent=photoVersionLabel(p,v.id);
+          b.appendChild(lab);
+          panel.appendChild(b);
+          renderVersionThumbInto(p,v.id,im);
+          b.addEventListener('click',()=>{
+            if(photoSetActive(p,v.id)){
+              renderThumbInto(p,im2,null);
+              verLbl.textContent=photoVersionLabel(p,v.id);
+              toast('« '+photoVersionLabel(p,v.id)+' » partira à la publication');
+            }
+            fermer();
+          });
+        });
+      };
+      chBtn.addEventListener('click',ouvrir);
+      apres.addEventListener('click',ouvrir);
+    }
+  });
+  if(bouges.length>40)note.textContent='Les 40 premières photos concernées sont montrées ; les '+(bouges.length-40)+' autres partiront aussi.';
+
+  /* Les photos DÉJÀ EN LIGNE À L'IDENTIQUE n'apparaissaient nulle part : impossible d'en
+     retirer une du site depuis cet écran, alors que c'est exactement là qu'on décide ce que
+     le visiteur va voir. Elles sont donc listées, repliées, avec leur bouton. */
+  if(bouges.length&&plan.inchangees){
+    const inch=plan.photos.filter(x=>x.etat==='inchangee');
+    const det=document.createElement('details');det.className='pub-bloc';
+    det.innerHTML='<summary>'+plan.inchangees+' photo(s) déjà en ligne à l’identique — ne seront pas réécrites</summary>';
+    inch.forEach(x=>{
+      const l=document.createElement('div');l.className='pub-mini';
+      l.innerHTML='<b>'+esc(x.p.name||'Photo sans titre')+'</b>'
+        +'<button type="button" class="pub-hors" data-hors>🚫 Retirer du site</button>';
+      l.querySelector('[data-hors]').addEventListener('click',()=>pubSetHorsSite(r,x.p,true));
+      det.appendChild(l);
+    });
+    liste.appendChild(det);
+  }
+  /* Et le geste inverse, au même endroit : sans lui, écarter une photo par erreur
+     obligeait à fermer, retrouver la vignette et fouiller son menu. */
+  const ecart=(r.photos||[]).filter(p=>p.horsSite);
+  if(ecart.length){
+    const det=document.createElement('details');det.className='pub-bloc';
+    det.innerHTML='<summary>🚫 '+ecart.length+' photo(s) écartée(s) — elles ne partiront pas</summary>';
+    ecart.forEach(pp=>{
+      const l=document.createElement('div');l.className='pub-mini';
+      l.innerHTML='<b>'+esc(pp.name||'Photo sans titre')+'</b>'
+        +'<button type="button" class="pub-hors" data-hors>↩ Remettre sur le site</button>';
+      l.querySelector('[data-hors]').addEventListener('click',()=>pubSetHorsSite(r,pp,false));
+      det.appendChild(l);
+    });
+    liste.appendChild(det);
+  }
+
+  const go=document.getElementById('pub-go');
+  /* CE QUI PART, EN DIRECT. Décocher une photo doit se lire tout de suite sur le bouton :
+     sinon on confirme sans savoir si on envoie une image ou seulement du texte. */
+  const cases=()=>[...liste.querySelectorAll('[data-envoi]')];
+  /* On lit l'identifiant PORTÉ PAR LA LIGNE, pas la position dans un tableau : les deux
+     listes ne coïncident pas toujours (lignes tronquées à 40, photos inchangées masquées),
+     et une correspondance par rang finirait par garder la mauvaise photo. */
+  const gardees=()=>cases().filter(c=>!c.checked)
+    .map(c=>c.closest('.pub-ligne').dataset.pid).filter(Boolean);
+  const rafraichir=()=>{
+    const gard=gardees().length;
+    const envoyees=bouges.length-gard;
+    if(!r.published)return;
+    go.textContent=envoyees>0
+      ? 'Republier ('+envoyees+' photo'+(envoyees>1?'s':'')+')'
+      : (gard?'Mettre à jour le texte seulement':'Mettre le site à jour');
+  };
+  const choix=document.getElementById('pub-choix');
+  if(choix&&cases().length){
+    choix.hidden=false;
+    document.getElementById('pub-aucune').addEventListener('click',()=>{cases().forEach(c=>{c.checked=false;});rafraichir();});
+    document.getElementById('pub-toutes').addEventListener('click',()=>{cases().forEach(c=>{c.checked=true;});rafraichir();});
+    cases().forEach(c=>c.addEventListener('change',rafraichir));
+  }
+  go.addEventListener('click',()=>{const g=gardees();closeModal();publishRealisation(r,g.length?{garder:g}:undefined);});
+  const force=document.getElementById('pub-force');
+  if(force)force.addEventListener('click',()=>{closeModal();publishRealisation(r,{tout:true});});
+}
+
+/* Publier, c'est écrire des IMAGES puis un MANIFESTE. Le plan (`realisationPublishPlan`)
+   dit exactement ce qui change ; on n'écrit que ça, et on garde trace de ce qui vient d'être
+   remplacé pour pouvoir y revenir en un geste. */
+async function publishRealisation(r,opts){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  if(!(r.photos||[]).length){toast('Aucune photo à publier');return;}
+  /* Le garde-fou vaut aussi ici, et pas seulement sur l'écran de confirmation : « Tout
+     republier » appelle cette fonction directement. Publier une galerie vide effacerait la
+     réalisation du site sans que personne ne l'ait demandé. */
+  if(!photosPubliees(r).length){toast('Toutes les photos sont écartées du site : il n’y a rien à publier');return;}
+  if(!(r.title||'').trim()){toast('Donnez un nom à la réalisation avant de publier');return;}
+  const tout=!!(opts&&opts.tout);
+  /* PHOTOS GARDÉES TELLES QUELLES. Le reproche exact : « pour publier mon texte, je suis
+     contraint de publier la photo qui n'est pas à jour ». Une photo listée ici reste en
+     ligne dans la version que le visiteur voit déjà — son fichier n'est ni recalculé ni
+     renvoyé — pendant que la fiche du projet, l'ordre et les légendes, eux, partent.
+     Une photo JAMAIS mise en ligne ne peut pas être gardée : le manifeste pointerait sur
+     un fichier qui n'existe pas. La consigne est donc ignorée pour celles-là. */
+  const garder=new Set((opts&&opts.garder)||[]);
+  const btn=document.querySelector('#rz-body [data-publish]');
+  if(btn){btn.disabled=true;btn.textContent='Publication…';}
+  /* Le temps de cette republication complète, la synchro automatique du texte
+     (`syncRealisationFicheEnLigne`) se met en pause pour ce projet plutôt que d'écrire
+     par-dessus — les deux touchent la même fiche du manifeste. */
+  _publishingIds.add(r.id);
+  try{
+    const folder=ownerId+'/'+r.id;
+    const plan=realisationPublishPlan(r);
+    /* Ce que le seau contient VRAIMENT. Une photo « inchangée » dont le fichier a disparu
+       (ménage manuel, publication interrompue) doit être réécrite, sinon le manifeste
+       pointerait sur du vide. On ne se fie pas à ce que le CRM croit savoir. */
+    let presents=null;
+    try{
+      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+      if(existing)presents=new Set(existing.map(f=>f.name));
+    }catch(e){ /* listing indisponible : on réécrit tout, c'est le choix sûr */ }
+
+    /* Gardable seulement si ce qui est en ligne existe VRAIMENT : sans cette vérification,
+       garder une photo dont le fichier a disparu du seau publierait un cadre vide. */
+    const estGardee=x=>{
+      const pub=x.p.pub;
+      if(!garder.has(x.p.id)||!pub||!pub.full||!pub.thumb)return false;
+      if(presents&&!(presents.has(pub.full.split('/').pop())&&presents.has(pub.thumb.split('/').pop())))return false;
+      return true;
+    };
+    const aEcrire=plan.photos.filter(x=>!estGardee(x)&&(tout||x.etat!=='inchangee'
+      ||!(presents&&presents.has(x.full.split('/').pop())&&presents.has(x.thumb.split('/').pop()))));
+    const entries=[];
+    /* Les identités publiées sont préparées ici mais POSÉES plus bas, après l'écriture du
+       manifeste. Tant qu'il n'est pas écrit, le site ne sait rien de ces images : les
+       marquer « en ligne » ici ferait disparaître le rappel « à republier » alors que rien
+       n'est parti. (Correction venue du chantier « Tout republier d'un coup » ; elle vaut
+       aussi pour `p.pub`, qui dit maintenant CE QUI est en ligne, pas seulement quand.) */
+    const posees=[];
+    let sharePartage=null,ecrites=0;
+    for(const x of plan.photos){
+      const p=x.p;
+      const laisser=estGardee(x);
+      const doit=!laisser&&aEcrire.indexOf(x)>=0;
+      let w=(p.pub&&p.pub.w)||p.w||0,h=(p.pub&&p.pub.h)||p.h||0;
+      if(doit){
+        ecrites++;
+        if(btn)btn.textContent='Publication '+ecrites+'/'+aEcrire.length+'…';
+        const img=await loadPhotoImage(p.id,{thumb:false});
+        /* Sauter en silence une photo illisible renumérotait toute la suite de la galerie :
+           les photos d'après changeaient d'adresse, et le site montrait « les anciennes ».
+           On s'arrête en nommant la photo — le site n'est pas modifié, rien n'est perdu. */
+        if(!img)throw new Error('image illisible pour « '+(p.name||'photo sans titre')+' » — vérifiez la connexion, puis réessayez');
+        const edit=p.edit||blankEdit();
+        /* La texture est mise en cache sous une clé : elle doit désigner l'IMAGE rendue,
+           pas la photo. Avec la photo, republier après une retouche pouvait réutiliser la
+           texture de la version précédente — et publier l'ancienne image. */
+        const tk='pub_'+photoVersionKey(p,photoActiveId(p),false);
+        const big=glRenderTo(img,edit,PUB_FULL,tk);
+        if(!big)throw new Error('rendu impossible');
+        const bigBlob=await canvasToBlob(big,PUB_FULL_Q);
+        w=big.width;h=big.height;
+        const small=glRenderTo(img,edit,PUB_THUMB,tk);
+        const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+        /* Image d'aperçu du site (WhatsApp, Instagram, moteurs) : la couverture de la
+           dernière réalisation publiée, écrite à une adresse FIXE. La page publique porte
+           cette adresse en dur dans ses balises : elle n'a donc jamais à être modifiée, et
+           un lien partagé cesse de s'afficher tout nu. */
+        if(!sharePartage||plan.coverId===p.id)sharePartage=smallBlob;
+        const up=async (name,blob)=>{
+          const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:'image/jpeg',upsert:true});
+          if(error)throw error;
+        };
+        await up(x.full,bigBlob);await up(x.thumb,smallBlob);
+      }
+      /* `plan.coverId` et non `r.cover` : si la couverture choisie a été écartée du site,
+         c'est la première photo publiée qui la remplace — décidé une fois, dans le plan. */
+      /* Une photo gardée pointe sur les fichiers DÉJÀ en ligne, pas sur ceux qu'aurait
+         produits la version courante — ils n'ont pas été écrits. */
+      const entry=laisser
+        ? {full:ownerId+'/'+p.pub.full,thumb:ownerId+'/'+p.pub.thumb,w:p.pub.w||w,h:p.pub.h||h,cover:plan.coverId===p.id}
+        : {full:ownerId+'/'+x.full,thumb:ownerId+'/'+x.thumb,w,h,cover:plan.coverId===p.id};
+      /* Seule la LÉGENDE part sur le site. Le titre reste interne : c'est souvent le nom du
+         fichier de l'appareil photo, qui n'a rien à faire sur une page publique. La légende
+         part MÊME pour une photo gardée : c'est du texte dans le manifeste, ça ne coûte
+         aucun envoi d'image — et refuser une correction de légende sous prétexte qu'on ne
+         renvoie pas la photo n'aurait aucun sens. */
+      if((p.caption||'').trim())entry.caption=p.caption.trim();
+      entries.push(entry);
+      /* Gardée : son identité publiée ne bouge pas — elle reste « à republier », et c'est
+         exact. Seuls la légende et le rôle de couverture, qui viennent de partir, sont
+         mis à jour, sans quoi le CRM la dirait modifiée pour une raison déjà réglée. */
+      posees.push(laisser
+        ? {p,pub:Object.assign({},p.pub,{cap:(p.caption||'').trim(),cover:plan.coverId===p.id}),garde:true}
+        : {p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
+            cap:(p.caption||'').trim(),cover:plan.coverId===p.id,
+            v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
+    }
+    _glTexKey='';
+
+    /* Vidéos : envoyées TELLES QUELLES, une seule fois — pas de « gardée »/« changée » à
+       distinguer (pas de retouche), donc pas de version à comparer : une vidéo déjà connue
+       de `r.pub.vids` n'est simplement pas renvoyée. */
+    const videoEntries=[];
+    const vidsAvant=new Set((r.pub&&Array.isArray(r.pub.vids))?r.pub.vids:[]);
+    for(const v of (r.videos||[])){
+      const name=r.id+'/vid-'+v.id+videoExt(v);
+      if(!vidsAvant.has(v.id)){
+        const blob=await videoStore.get(videoKey(v.id));
+        if(!blob)throw new Error('vidéo illisible pour « '+(v.name||'vidéo sans titre')+' » — vérifiez la connexion, puis réessayez');
+        const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+name,blob,{contentType:v.contentType||'video/mp4',upsert:true});
+        if(error)throw error;
+      }
+      videoEntries.push({src:ownerId+'/'+name,name:v.name||''});
+    }
+
+    /* Aucune image réécrite — republication de la seule fiche, retour à une publication
+       précédente, photos toutes gardées — et l'aperçu de partage n'était alors pas touché :
+       un lien partagé pouvait continuer à montrer la couverture d'un AUTRE projet, celui
+       publié en dernier. On recopie donc la vignette déjà en ligne de la couverture. Une
+       copie, pas un rendu : rien n'est recalculé. */
+    if(!sharePartage&&plan.coverId){
+      const couv=(r.photos||[]).find(p=>p.id===plan.coverId);
+      if(couv&&couv.pub&&couv.pub.thumb){
+        try{
+          const {data}=await sb.storage.from(GALLERY_BUCKET).download(ownerId+'/'+couv.pub.thumb);
+          if(data)sharePartage=data;
+        }catch(e){console.error('image de partage (copie)',e);}
+      }
+    }
+    /* L'aperçu de partage ne doit jamais faire échouer une publication : la galerie, elle,
+       est déjà en ligne à ce stade. */
+    if(sharePartage){
+      try{
+        await sb.storage.from(GALLERY_BUCKET).upload(shareImagePath(),sharePartage,
+          {contentType:'image/jpeg',cacheControl:'600',upsert:true});
+      }catch(e){console.error('image de partage',e);}
+    }
+
+    const man=await readManifest();
+    man.site=emptyManifest().site;
+    man.updatedAt=new Date().toISOString();
+    const avant=man.realisations.find(x=>x.id===r.id)||null;
+    man.realisations=man.realisations.filter(x=>x.id!==r.id);
+    /* Champs texte partagés avec `syncRealisationFicheEnLigne` (voir plus bas) : mêmes
+       règles de nettoyage et d'omission des champs vides des deux côtés. */
+    const fiche=Object.assign({id:r.id,photos:entries,publishedAt:new Date().toISOString()},ficheTexteChamps(r));
+    /* Absent plutôt que tableau vide : un projet sans vidéo ne doit rien ajouter au poids
+       du manifeste, ni faire croire au site qu'il y a une section vidéo à afficher. */
+    if(videoEntries.length)fiche.videos=videoEntries;
+    man.realisations.unshift(fiche);
+    await writeManifest(man);
+
+    /* Le manifeste est écrit : à partir d'ici seulement, ces photos sont vraiment en ligne.
+       C'est aussi le seul moment où l'on peut dire QUELLE version l'est. */
+    const quand=Date.now();
+    /* Une photo gardée n'a rien envoyé : sa date de mise en ligne ne bouge pas et rien ne
+       s'inscrit dans son historique, sinon elle passerait pour publiée à jour. */
+    posees.forEach(({p,pub,garde})=>{
+      p.pub=Object.assign({at:(garde&&p.pub&&p.pub.at)||quand},pub);
+      if(garde)return;
+      p.publishedAt=quand;photoLog(p,'publie',pub.vlabel);
+    });
+
+    /* Le pas d'avant est gardé — un seul, celui auquel « revenir » veut dire quelque chose.
+       Ses fichiers ne sont pas effacés (voir le ménage ci-dessous) : le retour est donc
+       immédiat et ne recalcule ni ne repaie rien. */
+    if(avant&&r.pub){
+      r.pubPrev={at:r.pub.at||quand,fiche:avant,
+        photos:(r.pub.photos||{}),label:r.pub.at?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
+    }
+    r.pub={at:quand,fiche:realisationFicheSig(r),
+      order:photosPubliees(r).map(p=>p.id),pids:photosPubliees(r).map(p=>p.id),
+      photos:Object.fromEntries(photosPubliees(r).map(p=>[p.id,p.pub])),
+      vids:(r.videos||[]).map(v=>v.id)};
+
+    /* Ménage : on retire ce qui n'est plus servi NI par la publication actuelle NI par celle
+       à laquelle on peut revenir. Effacer plus large casserait le retour en arrière ;
+       effacer moins laisserait des images publiquement accessibles pour rien. Les vidéos
+       suivent la même règle — leur fichier n'a jamais de « pas d'avant » puisqu'il n'y a
+       pas de version : `videoEntries` (l'état ACTUEL) suffit à les garder. */
+    try{
+      const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+      const keep=new Set(entries.flatMap(e=>[e.full.split('/').pop(),e.thumb.split('/').pop()]));
+      if(r.pubPrev&&r.pubPrev.fiche&&Array.isArray(r.pubPrev.fiche.photos))
+        r.pubPrev.fiche.photos.forEach(e=>{keep.add(String(e.full||'').split('/').pop());keep.add(String(e.thumb||'').split('/').pop());});
+      videoEntries.forEach(v=>keep.add(String(v.src||'').split('/').pop()));
+      const stale=(existing||[]).map(f=>f.name).filter(n=>!keep.has(n));
+      if(stale.length)await sb.storage.from(GALLERY_BUCKET).remove(stale.map(n=>folder+'/'+n));
+    }catch(e){}
+
+    r.published=true;r.publishedAt=quand;r.updatedAt=quand;
+    _pubLastError=null;storageInvalidate();
+    saveRealisations();renderRealisations();
+    toast(ecrites?('Publié — '+ecrites+' photo(s) mise(s) à jour'):'Publié — aucune image à réécrire');
+  }catch(e){
+    console.error('publication',e);
+    /* Une publication dure plusieurs secondes et peut échouer en cours : un message qui
+       s'efface au bout de trois secondes se rate. Celui-ci reste jusqu'à la prochaine
+       tentative. */
+    /* La texture en cache appartient à la photo sur laquelle on s'est arrêté : on la relâche,
+       sinon un nouvel essai pourrait repartir d'elle. */
+    _glTexKey='';
+    _pubLastError='Publication interrompue : '+((e&&e.message)||'erreur')+'. Le site n’a pas été modifié — vous pouvez réessayer.';
+    renderRealisations();
+    toast('Échec de la publication — le détail reste affiché');
+    if(btn){btn.disabled=false;btn.textContent=r.published?'✓ En ligne — republier':'🌐 Publier sur le site';}
+  }finally{
+    _publishingIds.delete(r.id);
+  }
+}
+
+/* Revenir à la publication précédente. Les fichiers de ce pas-là n'ont pas été effacés :
+   on réécrit simplement le manifeste avec sa fiche. C'est instantané, gratuit, et ça
+   n'invente rien — on remet en ligne exactement ce qui y était. Le pas qu'on quitte devient
+   le pas de retour : le geste est donc réversible dans les deux sens. */
+async function rollbackRealisation(r){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  if(!(r.pubPrev&&r.pubPrev.fiche))return;
+  const prev=r.pubPrev;
+  const btn=document.querySelector('#rz-body [data-rollback]');
+  if(btn){btn.disabled=true;btn.textContent='Retour…';}
+  try{
+    const man=await readManifest();
+    const courant=man.realisations.find(x=>x.id===r.id)||null;
+    man.realisations=man.realisations.filter(x=>x.id!==r.id);
+    man.site=emptyManifest().site;
+    man.updatedAt=new Date().toISOString();
+    man.realisations.unshift(prev.fiche);
+    await writeManifest(man);
+    /* Les photos reprennent l'identité publiée de ce pas-là : l'écran doit dire la vérité
+       sur ce qui est en ligne juste après le retour, pas rester sur l'état d'avant. */
+    const avant={at:r.pub&&r.pub.at,fiche:courant,photos:(r.pub&&r.pub.photos)||{},
+      label:(r.pub&&r.pub.at)?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
+    (r.photos||[]).forEach(p=>{
+      const pub=(prev.photos||{})[p.id];
+      if(pub){p.pub=pub;p.publishedAt=pub.at||Date.now();photoLog(p,'retour',pub.vlabel||'');}
+      else{delete p.pub;delete p.publishedAt;photoLog(p,'retour','n’était pas en ligne');}
+    });
+    r.pub={at:prev.at||Date.now(),fiche:realisationFicheSig(r),
+      order:(prev.fiche.photos||[]).map((e,i)=>((r.photos||[])[i]||{}).id).filter(Boolean),
+      pids:Object.keys(prev.photos||{}),photos:prev.photos||{}};
+    r.pubPrev=(avant.fiche)?avant:null;
+    if(!r.pubPrev)delete r.pubPrev;
+    r.published=true;r.updatedAt=Date.now();
+    _pubLastError=null;storageInvalidate();
+    saveRealisations();renderRealisations();
+    toast('Publication précédente rétablie');
+  }catch(e){
+    console.error('retour publication',e);
+    _pubLastError='Retour impossible : '+((e&&e.message)||'erreur')+'. Le site n’a pas été modifié.';
+    renderRealisations();
+    toast('Échec du retour — le détail reste affiché');
+  }
+}
+
+/* Le retrait EN LIGNE, sans confirmation ni rendu : c'est la brique. Elle sert au bouton
+   « Retirer du site » et à la suppression d'une réalisation — qui, elle, laissait le projet
+   en ligne pour toujours. Elle laisse remonter ses erreurs : l'appelant décide quoi faire,
+   et surtout ne doit rien effacer localement quand elle échoue. */
+async function retirerDuSite(r){
+  /* LE MANIFESTE D'ABORD, les fichiers ensuite. L'inverse — effacer les images puis écrire
+     le manifeste — laissait, si l'écriture échouait, un projet toujours annoncé sur le site
+     avec des images qui n'existent plus : des cadres vides sur la page publique. Dans cet
+     ordre-ci, le pire cas est un fichier orphelin dans le seau, invisible du visiteur. */
+  const man=await readManifest();
+  man.realisations=man.realisations.filter(x=>x.id!==r.id);
+  man.updatedAt=new Date().toISOString();
+  await writeManifest(man);
+  /* Le projet est déjà hors ligne à cet instant : un ménage qui échoue ne doit plus faire
+     échouer le retrait, sinon on rejouerait tout pour rien. */
+  try{
+    const folder=ownerId+'/'+r.id;
+    const {data:existing}=await sb.storage.from(GALLERY_BUCKET).list(folder,{limit:1000});
+    if(existing&&existing.length)await sb.storage.from(GALLERY_BUCKET).remove(existing.map(f=>folder+'/'+f.name));
+  }catch(e){console.error('ménage des images retirées',e);}
+  /* Plus rien en ligne : garder l'image d'aperçu ferait afficher, dans un lien partagé,
+     la photo d'un chantier qu'on vient justement de retirer du site. */
+  if(!man.realisations.length){try{await sb.storage.from(GALLERY_BUCKET).remove([shareImagePath()]);}catch(e){}}
+  /* Les fichiers viennent d'être effacés : garder `pub`/`pubPrev` ferait croire qu'on
+     peut revenir à une publication dont il ne reste rien. */
+  r.published=false;delete r.publishedAt;delete r.pub;delete r.pubPrev;r.updatedAt=Date.now();storageInvalidate();
+  (r.photos||[]).forEach(p=>{delete p.publishedAt;delete p.pub;photoLog(p,'depublie','');});
+}
+/* ---- Publication d'un produit -------------------------------------------------------
+   Même circuit que les réalisations : copies redimensionnées dans le seau public, retouches
+   appliquées, originaux jamais publiés. Les produits vivent dans le manifeste sous la clé
+   `produits`, à part des réalisations : un chantier terminé et un article en vente ne se
+   présentent pas de la même façon. */
+async function publishProduit(p){
+  if(!(sb&&sbUser&&ownerId)){toast('Connexion requise');return;}
+  if(!(p.photos||[]).length){toast('Ajoutez au moins une photo avant de publier');return;}
+  if(!(p.nom||'').trim()){toast('Donnez un nom au produit avant de publier');return;}
+  const btn=document.querySelector('#bt-body [data-pub]');
+  if(btn){btn.disabled=true;btn.textContent='Publication…';}
+  try{
+    const dossier=ownerId+'/prod-'+p.id;
+    const entries=[];
+    for(let i=0;i<p.photos.length;i++){
+      const ph=p.photos[i];
+      if(btn)btn.textContent='Publication '+(i+1)+'/'+p.photos.length+'…';
+      const img=await loadPhotoImage(ph.id,{thumb:false});
+      if(!img)continue;
+      const edit=ph.edit||blankEdit();
+      const big=glRenderTo(img,edit,PUB_FULL,'pub_'+ph.id);
+      if(!big)throw new Error('rendu impossible');
+      const bigBlob=await canvasToBlob(big,PUB_FULL_Q);
+      const small=glRenderTo(img,edit,PUB_THUMB,'pub_'+ph.id);
+      const smallBlob=await canvasToBlob(small,PUB_THUMB_Q);
+      const nomFull='prod-'+p.id+'/p'+i+'.jpg', nomThumb='prod-'+p.id+'/t'+i+'.jpg';
+      const up=async(nom,blob)=>{
+        const {error}=await sb.storage.from(GALLERY_BUCKET).upload(ownerId+'/'+nom,blob,{contentType:'image/jpeg',upsert:true});
+        if(error)throw error;
+      };
+      await up(nomFull,bigBlob);await up(nomThumb,smallBlob);
+      entries.push({full:ownerId+'/'+nomFull,thumb:ownerId+'/'+nomThumb,w:big.width,h:big.height,cover:p.cover===ph.id});
+    }
+    _glTexKey='';
+    if(!entries.some(e=>e.cover)&&entries.length)entries[0].cover=true;
+    /* Republication avec moins de photos : les fichiers devenus orphelins resteraient
+       publiquement accessibles alors qu'ils ne sont plus dans la fiche. */
+    try{
+      const {data:existants}=await sb.storage.from(GALLERY_BUCKET).list(dossier,{limit:1000});
+      const garder=new Set(entries.flatMap(e=>[e.full.split('/').pop(),e.thumb.split('/').pop()]));
+      const morts=(existants||[]).map(f=>f.name).filter(n=>!garder.has(n));
+      if(morts.length)await sb.storage.from(GALLERY_BUCKET).remove(morts.map(n=>dossier+'/'+n));
+    }catch(e){}
+
+    const man=await readManifest();
+    man.site=siteInfos();
+    man.updatedAt=new Date().toISOString();
+    if(!Array.isArray(man.produits))man.produits=[];
+    man.produits=man.produits.filter(x=>x.id!==p.id);
+    man.produits.unshift(produitPublie(p,entries));
+    await writeManifest(man);
+
+    p.published=true;p.publishedAt=Date.now();p.updatedAt=Date.now();
+    storageInvalidate();saveProduits();renderBoutique();
+    toast('Produit en ligne');
+  }catch(e){
+    console.error('publication produit',e);
+    toast('Échec de la publication : '+((e&&e.message)||'erreur'));
+    if(btn){btn.disabled=false;btn.textContent=p.published?'✓ En ligne — republier':'🌐 Publier sur le site';}
+  }
+}
+/* Ce qui part en ligne, et rien d'autre. Un champ vide ne part pas : le site sait retomber
+   sur le français, et « prix : » suivi de rien vaut moins que « sur demande ». */
+function produitPublie(p,photos){
+  const langs=siteLanguesActives();
+  const o={id:p.id,nom:(p.nom||'').trim(),photos:photos,dispo:p.dispo||'oui',
+    publishedAt:new Date().toISOString()};
+  ['description','matiere','prix','categorie'].forEach(k=>{
+    const v=(p[k]||'').trim();
+    if(v)o[k]=v;
+  });
+  const tr={};
+  langs.filter(l=>l!=='fr').forEach(l=>{
+    const bloc={};
+    PROD_TRADUISIBLES.forEach(k=>{const v=produitTexte(p,k,l).trim();if(v)bloc[k]=v;});
+    if(Object.keys(bloc).length)tr[l]=bloc;
+  });
+  if(Object.keys(tr).length)o.i18n=tr;
+  return o;
+}
+async function unpublishProduit(p){
+  askConfirm('Retirer « '+produitNom(p)+' » de la vente en ligne ? Les photos restent dans l’appli.',async()=>{
+    try{
+      const dossier=ownerId+'/prod-'+p.id;
+      const {data:existants}=await sb.storage.from(GALLERY_BUCKET).list(dossier,{limit:1000});
+      if(existants&&existants.length)await sb.storage.from(GALLERY_BUCKET).remove(existants.map(f=>dossier+'/'+f.name));
+      const man=await readManifest();
+      man.produits=(man.produits||[]).filter(x=>x.id!==p.id);
+      man.updatedAt=new Date().toISOString();
+      await writeManifest(man);
+      p.published=false;delete p.publishedAt;p.updatedAt=Date.now();
+      storageInvalidate();saveProduits();renderBoutique();
+      toast('Retiré de la vente en ligne');
+    }catch(e){toast('Échec du retrait : '+((e&&e.message)||'erreur'));}
+  });
+}
+async function unpublishRealisation(r){
+  askConfirm('Retirer « '+(r.title||'cette réalisation')+' » du site public ? Les photos restent dans l’appli.',async()=>{
+    try{
+      await retirerDuSite(r);
+      saveRealisations();renderRealisations();
+      toast('Retiré du site');
+    }catch(e){console.error('retrait du site',e);toast('Échec du retrait : '+((e&&e.message)||'erreur'));}
+  });
+}
+
+/* ============ SYNCHRONISATION SUPABASE (granulaire) ============ */
+const SB_URL='https://njaamykxnvohoesrtpvv.supabase.co';
+/* Site vitrine public : dépôt SÉPARÉ du CRM, sur son propre GitHub Pages.
+   Les visiteurs n'atterrissent jamais sur le CRM. */
+const SITE_URL='https://rnab26.github.io/melissa-nabet-site/';
+const SB_KEY='sb_publishable_h7zdNqYow8o3jdofbWKIlg_IaEEcjj0';
+const APP_VERSION='v14 · 2026-08-03 (Supabase)';
+const SYNC_KEYS=new Set([K_LIB,K_CLIENTS,K_DEVIS,K_TASKS,K_REAL,K_PROD,K_CHANTIER]);
+let sb=null,sbUser=null,ownerId=null,sbChannel=null,applyingRemote=false,offlineMode=false,lastSyncError='',cloudReady=false,loggedIn=false;
+let remoteClients={},remoteDevis={},remoteLibJson='',remoteTasksJson='',remoteRealJson='',remoteProdJson='',remoteChantierJson='',pushT=null;
+/* Un devis supprimé localement AVANT que le tout premier loadAll() de la session n'ait
+   réussi pouvait revenir tout seul : ce loadAll() rajoute dans devisList tout ce qu'il
+   trouve côté serveur sans savoir qu'un id vient d'être supprimé localement (il ne peut
+   comparer qu'à un remoteDevis déjà rempli par un chargement précédent — vide au tout
+   premier). Cet ensemble garde la mémoire des suppressions en cours tant que le serveur
+   n'a pas confirmé, pour que loadAll() ne les résurrecte jamais par erreur. */
+let _pendingDeletedDevisIds=new Set();
+/* Le badge seul (10px, discret dans la barre du haut) ne suffisait pas : une vraie erreur
+   de synchro (session expirée après une longue mise en veille, réseau perdu) passait
+   inaperçue — l'app continuait à tourner sur les données locales, potentiellement
+   périmées, sans que rien de visible ne le signale clairement. Une bannière en haut
+   d'écran, avec le message d'erreur réel et un bouton "Réessayer", pour que ça ne
+   puisse plus passer inaperçu. */
+function setSyncStatus(s){
+  const b=document.getElementById('sync-badge');if(b)b.textContent={local:'· local',sync:'· connexion…',ok:'· ✓ synchronisé',err:'· ⚠ hors ligne'}[s]||'';
+  let bar=document.getElementById('sync-error-bar');
+  if(s==='err'){
+    if(!bar){
+      bar=document.createElement('div');bar.id='sync-error-bar';bar.className='sync-error-bar';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML='<span>Synchronisation impossible'+(lastSyncError?(' : '+esc(lastSyncError)):'')+' — les données affichées peuvent être périmées.</span><button onclick="retrySync()">Réessayer</button>';
+    requestAnimationFrame(()=>bar.classList.add('show'));
+  }else if(bar){
+    bar.classList.remove('show');
+  }
+}
+function retrySync(){if(!sb||!sbUser)return;loadAll();cloudPush();}
+function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+function isEditingChantier(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#chantier-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+/* Trouvé lors d'un audit demandé par Raphaël (relecture complète du code, pas un bug
+   signalé) : la bibliothèque (Réglages/branding ET catalogue de prestations, panneaux
+   `openSettingsPanel`/`openLibraryPanel`) était le seul type de donnée synchronisée sans
+   AUCUNE protection contre l'écrasement d'une saisie en cours par un écho distant —
+   client/devis/tâches/réalisations/boutique/chantier en ont tous une. Les deux panneaux
+   posent `#modal.dataset.editing='library'` à l'ouverture (`closeModal()` l'efface). */
+function isEditingLibrary(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#modal')&&$('modal').dataset.editing==='library'&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+function isEditingTasks(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#dashboard-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+/* Id du client dont une fiche est en cours de saisie (champ actif dans .cl-group[data-cid]).
+   Sert à protéger cette fiche d'un écrasement par une mise à jour distante (voir handleRealtime) :
+   sans ça, un écho temps-réel de notre propre écriture (ou une synchro d'un autre appareil)
+   pouvait remplacer l'objet client en mémoire PENDANT la frappe — le champ édité continuait
+   à écrire dans un objet devenu orphelin (jamais sauvegardé), ou une valeur plus ancienne
+   écrasait en partie le texte tout juste tapé. */
+function activeEditingClientId(){const a=document.activeElement;const grp=a&&a.closest&&a.closest('.cl-group[data-cid]');return grp?grp.dataset.cid:null;}
+function isEditingDevisComposer(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('.editor')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
+function friendlyAuthErr(e){const m=((e&&e.message)||'').toLowerCase();
+  if(m.includes('invalid login'))return "E-mail ou mot de passe incorrect.";
+  if(m.includes('email not confirmed'))return "Compte non confirmé (cochez « Auto Confirm » dans Supabase).";
+  if(m.includes('network')||m.includes('fetch')||m.includes('failed to'))return "Pas de connexion internet.";
+  return "Connexion impossible ("+((e&&e.message)||'erreur')+").";}
+function initSupabase(){
+  if(typeof window.supabase==='undefined'||!window.supabase.createClient){setSyncStatus('local');return;}
+  try{
+    sb=window.supabase.createClient(SB_URL,SB_KEY);
+    document.getElementById('login-overlay').style.display='flex';
+    setSyncStatus('sync');
+    sb.auth.getSession().then(({data})=>{if(data&&data.session){onLogin(data.session);}});
+    sb.auth.onAuthStateChange((_e,session)=>{if(session){onLogin(session);}else if(!offlineMode){loggedIn=false;document.getElementById('login-overlay').style.display='flex';setSyncStatus('sync');}});
+  }catch(e){console.error(e);setSyncStatus('local');}
+}
+function doLogin(){
+  if(!sb)return;
+  const em=($('login-email').value||'').trim(),pw=$('login-pass').value||'';
+  $('login-err').textContent='';$('login-btn').disabled=true;
+  sb.auth.signInWithPassword({email:em,password:pw}).then(({error})=>{
+    if(error){$('login-err').textContent=friendlyAuthErr(error);}
+  }).catch(err=>{$('login-err').textContent=friendlyAuthErr(err);}).finally(()=>{$('login-btn').disabled=false;});
+}
+/* Plus de bypass visible dans l'UI (un mode local anonyme non lié à un compte a causé une perte
+   de données réelle — cf. incident du 20/08/2026). Fonction gardée uniquement pour les tests
+   automatisés en développement (appelée directement via la console, jamais depuis un bouton). */
+function loginOffline(){offlineMode=true;document.getElementById('login-overlay').style.display='none';setSyncStatus('local');toast('Mode hors ligne — données de cet appareil');}
+function onLogin(session){
+  if(!session||!session.user)return;
+  sbUser=session.user;ownerId=sbUser.id;
+  if(loggedIn)return;loggedIn=true;
+  document.getElementById('login-overlay').style.display='none';offlineMode=false;
+  setSyncStatus('sync');
+  loadAll().then(subscribeRealtime);
+}
+let _loadAllRetryT=null,_loadAllRetryDelay=5000;
+async function loadAll(){
+  if(!sb||!sbUser)return;setSyncStatus('sync');
+  try{
+    const {data,error}=await sb.from('app_data').select('id,kind,data');
+    if(error)throw error;
+    applyingRemote=true;
+    const prevC=new Set(Object.keys(remoteClients)),prevD=new Set(Object.keys(remoteDevis));
+    const cloudIds=new Set();
+    (data||[]).forEach(r=>{
+      /* Une suppression locale pas encore confirmée côté serveur (cloudPush en vol ou pas
+         encore tenté, ex. tout premier loadAll d'une session) ne doit jamais être annulée
+         par ce chargement — sinon le devis supprimé revient dans devisList comme si de
+         rien n'était, exactement le symptôme signalé. */
+      if(r.kind==='devis'&&_pendingDeletedDevisIds.has(r.id))return;
+      cloudIds.add(r.id);
+      if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
+      else if(r.kind==='devis'){if(!r.data||typeof r.data!=='object')return;const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
+      else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
+      else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=objets(r.data);remoteTasksJson=JSON.stringify(tasks);}}
+      else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=JSON.stringify(realisations);}}
+      else if(r.kind==='produits'){if(Array.isArray(r.data)){produits=r.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
+      else if(r.kind==='chantier'){if(Array.isArray(r.data)){chantierList=r.data;remoteChantierJson=JSON.stringify(chantierList);}}
+    });
+    clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
+    devisList=objets(devisList).filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));tasks=objets(tasks);
+    Object.keys(remoteClients).forEach(id=>{if(!cloudIds.has(id))delete remoteClients[id];});
+    Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);store.set(K_CHANTIER,chantierList);
+    applyingRemote=false;cloudReady=true;
+    /* APRÈS la lecture du cloud : les fiches restées « Nouveau client » alors que leur
+       contact est rempli reprennent leur contact comme nom. Avant, on réparerait une copie
+       locale qui serait aussitôt écrasée par les données distantes. */
+    reparerNomsClients();
+    try{renderClients();render();if(!isEditingRealisations())renderRealisations();if(!isEditingBoutique())renderBoutique();if(!isEditingChantier())renderChantier();if(!isEditingTasks())renderTaskList();}catch(e){console.error('Affichage après chargement',e);toast('Erreur d\'affichage : '+((e&&e.message)||e));}
+    setSyncStatus('ok');
+    clearTimeout(_loadAllRetryT);_loadAllRetryDelay=5000;
+    scheduleSyncPush();
+    /* Les demandes en vol vivent dans `library` : c'est ici, une fois la bibliothèque
+       vraiment chargée, qu'on sait s'il y a quelque chose à récupérer. */
+    iaRepriseAuto();
+  }catch(e){
+    lastSyncError=(e&&(e.message||e.code))||'lecture impossible';setSyncStatus('err');
+    /* Contrairement à cloudPush() (qui retente déjà après 20s), un échec ici n'avait AUCUNE
+       reprise automatique — si le tout premier chargement d'une session échouait (réseau,
+       session expirée après une longue mise en veille), cloudReady ne passait jamais à
+       true et l'app restait bloquée sur les données locales, potentiellement périmées,
+       pour le reste de la session, sans jamais se rattraper toute seule. Backoff
+       exponentiel plafonné à 60s, remis à 5s dès qu'un chargement réussit. */
+    clearTimeout(_loadAllRetryT);
+    _loadAllRetryT=setTimeout(()=>{if(sb&&sbUser)loadAll();},_loadAllRetryDelay);
+    _loadAllRetryDelay=Math.min(_loadAllRetryDelay*2,60000);
+  }
+}
+let _rtRetryT=null;
+function subscribeRealtime(){
+  if(!sb||sbChannel)return;
+  try{
+    sbChannel=sb.channel('app_data_rt')
+      .on('postgres_changes',{event:'*',schema:'public',table:'app_data'},payload=>handleRealtime(payload))
+      .subscribe(status=>{
+        if(status==='SUBSCRIBED'){setSyncStatus('ok');return;}
+        /* Sans ceci, un canal qui tombe (CHANNEL_ERROR/TIMED_OUT/CLOSED — fréquent sur
+           mobile quand l'onglet passe en arrière-plan et que le WebSocket est coupé par le
+           système) restait mort en silence pour le reste de la session : `sbChannel` gardait
+           une référence non nulle, donc `subscribeRealtime()` refusait tout nouvel essai
+           (garde `if(!sb||sbChannel)return`) — le badge « synchronisé » restait affiché
+           (posé ailleurs, sans rapport avec l'état réel du canal) alors que plus aucun
+           changement distant n'arrivait. On efface la référence et on retente. */
+        if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+          try{sb.removeChannel(sbChannel);}catch(e){}
+          sbChannel=null;
+          clearTimeout(_rtRetryT);
+          _rtRetryT=setTimeout(()=>{if(sb&&sbUser)subscribeRealtime();},5000);
+        }
+      });
+  }catch(e){}
+}
+/* Le WebSocket temps réel ne survit pas toujours à une mise en arrière-plan prolongée sur
+   mobile, même sans passer par un des statuts gérés ci-dessus (le navigateur peut le geler
+   sans jamais notifier de fermeture). Au retour au premier plan : on pousse d'abord tout
+   changement local resté en attente (cloudPush, sans risque si rien n'a changé), PUIS on
+   recharge depuis le cloud (loadAll) pour rattraper ce qui a pu arriver pendant l'absence,
+   et on s'assure que le canal est bien vivant. Pousser avant de tirer évite qu'un
+   rechargement écrase une modification locale pas encore envoyée. */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){
+    /* Une suppression (ou toute frappe) passe par scheduleSyncPush, débouncé à 500ms —
+       sans ce flush, verrouiller le téléphone ou changer d'appli dans cette fenêtre pouvait
+       geler/perdre le setTimeout en vol : le prochain loadAll() (retour au premier plan,
+       ou simple réouverture de l'appli) retrouvait alors côté serveur une ligne jamais
+       vraiment supprimée/envoyée, qui « revenait toute seule ». On déclenche l'envoi
+       immédiatement au lieu d'attendre le minuteur, qui peut ne jamais se déclencher une
+       fois l'onglet caché. */
+    if(sb&&sbUser&&!offlineMode){clearTimeout(pushT);cloudPush();}
+    return;
+  }
+  if(document.visibilityState!=='visible'||!sb||!sbUser||offlineMode)return;
+  /* Après une longue mise en veille (l'appli gelée en arrière-plan pendant des heures,
+     pas juste des minutes), le jeton de session peut avoir expiré pendant que le minuteur
+     de rafraîchissement automatique de supabase-js était lui-même gelé. getSession()
+     rafraîchit la session si besoin AVANT qu'on tente le moindre appel — sans ça, le
+     premier cloudPush()/loadAll() du retour pouvait échouer avec une session périmée,
+     déclenchant l'état d'erreur (badge "hors ligne") sans jamais se rattraper si ce
+     retour-là ne se reproduisait pas. */
+  (sb.auth.getSession?sb.auth.getSession().catch(()=>{}):Promise.resolve())
+    .then(cloudPush).then(loadAll).then(()=>{if(!sbChannel)subscribeRealtime();});
+});
+/* Filet supplémentaire : un onglet/app fermé (pas seulement mis en arrière-plan) peut ne
+   jamais recevoir 'visibilitychange' à temps sur certains navigateurs mobiles — 'pagehide'
+   se déclenche de façon plus fiable à la fermeture réelle. Même flush, sans risque à
+   l'appeler deux fois (cloudPush ne pousse que ce qui a réellement changé). */
+window.addEventListener('pagehide',()=>{
+  if(sb&&sbUser&&!offlineMode){clearTimeout(pushT);cloudPush();}
+});
+/* GitHub Pages sert index.html avec cache-control: max-age=600 — un appareil peut donc
+   continuer à exécuter le JS d'il y a 10 minutes (ou plus, tant que l'onglet n'est pas
+   rechargé) après un déploiement de correctif, silencieusement : aucune erreur, juste un
+   comportement obsolète (un bouton qui semblait ne "rien faire", des infos d'un ancien
+   devis qui restent affichées). Root cause d'une confusion réelle chez Raphaël (bouton
+   "Nouveau Devis" apparemment cassé, données de Rony Partouche visibles sur ce qui devait
+   être un devis vierge). On compare périodiquement l'ETag/Last-Modified réel du fichier
+   servi (requête HEAD, cache:'no-store' — contourne le cache HTTP pour CETTE requête
+   précise) à celui chargé au démarrage : si l'appareil est resté sans rien taper (aucun
+   champ actif), on recharge tout seul sans rien demander ; sinon on affiche une bannière
+   non intrusive plutôt que d'écraser une saisie en cours. */
+let _pageVersion=null,_updateBannerShown=false;
+function forceReload(){location.replace(location.pathname+'?_r='+Date.now()+location.hash);}
+function showUpdateBanner(){
+  _updateBannerShown=true;
+  let bar=document.getElementById('update-bar');
+  if(!bar){
+    bar=document.createElement('div');bar.id='update-bar';bar.className='update-bar';
+    bar.innerHTML='<span>Une nouvelle version du CRM est disponible.</span><button onclick="forceReload()">Recharger maintenant</button>';
+    document.body.appendChild(bar);
+  }
+  requestAnimationFrame(()=>bar.classList.add('show'));
+}
+async function checkForUpdate(){
+  try{
+    const res=await fetch(location.pathname||'./',{method:'HEAD',cache:'no-store'});
+    if(!res.ok)return;
+    const v=res.headers.get('etag')||res.headers.get('last-modified');
+    if(!v)return;
+    if(_pageVersion===null){_pageVersion=v;return;}
+    if(v===_pageVersion||_updateBannerShown)return;
+    const a=document.activeElement;
+    const isTyping=a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT');
+    if(!isTyping){forceReload();return;}
+    showUpdateBanner();
+  }catch(e){}
+}
+setInterval(checkForUpdate,60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkForUpdate();});
+setTimeout(checkForUpdate,4000);
+function handleRealtime(payload){
+  applyingRemote=true;
+  try{
+    if(payload.eventType==='DELETE'){
+      const oid=payload.old&&payload.old.id;
+      if(oid){clients=clients.filter(x=>x.id!==oid);devisList=devisList.filter(x=>x.id!==oid);delete remoteClients[oid];delete remoteDevis[oid];}
+    }else{
+      const row=payload.new;
+      if(row&&row.id){
+        if(row.kind==='client'&&row.id===activeEditingClientId()){
+          /* Fiche en cours de saisie : on ignore cette mise à jour distante (écho probable de
+             notre propre écriture, ou modif concurrente) plutôt que d'écraser une frappe en
+             cours. remoteClients[row.id] n'est PAS mis à jour : le prochain cloudPush() renverra
+             donc notre version locale (plus récente), qui redeviendra la référence pour tout le
+             monde — rien n'est perdu. */
+        }else if(row.kind==='client'){const nc=normalizeClient(row.data);const i=clients.findIndex(x=>x.id===row.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[row.id]=JSON.stringify(nc);}
+        /* Le devis affiché dans le composeur ne se rafraîchissait JAMAIS sur un écho distant
+           (seul devisList était mis à jour en coulisse) : travailler le même devis sur deux
+           appareils donnait l'impression que rien n'était « vraiment en direct » — il fallait
+           fermer/rouvrir pour voir l'autre appareil. Même garde que pour un client en cours de
+           saisie : si CE devis est ouvert ET qu'on est en train d'y taper, on ignore l'écho
+           (remoteDevis pas mis à jour, le prochain cloudPush renverra notre version) ; sinon
+           on recharge `current` depuis la donnée distante et on repeint l'écran tout de suite. */
+        else if(row.kind==='devis'&&row.id===currentDevisId&&isEditingDevisComposer()){}
+        else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
+          const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
+          if(row.id===currentDevisId&&row.data&&row.data.snapshot){
+            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;
+            fillFields();buildPrest();buildExclu();render();
+          }
+        }
+        else if(row.kind==='library'&&isEditingLibrary()){}
+        else if(row.kind==='library'){
+          if(row.data&&row.data.sections){
+            library=row.data;remoteLibJson=JSON.stringify(library);
+            /* Un réglage changé (ex. signature, logo) sur un AUTRE appareil pendant que
+               celui-ci a déjà un devis ouvert n'apparaissait qu'après avoir quitté/rouvert
+               le devis, ou rechargé la page — même trou que pour le devis lui-même, réglé le
+               14/09, mais jamais étendu à la bibliothèque. Un brouillon doit suivre les
+               derniers réglages (comme au chargement de la page ou à la réouverture d'un
+               devis) ; un devis déjà validé garde son branding gelé pour l'exactitude
+               historique. */
+            const openDevis=currentDevisId?devisList.find(x=>x.id===currentDevisId):null;
+            if(!openDevis||openDevis.status!=='valide'){current.branding={...library.branding};render();}
+          }
+        }
+        /* Trouvé en auditant le reste de handleRealtime après les trous devis/bibliothèque :
+           aucune protection de la frappe en cours (contrairement à client/réalisations/
+           boutique/chantier) ET aucun repeint du tableau de bord — une tâche modifiée sur un
+           autre appareil mettait bien à jour `tasks` en coulisse mais l'écran restait figé
+           jusqu'à un changement de vue ou un rechargement. */
+        else if(row.kind==='tasks'&&isEditingTasks()){}
+        else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=objets(row.data);remoteTasksJson=JSON.stringify(tasks);}}
+        else if(row.kind==='realisations'&&isEditingRealisations()){
+          /* Saisie ou retouche en cours : on ignore la mise à jour distante et on ne marque
+             PAS `remoteRealJson`, pour que le prochain cloudPush renvoie notre version. */
+        }
+        else if(row.kind==='realisations'){if(Array.isArray(row.data)){mergeRealisations(row.data);remoteRealJson=JSON.stringify(realisations);}}
+        /* Même protection que pour les réalisations : une saisie en cours ne se fait pas
+           écraser par un écho distant, et le prochain push renverra la version locale. */
+        else if(row.kind==='produits'&&isEditingBoutique()){}
+        else if(row.kind==='produits'){if(Array.isArray(row.data)){produits=row.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
+        /* Même protection : une estimation en cours de saisie ne se fait pas écraser par un
+           écho distant, remoteChantierJson n'est pas mis à jour, le prochain cloudPush
+           renverra la version locale. */
+        else if(row.kind==='chantier'&&isEditingChantier()){}
+        else if(row.kind==='chantier'){if(Array.isArray(row.data)){chantierList=row.data;remoteChantierJson=JSON.stringify(chantierList);}}
+      }
+    }
+    store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);store.set(K_CHANTIER,chantierList);
+  }catch(e){}
+  applyingRemote=false;
+  try{if(!isEditingClients())renderClients();}catch(e){}
+  try{if(!isEditingRealisations())renderRealisations();}catch(e){}
+  try{if(!isEditingBoutique())renderBoutique();}catch(e){}
+  try{if(!isEditingChantier())renderChantier();}catch(e){}
+  try{if(!isEditingTasks())renderTaskList();}catch(e){}
+  setSyncStatus('ok');
+}
+async function cloudPush(){
+  /* Ne JAMAIS pousser vers le serveur avant qu'un premier loadAll() ait réussi cette
+     session (cloudReady). Sans cette garde : remoteDevis/remoteClients démarrent vides,
+     donc CHAQUE ligne locale (potentiellement une copie périmée restée en cache depuis
+     avant une mise en veille prolongée, un devis validé ailleurs et jamais rapatrié…)
+     paraît "nouvelle ou changée" et serait réécrite sur le serveur — écrasant une donnée
+     serveur correcte avec une copie locale obsolète. Le correctif de loadAll() qui
+     retente désormais automatiquement garantit que cloudReady finit toujours par passer
+     à true ; scheduleSyncPush() (appelé à la fin d'un loadAll réussi) rattrape alors tout
+     changement resté en attente pendant ce délai. */
+  if(!sb||!sbUser||!cloudReady)return;setSyncStatus('sync');
+  const rows=[],seenC=new Set(),seenD=new Set(),delIds=[];
+  /* Le marquage "synchronisé" (remoteClients/remoteDevis/remoteLibJson/remoteTasksJson) n'est
+     appliqué qu'APRÈS confirmation d'écriture réussie — sinon un push qui échoue (hors ligne,
+     erreur réseau) était marqué à tort comme envoyé, et la modification locale ne repartait
+     plus jamais en synchro (silencieusement perdue au prochain rechargement/loadAll). */
+  const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null,pendingReal=null,pendingProd=null,pendingChantier=null;
+  const pendingDelC=[],pendingDelD=[];
+  clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){pendingC[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
+  devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){pendingD[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
+  const lj=JSON.stringify(library);if(lj!==remoteLibJson){pendingLib=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
+  const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){pendingTasks=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
+  const rj=JSON.stringify(realisations);if(rj!==remoteRealJson){pendingReal=rj;rows.push({id:'realisations',owner:ownerId,kind:'realisations',data:realisations,updated_at:new Date().toISOString()});}
+  const pj=JSON.stringify(produits);if(pj!==remoteProdJson){pendingProd=pj;rows.push({id:'produits',owner:ownerId,kind:'produits',data:produits,updated_at:new Date().toISOString()});}
+  const chj=JSON.stringify(chantierList);if(chj!==remoteChantierJson){pendingChantier=chj;rows.push({id:'chantier',owner:ownerId,kind:'chantier',data:chantierList,updated_at:new Date().toISOString()});}
+  Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id))pendingDelC.push(id);});
+  Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id))pendingDelD.push(id);});
+  delIds.push(...pendingDelC,...pendingDelD);
+  try{
+    if(rows.length){const {error}=await sb.from('app_data').upsert(rows,{onConflict:'id'});if(error)throw error;}
+    if(delIds.length){const {error}=await sb.from('app_data').delete().in('id',delIds);if(error)throw error;}
+    Object.assign(remoteClients,pendingC);Object.assign(remoteDevis,pendingD);
+    if(pendingLib!==null)remoteLibJson=pendingLib;
+    if(pendingTasks!==null)remoteTasksJson=pendingTasks;
+    if(pendingReal!==null)remoteRealJson=pendingReal;
+    if(pendingProd!==null)remoteProdJson=pendingProd;
+    if(pendingChantier!==null)remoteChantierJson=pendingChantier;
+    pendingDelC.forEach(id=>delete remoteClients[id]);
+    pendingDelD.forEach(id=>{delete remoteDevis[id];_pendingDeletedDevisIds.delete(id);});
+    lastSyncError='';setSyncStatus('ok');
+  }catch(e){lastSyncError=(e&&(e.message||e.code))||'écriture refusée';setSyncStatus('err');scheduleSyncRetry();}
+}
+let syncRetryT=null;
+function scheduleSyncRetry(){clearTimeout(syncRetryT);syncRetryT=setTimeout(()=>{if(sb&&sbUser)cloudPush();},20000);}
+window.addEventListener('online',()=>{if(sb&&sbUser)cloudPush();});
+function scheduleSyncPush(){if(!cloudReady)return;clearTimeout(pushT);pushT=setTimeout(cloudPush,500);}
+function openSyncPanel(){
+  const email=sbUser?sbUser.email:'(non connecté)';
+  const uid=sbUser?('…'+String(sbUser.id).slice(-8)):'—';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button>
+    <h3>Synchronisation</h3>
+    <p class="msub">Les deux appareils doivent utiliser le <b>même compte</b> (même e-mail).</p>
+    <div style="font-size:13.5px;line-height:2;background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:12px 14px;">
+      Compte connecté : <b>${esc(email)}</b><br>
+      Identifiant du compte : <b>${uid}</b><br>
+      Clients sur cet appareil : <b>${clients.length}</b><br>
+      Clients dans le cloud : <b id="cloud-count">…</b><br>
+      Devis enregistrés : <b>${devisList.length}</b><br>
+      Stockage cloud : <b id="doc-storage">…</b><br>
+      Version de l'appli : <b>${APP_VERSION}</b><br>
+      État : <b>${lastSyncError?('⚠ '+esc(lastSyncError)):'✓ ok'}</b>
+    </div>
+    <div class="ed-eyebrow" style="margin-top:16px">Place occupée</div>
+    <div id="stor-box" class="stor-box">Mesure en cours…</div>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Capacité du plan (Mo)</span><input type="number" id="stor-quota" min="50" max="1048576" step="50"></label>
+      <label class="fld"><span class="lbl">Alerter à partir de (%)</span><input type="number" id="stor-seuil" min="10" max="99" step="5"></label>
+    </div>
+    <p class="ias-msg" id="stor-msg"></p>
+    <button class="mini" id="stor-refresh">↻ Recalculer maintenant</button>
+
+    <p class="msub" style="margin-top:10px">« Forcer » renvoie toutes les données de <b>cet</b> appareil vers le cloud, puis recharge.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+      <button class="btn btn-primary" onclick="forceSync()">Forcer la synchronisation</button>
+      <button class="mini" onclick="logoutApp()">Se déconnecter (changer de compte)</button>
+    </div>`);
+  if(sb&&sbUser){sb.from('app_data').select('id',{count:'exact',head:true}).eq('kind','client').then(({count,error})=>{const el=document.getElementById('cloud-count');if(el)el.textContent=error?('erreur ('+((error.message)||'?')+')'):count;});}
+  else{const el=document.getElementById('cloud-count');if(el)el.textContent='hors ligne';}
+  loadDocStorageUsage();
+  storageSettingsBind();
+}
+/* La jauge compte les DEUX seaux et dit ce qu'il reste en photos, pas seulement en méga-
+   octets : « il reste 280 photos » se décide, « il reste 320 Mo » se calcule. */
+async function loadDocStorageUsage(force){
+  const el=document.getElementById('doc-storage'), box=document.getElementById('stor-box');
+  if(!el&&!box)return;
+  const set=storageSettings();
+  const qi=document.getElementById('stor-quota'), si=document.getElementById('stor-seuil');
+  if(qi&&!qi.value)qi.value=set.quotaMo;
+  if(si&&!si.value)si.value=set.seuil;
+  if(!sb||!sbUser||!ownerId){
+    if(el)el.textContent='hors ligne';
+    if(box)box.textContent='Hors ligne : la place occupée ne peut pas être mesurée.';
+    return;
+  }
+  if(el)el.textContent='mesure…';
+  if(box)box.textContent='Mesure en cours…';
+  const st=await loadStorageStat(force);
+  if(!st)return;
+  if(st.erreur){
+    if(el)el.textContent='indisponible ('+st.erreur+')';
+    if(box)box.textContent='Mesure impossible : '+st.erreur+'. Rien n’est perdu — réessayez plus tard.';
+    return;
+  }
+  const pct=storagePct(st);
+  if(el)el.textContent=moLisible(st.bytes)+' sur '+set.quotaMo+' Mo ('+Math.round(pct)+' %) · '+st.files+' fichier(s)';
+  if(box){
+    box.innerHTML='';
+    const bar=document.createElement('div');bar.className='rz-bar';
+    bar.innerHTML='<i></i>';
+    const i=bar.querySelector('i');
+    i.style.width=Math.min(100,pct)+'%';
+    if(pct>=95)i.style.background='#b6543f'; else if(pct>=(set.seuil|0))i.style.background='#b7752f';
+    box.appendChild(bar);
+    const d=document.createElement('p');d.className='stor-det';
+    d.textContent=moLisible(st.bytes)+' sur '+set.quotaMo+' Mo — soit '+Math.round(pct)+' %. '
+      +'Documents et photos privées : '+moLisible(st.docs?st.docs.bytes:0)+'. Publié sur le site : '+moLisible(st.gal?st.gal.bytes:0)+'. '
+      +'Place pour environ '+storagePhotosRestantes(st)+' photo(s) de plus.';
+    box.appendChild(d);
+  }
+}
+function storageSettingsBind(){
+  const qi=document.getElementById('stor-quota'), si=document.getElementById('stor-seuil');
+  const msg=document.getElementById('stor-msg'), btn=document.getElementById('stor-refresh');
+  if(!qi||!si)return;
+  const set=storageSettings();
+  qi.value=set.quotaMo;si.value=set.seuil;
+  const dire=t=>{if(msg)msg.textContent=t||'';};
+  const majQuota=()=>{
+    const v=parseInt(qi.value,10);
+    if(!isFinite(v)||v<50){dire('Capacité refusée : il faut au moins 50 Mo. Le plan gratuit Supabase vaut 1024 Mo.');return;}
+    dire('');storageSettings().quotaMo=v;saveLibraryDebounced();loadDocStorageUsage();paintStorageBanner();
+  };
+  const majSeuil=()=>{
+    const v=parseInt(si.value,10);
+    if(!isFinite(v)||v<10||v>99){dire('Seuil refusé : donnez un pourcentage entre 10 et 99.');return;}
+    dire('');storageSettings().seuil=v;saveLibraryDebounced();paintStorageBanner();
+  };
+  qi.addEventListener('change',majQuota);qi.addEventListener('input',majQuota);
+  si.addEventListener('change',majSeuil);si.addEventListener('input',majSeuil);
+  if(btn)btn.addEventListener('click',()=>{storageInvalidate();loadDocStorageUsage(true).then(paintStorageBanner);});
+}
+function forceSync(){
+  if(!sb||!sbUser){toast('Non connecté');return;}
+  remoteClients={};remoteDevis={};remoteLibJson='';cloudReady=true;
+  cloudPush().then(()=>loadAll());closeModal();toast('Synchronisation forcée');
+}
+function logoutApp(){
+  if(sb){if(sbChannel){try{sb.removeChannel(sbChannel);}catch(e){}sbChannel=null;}sb.auth.signOut().then(()=>{loggedIn=false;try{location.reload();}catch(e){}});}
+}
+
+/* Une liste (devis, tâches…) ne doit contenir que des objets : une seule entrée nulle, venue
+   de l'état local d'un appareil, faisait échouer l'affichage de TOUTES les fiches clients
+   (« Cannot read properties of null (reading 'clientId') », constaté le 5 oct. 2026). */
+function objets(a){return Array.isArray(a)?a.filter(x=>x&&typeof x==='object'):[];}
+
+/* ============ INIT ============ */
+async function init(){
+  const savedLib=await store.get(K_LIB);if(savedLib&&savedLib.sections&&savedLib.version===LIB_VERSION)library=savedLib;else{library=defaultLibrary();await store.set(K_LIB,library);}
+  ensureBranding();
+  applyBrandingToUI();
+  const cs=await store.get(K_CLIENTS);
+  clients=Array.isArray(cs)?cs.map(normalizeClient):[];
+  devisList=objets(await store.get(K_DEVIS));
+  tasks=objets(await store.get(K_TASKS));
+  realisations=((await store.get(K_REAL))||[]).map(normalizeRealisation);
+  produits=((await store.get(K_PROD))||[]).map(normalizeProduit);
+  chantierList=(await store.get(K_CHANTIER))||[];
+  const chDraft=await store.get('mn_chantier_draft');
+  if(chDraft&&Array.isArray(chDraft.cats))chantier=chDraft;
+  const draft=await store.get(K_DRAFT);
+  if(draft&&draft.services){
+    Object.assign(current,draft);
+    current.open={}; /* sections repliées par défaut au rechargement de la page */
+    currentDevisId=draft._draftDevisId||null;
+  } else {
+    seedComposerFromLibrary();
+    current.services.forEach(sv=>sv.on=false);
+    current.exclus.forEach(ex=>ex.on=false);
+  }
+  /* Un brouillon est un document en cours, pas figé : il doit toujours refléter les derniers
+     réglages de la bibliothèque, sinon un changement de thème "ne prend pas" au rechargement. */
+  current.branding={...library.branding};
+  fillFields();wireBindings();buildPrest();buildExclu();render();
+  chargerEtatArchives();
+  wireClientFilters();
+  showView(vueDepuisHash()||'dashboard');
+  $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
+  initSupabase();
+}
+if(typeof document!=='undefined'&&document.getElementById){init();}
