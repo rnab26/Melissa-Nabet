@@ -1388,3 +1388,21 @@ certificat n'est pas approuvé par le Chromium de test) — le filtre `envNoise`
 couvrait que les échecs DNS/connexion, pas les échecs de certificat ; ajouté `ERR_CERT`
 au filtre. Sans lien avec le code du site. Total après correctif : 826 vérifications sur
 les quatre suites, 0 échec.
+
+## Cockpit central (branché sur `main` le 14 octobre 2026)
+
+**État** : le projet est suivi dans le cockpit central (projet `melissa-nabet`, app https://rnab26.github.io/Cockpit-General/).
+Hooks de session, commandes `scripts/cockpit-*.sh` et bloc « Cockpit » du `CLAUDE.md` sont sur `main`. Les 18 chantiers encore ouverts de
+l'ancien tableau (artefact `c7ead2fa…`) y ont été repris : 2 libres, 9 à cadrer (décision de Raphaël avant de lancer), 7 bloqués (une action
+de Raphaël ou du contenu de Mélissa). Mode autonome allumé « tout le temps » par Raphaël (il s'éteint seul après 3 h sans rien à prendre).
+
+**Pourquoi ce journal le note** : le 29 sept. le cockpit avait été posé sur une branche à part (`claude/cockpit-setup-oyrkl9`, jamais fusionnée).
+Toute session ouverte sur `main` démarrait donc SANS cockpit : « plus aucune session depuis 15 jours » à l'écran du cockpit, module du site jamais
+installé, rapprochement GitHub jamais passé. Rebranché proprement le 14 oct. depuis `main` ; l'ancienne branche n'est pas supprimée.
+
+**Ne pas casser** : un branchement du cockpit se fusionne sur `main` (c'est ce que lisent les sessions) ; ne plus écrire dans l'ancien tableau,
+il est en lecture seule. Le questionnaire « où le cockpit apparaît » est posé dans le cockpit : la balise du module ne se colle qu'après les réponses.
+
+**Notes / À faire**
+- [ ] Réponses de Raphaël aux deux cartes d'emplacement, puis pose de la balise dans `index.html` (le CRM, comptes connectés seulement).
+- [ ] « Réveil immédiat » : facultatif, non en place (demande une routine et un jeton ; chaque réveil recharge ~290 000 jetons).
