@@ -191,6 +191,16 @@
   .sync-error-bar{position:fixed;left:0;right:0;top:0;z-index:9998;background:#7a2e2e;color:#fff;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top,0px));display:flex;align-items:center;justify-content:center;gap:12px;font-family:'Inter',sans-serif;font-size:12.5px;box-shadow:0 2px 14px rgba(0,0,0,.2);transform:translateY(-120%);transition:transform .25s ease;flex-wrap:wrap;text-align:center;}
   .sync-error-bar.show{transform:translateY(0);}
   .sync-error-bar button{font-family:'Inter',sans-serif;font-size:12.5px;font-weight:600;border:1px solid rgba(255,255,255,.5);background:transparent;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;white-space:nowrap;}
+  /* Réglages › Application : installer le CRM comme une application. */
+  .inst-box{background:var(--panel);border:1px solid var(--panel-edge);border-radius:6px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.55;color:var(--stone-deep);}
+  .inst-box p{margin:0 0 8px;}
+  .inst-box p:last-child{margin-bottom:0;}
+  .inst-box ol{margin:0 0 8px;padding-left:20px;}
+  .inst-box .btn{margin-top:4px;}
+  .inst-box .btn[disabled]{opacity:.55;cursor:default;}
+  .inst-etat{font-weight:600;color:#3f5a3a;}
+  .inst-msg{font-size:12.5px;}
+  .inst-msg.err{color:#b6543f;}
   .sync-badge{font-size:10.5px;color:var(--stone-light);letter-spacing:.04em;margin-left:8px;white-space:nowrap;cursor:pointer;}
   #login-overlay{display:none;position:fixed;inset:0;z-index:110;background:linear-gradient(180deg,#f4efe6,#e4ded4);align-items:center;justify-content:center;padding:24px;}
   .login-card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:10px;padding:30px 26px;width:100%;max-width:360px;box-shadow:0 16px 50px rgba(60,50,35,.2);text-align:center;}

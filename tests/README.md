@@ -18,6 +18,11 @@ Trois suites :
   champ libre), liste modifiable depuis le CRM, renommage qui suit sur les réalisations,
   ordre publié dans le manifeste, et le bouton « + Nouvelle réalisation » visible sans
   défilement. Port 8899 : `node tests/categories.test.mjs`.
+- `tests/langues.test.mjs` — la **traduction anglaise** : la langue de l'interface et la langue
+  du devis sont indépendantes (devis anglais + écran français, et l'inverse), la langue du
+  devis est enregistrée avec lui, les e-mails/WhatsApp suivent la langue du devis, tout le
+  contenu standard (prestations, exclusions, conditions générales) a sa traduction, retour au
+  français sans reste, téléphone. Port 8899 : `node tests/langues.test.mjs`.
 - `tests/onglet-persistant.test.mjs` — l'onglet du CRM **survit au rechargement** (F5),
   via une route dans l'URL (`#/devis`, `#/clients`…) : Tableau de bord au tout premier
   chargement, même onglet après un rechargement, lien direct vers un onglet. Fichier à
@@ -47,6 +52,16 @@ Trois suites :
   l'afficher sans qu'aucun test ne bronche. Se lance seul (il démarre son propre serveur
   sur le port 8903), il faut juste le serveur du CRM sur 8899 :
   `node tests/bout-en-bout.test.mjs`.
+- `tests/pwa.test.mjs` — le CRM **s'installe comme une application** (Chrome, Android,
+  ordinateur ; Safari sur iPhone) : manifeste, icônes (taille, fond, zone sûre de l'icône
+  « maskable »), service worker, et surtout **Chromium lui-même** : `Page.getInstallabilityErrors`
+  doit rendre une liste vide (sur `main` avant ce chantier : `no-manifest`), à la racine ET sous
+  `/Melissa-Nabet/` comme sur GitHub Pages. Vérifie aussi que le service worker ne gêne rien
+  (Supabase, détection de nouvelle version, aucun cache), qu'une nouvelle version s'affiche dès la
+  réouverture malgré le `max-age=600` de Pages, la page « Pas de connexion » hors ligne, et le bloc
+  « Application » des Réglages (invite réelle de Chrome, refus, échec, déjà installé, iPhone). Se
+  lance SEUL : il démarre ses propres serveurs (ports libres) et un Chromium à profil jetable, aucun
+  serveur à lancer avant, une dizaine de secondes : `node tests/pwa.test.mjs`.
 
 La retouche IA est **entièrement interceptée** dans le test du navigateur : le faux pont
 rejoue les trois temps de la file de fal (déposer, suivre, récupérer), y compris une demande

@@ -1,6 +1,8 @@
+const {dvLabel,dvTr,dvLang}=I18N; /* langue du DEVIS : i18n.js */
 /* ============ PURE (sans DOM) — testable ============ */
 function esc(t){return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function cgvClauseHtml(c){
+function cgvClauseHtml(c,S){
+  c={title:dvTr(S,c.title),body:dvTr(S,c.body)};
   const lines=(c.body||'').split('\n').map(l=>l.trim()).filter(l=>l);
   const first=lines[0]||'';
   let html=`<p><b>${esc(c.title)}</b> ${esc(first)}</p>`;
@@ -13,7 +15,10 @@ function cgvClauseHtml(c){
   flush();
   return html;
 }
-function fmt(n){return Math.round(n).toLocaleString('fr-FR');}
+/* Séparateur de milliers : celui de la langue du DEVIS en cours de construction (buildDevisHTML
+   le pose le temps du rendu), français partout ailleurs. */
+let _fmtLoc='fr-FR';
+function fmt(n){return Math.round(n).toLocaleString(_fmtLoc);}
 /* Dates : on stocke en ISO (aaaa-mm-jj, ce que renvoie le calendrier natif) et on affiche en jj/mm/aa. */
 function isoDate(v){return (v&&/^\d{4}-\d{2}-\d{2}$/.test(v))?v:'';}
 function fmtDate(v){if(!v)return '—';const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v);return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:v;}
@@ -26,7 +31,7 @@ function lineTotal(S,sv){
 }
 function priceLabel(S,sv){const c=S.cur,t=lineTotal(S,sv);
   if((sv.mode==='fixed'||sv.mode==='perM2'||sv.mode==='qtePU')&&t)return fmt(t)+' '+c;
-  if(sv.mode==='quote')return 'sur devis';return '';}
+  if(sv.mode==='quote')return dvLabel(S,'surDevis');return '';}
 function metaLabel(S,sv){const c=S.cur;
   if(sv.mode==='perM2'&&sv.price)return `${S.surf} m² × ${fmt(sv.price)} ${c}/m²`;
   if(sv.mode==='qtePU'&&lineTotal(S,sv))return `${sv.qty} × ${fmt(sv.pu)} ${c}`;return '';}
@@ -42,6 +47,11 @@ function computeTotals(S,inc){
   return {ht,tva,ttc:ht+tva,rate,show:inc.some(v=>lineTotal(S,v)>0)};
 }
 function buildDevisHTML(S){
+  const prevLoc=_fmtLoc;_fmtLoc=dvLabel(S,'locale');
+  try{return buildDevisHTMLInner(S);}finally{_fmtLoc=prevLoc;}
+}
+function buildDevisHTMLInner(S){
+  const L=k=>dvLabel(S,k),X=t=>dvTr(S,t),C=dvLang(S)==='en'?': ':' : ';
   const B=(S.branding&&S.branding.companyName)?S.branding:DEFAULT_BRANDING;
   const pal=B.palette==='custom'?buildCustomPalette(B.customAccent):(DEFAULT_PALETTES[B.palette]||DEFAULT_PALETTES.actuel);
   const fonts=FONT_THEMES[B.fontTheme]||FONT_THEMES.actuel;
@@ -65,32 +75,32 @@ function buildDevisHTML(S){
   const groupsHtml=order.map(cat=>{
     const items=inc.filter(v=>v.cat===cat).map(v=>{
       const pl=detail?priceLabel(S,v):'',ml=detail?metaLabel(S,v):'';
-      const optHtml=v.optionClient?'<div class="dv-option-choice"><span class="dv-opt-box"></span> Oui, je valide cette option &nbsp;&nbsp; <span class="dv-opt-box"></span> Non</div>':'';
-      return `<div class="dv-item${v.optionClient?' dv-item-option':''}"><div class="it-t"><span>${esc(v.title)}</span>${pl?`<span class="price">${pl}</span>`:''}</div>${ml?`<div class="it-meta">${ml}</div>`:''}${v.desc?`<div class="it-d">${esc(v.desc)}</div>`:''}${optHtml}</div>`;
+      const optHtml=v.optionClient?`<div class="dv-option-choice"><span class="dv-opt-box"></span> ${esc(L('optOui'))} &nbsp;&nbsp; <span class="dv-opt-box"></span> ${esc(L('optNon'))}</div>`:'';
+      return `<div class="dv-item${v.optionClient?' dv-item-option':''}"><div class="it-t"><span>${esc(X(v.title))}</span>${pl?`<span class="price">${pl}</span>`:''}</div>${ml?`<div class="it-meta">${ml}</div>`:''}${v.desc?`<div class="it-d">${esc(X(v.desc))}</div>`:''}${optHtml}</div>`;
     }).join('');
-    return `<div class="dv-group" data-cat="${esc(cat)}"><div class="dv-group-h">${esc(cat)}</div>${items}</div>`;
+    return `<div class="dv-group" data-cat="${esc(cat)}"><div class="dv-group-h">${esc(X(cat))}</div>${items}</div>`;
   }).join('');
-  const exclHtml=exc.length?`<div class="dv-excl"><div class="dv-group-h">Hors prestation</div><ul>${exc.map(v=>`<li>${esc(v.title)}</li>`).join('')}</ul><p style="font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:#8c7b63;text-align:center;font-style:italic;margin-top:2mm;">Des partenaires spécialisés peuvent être recommandés selon les besoins du projet.</p></div>`:'';
+  const exclHtml=exc.length?`<div class="dv-excl"><div class="dv-group-h">${esc(L('hors'))}</div><ul>${exc.map(v=>`<li>${esc(X(v.title))}</li>`).join('')}</ul><p style="font-family:var(--devis-body-font,'EB Garamond',serif);font-size:11.5px;color:#8c7b63;text-align:center;font-style:italic;margin-top:2mm;">${esc(L('partenaires'))}</p></div>`:'';
   const T=computeTotals(S,inc);
   let totalsHtml='';
   if(T.show){
-    const htLabel=(S.pricingMode==='global')?'Honoraires — forfait global (H.T.)':'Montant total H.T.';
-    totalsHtml=`<div class="dv-totals"><div class="tr"><span class="k">${htLabel}</span><span class="v">${fmt(T.ht)} ${S.cur}</span></div>${S.tvaOff?`<div class="tr"><span class="k">TVA (non applicable)</span><span class="v">0 ${S.cur}</span></div>`:`<div class="tr"><span class="k">TVA ${T.rate}%</span><span class="v">${fmt(T.tva)} ${S.cur}</span></div>`}<div class="tr grand"><span class="k">Total T.T.C.</span><span class="v">${fmt(T.ttc)} ${S.cur}</span></div>${S.tvaOff?`<div class="dv-tva-note">TVA non applicable — à confirmer avec le comptable.</div>`:''}</div>`;
+    const htLabel=(S.pricingMode==='global')?L('htGlobal'):L('htTotal');
+    totalsHtml=`<div class="dv-totals"><div class="tr"><span class="k">${htLabel}</span><span class="v">${fmt(T.ht)} ${S.cur}</span></div>${S.tvaOff?`<div class="tr"><span class="k">${esc(L('tvaNA'))}</span><span class="v">0 ${S.cur}</span></div>`:`<div class="tr"><span class="k">${esc(L('tva'))} ${T.rate}%</span><span class="v">${fmt(T.tva)} ${S.cur}</span></div>`}<div class="tr grand"><span class="k">${esc(L('ttc'))}</span><span class="v">${fmt(T.ttc)} ${S.cur}</span></div>${S.tvaOff?`<div class="dv-tva-note">${esc(L('tvaNote'))}</div>`:''}</div>`;
   }
-  const tlHtml=S.tlOn?`<div class="dv-timeline"><div class="tl-h">Déroulement</div>${(S.tl||'').split('\n').filter(x=>x.trim()).map(x=>`<div class="tl-row">${esc(x)}</div>`).join('')}</div>`:'';
+  const tlHtml=S.tlOn?`<div class="dv-timeline"><div class="tl-h">${esc(L('deroulement'))}</div>${(S.tl||'').split('\n').filter(x=>x.trim()).map(x=>`<div class="tl-row">${esc(x)}</div>`).join('')}</div>`:'';
   const cAddr=[S.caddr,[S.cp,S.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-  const clientBlock=`Destiné à : <span class="nm">${esc(S.raison)}</span><br>${S.contact?esc(S.contact)+'<br>':''}${S.cphone?'Tél : '+esc(S.cphone)+'<br>':''}${S.cemail?esc(S.cemail)+'<br>':''}${cAddr?esc(cAddr)+'<br>':''}${S.siret?'N° société : '+esc(S.siret)+'<br>':''}Projet : ${esc(S.proj)}<br>Adresse : ${esc(S.paddr)}`;
+  const clientBlock=`${esc(L('destine'))}${C}<span class="nm">${esc(S.raison)}</span><br>${S.contact?esc(S.contact)+'<br>':''}${S.cphone?esc(L('tel'))+C+esc(S.cphone)+'<br>':''}${S.cemail?esc(S.cemail)+'<br>':''}${cAddr?esc(cAddr)+'<br>':''}${S.siret?esc(L('societe'))+C+esc(S.siret)+'<br>':''}${esc(L('projet'))}${C}${esc(S.proj)}<br>${esc(L('adresse'))}${C}${esc(S.paddr)}`;
   const clientSigHtml=S.clientSignature?`<img src="${S.clientSignature}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
   const ownerSigHtml=B.signatureImage?`<img src="${B.signatureImage}" style="max-width:52mm;max-height:16mm;display:block;margin-top:2mm;">`:`<span class="line"></span>`;
   const signerName=(S.sigOverride&&S.sigName)?S.sigName:S.raison;
-  const signOnly=`<div class="dv-sign"><div class="s">Signature : ${esc(B.signatureName)}<br>${ownerSigHtml}</div><div class="s">Signature client : ${esc(signerName)}<br>${clientSigHtml}</div></div>`;
+  const signOnly=`<div class="dv-sign"><div class="s">${esc(L('signature'))}${C}${esc(B.signatureName)}<br>${ownerSigHtml}</div><div class="s">${esc(L('signatureClient'))}${C}${esc(signerName)}<br>${clientSigHtml}</div></div>`;
   const footOnly=`${B.licenseNumber?`<div class="dv-license" dir="rtl">${esc(B.licenseLabel)} : ${esc(B.licenseNumber)}</div>`:''}<div class="dv-foot">${esc(B.email)} · ${esc(B.phone)} · ${esc(B.social)}</div>`;
   const signOnDevis=B.signOnDevis!==false;
   const signBlock=(signOnDevis?signOnly:'')+footOnly;
-  const docLabel=S.docType==='facture'?'Facture':'Devis';
-  const page1=`<div class="devis-page"><div class="wm"><span>${esc(B.watermarkText)}</span></div><div class="dv-inner">${B.showBsd?`<div class="dv-bsd" dir="rtl">בס״ד</div>`:''}<div class="dv-head"><div class="col">${docLabel} N° : ${esc(S.num)}<br>Date : ${esc(S.date)}<br>${esc(B.address)}<br>Tél : ${esc(B.phone)}<br>${esc(B.email)}</div><div class="col right">${clientBlock}</div></div><div class="dv-brand"><img class="dv-logo" src="${B.logoDataUri}" alt="${esc(B.companyName)}"></div><div class="dv-title">${esc(S.proj)}${S.surf?` — ${S.surf} m²`:''}</div><div class="dv-rule"></div>${S.intro?`<div class="dv-intro">${esc(S.intro)}</div>`:''}${groupsHtml}${exclHtml}${tlHtml}<div class="dv-pricesign">${totalsHtml}${signBlock}</div></div></div>`;
+  const docLabel=S.docType==='facture'?L('facture'):L('devis');
+  const page1=`<div class="devis-page"><div class="wm"><span>${esc(B.watermarkText)}</span></div><div class="dv-inner">${B.showBsd?`<div class="dv-bsd" dir="rtl">בס״ד</div>`:''}<div class="dv-head"><div class="col">${docLabel} ${esc(L('no'))}${C}${esc(S.num)}<br>${esc(L('date'))}${C}${esc(S.date)}<br>${esc(B.address)}<br>${esc(L('tel'))}${C}${esc(B.phone)}<br>${esc(B.email)}</div><div class="col right">${clientBlock}</div></div><div class="dv-brand"><img class="dv-logo" src="${B.logoDataUri}" alt="${esc(B.companyName)}"></div><div class="dv-title">${esc(S.proj)}${S.surf?` — ${S.surf} m²`:''}</div><div class="dv-rule"></div>${S.intro?`<div class="dv-intro">${esc(S.intro)}</div>`:''}${groupsHtml}${exclHtml}${tlHtml}<div class="dv-pricesign">${totalsHtml}${signBlock}</div></div></div>`;
   const condSignHtml=B.signOnCgv?signOnly:'';
-  const condPage=S.condOn?`<div class="devis-page cond"><div class="wm"><span>${esc(B.watermarkText)}</span></div><div class="dv-inner dv-cond"><h2>Conditions générales</h2>${(S.cgv&&S.cgv.length?S.cgv:DEFAULT_CGV).map(cgvClauseHtml).join('')}${condSignHtml}</div></div>`:'';
+  const condPage=S.condOn?`<div class="devis-page cond"><div class="wm"><span>${esc(B.watermarkText)}</span></div><div class="dv-inner dv-cond"><h2>${esc(L('cgv'))}</h2>${(S.cgv&&S.cgv.length?S.cgv:DEFAULT_CGV).map(c=>cgvClauseHtml(c,S)).join('')}${condSignHtml}</div></div>`:'';
   return paletteStyle+page1+condPage;
 }
 
@@ -287,6 +297,7 @@ const DEFAULT_BRANDING={
   defaultTva:18,
   numPrefix:'',
   numStart:77,
+  defaultDevisLang:'fr',
 };
 const DEFAULT_CHANTIER_CATS=[
   {id:uid(),name:'Démolition',unit:'m²',price:60},
@@ -370,6 +381,7 @@ const current={
   tl:'',
   services:[],exclus:[],cgv:[],branding:{},clientSignature:null,docType:'devis',open:{},
   sigOverride:false,sigName:'',
+  lang:'fr',
 };
 function seedComposerFromLibrary(){
   current.services=[];current.open={};
@@ -381,6 +393,7 @@ function seedComposerFromLibrary(){
   current.cgv=(library.cgv||DEFAULT_CGV).map(c=>({...c}));
   ensureBranding();
   current.branding={...library.branding};
+  current.lang=library.branding.defaultDevisLang==='en'?'en':'fr';
 }
 
 /* ============ DOM: helpers ============ */
@@ -496,6 +509,7 @@ function fillFields(){
   const map={num:'f-num',date:'f-date',raison:'f-raison',contact:'f-contact',cphone:'f-cphone',cemail:'f-cemail',caddr:'f-caddr',ville:'f-ville',cp:'f-cp',siret:'f-siret',proj:'f-proj',surf:'f-surf',paddr:'f-paddr',intro:'f-intro',gAmount:'f-gamount',tva:'f-tva',cur:'f-cur',tl:'f-tl',sigName:'f-sig-name'};
   Object.entries(map).forEach(([k,id])=>{const el=$(id);if(el)el.value=current[k];});
   $('f-gttc').value=current.gIsTTC?'ttc':'ht';
+  $('f-lang').value=current.lang==='en'?'en':'fr';
   $('f-tva-off').checked=current.tvaOff;$('f-cond-on').checked=current.condOn;$('f-tl-on').checked=current.tlOn;
   $('f-sig-override').checked=current.sigOverride;
   $('sig-name-fld').style.display=current.sigOverride?'block':'none';
@@ -512,6 +526,7 @@ function wireBindings(){
   bind('f-gamount','gAmount',true);bind('f-tva','tva',true);bind('f-tl','tl');bind('f-sig-name','sigName');
   $('f-cur').addEventListener('change',e=>{current.cur=e.target.value;buildPrest();render();});
   $('f-gttc').addEventListener('change',e=>{current.gIsTTC=e.target.value==='ttc';render();});
+  $('f-lang').addEventListener('change',e=>{current.lang=e.target.value==='en'?'en':'fr';render();toast(current.lang==='en'?'Quote language: English':'Langue du devis : français');});
   const bc=(id,key)=>$(id).addEventListener('change',e=>{current[key]=e.target.checked;render();});
   bc('f-tva-off','tvaOff');bc('f-cond-on','condOn');bc('f-tl-on','tlOn');
   $('prest').addEventListener('focusin',e=>{const acc=e.target.closest('.acc');if(acc&&acc.dataset.cat)scrollDevisToCat(acc.dataset.cat);});
@@ -1128,6 +1143,13 @@ function openSettingsPanel(){
   openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Réglages</h3>
     <p class="msub">Tout ce qui apparaît sur tes devis — modifiable ici, sans toucher au code.</p>
 
+    <div class="ed-eyebrow" style="margin-top:16px">Langues</div>
+    <div class="row2">
+      <label class="fld"><span class="lbl">Langue de l’interface</span><select id="set-ui-lang" data-notr onchange="setUiLang(this.value)"><option value="fr" ${uiLang()==='fr'?'selected':''}>Français</option><option value="en" ${uiLang()==='en'?'selected':''}>English</option></select></label>
+      <label class="fld"><span class="lbl">Langue par défaut des nouveaux devis</span><select id="set-devis-lang" data-notr onchange="settingsEdit('defaultDevisLang',this.value)"><option value="fr" ${b.defaultDevisLang!=='en'?'selected':''}>Français</option><option value="en" ${b.defaultDevisLang==='en'?'selected':''}>English</option></select></label>
+    </div>
+    <p class="brand-media-hint" style="margin:0 0 12px;">L’interface est ce que tu lis à l’écran (réglé sur cet appareil). Le devis est ce que lit le client : chaque devis peut changer de langue dans l’éditeur, sans toucher à l’interface.</p>
+
     <div class="ed-eyebrow" style="margin-top:16px">Identité</div>
     <label class="fld"><span class="lbl">Nom de l'entreprise</span><input type="text" value="${esc(b.companyName)}" oninput="settingsEdit('companyName',this.value)"></label>
     <div class="row2">
@@ -1255,6 +1277,8 @@ function openSettingsPanel(){
       <button class="mini" onclick="closeModal();openTxtUsagePanel();">Rédaction IA — consommation</button>
     </div>
 
+    ${blocInstallationHtml(true)}
+
     <div style="display:flex;gap:8px;justify-content:space-between;margin-top:14px;flex-wrap:wrap;">
       <button class="mini" onclick="settingsReset()">↺ Tout réinitialiser</button>
       <button class="btn btn-primary" onclick="settingsSave()">Enregistrer</button></div>`);
@@ -1275,10 +1299,11 @@ async function settingsSave(){
 }
 
 /* ============ EXPORT PDF ============ */
-function openDevisWindowHTML(devisHTML,num,companyName,docType){
+function openDevisWindowHTML(devisHTML,num,companyName,docType,lang){
   const styles=Array.from(document.querySelectorAll('style,link[rel=stylesheet]')).map(n=>n.tagName==='LINK'?`<link rel="stylesheet" href="${n.href}">`:n.outerHTML).join('');
-  const docLabel=docType==='facture'?'Facture':'Devis';
-  const doc=`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${docLabel} ${esc(num||'')} — ${esc(companyName||'Melissa Nabet')}</title>${styles}
+  const dl={lang:lang};
+  const docLabel=docType==='facture'?dvLabel(dl,'facture'):dvLabel(dl,'devis');
+  const doc=`<!DOCTYPE html><html lang="${dvLang(dl)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${docLabel} ${esc(num||'')} — ${esc(companyName||'Melissa Nabet')}</title>${styles}
     <style>body{background:#e8e2d7;margin:0;padding:64px 0 20px;} .devis{box-shadow:0 8px 30px rgba(60,50,35,.18);margin:0 auto;transform:none!important;}
     .exportbar{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;gap:8px;justify-content:center;padding:10px;background:rgba(35,32,28,.96);}
     .exportbar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:500;border:none;background:#9a8574;color:#fff;padding:11px 16px;border-radius:4px;cursor:pointer;}
@@ -1309,24 +1334,32 @@ function openDevisWindowHTML(devisHTML,num,companyName,docType){
 }
 function openDevisWindow(){
   render();
-  return openDevisWindowHTML($('devis').outerHTML,current.num,current.branding&&current.branding.companyName,current.docType);
+  return openDevisWindowHTML($('devis').outerHTML,current.num,current.branding&&current.branding.companyName,current.docType,current.lang);
 }
 async function exportDevis(){
   if(openDevisWindow()){toast('Aperçu ouvert — bouton « Imprimer / Enregistrer en PDF »');return;}
   /* Repli si les pop-ups sont bloqués : impression directe (mêmes marges @page). */
   render();window.print();
 }
-function sendDevisEmail(){
+function devisMessageTexte(canal){
+  /* Le message part avec le devis : il est dans la langue du DEVIS, pas celle de l'interface. */
   const B=(current.branding&&current.branding.companyName)?current.branding:DEFAULT_BRANDING;
-  const docLabel=current.docType==='facture'?'Facture':'Devis';
+  const L=k=>dvLabel(current,k),C=dvLang(current)==='en'?':':' :';
+  const fact=current.docType==='facture';
+  const docLabel=fact?L('facture'):L('devis');
+  const objet=fact?L('laFacture'):L('leDevis');
+  const corps=`${L('mailBonjour')}${current.contact?' '+current.contact:''},\n\n`+
+    `${L('mailJoint')} ${objet} ${L('no')}${current.num}`+
+    `${current.proj?' '+L('mailPourProjet')+' « '+current.proj+' »':''}.\n\n`+
+    `${canal==='wa'?L('waPdf'):L('mailPdf')}\n\n`+
+    `${L('cordialement')},\n${B.signatureName||B.companyName}`;
+  return {docLabel,B,corps,objet,C};
+}
+function sendDevisEmail(){
+  const m=devisMessageTexte('mail');
   const to=(current.cemail||'').trim();
-  const subject=`${docLabel} N°${current.num} — ${B.companyName}`;
-  const body=`Bonjour${current.contact?' '+current.contact:''},\n\n`+
-    `Veuillez trouver ci-joint ${docLabel==='Facture'?'la facture':'le devis'} N°${current.num}`+
-    `${current.proj?' pour le projet « '+current.proj+' »':''}.\n\n`+
-    `(pensez à joindre le PDF téléchargé — un email ne peut pas joindre de fichier automatiquement)\n\n`+
-    `Cordialement,\n${B.signatureName||B.companyName}`;
-  const url=`mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const subject=`${m.docLabel} ${dvLabel(current,'no')}${current.num} — ${m.B.companyName}`;
+  const url=`mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(m.corps)}`;
   window.location.href=url;
   toast('Client de messagerie ouvert — pensez à joindre le PDF téléchargé');
 }
@@ -1337,15 +1370,9 @@ function toWhatsAppPhone(raw){
   return digits.startsWith('0')?'972'+digits.slice(1):digits;
 }
 function sendDevisWhatsApp(){
-  const B=(current.branding&&current.branding.companyName)?current.branding:DEFAULT_BRANDING;
-  const docLabel=current.docType==='facture'?'Facture':'Devis';
+  const m=devisMessageTexte('wa');
   const phone=toWhatsAppPhone(current.cphone);
-  const text=`Bonjour${current.contact?' '+current.contact:''},\n\n`+
-    `Veuillez trouver ci-joint ${docLabel==='Facture'?'la facture':'le devis'} N°${current.num}`+
-    `${current.proj?' pour le projet « '+current.proj+' »':''}.\n\n`+
-    `(pensez à joindre le PDF téléchargé — WhatsApp Web ne permet pas de le joindre automatiquement)\n\n`+
-    `Cordialement,\n${B.signatureName||B.companyName}`;
-  const url=`https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  const url=`https://wa.me/${phone}?text=${encodeURIComponent(m.corps)}`;
   window.open(url,'_blank');
   toast('WhatsApp ouvert — pensez à joindre le PDF téléchargé');
 }
@@ -1552,6 +1579,7 @@ function loadDevis(id){
   Object.assign(current,JSON.parse(JSON.stringify(d.snapshot)));
   current.open={}; /* sections repliées par défaut à l'ouverture, même si sauvegardées ouvertes */
   current.docType=d.snapshot.docType||'devis';current.clientSignature=d.snapshot.clientSignature||null;
+  current.lang=d.snapshot.lang==='en'?'en':'fr'; /* un ancien devis n'a pas de langue : il est en français */
   /* Un brouillon n'est pas figé : il doit suivre les derniers réglages de la bibliothèque.
      Seul un devis validé garde son branding gelé, pour l'exactitude historique. */
   if(d.status!=='valide')current.branding={...library.branding};
@@ -1625,7 +1653,7 @@ function viewDevisSnapshot(id){
   const d=devisList.find(x=>x.id===id);if(!d)return;
   const snap=d.status!=='valide'?{...d.snapshot,branding:{...library.branding}}:d.snapshot;
   const html=`<div class="devis">${buildDevisHTML(snap)}</div>`;
-  if(!openDevisWindowHTML(html,snap.num||d.num,snap.branding&&snap.branding.companyName,snap.docType)){toast('Autorisez les pop-ups pour voir le devis');}
+  if(!openDevisWindowHTML(html,snap.num||d.num,snap.branding&&snap.branding.companyName,snap.docType,snap.lang)){toast('Autorisez les pop-ups pour voir le devis');}
 }
 function newDevis(){currentDevisId=null;seedComposerFromLibrary();
   ensureBranding();
@@ -10374,7 +10402,7 @@ function handleRealtime(payload){
         else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
           const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
           if(row.id===currentDevisId&&row.data&&row.data.snapshot){
-            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;
+            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;current.lang=row.data.snapshot.lang==='en'?'en':'fr';
             fillFields();buildPrest();buildExclu();render();
           }
         }
@@ -10581,6 +10609,103 @@ function logoutApp(){
    de l'état local d'un appareil, faisait échouer l'affichage de TOUTES les fiches clients
    (« Cannot read properties of null (reading 'clientId') », constaté le 5 oct. 2026). */
 function objets(a){return Array.isArray(a)?a.filter(x=>x&&typeof x==='object'):[];}
+
+/* ============ APPLICATION INSTALLABLE ============
+   Le bloc « Application » des Réglages : installer le CRM comme une application (icône sur l'écran
+   d'accueil, fenêtre à part, sans barre d'adresse). Le manifeste, les icônes et le service worker sont
+   dans manifest.webmanifest, icons/ et sw.js ; le petit script du <head> garde l'invite d'installation
+   de Chrome dans window.mnInstall (elle n'est envoyée qu'une fois). Rien n'est enregistré : l'état se
+   lit sur le navigateur chaque fois que le panneau s'ouvre. Les navigateurs ne s'installent pas tous
+   de la même façon, d'où cinq cas :
+   - installee     : le CRM tourne déjà comme application, ou vient d'être installé ;
+   - invite        : Chrome/Edge a donné son invite → bouton « Installer l'application » ;
+   - ios           : Safari (iPhone, iPad) n'a pas d'invite → mode d'emploi Partager › Sur l'écran d'accueil ;
+   - menu          : Chrome/Edge sans invite (pas encore envoyée, déjà refusée, déjà installée) : c'est son
+                     menu qui installe ;
+   - indisponible  : le navigateur ne sait pas installer (Firefox sur ordinateur…).
+   Détection par présence des fonctions du navigateur, jamais par son nom : `navigator.standalone` n'existe
+   que sur iPhone/iPad, `onbeforeinstallprompt` que sur les navigateurs Chrome/Edge. */
+function lireEnvInstallation(){
+  const mn=window.mnInstall||{};
+  let application=false;
+  try{
+    application=navigator.standalone===true||['standalone','fullscreen','minimal-ui','window-controls-overlay'].some(m=>window.matchMedia('(display-mode: '+m+')').matches);
+  }catch(e){}
+  return {application,installee:!!mn.installee,invite:!!(mn.invite||mn.enCours),ios:'standalone' in navigator,chrome:'onbeforeinstallprompt' in window};
+}
+function etatInstallation(env){
+  env=env||lireEnvInstallation();
+  if(env.application||env.installee)return 'installee';
+  if(env.invite)return 'invite';
+  if(env.ios)return 'ios';
+  if(env.chrome)return 'menu';
+  return 'indisponible';
+}
+function blocInstallationHtml(ouverture){
+  /* `ouverture` : les Réglages viennent de s'ouvrir — l'ancienne réponse (« Installation annulée. ») n'a plus
+     de raison d'être affichée. Un défaut dans ce bloc ne doit JAMAIS empêcher d'ouvrir les Réglages : sans lui,
+     ils s'ouvrent. */
+  try{
+    if(ouverture&&window.mnInstall&&!window.mnInstall.enCours)window.mnInstall.msg=null;
+    return blocInstallationHtmlBrut();
+  }catch(e){console.error('Bloc Application :',e);return '';}
+}
+function blocInstallationHtmlBrut(){
+  const mn=window.mnInstall||{};
+  const env=lireEnvInstallation();
+  const etat=etatInstallation(env);
+  const note=(mn.msg&&etat!=='installee')?`<p class="inst-msg${mn.msg.erreur?' err':''}" role="status">${esc(mn.msg.texte)}</p>`:'';
+  let corps;
+  if(etat==='installee'){
+    corps=`<p class="inst-etat">Application installée ✓</p>
+      <p>${env.application?'Tu utilises déjà le CRM en mode application.':'Ouvre-la depuis son icône « CRM Melissa », sur ton écran d’accueil ou dans tes applications.'}</p>`;
+  }else if(etat==='invite'){
+    corps=`<p>Installe le CRM sur cet appareil : il s’ouvre dans sa propre fenêtre, avec son icône, comme une application. Comme dans le navigateur, il faut internet pour s’en servir.</p>
+      <button class="btn btn-primary" onclick="installerApplication()"${mn.enCours?' disabled':''}>${mn.enCours?'Installation…':'Installer l’application'}</button>`;
+  }else if(etat==='ios'){
+    corps=`<p>Sur iPhone et iPad, l’installation se fait depuis Safari :</p>
+      <ol><li>Touche l’icône Partager (le carré avec une flèche vers le haut).</li>
+      <li>Choisis « Sur l’écran d’accueil », puis « Ajouter ».</li></ol>`;
+  }else if(etat==='menu'){
+    corps=`<p>Ton navigateur peut installer l’application depuis son menu :</p>
+      <ol><li>Ouvre le menu du navigateur (les trois points).</li>
+      <li>Choisis « Installer l’application » (ou « Ajouter à l’écran d’accueil »).</li></ol>
+      <p>Sur ordinateur, tu peux aussi cliquer sur l’icône d’installation, à droite de la barre d’adresse. Si l’application est déjà installée ici, ouvre-la depuis son icône.</p>`;
+  }else{
+    corps=`<p>Ce navigateur ne sait pas installer l’application. Ouvre le CRM dans Chrome (Android ou ordinateur) ou dans Safari (iPhone et iPad), puis reviens ici.</p>`;
+  }
+  return `<div id="inst-bloc" data-etat="${etat}">
+    <div class="ed-eyebrow">Application</div>
+    <div class="inst-box">${corps}${note}</div>
+  </div>`;
+}
+/* Le bloc se redessine tout seul quand l'invite arrive, quand l'installation se termine ou quand le CRM
+   passe en mode application — sans toucher au reste du panneau (une saisie en cours n'est pas perdue). */
+function majBlocInstallation(){
+  const el=document.getElementById('inst-bloc');
+  if(el)el.outerHTML=blocInstallationHtml();
+}
+try{window.matchMedia('(display-mode: standalone)').addEventListener('change',majBlocInstallation);}catch(e){}
+async function installerApplication(){
+  const mn=window.mnInstall;
+  const invite=mn&&mn.invite;
+  if(!invite){majBlocInstallation();return;}
+  /* Une invite ne sert qu'une fois : on la range tout de suite. Si le navigateur en renvoie une autre
+     (c'est ce qu'il fait en général après un refus), le bouton revient tout seul. */
+  mn.invite=null;mn.enCours=true;mn.msg=null;
+  majBlocInstallation();
+  try{
+    await invite.prompt();
+    const choix=await invite.userChoice;
+    if(choix&&choix.outcome==='accepted'){mn.installee=true;toast('Application installée ✓');}
+    else{mn.msg={texte:'Installation annulée.'};toast('Installation annulée');}
+  }catch(e){
+    mn.msg={texte:'Installation impossible ('+((e&&e.message)||'erreur')+'). Essaie par le menu du navigateur.',erreur:true};
+    toast('Installation impossible');
+  }
+  mn.enCours=false;
+  majBlocInstallation();
+}
 
 /* ============ INIT ============ */
 async function init(){
