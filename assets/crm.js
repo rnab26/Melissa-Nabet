@@ -1,3 +1,4 @@
+
 const {dvLabel,dvTr,dvLang}=I18N; /* langue du DEVIS : i18n.js */
 /* ============ PURE (sans DOM) — testable ============ */
 function esc(t){return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -10742,3 +10743,108 @@ async function init(){
   initSupabase();
 }
 if(typeof document!=='undefined'&&document.getElementById){init();}
+
+
+/* ============ LANGUE DE L'INTERFACE (indépendante de la langue du devis) ============
+   Le français reste le texte d'origine dans le code. En anglais, ce moteur remplace à l'écran
+   chaque texte qui figure dans le dictionnaire (I18N.uiTr, fichier i18n.js) et garde l'original
+   pour revenir au français. Un texte absent du dictionnaire reste en français. Le devis affiché
+   (#devis) n'est JAMAIS touché ici : sa langue est celle du devis (current.lang). */
+(function(){
+  const LS='mn_ui_lang',ATTRS=['placeholder','title','aria-label'];
+  let lang='fr';
+  try{lang=localStorage.getItem(LS)==='en'?'en':'fr';}catch(e){}
+  const tmap=new WeakMap(),amap=new WeakMap();
+  const ignore=n=>{const el=n.nodeType===1?n:n.parentElement;return !el||!!el.closest('#devis,script,style,textarea,[data-notr]');};
+  function cut(t){const m=/^(\s*)([\s\S]*?)(\s*)$/.exec(t);return [m[1],m[2],m[3]];}
+  function trText(n){
+    if(ignore(n))return;
+    const rec=tmap.get(n);
+    if(lang==='en'){
+      const src=(rec&&n.data===rec.en)?rec.fr:n.data;
+      const [a,core,z]=cut(src);
+      const en=core?I18N.uiTr(core):null;
+      if(en==null){tmap.delete(n);if(rec&&n.data===rec.en)n.data=src;return;}
+      const out=a+en+z;
+      tmap.set(n,{fr:src,en:out});
+      if(n.data!==out)n.data=out;
+    }else if(rec){
+      if(n.data===rec.en)n.data=rec.fr;
+      tmap.delete(n);
+    }
+  }
+  function trAttrs(el){
+    if(el.nodeType!==1||ignore(el))return;
+    const rec=amap.get(el)||{};
+    ATTRS.forEach(at=>{
+      if(!el.hasAttribute(at))return;
+      const cur=el.getAttribute(at),r=rec[at];
+      if(lang==='en'){
+        const src=(r&&cur===r.en)?r.fr:cur;
+        const en=I18N.uiTr(src);
+        if(en==null){delete rec[at];if(r&&cur===r.en)el.setAttribute(at,src);return;}
+        rec[at]={fr:src,en};
+        if(cur!==en)el.setAttribute(at,en);
+      }else if(r){
+        if(cur===r.en)el.setAttribute(at,r.fr);
+        delete rec[at];
+      }
+    });
+    amap.set(el,rec);
+  }
+  function walk(root){
+    if(!root)return;
+    if(root.nodeType===3){trText(root);return;}
+    if(root.nodeType!==1)return;
+    trAttrs(root);
+    const tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);let n;
+    while((n=tw.nextNode()))trText(n);
+    root.querySelectorAll('[placeholder],[title],[aria-label]').forEach(trAttrs);
+  }
+  function titre(){
+    const t=document.querySelector('title');if(!t||!t.firstChild)return;
+    trTitle(t.firstChild);
+  }
+  function trTitle(n){ /* le titre de l'onglet est hors <body> et construit : motif dédié */
+    const src=(n.__fr&&n.data===n.__en)?n.__fr:n.data;
+    if(lang==='en'){
+      const m=/^Générateur de devis — (.*)$/.exec(src);
+      if(m){n.__fr=src;n.__en='Quote generator — '+m[1];if(n.data!==n.__en)n.data=n.__en;}
+    }else if(n.__fr&&n.data===n.__en){n.data=n.__fr;n.__fr=n.__en=null;}
+  }
+  function majBouton(){
+    const b=document.getElementById('ui-lang-btn');if(b)b.textContent=lang==='en'?'🌐 FR':'🌐 EN';
+    document.documentElement.lang=lang;
+  }
+  function tout(){walk(document.body);titre();majBouton();}
+  window.uiLang=()=>lang;
+  window.setUiLang=function(v){
+    lang=v==='en'?'en':'fr';
+    try{localStorage.setItem(LS,lang);}catch(e){}
+    tout();
+    const s=document.getElementById('set-ui-lang');if(s)s.value=lang;
+    if(typeof toast==='function')toast(lang==='en'?'Interface language: English':'Langue de l’interface : français');
+  };
+  window.toggleUiLang=()=>setUiLang(lang==='en'?'fr':'en');
+  /* Aide à l'extension : les textes français encore affichés (peut contenir tes propres données). */
+  window.__trManquants=function(){
+    const out=new Set(),tw=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;
+    while((n=tw.nextNode())){
+      if(ignore(n)||tmap.has(n))continue;
+      const t=n.data.replace(/\s+/g,' ').trim();
+      if(/[A-Za-zÀ-ÿ]{2}/.test(t)&&n.parentElement&&n.parentElement.offsetParent!==null)out.add(t);
+    }
+    return [...out];
+  };
+  const obs=new MutationObserver(recs=>{
+    for(const r of recs){
+      if(r.type==='childList'){
+        r.addedNodes.forEach(nd=>{if(r.target.nodeName==='TITLE')trTitle(nd);else walk(nd);});
+      }
+      else if(r.type==='characterData'){if(r.target.parentNode&&r.target.parentNode.nodeName==='TITLE')trTitle(r.target);else trText(r.target);}
+      else if(r.type==='attributes')trAttrs(r.target);
+    }
+  });
+  obs.observe(document.documentElement,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:ATTRS});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',tout);else tout();
+})();
