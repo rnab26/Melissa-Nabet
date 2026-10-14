@@ -52,6 +52,16 @@ Trois suites :
   l'afficher sans qu'aucun test ne bronche. Se lance seul (il démarre son propre serveur
   sur le port 8903), il faut juste le serveur du CRM sur 8899 :
   `node tests/bout-en-bout.test.mjs`.
+- `tests/pwa.test.mjs` — le CRM **s'installe comme une application** (Chrome, Android,
+  ordinateur ; Safari sur iPhone) : manifeste, icônes (taille, fond, zone sûre de l'icône
+  « maskable »), service worker, et surtout **Chromium lui-même** : `Page.getInstallabilityErrors`
+  doit rendre une liste vide (sur `main` avant ce chantier : `no-manifest`), à la racine ET sous
+  `/Melissa-Nabet/` comme sur GitHub Pages. Vérifie aussi que le service worker ne gêne rien
+  (Supabase, détection de nouvelle version, aucun cache), qu'une nouvelle version s'affiche dès la
+  réouverture malgré le `max-age=600` de Pages, la page « Pas de connexion » hors ligne, et le bloc
+  « Application » des Réglages (invite réelle de Chrome, refus, échec, déjà installé, iPhone). Se
+  lance SEUL : il démarre ses propres serveurs (ports libres) et un Chromium à profil jetable, aucun
+  serveur à lancer avant, une dizaine de secondes : `node tests/pwa.test.mjs`.
 
 La retouche IA est **entièrement interceptée** dans le test du navigateur : le faux pont
 rejoue les trois temps de la file de fal (déposer, suivre, récupérer), y compris une demande
