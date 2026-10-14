@@ -3970,8 +3970,8 @@ raccourci ».
 - `tests/pwa.test.mjs` (82 vérifications, ≈ 7 s, se lance seul) : Chromium lui-même dit `[]` à la racine ET sous
   `/Melissa-Nabet/` ; le service worker ne touche à rien d'autre qu'à l'ouverture d'une page ; la détection de
   nouvelle version du CRM marche toujours ; une nouvelle version s'affiche dès la réouverture malgré le
-  `max-age=600` de GitHub Pages. 13 pannes provoquées exprès (manifeste retiré, chemin absolu, cache ajouté,
-  revalidation retirée, service worker trop gourmand…) : le test les voit toutes.
+  `max-age=600` de GitHub Pages. 15 pannes provoquées exprès (manifeste retiré, chemin absolu, cache ajouté,
+  revalidation retirée, service worker trop gourmand, traduction retirée…) : le test les voit toutes.
 
 **Décision prise sans Raphaël, à lui de la confirmer** : hors ligne, le service worker affiche une page
 « Pas de connexion internet », et NON la dernière page du CRM (la consigne le demandait). Raison, **vérifiée par
@@ -3986,7 +3986,8 @@ jour tous les caches qu'il ne connaît pas : une copie gardée n'aurait pas tenu
 (Chrome sans écran répond « refusé »), fenêtre « application » réelle (`--app`, écran virtuel) : le CRM s'y
 reconnaît (`display-mode: standalone` → « Application installée ✓ »), anciennes suites : 968 vérifications
 avant, 968 après, 0 échec (realisations 615, site 195, bout-en-bout 22, boutique 34, catégories 18, estimation 14,
-onglet 6, langues 37, sections 7, pont IA 20, + clients-liste qui n'a pas de compteur).
+onglet 6, langues du site 37, sections 7, pont IA 20, + clients-liste qui n'a pas de compteur) ; la suite de la
+traduction anglaise arrivée de `main` : 27 avant, 27 après la fusion.
 **Déduit** : GitHub Pages servira `.webmanifest` en `application/manifest+json` (c'est ce qu'il fait pour le
 cockpit, même hébergeur) ; Chrome sur Android peut exiger le service worker pour son invite automatique
 (doc developer.chrome.com, mise à jour le 5/12/2023) alors que Chromium 141 de test n'en a pas besoin.
