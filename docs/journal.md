@@ -3997,3 +3997,7 @@ cockpit, même hébergeur) ; Chrome sur Android peut exiger le service worker po
 cache et ne traite que les ouvertures de page ; le petit script du `<head>` reste AVANT la bibliothèque Supabase ;
 le bloc « Application » ne doit jamais empêcher d'ouvrir les Réglages. Changer `sw.js` : changer `VERSION`.
 Détail et marche à suivre : `PROJECT_LOG.md`, « Application installable ».
+
+## 14 octobre 2026 — Découpage de index.html : conflit avec la traduction et l'application installable
+- `index.html` (CSS et JS dans `assets/crm.css` et `assets/crm.js`) a été refait à partir de la version de `main` qui contient la traduction anglaise (`i18n.js`) et l'application installable.
+- Piège évité : la détection « nouvelle version » compare l'ETag de `index.html`. Avec le découpage, un changement qui ne touche que le CSS ou le JS ne se voyait plus. Les adresses portent maintenant une empreinte (`?v=…`). **Après toute modification de `assets/crm.css` ou `assets/crm.js` : `python3 scripts/versionner-assets.py`** ; `tests/assets-versionnes.test.mjs` échoue sinon.
