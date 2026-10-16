@@ -1667,7 +1667,16 @@ const UI_EN={
   'Réalisations ({1})':'Portfolio ({1})',
   'Tâches ({1})':'Tasks ({1})',
   '{1} / 900 caractères — sans texte, le site n’affiche que les photos':'{1} / 900 characters — with no text, the site shows only the photos',
-  '{1} / 200 caractères — sans légende, rien ne s’affiche sous la photo':'{1} / 200 characters — with no caption, nothing is shown under the photo'
+  '{1} / 200 caractères — sans légende, rien ne s’affiche sous la photo':'{1} / 200 characters — with no caption, nothing is shown under the photo',
+  'traductions pour le site public':'translations for the public site',
+  'Nom de la réalisation — {1}':'Project name — {1}',
+  'Lieu — {6}':'Location — {6}',
+  'Les villes courantes sont déjà traduites par le site.':'Common cities are already translated by the site.',
+  'Type de mission — {11}':'Type of assignment — {11}',
+  'Les missions de la liste sont déjà traduites par le site.':'The assignments in the list are already translated by the site.',
+  'Texte de présentation — {16}':'Presentation text — {16}',
+  'Légende — {1}':'Caption — {1}',
+  '(vide = le français s’affiche)':'(empty = French is shown)'
 };
 /* Un texte fixe va dans l'index exact ; un texte avec « {1} », « {2}… » (un nom, un nombre inséré
    par l'application) devient un motif. Les trous sont numérotés comme dans le code : la phrase

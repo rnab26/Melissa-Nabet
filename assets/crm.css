@@ -1260,3 +1260,4 @@
     .ed-stage{flex:0 0 auto;max-height:56vh;}
     .ed-panel{flex:1 1 auto;max-height:none;}
   }
+  .rz-trad{margin:14px 0 4px;padding:10px 12px;border:1px dashed var(--panel-edge);border-radius:4px;}

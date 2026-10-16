@@ -3885,7 +3885,7 @@ function photoPubChange(r,p){
     if((pub.v||'orig')!==vid)raisons.push('« '+photoVersionLabel(p,vid)+' » au lieu de « '+(pub.vlabel||'?')+' »');
     else raisons.push('réglages de l’image');
   }
-  if((pub.cap||'')!==((p.caption||'').trim()))raisons.push((p.caption||'').trim()?'légende':'légende retirée');
+  if((pub.cap||'')!==photoCapSig(p))raisons.push(photoCapSig(p)?'légende':'légende retirée');
   const couv=couvertureEffective(r);
   if(!!pub.cover!==(couv===p.id))raisons.push(couv===p.id?'devient la couverture':'n’est plus la couverture');
   return raisons.join(' · ');
@@ -3988,17 +3988,59 @@ function ficheTexteChamps(r){
     if((v||'').trim())f[k]=String(v).trim();
   });
   if(r.personnelle)f.personnelle=true;
+  const tr=realI18nPubliable(r);
+  if(Object.keys(tr).length)f.i18n=tr;
   return f;
 }
 function realisationFicheSig(r){
   return [r.title||'',r.date||'',r.lieu||'',r.surface||'',r.mission||'',r.categorie||'',r.texte||'',
-    r.personnelle?'perso':''].join('\u0001');
+    r.personnelle?'perso':'',JSON.stringify(realI18nPubliable(r))].join('\u0001');
+}
+/* ---- Traductions d'une réalisation (site public en anglais et en hébreu) ----
+   Seuls les textes qui se LISENT se traduisent : nom, lieu, type de mission, texte de
+   présentation (et la légende d'une photo, plus bas). Le français reste dans les champs
+   d'origine ; les autres langues vivent à côté, dans `i18n`, et ne partent en ligne que
+   si elles sont remplies : le site retombe alors sur le français, jamais sur du vide. Les
+   mots courants (catégories, « Rénovation complète », villes) sont traduits par le site
+   lui-même. */
+const REAL_TRADUISIBLES=['title','lieu','mission','texte'];
+function realTexte(r,cle,lang){
+  return lang==='fr'?(r[cle]||''):(((r.i18n||{})[lang]||{})[cle]||'');
+}
+function realSetTexte(r,cle,lang,val){
+  if(lang==='fr'){r[cle]=val;return;}
+  if(!r.i18n||typeof r.i18n!=='object')r.i18n={};
+  if(!r.i18n[lang]||typeof r.i18n[lang]!=='object')r.i18n[lang]={};
+  r.i18n[lang][cle]=val;
+}
+function realI18nPubliable(r){
+  const o={};
+  siteLanguesActives().filter(l=>l!=='fr').forEach(l=>{
+    const b={};
+    REAL_TRADUISIBLES.forEach(k=>{const v=String(realTexte(r,k,l)).trim();if(v)b[k]=v;});
+    if(Object.keys(b).length)o[l]=b;
+  });
+  return o;
+}
+function photoLegendesPubliables(p){
+  const o={};
+  siteLanguesActives().filter(l=>l!=='fr').forEach(l=>{
+    const v=String((((p.i18n||{})[l])||{}).caption||'').trim();
+    if(v)o[l]={caption:v};
+  });
+  return o;
+}
+/* Ce qui est « en ligne » pour une légende : la française ET ses traductions. Une
+   traduction ajoutée après coup doit faire dire « à republier », comme une correction. */
+function photoCapSig(p){
+  const tr=photoLegendesPubliables(p);
+  return (p.caption||'').trim()+(Object.keys(tr).length?'\u0001'+JSON.stringify(tr):'');
 }
 const HIST_LABEL={horssite:'Écartée du site',sursite:'Remise sur le site',couverture:'Mise en couverture',import:'Ajoutée',reglages:'Réglages modifiés',ia:'Retouche IA',version:'Version affichée changée',iasuppr:'Version IA supprimée',publie:'Publiée sur le site',depublie:'Retirée du site',texte:'Titre ou légende modifié',ordre:'Position modifiée',remplacee:'Photo remplacée',retour:'Retour à la publication précédente'};
 function normalizeRealisation(r){
   /* `lieu`, `surface`, `mission` et `texte` font la différence entre une galerie de photos
      et un portfolio : ils partent sur le site avec les photos. */
-  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',cover:'',photos:[],videos:[],published:false,personnelle:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
+  const o=Object.assign({id:uid(),title:'',clientId:'',date:'',lieu:'',surface:'',mission:'',categorie:'',texte:'',i18n:{},cover:'',photos:[],videos:[],published:false,personnelle:false,createdAt:Date.now(),updatedAt:Date.now()},r||{});
   /* `name` = le titre de la photo (le nom du fichier importé au départ, renommable) ;
      `caption` = la légende publiée sous la photo sur le site. Les deux partent dans le
      manifeste : ce qu'on écrit ici est ce que le visiteur lit. */
@@ -4006,6 +4048,7 @@ function normalizeRealisation(r){
     Object.assign({id:uid(),name:'',caption:'',w:0,h:0,createdAt:Date.now()},p,{edit:Object.assign(blankEdit(),p&&p.edit)})));
   /* Pas d'`edit` : une vidéo est publiée telle quelle, il n'y a rien à retoucher. */
   o.videos=(o.videos||[]).map(v=>Object.assign({id:uid(),name:'',contentType:'video/mp4',size:0,createdAt:Date.now()},v));
+  if(!o.i18n||typeof o.i18n!=='object')o.i18n={};
   return o;
 }
 function ensureRealisations(){if(!Array.isArray(realisations))realisations=[];}
@@ -5071,6 +5114,8 @@ function renderRealisationDetail(host,r){
     el.addEventListener('change',()=>{ecrire();if(el.dataset.f==='clientId'){saveRealisations();renderRealisations();}});
   });
   head.appendChild(pres);
+  const trad=buildRealisationTraductions(r);
+  if(trad)head.appendChild(trad);
   host.appendChild(head);
 
   const grid=document.createElement('div');grid.className='rz-photos'+(_rzOrderMode?' rz-ordering':'');
@@ -5267,6 +5312,55 @@ function rzSetCover(r,pid){
   toast('Photo de couverture définie');
 }
 
+/* ============ TRADUCTIONS D'UNE RÉALISATION ============
+   Un bloc par langue, une langue à la fois (trois colonnes sont illisibles sur un
+   téléphone). Absent tant que le site n'a que le français : « ⚙ Le site public » active
+   l'anglais et l'hébreu. Un champ laissé vide n'est pas un trou : le site affiche alors le
+   français — c'est écrit sous le champ. */
+let _rzLang='en';
+function buildRealisationTraductions(r){
+  const actives=siteLanguesActives().filter(l=>l!=='fr');
+  if(!actives.length)return null;
+  if(actives.indexOf(_rzLang)<0)_rzLang=actives[0];
+  const L=_rzLang, def=SITE_LANGUES.find(l=>l.code===L)||{nom:L,dir:'ltr'};
+  const rtl=def.dir==='rtl'?' dir="rtl"':'';
+  const box=document.createElement('div');box.className='rz-trad';
+  const ong=document.createElement('div');ong.className='site-onglets';
+  actives.forEach(c=>{
+    const l=SITE_LANGUES.find(x=>x.code===c);
+    const b=document.createElement('button');b.type='button';
+    b.className='site-onglet'+(c===L?' on':'');b.textContent=l.nom;
+    b.addEventListener('click',()=>{_rzLang=c;renderRealisations();});
+    ong.appendChild(b);
+  });
+  const n=document.createElement('span');n.className='site-onglets-note';n.textContent='traductions pour le site public';
+  ong.appendChild(n);
+  box.appendChild(ong);
+  const repli=(cle)=>(!String(realTexte(r,cle,L)).trim()&&String(r[cle]||'').trim())
+    ?'<p class="site-repli">Non traduit — le français s’affichera.</p>':'';
+  const champs=document.createElement('div');
+  champs.innerHTML=`<div class="rz-meta">
+    <label class="fld" style="flex:2;min-width:200px"><span class="lbl">Nom de la réalisation — ${esc(def.nom)}</span>
+      <input type="text" data-t="title"${rtl} value="${esc(realTexte(r,'title',L))}" placeholder="${esc(r.title||'—')}">${repli('title')}</label>
+    <label class="fld" style="flex:1;min-width:150px"><span class="lbl">Lieu — ${esc(def.nom)}</span>
+      <input type="text" data-t="lieu"${rtl} value="${esc(realTexte(r,'lieu',L))}" placeholder="${esc(r.lieu||'—')}">
+      <span class="msub" style="font-size:10.5px">Les villes courantes sont déjà traduites par le site.</span>${repli('lieu')}</label>
+    <label class="fld" style="flex:1;min-width:170px"><span class="lbl">Type de mission — ${esc(def.nom)}</span>
+      <input type="text" data-t="mission"${rtl} value="${esc(realTexte(r,'mission',L))}" placeholder="${esc(r.mission||'—')}">
+      <span class="msub" style="font-size:10.5px">Les missions de la liste sont déjà traduites par le site.</span>${repli('mission')}</label>
+    </div>
+    <label class="fld"><span class="lbl">Texte de présentation — ${esc(def.nom)}</span>
+      <textarea data-t="texte" rows="3" maxlength="900"${rtl} placeholder="${esc((r.texte||'').slice(0,120)||'—')}">${esc(realTexte(r,'texte',L))}</textarea>${repli('texte')}</label>`;
+  champs.querySelectorAll('[data-t]').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      realSetTexte(r,inp.dataset.t,L,inp.value);r.updatedAt=Date.now();saveRealisationsDebounced();
+      scheduleFicheSync(r);
+    });
+  });
+  box.appendChild(champs);
+  return box;
+}
+
 /* ============ TITRE ET LÉGENDE D'UNE PHOTO ============ */
 function openPhotoTextDialog(r,p){
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
@@ -5277,6 +5371,11 @@ function openPhotoTextDialog(r,p){
     <label class="fld"><span class="lbl">Légende publiée sur le site</span>
       <textarea id="ph-cap" rows="3" maxlength="200" placeholder="ex. Cuisine ouverte, plan de travail en chêne massif">${esc(p.caption||'')}</textarea></label>
     <p class="msub" id="ph-cap-n" style="margin-top:-6px"></p>
+    ${siteLanguesActives().filter(l=>l!=='fr').map(c=>{
+      const l=SITE_LANGUES.find(x=>x.code===c);
+      return `<label class="fld"><span class="lbl">Légende — ${esc(l.nom)} <em>(vide = le français s’affiche)</em></span>
+        <textarea data-capl="${c}" rows="2" maxlength="200"${l.dir==='rtl'?' dir="rtl"':''}>${esc((((p.i18n||{})[c])||{}).caption||'')}</textarea></label>`;
+    }).join('')}
     <div style="display:flex;gap:8px;align-items:center;margin-top:14px">
       <button class="mini" id="ph-txt-clear">Effacer la légende</button>
       <span style="flex:1"></span>
@@ -5284,13 +5383,20 @@ function openPhotoTextDialog(r,p){
       <button class="btn btn-primary" id="ph-txt-ok">Enregistrer</button>
     </div>`);
   const nom=$('ph-name'),cap=$('ph-cap'),cpt=$('ph-cap-n');
+  const nomAvant=p.name||'';
   const compte=()=>{cpt.textContent=(cap.value.length||0)+' / 200 caractères'+(cap.value.trim()?'':' — sans légende, rien ne s’affiche sous la photo');};
   cap.addEventListener('input',compte);compte();
   $('ph-txt-clear').addEventListener('click',()=>{cap.value='';compte();cap.focus();});
   $('ph-txt-ok').addEventListener('click',()=>{
     const n=nom.value.trim(),c=cap.value.trim();
-    const change=(n!==(p.name||''))||(c!==(p.caption||''));
+    const avantSig=photoCapSig(p);
     p.name=n;p.caption=c;
+    document.querySelectorAll('#modal [data-capl]').forEach(t=>{
+      if(!p.i18n||typeof p.i18n!=='object')p.i18n={};
+      if(!p.i18n[t.dataset.capl]||typeof p.i18n[t.dataset.capl]!=='object')p.i18n[t.dataset.capl]={};
+      p.i18n[t.dataset.capl].caption=t.value.trim();
+    });
+    const change=(n!==nomAvant)||(photoCapSig(p)!==avantSig);
     /* La légende part sur le site : la changer, c'est changer ce qui est publié. */
     if(change)photoTouch(p,'texte',n?(n+(c?' · '+c:'')):c);
     r.updatedAt=Date.now();saveRealisations();
@@ -8714,7 +8820,7 @@ async function syncRealisationFicheEnLigne(r){
     Object.assign(entree,champs);
     /* Un champ facultatif redevenu vide doit disparaître de la fiche, pas y laisser une
        ancienne valeur : `ficheTexteChamps` omet déjà les champs vides à l'écriture. */
-    ['lieu','surface','mission','categorie','texte','personnelle'].forEach(k=>{if(!(k in champs))delete entree[k];});
+    ['lieu','surface','mission','categorie','texte','personnelle','i18n'].forEach(k=>{if(!(k in champs))delete entree[k];});
     man.updatedAt=new Date().toISOString();
     await writeManifest(man);
     /* Le texte est en ligne : le badge « à republier » ne doit plus le dire pour autant que
@@ -9838,14 +9944,16 @@ async function publishRealisation(r,opts){
          aucun envoi d'image — et refuser une correction de légende sous prétexte qu'on ne
          renvoie pas la photo n'aurait aucun sens. */
       if((p.caption||'').trim())entry.caption=p.caption.trim();
+      const legTr=photoLegendesPubliables(p);
+      if(Object.keys(legTr).length)entry.i18n=legTr;
       entries.push(entry);
       /* Gardée : son identité publiée ne bouge pas — elle reste « à republier », et c'est
          exact. Seuls la légende et le rôle de couverture, qui viennent de partir, sont
          mis à jour, sans quoi le CRM la dirait modifiée pour une raison déjà réglée. */
       posees.push(laisser
-        ? {p,pub:Object.assign({},p.pub,{cap:(p.caption||'').trim(),cover:plan.coverId===p.id}),garde:true}
+        ? {p,pub:Object.assign({},p.pub,{cap:photoCapSig(p),cover:plan.coverId===p.id}),garde:true}
         : {p,pub:{sig:x.sig,rev:x.rev,full:x.full,thumb:x.thumb,w,h,
-            cap:(p.caption||'').trim(),cover:plan.coverId===p.id,
+            cap:photoCapSig(p),cover:plan.coverId===p.id,
             v:photoActiveId(p),vlabel:photoVersionLabel(p,photoActiveId(p))}});
     }
     _glTexKey='';
