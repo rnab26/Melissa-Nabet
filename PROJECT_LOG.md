@@ -1424,8 +1424,10 @@ Chrome et ajoute `in-incognito` : le test et les mesures utilisent un profil non
   l'icône), `display: standalone`, `lang: fr`, `start_url` et `scope` `"./"` (RELATIFS : en ligne le CRM vit sous `/Melissa-Nabet/`,
   en local à la racine), `theme_color` `#3d3934` (la barre du haut du CRM, qui est aussi sa barre du bas), `background_color`
   `#e9e4db` (le fond de page tel que `applySiteTheme()` l'applique — Chromium l'a mesuré — et non le `#e8e2d7` écrit dans le
-  `:root`, remplacé au chargement). `id` `melissa-nabet-crm` : il se résout sur l'ORIGINE (spec W3C) ; un `id` `"./"` serait devenu la
-  racine de `rnab26.github.io`, que partagent le cockpit et les autres sites, et les aurait confondus.
+  `:root`, remplacé au chargement). `id` `/Melissa-Nabet/` (corrigé le 16 oct. 2026 : l'`id` se résout sur l'ORIGINE (spec W3C), donc `melissa-nabet-crm` tombait sur
+  `rnab26.github.io/melissa-nabet-crm`, HORS du CRM ; Chrome (`Page.getAppId`) recommandait `/Melissa-Nabet/`. Sur le téléphone de
+  Raphaël l'icône créée disait « Impossible d'ouvrir l'application » ; cause probable, non prouvée sur un vrai Android — le test
+  desktop passait déjà. Un `id` `"./"` serait devenu la racine du domaine, partagée avec le cockpit : à éviter).
 - `icons/` : `icon-192.png` et `icon-512.png` (purpose `any`), `icon-maskable-512.png` (Android découpe l'icône en rond, goutte…),
   `apple-touch-icon.png` (180, iPhone). Opaques, fond `#e9e4db`, monogramme MN noir. Source : le logo par défaut déjà embarqué
   dans `index.html` (`DEFAULT_LOGO_DATAURI`, 620 px) ; `favicon.png` (256 px) aurait été flou à 512. Pour la maskable, tout le dessin
