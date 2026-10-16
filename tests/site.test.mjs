@@ -600,6 +600,50 @@ const he = await page.evaluate(() => ({
 check('Hébreu : la page passe en lecture de droite à gauche',
   he.lang === 'he' && he.dir === 'rtl' && he.sens === 'rtl', he.lang + '/' + he.dir + '/' + he.sens);
 check('Interface traduite en hébreu', he.rubrique === 'עבודות', he.rubrique);
+/* Chantier « Anglais et hébreu sur le site public » (16 oct. 2026) : les titres, lieux,
+   missions, catégories et la fiche d'un projet suivent la langue. Avant, ils restaient en
+   français quelle que soit la langue choisie. */
+const heCartes = await page.evaluate(() => ({
+  noms: [...document.querySelectorAll('#projects .project-name')].map(n => n.textContent),
+  metas: [...document.querySelectorAll('#projects .project-meta')].map(n => n.textContent),
+  aria: document.getElementById('menu').getAttribute('aria-label'),
+  titreOnglet: document.title,
+  og: (document.querySelector('meta[property="og:locale"]') || {}).content,
+}));
+check('Hébreu : le titre d’un projet traduit s’affiche en hébreu',
+  heCartes.noms.indexOf('דופלקס בן יהודה') >= 0, heCartes.noms.join(' | '));
+check('Hébreu : un projet sans traduction garde son titre français, sans blanc',
+  heCartes.noms.indexOf('Bureau Sébastien') >= 0, heCartes.noms.join(' | '));
+check('Hébreu : lieu et mission courants traduits par le dictionnaire du site',
+  heCartes.metas.some(m => /תל אביב/.test(m)) && heCartes.metas.some(m => /שיפוץ מלא/.test(m)) &&
+  !heCartes.metas.some(m => /Rénovation complète/.test(m)), heCartes.metas.join(' | '));
+check('Hébreu : libellés d’accessibilité, titre de l’onglet et langue de partage',
+  heCartes.aria === 'חלקי האתר' && /אדריכלות פנים|Interior|Architecture/.test(heCartes.titreOnglet) && heCartes.og === 'he_IL',
+  heCartes.aria + ' | ' + heCartes.titreOnglet + ' | ' + heCartes.og);
+await page.locator('#projects .project', { hasText: 'Bureau Sébastien' }).first().click();
+await page.waitForTimeout(500);
+const heFiche = await page.evaluate(() => ({
+  meta: document.getElementById('d-meta').textContent,
+  texte: document.getElementById('d-text').textContent,
+  legendes: [...document.querySelectorAll('#d-shots .shot-cap')].map(n => n.textContent),
+}));
+check('Hébreu : la fiche affiche le texte de présentation traduit et mission/lieu en hébreu',
+  /קומת משרדים/.test(heFiche.texte) && /שיפוץ מלא/.test(heFiche.meta) && /תל אביב/.test(heFiche.meta),
+  heFiche.texte.slice(0, 20) + ' | ' + heFiche.meta);
+check('Hébreu : la légende d’une photo traduite s’affiche en hébreu',
+  heFiche.legendes.some(l => /מטבח פתוח/.test(l)), heFiche.legendes.join(' | ').slice(0, 80));
+await page.click('#back'); await page.waitForTimeout(300);
+await page.locator('#langs button', { hasText: 'EN' }).click();
+await page.waitForTimeout(300);
+const enCartes = await page.evaluate(() => ({
+  noms: [...document.querySelectorAll('#projects .project-name')].map(n => n.textContent),
+  metas: [...document.querySelectorAll('#projects .project-meta')].map(n => n.textContent),
+}));
+check('Anglais : titre traduit, lieu et mission courants traduits',
+  enCartes.noms.indexOf('Ben Yehuda Duplex') >= 0 && enCartes.metas.some(m => /Full renovation/.test(m)) &&
+  !enCartes.metas.some(m => /Rénovation/.test(m)), enCartes.noms.join(' | ') + ' // ' + enCartes.metas.join(' | '));
+await page.locator('#langs button', { hasText: 'עב' }).click();
+await page.waitForTimeout(300);
 /* Un texte français non traduit, affiché dans une page hébreu, doit garder sa ponctuation
    à sa place : sans `dir="auto"`, le point final part se coller au début de la ligne. */
 const bidi = await page.evaluate(() => ({

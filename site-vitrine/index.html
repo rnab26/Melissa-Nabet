@@ -665,7 +665,13 @@ var MOTS = {
         panneTxt:'La connexion n’a pas abouti. Vérifiez votre réseau, puis réessayez.',
         m2:'m²',
         reessayer:'Réessayer', genre:'Un projet de ce genre ? ',
-        ecrire:'écrivez-moi', whatsapp:'écrivez-moi sur WhatsApp' },
+        ecrire:'écrivez-moi', whatsapp:'écrivez-moi sur WhatsApp',
+        aLangue:'Langue', aMenu:'Sections du site', aBandeau:'Réalisations en images',
+        aPrec:'Photo précédente', aSuiv:'Photo suivante', aFiltre:'Filtrer les réalisations',
+        aFiltreProd:'Filtrer les produits', aPlein:'Photo en plein écran', aFermer:'Fermer',
+        titreSite:'Architecture d’intérieur',
+        seoDesc:'Réalisations d’architecture d’intérieur : chantiers livrés, photographiés et présentés projet par projet.',
+        ogAlt:'Réalisation d’architecture d’intérieur', ogLocale:'fr_FR' },
   en: { realisations:'Works', personnelles:'Personal work', apropos:'About', journal:'Journal', whatsappCourt:'Message',
         retour:'← All works', suivant:'Next project', tout:'All',
         photos:'photographs', agrandir:'Enlarge photograph', photo:'photograph',
@@ -677,7 +683,13 @@ var MOTS = {
         panneTxt:'The connection failed. Check your network, then try again.',
         m2:'m²',
         reessayer:'Try again', genre:'A project like this one? ',
-        ecrire:'write to me', whatsapp:'message me on WhatsApp' },
+        ecrire:'write to me', whatsapp:'message me on WhatsApp',
+        aLangue:'Language', aMenu:'Site sections', aBandeau:'Projects in pictures',
+        aPrec:'Previous photograph', aSuiv:'Next photograph', aFiltre:'Filter the projects',
+        aFiltreProd:'Filter the products', aPlein:'Full-screen photograph', aFermer:'Close',
+        titreSite:'Interior architecture',
+        seoDesc:'Interior architecture projects: completed sites, photographed and presented project by project.',
+        ogAlt:'Interior architecture project', ogLocale:'en_US' },
   he: { realisations:'עבודות', personnelles:'עבודות אישיות', apropos:'אודות', journal:'יומן', whatsappCourt:'כתבו',
         retour:'→ כל העבודות', suivant:'הפרויקט הבא', tout:'הכול',
         photos:'תמונות', agrandir:'הגדלת התמונה', photo:'תמונה',
@@ -689,8 +701,49 @@ var MOTS = {
         panneTxt:'החיבור נכשל. בדקו את הרשת ונסו שוב.',
         m2:'מ″ר',
         reessayer:'נסו שוב', genre:'רוצים פרויקט כזה? ',
-        ecrire:'כתבו לי', whatsapp:'כתבו לי בוואטסאפ' }
+        ecrire:'כתבו לי', whatsapp:'כתבו לי בוואטסאפ',
+        aLangue:'שפה', aMenu:'חלקי האתר', aBandeau:'עבודות בתמונות',
+        aPrec:'התמונה הקודמת', aSuiv:'התמונה הבאה', aFiltre:'סינון העבודות',
+        aFiltreProd:'סינון המוצרים', aPlein:'תמונה במסך מלא', aFermer:'סגירה',
+        titreSite:'אדריכלות פנים',
+        seoDesc:'עבודות אדריכלות פנים: פרויקטים שהושלמו, מצולמים ומוצגים פרויקט אחר פרויקט.',
+        ogAlt:'פרויקט אדריכלות פנים', ogLocale:'he_IL' }
 };
+/* Légende d'une photo : sa traduction si Melissa l'a écrite, sinon la légende d'origine. */
+function legende(ph) {
+  var tr = ((ph.i18n || {})[langue]) || {};
+  return (tr.caption || '').trim() || (ph.caption || '').trim();
+}
+/* Les libellés d'accessibilité et l'en-tête de la page (titre de l'onglet, description,
+   aperçu de partage) suivent la langue, comme le reste. Les robots qui ne lisent pas le
+   JavaScript voient le français écrit dans le HTML : c'est voulu, c'est la langue par
+   défaut du site. */
+var ARIA = { langs:'aLangue', menu:'aMenu', bandeau:'aBandeau', 'bd-prec':'aPrec', 'bd-suiv':'aSuiv',
+  filtres:'aFiltre', 'filtres-prod':'aFiltreProd', lightbox:'aPlein', 'lb-close':'aFermer',
+  'lb-prev':'aPrec', 'lb-next':'aSuiv' };
+/* Titre et description d'origine, ceux écrits dans le HTML : en français, on les rend tels
+   quels (un robot et un visiteur français voient exactement la même chose). */
+var TITRE_HTML = document.title;
+var DESC_HTML = (document.querySelector('meta[name="description"]') || {}).content || '';
+function metaContenu(sel, v) { var n = document.querySelector(sel); if (n) n.content = v; }
+function majLangueEnTete() {
+  Object.keys(ARIA).forEach(function (id) { var n = el(id); if (n) n.setAttribute('aria-label', mot(ARIA[id])); });
+  if (langue === 'fr') { TITRE_SITE = TITRE_HTML; DESC_SITE = DESC_HTML; }
+  else {
+    var nom = (infosSite && infosSite.title) || 'Melissa Nabet';
+    TITRE_SITE = nom + ' — ' + ((infosSite && texteSite('subtitle')) || mot('titreSite'));
+    DESC_SITE = mot('seoDesc');
+  }
+  /* Sans toucher à l'adresse canonique ni à l'image : seul un projet ouvert les change. */
+  if (!current) {
+    document.title = TITRE_SITE;
+    metaContenu('meta[name="description"]', DESC_SITE);
+    metaContenu('meta[property="og:title"]', TITRE_SITE);
+    metaContenu('meta[property="og:description"]', DESC_SITE);
+  }
+  metaContenu('meta[property="og:locale"]', mot('ogLocale'));
+  metaContenu('meta[property="og:image:alt"]', mot('ogAlt'));
+}
 /* `dir="auto"` sur tout ce que MELISSA écrit : la page peut être en hébreu (lecture de
    droite à gauche) et le texte, lui, rester français faute de traduction. Sans ce marquage,
    le point final d'une phrase française part se coller au début de la ligne — c'est
@@ -716,11 +769,81 @@ function surfaceLisible(v) {
 function texteSite(cle, src) {
   var s = src || infosSite || {};
   var tr = (s.i18n || {})[langue] || {};
-  return (tr[cle] || '').trim() || (s[cle] || '').trim();
+  var base = (s[cle] || '').trim();
+  /* Le sous-titre d'origine du site (« Architecture d'intérieur ») a sa traduction en dur ;
+     un sous-titre écrit par Melissa, lui, n'est jamais traduit à sa place. */
+  return (tr[cle] || '').trim() || (cle === 'subtitle' ? valeur(base) : base);
 }
 function texteEntree(j, cle) {
   var tr = ((j.i18n || {})[langue]) || {};
   return (tr[cle] || '').trim() || (j[cle] || '').trim();
+}
+/* ---- Mots courants de la vitrine, traduits une fois pour toutes ----------------------
+   Les catégories, les types de mission et les villes d'une réalisation se saisissent dans
+   le CRM en français. Ce sont des MOTS COURANTS (« Habitation », « Rénovation complète »,
+   « Netanya »), pas la prose de Melissa : on les traduit ici, en dur, pour que le site ne
+   reste pas à moitié français en hébreu. Priorité : (1) la traduction écrite par Melissa
+   dans la fiche (`i18n`), (2) ce dictionnaire, (3) le français d'origine. Un mot absent
+   d'ici reste en français — jamais de texte cassé. Clé = français en minuscules,
+   apostrophes droites ; pour en ajouter un : une ligne. */
+var VALEURS = {
+  en: {
+    'commercial':'Commercial', 'habitation':'Residential', 'bureaux':'Offices',
+    'réalisation sur mesure':'Custom work', 'réalisations sur mesure':'Custom work',
+    'revêtement mural':'Wall covering', 'papier peint':'Wallpaper',
+    'panneau décoratif':'Decorative panel', 'accessoire':'Accessory',
+    'rénovation complète':'Full renovation', 'aménagement intérieur':'Interior fit-out',
+    'décoration':'Decoration', 'agencement sur mesure':'Bespoke joinery and layout',
+    'suivi de chantier':'Site supervision', 'conseil et plans':'Advice and plans',
+    "architecture d'intérieur":'Interior architecture',
+    'jérusalem':'Jerusalem', 'tel aviv':'Tel Aviv', 'tel-aviv':'Tel Aviv', 'netanya':'Netanya',
+    'haïfa':'Haifa', 'haifa':'Haifa', 'herzliya':'Herzliya', 'raanana':"Ra'anana",
+    "ra'anana":"Ra'anana", 'ramat gan':'Ramat Gan', 'petah tikva':'Petah Tikva',
+    'petah-tikva':'Petah Tikva', 'rishon lezion':'Rishon LeZion', 'rishon le-zion':'Rishon LeZion',
+    'kfar saba':'Kfar Saba', 'hod hasharon':'Hod HaSharon', 'ashdod':'Ashdod',
+    'ashkelon':'Ashkelon', 'eilat':'Eilat', 'beer sheva':'Beer Sheva', 'holon':'Holon',
+    'bat yam':'Bat Yam', 'rehovot':'Rehovot', 'modiin':"Modi'in", 'givatayim':'Givatayim',
+    'césarée':'Caesarea', 'caesarea':'Caesarea', 'even yehuda':'Even Yehuda', 'israël':'Israel',
+    'israel':'Israel', 'france':'France', 'paris':'Paris'
+  },
+  he: {
+    'commercial':'מסחרי', 'habitation':'מגורים', 'bureaux':'משרדים',
+    'réalisation sur mesure':'עבודות בהתאמה אישית', 'réalisations sur mesure':'עבודות בהתאמה אישית',
+    'revêtement mural':'חיפוי קיר', 'papier peint':'טפט',
+    'panneau décoratif':'פאנל דקורטיבי', 'accessoire':'אקססוריז',
+    'rénovation complète':'שיפוץ מלא', 'aménagement intérieur':'עיצוב פנים',
+    'décoration':'עיצוב ודקורציה', 'agencement sur mesure':'נגרות ותכנון בהתאמה אישית',
+    'suivi de chantier':'ליווי ופיקוח באתר', 'conseil et plans':'ייעוץ ותוכניות',
+    "architecture d'intérieur":'אדריכלות פנים',
+    'jérusalem':'ירושלים', 'tel aviv':'תל אביב', 'tel-aviv':'תל אביב', 'netanya':'נתניה',
+    'haïfa':'חיפה', 'haifa':'חיפה', 'herzliya':'הרצליה', 'raanana':'רעננה',
+    "ra'anana":'רעננה', 'ramat gan':'רמת גן', 'petah tikva':'פתח תקווה',
+    'petah-tikva':'פתח תקווה', 'rishon lezion':'ראשון לציון', 'rishon le-zion':'ראשון לציון',
+    'kfar saba':'כפר סבא', 'hod hasharon':'הוד השרון', 'ashdod':'אשדוד',
+    'ashkelon':'אשקלון', 'eilat':'אילת', 'beer sheva':'באר שבע', 'holon':'חולון',
+    'bat yam':'בת ים', 'rehovot':'רחובות', 'modiin':'מודיעין', 'givatayim':'גבעתיים',
+    'césarée':'קיסריה', 'caesarea':'קיסריה', 'even yehuda':'אבן יהודה', 'israël':'ישראל',
+    'israel':'ישראל', 'france':'צרפת', 'paris':'פריז'
+  }
+};
+function cleValeur(v) { return String(v).replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim().toLowerCase(); }
+/* Un mot courant dans la langue courante ; en français, ou sans équivalent, tel quel. */
+function valeur(v) {
+  var t = String(v == null ? '' : v).trim();
+  if (!t || langue === 'fr') return t;
+  var d = VALEURS[langue];
+  return (d && d[cleValeur(t)]) || t;
+}
+/* Un champ d'une réalisation : la traduction de Melissa, sinon le dictionnaire (pour les
+   mots courants seulement), sinon le français. Le titre et le texte de présentation,
+   eux, ne passent JAMAIS par le dictionnaire : ils n'ont de sens qu'écrits par elle. */
+var CHAMPS_COURANTS = { lieu: 1, mission: 1, categorie: 1 };
+function textePro(p, cle) {
+  var tr = ((p.i18n || {})[langue]) || {};
+  var t = (tr[cle] || '').trim();
+  if (t) return t;
+  var base = (p[cle] || '').trim();
+  return CHAMPS_COURANTS[cle] ? valeur(base) : base;
 }
 function languesDuSite() {
   var l = (infosSite && infosSite.langues) || [];
@@ -770,6 +893,7 @@ function toutRedessiner() {
   el('t-journal').textContent = mot('journal');
   el('t-suivant').textContent = mot('suivant');
   el('back').textContent = mot('retour');
+  majLangueEnTete();
   renderLangues();
   renderApropos(s);
   renderBoutique();
@@ -826,7 +950,7 @@ function renderFiltresProd(visibles) {
     b.type = 'button';
     b.dir = 'auto';
     var n = c ? visibles.filter(function (p) { return (p.categorie || '') === c; }).length : visibles.length;
-    b.textContent = (c || mot('tout')) + ' (' + n + ')';
+    b.textContent = (c ? valeur(c) : mot('tout')) + ' (' + n + ')';
     b.setAttribute('aria-pressed', filtreProd === c ? 'true' : 'false');
     b.addEventListener('click', function () { filtreProd = c; renderBoutique(); });
     host.appendChild(b);
@@ -975,7 +1099,7 @@ function renderFiltres() {
     b.type = 'button';
     var n = c ? projetsPro().filter(function (p) { return (p.categorie || '').trim() === c; }).length : projetsPro().length;
     b.dir = 'auto';
-    b.textContent = (c || mot('tout')) + ' (' + n + ')';
+    b.textContent = (c ? valeur(c) : mot('tout')) + ' (' + n + ')';
     b.setAttribute('aria-pressed', filtre === c ? 'true' : 'false');
     b.addEventListener('click', function () { filtre = c; renderFiltres(); renderIndex(); });
     host.appendChild(b);
@@ -1013,12 +1137,12 @@ function carteProjet(p, i) {
   // quand une image arrive.
   vign.loading = i > 1 ? 'lazy' : 'eager';
   guetter(b);
-  b.querySelector('.project-name').textContent = p.title;
+  b.querySelector('.project-name').textContent = textePro(p, "title");
   b.querySelector('.project-name').dir = 'auto';
   b.querySelector('.project-meta').dir = 'auto';
   // Lieu et mission valent mieux qu'un décompte de photos sur une carte de portfolio —
   // mais s'ils manquent, on retombe sur le décompte plutôt que sur une ligne quasi vide.
-  var infos = [p.date, p.lieu, p.mission].filter(Boolean);
+  var infos = [p.date, textePro(p, "lieu"), textePro(p, "mission")].filter(Boolean);
   if (infos.length < 2) infos.push(nbPhotos(p.photos.length));
   b.querySelector('.project-meta').textContent = infos.join(' · ');
   b.addEventListener('click', function () { openProject(projects.indexOf(p)); });
@@ -1255,7 +1379,7 @@ function bdRemplir(indice, vue) {
     case_.className = 'bd-case';
     var im = document.createElement('img');
     im.decoding = 'async';
-    im.alt = ph.caption || (vue.p.title + ' — ' + mot('photo') + ' ' + (k + 1));
+    im.alt = legende(ph) || (textePro(vue.p, "title") + ' — ' + mot('photo') + ' ' + (k + 1));
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
     /* Le bandeau est large : la pleine définition est la bonne source sur un écran
        d'ordinateur, la vignette suffit sur un téléphone. Les deux existent déjà dans le
@@ -1303,11 +1427,11 @@ function bdAller(pas) {
     bdCouche = cible;
     bdProjet = vue.p;
     bdEchecs = 0;
-    el('bd-nom').textContent = vue.p.title;
-    el('bd-meta').textContent = [vue.p.date, vue.p.lieu].filter(Boolean).join(' · ');
+    el('bd-nom').textContent = textePro(vue.p, "title");
+    el('bd-meta').textContent = [vue.p.date, textePro(vue.p, "lieu")].filter(Boolean).join(' · ');
     el('bd-legende').hidden = false;
     el('bd-voile').hidden = false;
-    el('bandeau').setAttribute('aria-label', vue.p.title);
+    el('bandeau').setAttribute('aria-label', textePro(vue.p, "title"));
   }, function () {
     /* Une image absente ne doit pas arrêter le bandeau — ni le faire tourner à vide sur un
        stockage entièrement injoignable. On tente les autres vues, une fois chacune. */
@@ -1428,11 +1552,11 @@ function majSeo(titre, description, image) {
    contredire. */
 function afficherProjet(i) {
   current = projects[i];
-  el('d-title').textContent = current.title;
-  el('d-meta').textContent = [current.date, current.categorie, current.lieu, surfaceLisible(current.surface),
-    current.mission, nbPhotos(current.photos.length)].filter(Boolean).join(' · ');
-  el('d-text').textContent = current.texte || '';
-  el('d-text').hidden = !current.texte;
+  el('d-title').textContent = textePro(current, "title");
+  el('d-meta').textContent = [current.date, textePro(current, "categorie"), textePro(current, "lieu"), surfaceLisible(current.surface),
+    textePro(current, "mission"), nbPhotos(current.photos.length)].filter(Boolean).join(' · ');
+  el('d-text').textContent = textePro(current, "texte") || '';
+  el('d-text').hidden = !textePro(current, "texte");
   var host = el('d-shots');
   host.innerHTML = '';
   current.photos.forEach(function (ph, k) {
@@ -1470,16 +1594,16 @@ function afficherProjet(i) {
     im.decoding = 'async';
     if (k === 0) im.setAttribute('fetchpriority', 'high');
     if (ph.w && ph.h) { im.width = ph.w; im.height = ph.h; }
-    im.alt = ph.caption || (current.title + ' — ' + mot('photo') + ' ' + (k + 1));
+    im.alt = legende(ph) || (textePro(current, "title") + ' — ' + mot('photo') + ' ' + (k + 1));
     // `complete` couvre le cas d'une image déjà en cache : l'événement `load` serait déjà passé.
     if (im.complete) im.classList.add('chargee');
     else im.addEventListener('load', function () { im.classList.add('chargee'); });
     b.appendChild(im);
-    if (ph.caption) {
+    if (legende(ph)) {
       var cap = document.createElement('span');
       cap.className = 'shot-cap';
       cap.dir = 'auto';
-      cap.textContent = ph.caption;
+      cap.textContent = legende(ph);
       b.appendChild(cap);
     }
     b.addEventListener('click', function () { openLightbox(k); });
@@ -1512,8 +1636,8 @@ function afficherProjet(i) {
   peindreSuivant();
   peindreContactProjet();
   var couv = current.photos.filter(function (x) { return x.cover; })[0] || current.photos[0];
-  majSeo(current.title + ' — ' + TITRE_SITE,
-    current.texte || [current.lieu, surfaceLisible(current.surface), current.mission].filter(Boolean).join(' · ') || DESC_SITE,
+  majSeo(textePro(current, 'title') + ' — ' + TITRE_SITE,
+    textePro(current, 'texte') || [textePro(current, 'lieu'), surfaceLisible(current.surface), textePro(current, 'mission')].filter(Boolean).join(' · ') || DESC_SITE,
     couv ? url(couv.full) : '');
 }
 
@@ -1552,7 +1676,7 @@ function peindreSuivant() {
   var b = el('suivant'), p = projetSuivant(1);
   if (!p) { b.hidden = true; return; }
   b.hidden = false;
-  el('suivant-nom').textContent = p.title;
+  el('suivant-nom').textContent = textePro(p, "title");
 }
 el('suivant').addEventListener('click', function () {
   var p = projetSuivant(1);
@@ -1581,9 +1705,9 @@ function afficherPhoto(k) {
   var ph = current.photos[k];
   el('lb-rang').textContent = (k + 1) + ' / ' + current.photos.length;
   el('lb-img').src = url(ph.full);
-  el('lb-img').alt = ph.caption || (current.title + ' — photo ' + (k + 1));
-  el('lb-cap').textContent = ph.caption || '';
-  el('lb-cap').hidden = !ph.caption;
+  el('lb-img').alt = legende(ph) || (textePro(current, "title") + ' — photo ' + (k + 1));
+  el('lb-cap').textContent = legende(ph) || '';
+  el('lb-cap').hidden = !legende(ph);
   el('lightbox').classList.add('open');
   var fermer = el('lb-close');
   if (fermer) fermer.focus();
