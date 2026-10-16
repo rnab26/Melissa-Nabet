@@ -119,11 +119,13 @@ writeFileSync(join(DIR, 'galerie/u/manifest.json'), JSON.stringify({
     lieu: 'Tel Aviv', surface: '85 m²', mission: 'Rénovation complète', categorie: 'Bureau',
     texte: 'Un plateau de bureaux cloisonné, ramené à un seul volume traversant. Les rangements ont été redessinés sur mesure pour dégager la vue depuis l’entrée.',
     publishedAt: new Date().toISOString(),
-    photos: [photo(0, ''), photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), photo(2, '', true)],
+    i18n: { he: { texte: 'קומת משרדים מחולקת שהפכה לנפח אחד.' } },
+    photos: [photo(0, ''), Object.assign(photo(1, 'Cuisine ouverte, plan de travail en chêne massif.'), { i18n: { he: { caption: 'מטבח פתוח, משטח עבודה מעץ אלון מלא.' } } }), photo(2, '', true)],
   }, {
     id: 'r2', title: 'Duplex Ben Yehuda', date: '2025',
     /* Surface tapée comme un nombre nu — c'est ce que Mélissa fait en pratique. Le site
        doit y remettre l'unité, alors que « 85 m² » de r1 ne doit pas être touché. */
+    i18n: { he: { title: 'דופלקס בן יהודה' }, en: { title: 'Ben Yehuda Duplex' } },
     lieu: 'Tel Aviv', surface: '110', categorie: 'Appartement',
     publishedAt: new Date().toISOString(),
     photos: [photo(0, ''), photo(1, '')],
