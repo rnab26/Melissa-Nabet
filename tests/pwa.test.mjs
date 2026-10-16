@@ -385,12 +385,16 @@ try {
     textes.push(b && b.texte);
     check('Chrome sans invite (déjà refusée, ou pas encore envoyée) : les deux gestes du menu, sans bouton',
       !!b && b.etat === 'menu' && !b.bouton && /Installer l’application/.test(b.texte) && /Ajouter à l’écran d’accueil/.test(b.texte) && /icône d’installation/.test(b.texte), b && b.texte);
+    check('Aide de sortie du piège (ancienne installation cassée) affichée avec le mode d’emploi du menu, dans le bloc, sans dépasser de l’écran (390 px)',
+      b.texte.includes('Si l’icône ne s’ouvre pas : supprime-la de l’écran d’accueil, efface les données du site dans Chrome, puis réinstalle.') && await A.page.evaluate(() => { const bloc = document.getElementById('inst-bloc'), r = bloc.getBoundingClientRect(); return !!bloc.querySelector('.inst-aide') && r.right <= window.innerWidth + 1 && bloc.scrollWidth <= bloc.clientWidth + 1; }), b.texte);
     b = await voir(() => { Object.defineProperty(navigator, 'standalone', { value: false, configurable: true }); });
     textes.push(b && b.texte);
     check('Safari sur iPhone/iPad : « Partager » puis « Sur l’écran d’accueil », sans bouton', !!b && b.etat === 'ios' && !b.bouton && /Partager/.test(b.texte) && /Sur l’écran d’accueil/.test(b.texte), b && b.texte);
+    check('Pas d’aide « Chrome » sur iPhone (autre procédure)', !b.texte.includes('efface les données'), b.texte);
     b = await voir(() => { Object.defineProperty(navigator, 'standalone', { value: true, configurable: true }); });
     textes.push(b && b.texte);
     check('CRM ouvert depuis l’écran d’accueil (iPhone) : « Application installée ✓ », rien d’autre à faire', !!b && b.etat === 'installee' && !b.bouton && /Tu utilises déjà le CRM en mode application/.test(b.texte), b && b.texte);
+    check('Déjà en mode application : pas d’aide de réinstallation (inutile, ça marche)', !b.texte.includes('efface les données'), b.texte);
     b = await voir(() => { delete navigator.standalone; const mm = window.matchMedia.bind(window); window.__mm = mm; window.matchMedia = (q) => /display-mode:\s*standalone/.test(q) ? { matches: true, media: q, addEventListener() {}, removeEventListener() {} } : mm(q); });
     textes.push(b && b.texte);
     check('CRM ouvert comme application installée (display-mode: standalone) : « Application installée ✓ »', !!b && b.etat === 'installee' && !b.bouton && /Tu utilises déjà/.test(b.texte), b && b.texte);
@@ -401,6 +405,7 @@ try {
     b = await voir(() => { window.mnInstall.installee = false; window.mnInstall.invite = null; });
     check('En anglais — Chrome sans invite : « Install app », « Add to Home screen », icône d’installation',
       !!b && b.etat === 'menu' && /Install app/.test(b.texte) && /Add to Home screen/.test(b.texte) && /install icon/.test(b.texte), b && b.texte);
+    check('En anglais — l’aide de réinstallation est traduite', b.texte.includes('If the icon does not open: remove it from your home screen, clear the site data in Chrome, then install again.'), b && b.texte);
     b = await voir(() => { Object.defineProperty(navigator, 'standalone', { value: false, configurable: true }); });
     check('En anglais — Safari sur iPhone/iPad : « Share » puis « Add to Home Screen »', !!b && b.etat === 'ios' && /Share icon/.test(b.texte) && /Add to Home Screen/.test(b.texte), b && b.texte);
     b = await voir(() => { Object.defineProperty(navigator, 'standalone', { value: true, configurable: true }); });
