@@ -51,7 +51,14 @@ const DV_LABELS={
     locale:'en-US'
   }
 };
-function dvLang(S){return (S&&S.lang==='en')?'en':'fr';}
+/* Langues connues : le français (texte d'origine), l'anglais (ce fichier) et les langues ajoutées
+   par addLang (l'hébreu : i18n-he.js, écrit de droite à gauche). */
+const LANGS=['fr','en'];
+const PACKS={};
+const DIRS={fr:'ltr',en:'ltr'};
+function normLang(v){return LANGS.indexOf(v)>=0?v:'fr';}
+function langDir(v){return DIRS[normLang(v)]||'ltr';}
+function dvLang(S){return normLang(S&&S.lang);}
 /* Libellé d'un devis dans SA langue (jamais celle de l'interface). */
 function dvLabel(S,key){const L=DV_LABELS[dvLang(S)];return (L&&L[key]!=null)?L[key]:DV_LABELS.fr[key];}
 
@@ -135,8 +142,10 @@ const _dvIndex=new Map(Object.keys(DV_EN).map(k=>[norm(k),DV_EN[k]]));
 /* Texte standard d'un devis dans la langue du devis. Un texte saisi à la main (absent du
    dictionnaire) est rendu tel quel. */
 function dvTr(S,text){
-  if(dvLang(S)!=='en'||text==null)return text;
-  const hit=_dvIndex.get(norm(text));
+  const lg=dvLang(S);
+  if(lg==='fr'||text==null)return text;
+  const idx=lg==='en'?_dvIndex:(PACKS[lg]&&PACKS[lg].dvIdx);
+  const hit=idx?idx.get(norm(text)):null;
   return hit!=null?hit:text;
 }
 
@@ -238,18 +247,36 @@ const UI_PATTERNS=[
   [/^(\d+) devis$/,(m)=>m[1]+' quotes'],
   [/^Installation impossible \((.*)\)\. Essaie par le menu du navigateur\.$/,(m)=>'Installation failed ('+m[1]+'). Try from the browser menu.']
 ];
-/* Traduit un texte d'écran ; renvoie null s'il n'est pas dans le dictionnaire. */
-function uiTr(text){
+/* Traduit un texte d'écran dans la langue demandée (anglais par défaut) ; renvoie null s'il
+   n'est pas dans le dictionnaire. */
+function uiTr(text,lang){
   if(text==null)return null;
   const n=norm(text);
   if(!n)return null;
-  const hit=_uiIndex.get(n);
+  const lg=lang||'en';
+  const idx=lg==='en'?_uiIndex:(PACKS[lg]&&PACKS[lg].uiIdx);
+  const pats=lg==='en'?UI_PATTERNS:(PACKS[lg]&&PACKS[lg].patterns)||[];
+  if(!idx)return null;
+  const hit=idx.get(n);
   if(hit!=null)return hit;
-  for(let i=0;i<UI_PATTERNS.length;i++){const m=UI_PATTERNS[i][0].exec(n);if(m)return UI_PATTERNS[i][1](m);}
+  for(let i=0;i<pats.length;i++){const m=pats[i][0].exec(n);if(m)return pats[i][1](m);}
   return null;
 }
+/* Ajoute une langue : { dir, labels (libellés du devis), dv (contenu standard du devis),
+   ui (interface, clés françaises), patterns (textes construits), titre (titre d'onglet) }. */
+function addLang(code,pack){
+  if(LANGS.indexOf(code)<0)LANGS.push(code);
+  DIRS[code]=pack.dir||'ltr';
+  DV_LABELS[code]=pack.labels||{};
+  PACKS[code]={
+    dir:DIRS[code],titre:pack.titre,patterns:pack.patterns||[],
+    dvIdx:new Map(Object.keys(pack.dv||{}).map(k=>[norm(k),pack.dv[k]])),
+    uiIdx:new Map(Object.keys(pack.ui||{}).map(k=>[norm(k),pack.ui[k]]))
+  };
+}
+function titreOnglet(lang,x){return lang==='en'?'Quote generator — '+x:(PACKS[lang]&&PACKS[lang].titre?PACKS[lang].titre(x):null);}
 
-const api={norm,DV_LABELS,DV_EN,UI_EN,dvLang,dvLabel,dvTr,uiTr};
+const api={norm,DV_LABELS,DV_EN,UI_EN,dvLang,dvLabel,dvTr,uiTr,LANGS,normLang,langDir,addLang,titreOnglet};
 root.I18N=api;
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

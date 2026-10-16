@@ -225,7 +225,7 @@ Ligne de prestation « option à valider par le client » (demande explicite de 
 
 **Notes / À faire**
 - [ ] Traduction anglais (UI + devis).
-- [ ] Traduction hébreu RTL.
+- [x] Traduction hébreu RTL (16 oct. 2026) : interface + devis, `i18n-he.js`, bloc « HÉBREU » de `assets/crm.css`, test `tests/hebreu.test.mjs`. Reste : les textes écrits en dur que l’anglais ne couvre pas encore (voir journal).
 - [ ] Langue de l'UI et langue du devis indépendantes l'une de l'autre.
 - [ ] Parcours d'inscription self-service (actuellement, un compte doit être créé manuellement côté Supabase).
 
