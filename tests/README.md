@@ -23,6 +23,12 @@ Trois suites :
   devis est enregistrée avec lui, les e-mails/WhatsApp suivent la langue du devis, tout le
   contenu standard (prestations, exclusions, conditions générales) a sa traduction, retour au
   français sans reste, téléphone. Port 8899 : `node tests/langues.test.mjs`.
+- `tests/traduction-complete.test.mjs` — **aucun texte français en dur sans traduction** : lit
+  `assets/crm.js` et `index.html` (analyse syntaxique, sans navigateur ni serveur), relève chaque
+  message, confirmation, erreur, état vide et libellé, et échoue en les listant s'il manque une
+  ligne dans `UI_EN` (`i18n.js`). Un texte qui ne s'affiche jamais (classe CSS, étiquette de
+  console) se déclare avec sa raison dans `tests/i18n-hors-ecran.json`. Lancer :
+  `node tests/traduction-complete.test.mjs` (`--lister` donne les manquants prêts à ranger).
 - `tests/onglet-persistant.test.mjs` — l'onglet du CRM **survit au rechargement** (F5),
   via une route dans l'URL (`#/devis`, `#/clients`…) : Tableau de bord au tout premier
   chargement, même onglet après un rechargement, lien direct vers un onglet. Fichier à

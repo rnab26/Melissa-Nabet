@@ -1503,3 +1503,36 @@ un cache à soi ; ce n'est pas fait.
   du périmètre de ce chantier).
 - [ ] La couleur de la barre du système reste celle de la palette par défaut (`#3d3934`) si Melissa choisit une autre palette
   (« Couleurs de l'application ») : `theme-color` n'est pas suivi dynamiquement.
+
+## Traduction anglaise : tous les textes en dur (16 oct. 2026, chantier 41aa747b)
+
+**Constat de Raphaël (16 oct.)** : en anglais, la plupart des messages restaient en français (« Signature enregistrée »,
+« Estimation supprimée », « Catégories enregistrées »). **Cause racine** : le dictionnaire `UI_EN` (`i18n.js`) ne couvrait que les
+libellés des écrans ; les messages (toast), confirmations, erreurs, états vides et gabarits HTML écrits en dur dans `assets/crm.js`
+n'y étaient pas, et le moteur laisse en français ce qu'il ne connaît pas, donc rien ne le signalait.
+
+**Fait**
+- Inventaire par analyse syntaxique de `assets/crm.js` et `index.html` : 1 838 textes repérés ; 145 sont déclarés « hors écran » avec leur raison (`tests/i18n-hors-ecran.json` : classes CSS,
+  identifiants, étiquettes de console), tous les autres sont traduits. `UI_EN` passe de ≈ 230 à 1 642 lignes.
+- Moteur (`i18n.js`) : textes à trous numérotés (`Supprimer {1} ?` -> `Delete {1}?`), pluriels collés (`{2} tâche{3}`), icône devant le
+  texte (`💰 Financier`), lignes composées « A · B », textes standard du devis traduits aussi dans l'éditeur. Un trou n'avale pas la phrase
+  d'un autre écran (un trou collé à une lettre ≤ 3 caractères ; un trou en bout de motif court = un mot ; « {1} sur {2} » = un mot chacun).
+- `i18n.js` est maintenant versionné dans `index.html` (`?v=`) comme `crm.js` : sinon un ancien dictionnaire mis en cache, avec le nouveau
+  code, laissait des textes en français pendant ≈ 10 min après chaque mise en ligne.
+- Dates en toutes lettres (« 16 oct. à 09:57 ») et « à » suivent la langue de l'interface (`uiLoc()`, `uiA()`). Les dates en chiffres
+  (16/10/2026) ne changent pas.
+- LISEZ-MOI de la sauvegarde complète (.zip) : suit la langue de l'interface.
+- Correctif annexe : la recherche affichait le code interne du statut d'un devis (« valide ») au lieu de « Validé / Brouillon ».
+- **Tests permanents** : `tests/traduction-complete.test.mjs` (échoue en listant tout texte en dur sans traduction ; sans navigateur) et,
+  dans `tests/langues.test.mjs`, les cas signalés rejoués par les vraies fonctions + un parcours de 21 écrans en anglais qui exige
+  zéro texte français (`__trManquants`).
+
+**Règle pour la suite** : tout nouveau texte écrit dans le code = une ligne dans `UI_EN`, sinon `traduction-complete.test.mjs` rougit.
+
+**Pas couvert / à savoir**
+- Les textes saisis par l'utilisateur ne sont JAMAIS traduits (noms de clients, titres, notes, légendes) ; seuls les libellés de
+  l'application le sont. Un texte saisi qui serait identique mot pour mot à un libellé de l'application serait traduit (cas rare).
+- Le contrôle statique ne voit pas un texte construit par morceaux à l'exécution (ex. un titre de groupe + un nombre) : le parcours
+  d'écrans de `langues.test.mjs` complète. Les écrans profonds jamais ouverts par ce parcours (éditeur photo, fenêtres de série IA)
+  ne sont couverts que par le contrôle statique.
+- Nombres d'argent à virgule décimale (`0,13 $`) et dates numériques gardent le format français.

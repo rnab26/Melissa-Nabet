@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Écrit dans index.html l'empreinte de assets/crm.css et assets/crm.js (?v=…).
+"""Écrit dans index.html l’empreinte de assets/crm.css, i18n.js et assets/crm.js (?v=…).
 
 Pourquoi : la détection « nouvelle version disponible » du CRM compare l'ETag de index.html.
 Depuis que le CSS et le JS sont des fichiers à part, une modification qui ne touche qu'eux
@@ -19,7 +19,7 @@ def empreinte(chemin):
     return hashlib.sha1((racine / chemin).read_bytes()).hexdigest()[:10]
 
 nouveau = html
-for chemin in ("assets/crm.css", "assets/crm.js"):
+for chemin in ("assets/crm.css", "i18n.js", "assets/crm.js"):
     motif = re.compile(r'(%s)(\?v=[0-9a-f]+)?"' % re.escape(chemin))
     if not motif.search(nouveau):
         sys.exit("introuvable dans index.html : " + chemin)

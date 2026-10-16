@@ -19,6 +19,9 @@ function cgvClauseHtml(c,S){
 /* Séparateur de milliers : celui de la langue du DEVIS en cours de construction (buildDevisHTML
    le pose le temps du rendu), français partout ailleurs. */
 let _fmtLoc='fr-FR';
+/* Langue des dates écrites en toutes lettres (« 16 oct. à 09:57 ») : celle de l'interface. Les dates en chiffres (16/10/2026) restent telles quelles. */
+function uiLoc(){return (typeof uiLang==='function'&&uiLang()==='en')?'en-GB':'fr-FR';}
+function uiA(){return (typeof uiLang==='function'&&uiLang()==='en')?' at ':' à ';}
 function fmt(n){return Math.round(n).toLocaleString(_fmtLoc);}
 /* Dates : on stocke en ISO (aaaa-mm-jj, ce que renvoie le calendrier natif) et on affiche en jj/mm/aa. */
 function isoDate(v){return (v&&/^\d{4}-\d{2}-\d{2}$/.test(v))?v:'';}
@@ -2830,7 +2833,7 @@ function peindreRecherche(q){
     }
   };
   groupe('Clients',res.clients,c=>({t:c.name||'Client',sub:[c.ville,c.phone,c.email].filter(Boolean).join(' · '),go:()=>gotoClient(c.id)}));
-  groupe('Devis',res.devis,d=>({t:(d.title||'Devis')+(d.num?' n°'+d.num:''),sub:[clientName(d.clientId),d.status].filter(Boolean).join(' · '),go:()=>editDevis(d.id)}));
+  groupe('Devis',res.devis,d=>({t:(d.title||'Devis')+(d.num?' n°'+d.num:''),sub:[clientName(d.clientId),d.status==='valide'?'Validé':'Brouillon'].filter(Boolean).join(' · '),go:()=>editDevis(d.id)}));
   groupe('Réalisations',res.realisations,r=>({t:r.title||'Réalisation sans titre',
     sub:[(r.photos||[]).length+' photo(s)',r.lieu,r.categorie,r.published?'en ligne':''].filter(Boolean).join(' · '),
     go:()=>gotoRealisation(r.id)}));
@@ -3010,7 +3013,7 @@ function taskTagsHtml(t,opts){
 function fmtDateTimeFr(ts){
   const d=new Date(ts);
   const pad=n=>String(n).padStart(2,'0');
-  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} à ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}${uiA()}${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function fmtDateFr(iso){
   if(!iso)return '';
@@ -3405,22 +3408,29 @@ function bkProgres(fait,total,texte){
   const t=$('bk-prog-txt');if(t)t.textContent=texte;
 }
 function bkDire(t){const el=$('bk-msg');if(el)el.textContent=t||'';}
+/* Le LISEZ-MOI de l'archive suit la langue de l'interface. Une ligne = un texte, ou [retrait, texte]
+   quand les textes sont alignés en colonne (le retrait ne se traduit pas). */
 const BK_README=[
 'SAUVEGARDE COMPLÈTE — CRM Melissa Nabet','',
 'Ce que contient cette archive :','',
-'  donnees.json        toutes vos données (clients, devis, tâches, réalisations,',
-'                      réglages) et les vignettes des photos.',
-'  photos/             les photos en pleine définition, un dossier par réalisation.',
-'                      Les fichiers « -ia » sont les versions retouchées par l’IA ;',
-'                      l’original est toujours conservé à côté.',
-'  photos/_index.json  ce qui permet à l’application de remettre chaque photo à sa',
-'                      place. Ne pas le supprimer si vous comptez réimporter.','',
+['  donnees.json        ','toutes vos données (clients, devis, tâches, réalisations,'],
+['                      ','réglages) et les vignettes des photos.'],
+['  photos/             ','les photos en pleine définition, un dossier par réalisation.'],
+['                      ','Les fichiers « -ia » sont les versions retouchées par l’IA ;'],
+['                      ','l’original est toujours conservé à côté.'],
+['  photos/_index.json  ','ce qui permet à l’application de remettre chaque photo à sa'],
+['                      ','place. Ne pas le supprimer si vous comptez réimporter.'],'',
 'Pour tout retrouver sur un nouvel appareil :',
-'  ouvrir l’application, se connecter, puis Sauvegarde →',
-'  « Importer une sauvegarde complète (.zip) » et choisir CE fichier.','',
+['  ','ouvrir l’application, se connecter, puis Sauvegarde →'],
+['  ','« Importer une sauvegarde complète (.zip) » et choisir CE fichier.'],'',
 'Les photos sont aussi lisibles directement : ouvrez le dossier photos/.',
 'Ne recompressez pas l’archive avec un autre outil si vous comptez la réimporter.',
-''].join('\n');
+''];
+function bkReadme(){
+  const en=typeof uiLang==='function'&&uiLang()==='en';
+  const tr=x=>en&&x?(I18N.uiTr(x)||x):x;
+  return BK_README.map(l=>Array.isArray(l)?l[0]+tr(l[1]):tr(l)).join('\n');
+}
 
 async function exportComplet(rid){
   if(!(sb&&sbUser&&ownerId)){bkDire('Connexion requise : les photos en pleine définition sont dans le cloud.');return;}
@@ -3461,7 +3471,7 @@ async function exportComplet(rid){
     bkProgres(taches.length,taches.length,'Assemblage de l’archive…');
     const data=await donneesSauvegarde();
     entries.unshift({name:'donnees.json',bytes:enc.encode(JSON.stringify(data))});
-    entries.unshift({name:'LISEZ-MOI.txt',bytes:enc.encode(BK_README)});
+    entries.unshift({name:'LISEZ-MOI.txt',bytes:enc.encode(bkReadme())});
     entries.push({name:'photos/_index.json',bytes:enc.encode(JSON.stringify(index))});
     const zip=buildZip(entries);
     const nom='sauvegarde-complete-'+(rid?slugify((liste[0]||{}).title||'realisation')+'-':'')+new Date().toISOString().slice(0,10)+'.zip';
@@ -6489,7 +6499,7 @@ function openPhotoHistory(r,p){
   const etat=photoPubState(r,p);
   const quand=t=>{
     const d=new Date(t);
-    return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    return d.toLocaleDateString(uiLoc(),{day:'2-digit',month:'short'})+uiA()+d.toLocaleTimeString(uiLoc(),{hour:'2-digit',minute:'2-digit'});
   };
   const lignes=(p.hist||[]).map(h=>`<li><span class="hist-t">${esc(quand(h.t))}</span>
       <span class="hist-k">${esc(HIST_LABEL[h.k]||h.k)}</span>
@@ -9909,7 +9919,7 @@ async function publishRealisation(r,opts){
        immédiat et ne recalcule ni ne repaie rien. */
     if(avant&&r.pub){
       r.pubPrev={at:r.pub.at||quand,fiche:avant,
-        photos:(r.pub.photos||{}),label:r.pub.at?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
+        photos:(r.pub.photos||{}),label:r.pub.at?new Date(r.pub.at).toLocaleString(uiLoc(),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
     }
     r.pub={at:quand,fiche:realisationFicheSig(r),
       order:photosPubliees(r).map(p=>p.id),pids:photosPubliees(r).map(p=>p.id),
@@ -9973,7 +9983,7 @@ async function rollbackRealisation(r){
     /* Les photos reprennent l'identité publiée de ce pas-là : l'écran doit dire la vérité
        sur ce qui est en ligne juste après le retour, pas rester sur l'état d'avant. */
     const avant={at:r.pub&&r.pub.at,fiche:courant,photos:(r.pub&&r.pub.photos)||{},
-      label:(r.pub&&r.pub.at)?new Date(r.pub.at).toLocaleString('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
+      label:(r.pub&&r.pub.at)?new Date(r.pub.at).toLocaleString(uiLoc(),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''};
     (r.photos||[]).forEach(p=>{
       const pub=(prev.photos||{})[p.id];
       if(pub){p.pub=pub;p.publishedAt=pub.at||Date.now();photoLog(p,'retour',pub.vlabel||'');}
