@@ -93,7 +93,7 @@ function ressembleAUnTexteDEcran(t) {
 const AFFICHAGE = /^(toast|askConfirm|bkDire|bkProgres|dire|setBtn)$/;
 
 /* Découpe en morceaux de texte tels que l'écran les montre (un morceau par nœud de texte). */
-const BALISE = /<(?:[^>"']|"[^"]*"|'[^']*')*>/g;
+const PARTIE_HTML = /<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>|<(?:[^>"']|"[^"]*"|'[^']*')*>|[^<]+/gi;
 function morceaux(parts, appelant) {
   let i = 0;
   const s = parts.map(p => p === null ? '{' + (++i) + '}' : p).join('');
@@ -104,9 +104,16 @@ function morceaux(parts, appelant) {
     out.push({ t, source, force: affiche || AFFICHAGE.test(appelant) });
   };
   if (/<[a-zA-Z\/!]/.test(s)) {
-    for (const m of s.matchAll(/\b(?:placeholder|title|aria-label|alt)=(?:"([^"]*)"|'([^']*)')/g)) ajouter(m[1] ?? m[2], 'attribut');
-    /* le texte entre deux balises s'affiche forcément : on l'exige même en un seul mot en minuscules */
-    s.replace(/<(style|script)[\s\S]*?<\/\1>/g, '').replace(BALISE, '\u0001').split('\u0001').forEach(x => ajouter(x, 'html', true));
+    for (const m of s.matchAll(PARTIE_HTML)) {
+      const partie = m[0];
+      if (/^<!--|^<(?:script|style)\b/i.test(partie)) continue;
+      if (partie[0] === '<') {
+        for (const a of partie.matchAll(/\b(?:placeholder|title|aria-label|alt)=(?:"([^"]*)"|'([^']*)')/g)) ajouter(a[1] ?? a[2], 'attribut');
+      } else {
+        /* le texte entre deux balises s'affiche forcément : on l'exige même en un seul mot en minuscules */
+        ajouter(partie, 'html', true);
+      }
+    }
   } else ajouter(s, appelant || 'texte');
   return out;
 }
@@ -123,10 +130,8 @@ for (const r of textesDuCode(fichierJs)) {
 }
 /* Le texte écrit directement dans index.html (écran de connexion, titres, intro des onglets) */
 {
-  const html = fs.readFileSync(path.join(racine, 'index.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
-  const corps = html.replace(/<(style|script)[\s\S]*?<\/\1>/g, '');
-  const parts = [corps];
-  for (const m of morceaux(parts, '')) {
+  const html = fs.readFileSync(path.join(racine, 'index.html'), 'utf8');
+  for (const m of morceaux([html], '')) {
     if (!vus.has(m.t)) vus.set(m.t, { ...m, ligne: 'index.html' });
   }
 }

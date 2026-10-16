@@ -61,7 +61,7 @@ check('Interface en anglais : éditeur de devis traduit (boutons)', editeur.bout
 check('Interface en anglais : champs traduits', editeur.lbl.includes('Quote language') && editeur.lbl.includes('Project title'), editeur.lbl.slice(0, 8).join('|'));
 check('Interface en anglais : le devis, lui, reste en français (indépendance)', /Destiné à/.test(await devisTexte()) && !/Prepared for/.test(await devisTexte()));
 check('Interface en anglais : le sélecteur « Langue du devis » garde « Français / English »',
-  await page.evaluate(() => [...document.getElementById('f-lang').options].map(o => o.textContent).join('|')) === 'Français|English');
+  await page.evaluate(() => [...document.getElementById('f-lang').options].map(o => o.textContent).join('|')) === 'Français|English|עברית');
 
 /* contenu rendu après coup (menu) traduit aussi */
 await page.evaluate(() => toggleDevisMenu());
@@ -187,7 +187,7 @@ check('Interface en anglais : aucun texte français ne reste sur les écrans pri
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(1200);
 check('La langue de l’interface survit au rechargement', (await navTexte())[0] === 'Dashboard', (await navTexte()).join('|'));
-await page.evaluate(() => toggleUiLang());
+await page.evaluate(() => setUiLang('fr'));
 const fr = await page.evaluate(() => ({
   nav: [...document.querySelectorAll('.viewnav .vnav')].map(b => b.textContent.trim().replace(/\s*▾/, '')),
   btn: document.getElementById('ui-lang-btn').textContent,

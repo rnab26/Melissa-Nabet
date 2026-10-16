@@ -4001,3 +4001,18 @@ Détail et marche à suivre : `PROJECT_LOG.md`, « Application installable ».
 ## 14 octobre 2026 — Découpage de index.html : conflit avec la traduction et l'application installable
 - `index.html` (CSS et JS dans `assets/crm.css` et `assets/crm.js`) a été refait à partir de la version de `main` qui contient la traduction anglaise (`i18n.js`) et l'application installable.
 - Piège évité : la détection « nouvelle version » compare l'ETag de `index.html`. Avec le découpage, un changement qui ne touche que le CSS ou le JS ne se voyait plus. Les adresses portent maintenant une empreinte (`?v=…`). **Après toute modification de `assets/crm.css` ou `assets/crm.js` : `python3 scripts/versionner-assets.py`** ; `tests/assets-versionnes.test.mjs` échoue sinon.
+
+## 16 octobre 2026 — Traduction hébraïque et sens de lecture inversé
+
+Chantier « Traduction hébreu et sens de lecture inversé » (cockpit, repris de l’ancien tableau).
+
+**Livré**
+- **Langue de l’interface** « עברית » : réglages ⚙, ou bouton 🌐 de la barre du haut (cycle fr → en → he → fr). Mémorisée par appareil (`mn_ui_lang`). `<html dir="rtl" lang="he">` : le navigateur retourne tout seul flex, grilles et texte ; le bloc « HÉBREU » de `assets/crm.css` ne traite que les côtés écrits en dur (marges, bordures, menus, pastilles). Aucune règle ne touche le français ni l’anglais (tout est sous `html[dir=rtl]`). Le petit script du `<head>` pose `dir=rtl` AVANT le rendu : pas de clignotement au rechargement.
+- **Langue du devis** « עברית » : libellés fixes, contenu standard (prestations, hors prestation, conditions générales), séparateur `he-IL`, pages `dir="rtl"`, polices à glyphes hébreux (Frank Ruhl Libre / Assistant, Google Fonts), fenêtre PDF `dir=rtl`, texte de l’e-mail et du message WhatsApp. Le devis garde SON sens (`#devis dir=ltr` s’il est en français ou en anglais), même dans une interface hébraïque.
+- Architecture : `i18n-he.js` s’enregistre auprès de `i18n.js` par `I18N.addLang(code, {dir, labels, dv, ui, patterns, titre})` — une langue de plus = un fichier de plus, sans toucher au moteur. Les langues inconnues retombent sur le français (`I18N.normLang`).
+- Test permanent : `tests/hebreu.test.mjs` (49 vérifications), dont : tout texte d’écran traduit en anglais l’est en hébreu.
+
+**Limites connues**
+- Les textes écrits en dur que le dictionnaire anglais ne couvre pas encore (écrans longs, états vides, certains en-têtes) restent en français en hébreu aussi. Règle : chaque ligne ajoutée à `UI_EN` doit recevoir sa ligne dans `UI_HE` (le test l’impose).
+- Les conditions générales en hébreu sont une traduction courante, à faire relire par un juriste avant usage contractuel. Vérification visuelle faite en Chromium ; pas sur un vrai iPhone / Android.
+- Le logo « MELISSA NABET » et les adresses e-mail restent en lettres latines (voulu).

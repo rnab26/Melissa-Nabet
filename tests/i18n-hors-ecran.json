@@ -580,6 +580,18 @@
   {
    "texte": "MELISSA NABET",
    "raison": "nom de l’entreprise (marque), identique dans toutes les langues"
+  },
+  {
+   "texte": "<div dir=\"rtl\" class=\"devis-page",
+   "raison": "balise HTML du devis hébreu (ajout de dir=\"rtl\"), jamais affichée comme texte"
+  },
+  {
+   "texte": "EN",
+   "raison": "code de langue affiché tel quel sur le bouton 🌐 (EN / FR), identique dans toutes les langues"
+  },
+  {
+   "texte": "FR",
+   "raison": "code de langue affiché tel quel sur le bouton 🌐 (EN / FR), identique dans toutes les langues"
   }
  ]
 }

@@ -23,6 +23,11 @@ Trois suites :
   devis est enregistrée avec lui, les e-mails/WhatsApp suivent la langue du devis, tout le
   contenu standard (prestations, exclusions, conditions générales) a sa traduction, retour au
   français sans reste, téléphone. Port 8899 : `node tests/langues.test.mjs`.
+- `tests/hebreu.test.mjs` — la **traduction hébraïque** et le **sens de lecture inversé** : tout
+  texte traduit en anglais l'est aussi en hébreu (le test échoue sinon : à chaque ligne ajoutée
+  à `UI_EN`, ajouter sa ligne dans `UI_HE`), `<html dir="rtl">`, mise en page retournée, retour
+  au français sans reste, devis en hébreu (pages, fenêtre PDF, e-mail), indépendance des deux
+  langues, aucun débordement sur téléphone. Port 8899 : `node tests/hebreu.test.mjs`.
 - `tests/traduction-complete.test.mjs` — **aucun texte français en dur sans traduction** : lit
   `assets/crm.js` et `index.html` (analyse syntaxique, sans navigateur ni serveur), relève chaque
   message, confirmation, erreur, état vide et libellé, et échoue en les listant s'il manque une

@@ -52,10 +52,15 @@ function computeTotals(S,inc){
 }
 function buildDevisHTML(S){
   const prevLoc=_fmtLoc;_fmtLoc=dvLabel(S,'locale');
-  try{return buildDevisHTMLInner(S);}finally{_fmtLoc=prevLoc;}
+  try{
+    const h=buildDevisHTMLInner(S);
+    /* Devis en hébreu : chaque page se lit de droite à gauche (le CSS suit l'attribut dir). */
+    if(I18N.langDir(dvLang(S))==='rtl'){ensureHebrewFont();return h.replace(/<div class="devis-page/g,'<div dir="rtl" class="devis-page').replace('</style>','</style><style>.devis{--devis-heading-font:\'Frank Ruhl Libre\',\'David\',serif;--devis-body-font:\'Assistant\',\'Arial Hebrew\',Arial,sans-serif;}</style>');}
+    return h;
+  }finally{_fmtLoc=prevLoc;}
 }
 function buildDevisHTMLInner(S){
-  const L=k=>dvLabel(S,k),X=t=>dvTr(S,t),C=dvLang(S)==='en'?': ':' : ';
+  const L=k=>dvLabel(S,k),X=t=>dvTr(S,t),C=dvLang(S)==='fr'?' : ':': ';
   const B=(S.branding&&S.branding.companyName)?S.branding:DEFAULT_BRANDING;
   const pal=B.palette==='custom'?buildCustomPalette(B.customAccent):(DEFAULT_PALETTES[B.palette]||DEFAULT_PALETTES.actuel);
   const fonts=FONT_THEMES[B.fontTheme]||FONT_THEMES.actuel;
@@ -270,6 +275,15 @@ function ensureFontThemeLoaded(key){
   link.href='https://fonts.googleapis.com/css2?'+t.gfam+'&display=swap';
   document.head.appendChild(link);
 }
+/* Polices à glyphes hébreux pour le devis en hébreu (les polices du devis n'en ont pas). */
+let _hebFont=false;
+function ensureHebrewFont(){
+  if(_hebFont)return;_hebFont=true;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href='https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Frank+Ruhl+Libre:wght@400;500;700&display=swap';
+  document.head.appendChild(link);
+}
 const DEFAULT_BRANDING={
   companyName:'Melissa Nabet',
   logoDataUri:DEFAULT_LOGO_DATAURI,
@@ -397,13 +411,13 @@ function seedComposerFromLibrary(){
   current.cgv=(library.cgv||DEFAULT_CGV).map(c=>({...c}));
   ensureBranding();
   current.branding={...library.branding};
-  current.lang=library.branding.defaultDevisLang==='en'?'en':'fr';
+  current.lang=I18N.normLang(library.branding.defaultDevisLang);
 }
 
 /* ============ DOM: helpers ============ */
 const $=id=>document.getElementById(id);
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
-function render(){$('devis').innerHTML=buildDevisHTML(current);saveDraftDebounced();updateSigStatus();updateDocTypeUI();}
+function render(){$('devis').dir=I18N.langDir(dvLang(current));$('devis').innerHTML=buildDevisHTML(current);saveDraftDebounced();updateSigStatus();updateDocTypeUI();}
 function updateSigStatus(){
   const el=$('sig-status');if(!el)return;
   el.textContent=current.clientSignature?'✓ Signature enregistrée':'Pas encore signé';
@@ -513,7 +527,7 @@ function fillFields(){
   const map={num:'f-num',date:'f-date',raison:'f-raison',contact:'f-contact',cphone:'f-cphone',cemail:'f-cemail',caddr:'f-caddr',ville:'f-ville',cp:'f-cp',siret:'f-siret',proj:'f-proj',surf:'f-surf',paddr:'f-paddr',intro:'f-intro',gAmount:'f-gamount',tva:'f-tva',cur:'f-cur',tl:'f-tl',sigName:'f-sig-name'};
   Object.entries(map).forEach(([k,id])=>{const el=$(id);if(el)el.value=current[k];});
   $('f-gttc').value=current.gIsTTC?'ttc':'ht';
-  $('f-lang').value=current.lang==='en'?'en':'fr';
+  $('f-lang').value=I18N.normLang(current.lang);
   $('f-tva-off').checked=current.tvaOff;$('f-cond-on').checked=current.condOn;$('f-tl-on').checked=current.tlOn;
   $('f-sig-override').checked=current.sigOverride;
   $('sig-name-fld').style.display=current.sigOverride?'block':'none';
@@ -530,7 +544,7 @@ function wireBindings(){
   bind('f-gamount','gAmount',true);bind('f-tva','tva',true);bind('f-tl','tl');bind('f-sig-name','sigName');
   $('f-cur').addEventListener('change',e=>{current.cur=e.target.value;buildPrest();render();});
   $('f-gttc').addEventListener('change',e=>{current.gIsTTC=e.target.value==='ttc';render();});
-  $('f-lang').addEventListener('change',e=>{current.lang=e.target.value==='en'?'en':'fr';render();toast(current.lang==='en'?'Quote language: English':'Langue du devis : français');});
+  $('f-lang').addEventListener('change',e=>{current.lang=I18N.normLang(e.target.value);render();toast(({en:'Quote language: English',he:'שפת ההצעה: עברית'})[current.lang]||'Langue du devis : français');});
   const bc=(id,key)=>$(id).addEventListener('change',e=>{current[key]=e.target.checked;render();});
   bc('f-tva-off','tvaOff');bc('f-cond-on','condOn');bc('f-tl-on','tlOn');
   $('prest').addEventListener('focusin',e=>{const acc=e.target.closest('.acc');if(acc&&acc.dataset.cat)scrollDevisToCat(acc.dataset.cat);});
@@ -1149,8 +1163,8 @@ function openSettingsPanel(){
 
     <div class="ed-eyebrow" style="margin-top:16px">Langues</div>
     <div class="row2">
-      <label class="fld"><span class="lbl">Langue de l’interface</span><select id="set-ui-lang" data-notr onchange="setUiLang(this.value)"><option value="fr" ${uiLang()==='fr'?'selected':''}>Français</option><option value="en" ${uiLang()==='en'?'selected':''}>English</option></select></label>
-      <label class="fld"><span class="lbl">Langue par défaut des nouveaux devis</span><select id="set-devis-lang" data-notr onchange="settingsEdit('defaultDevisLang',this.value)"><option value="fr" ${b.defaultDevisLang!=='en'?'selected':''}>Français</option><option value="en" ${b.defaultDevisLang==='en'?'selected':''}>English</option></select></label>
+      <label class="fld"><span class="lbl">Langue de l’interface</span><select id="set-ui-lang" data-notr onchange="setUiLang(this.value)"><option value="fr" ${uiLang()==='fr'?'selected':''}>Français</option><option value="en" ${uiLang()==='en'?'selected':''}>English</option><option value="he" ${uiLang()==='he'?'selected':''}>עברית</option></select></label>
+      <label class="fld"><span class="lbl">Langue par défaut des nouveaux devis</span><select id="set-devis-lang" data-notr onchange="settingsEdit('defaultDevisLang',this.value)"><option value="fr" ${I18N.normLang(b.defaultDevisLang)==='fr'?'selected':''}>Français</option><option value="en" ${b.defaultDevisLang==='en'?'selected':''}>English</option><option value="he" ${b.defaultDevisLang==='he'?'selected':''}>עברית</option></select></label>
     </div>
     <p class="brand-media-hint" style="margin:0 0 12px;">L’interface est ce que tu lis à l’écran (réglé sur cet appareil). Le devis est ce que lit le client : chaque devis peut changer de langue dans l’éditeur, sans toucher à l’interface.</p>
 
@@ -1307,7 +1321,7 @@ function openDevisWindowHTML(devisHTML,num,companyName,docType,lang){
   const styles=Array.from(document.querySelectorAll('style,link[rel=stylesheet]')).map(n=>n.tagName==='LINK'?`<link rel="stylesheet" href="${n.href}">`:n.outerHTML).join('');
   const dl={lang:lang};
   const docLabel=docType==='facture'?dvLabel(dl,'facture'):dvLabel(dl,'devis');
-  const doc=`<!DOCTYPE html><html lang="${dvLang(dl)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${docLabel} ${esc(num||'')} — ${esc(companyName||'Melissa Nabet')}</title>${styles}
+  const doc=`<!DOCTYPE html><html lang="${dvLang(dl)}" dir="${I18N.langDir(dvLang(dl))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${docLabel} ${esc(num||'')} — ${esc(companyName||'Melissa Nabet')}</title>${styles}
     <style>body{background:#e8e2d7;margin:0;padding:64px 0 20px;} .devis{box-shadow:0 8px 30px rgba(60,50,35,.18);margin:0 auto;transform:none!important;}
     .exportbar{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;gap:8px;justify-content:center;padding:10px;background:rgba(35,32,28,.96);}
     .exportbar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:500;border:none;background:#9a8574;color:#fff;padding:11px 16px;border-radius:4px;cursor:pointer;}
@@ -1348,7 +1362,7 @@ async function exportDevis(){
 function devisMessageTexte(canal){
   /* Le message part avec le devis : il est dans la langue du DEVIS, pas celle de l'interface. */
   const B=(current.branding&&current.branding.companyName)?current.branding:DEFAULT_BRANDING;
-  const L=k=>dvLabel(current,k),C=dvLang(current)==='en'?':':' :';
+  const L=k=>dvLabel(current,k),C=dvLang(current)==='fr'?' :':':';
   const fact=current.docType==='facture';
   const docLabel=fact?L('facture'):L('devis');
   const objet=fact?L('laFacture'):L('leDevis');
@@ -1583,7 +1597,7 @@ function loadDevis(id){
   Object.assign(current,JSON.parse(JSON.stringify(d.snapshot)));
   current.open={}; /* sections repliées par défaut à l'ouverture, même si sauvegardées ouvertes */
   current.docType=d.snapshot.docType||'devis';current.clientSignature=d.snapshot.clientSignature||null;
-  current.lang=d.snapshot.lang==='en'?'en':'fr'; /* un ancien devis n'a pas de langue : il est en français */
+  current.lang=I18N.normLang(d.snapshot.lang); /* un ancien devis n'a pas de langue : il est en français */
   /* Un brouillon n'est pas figé : il doit suivre les derniers réglages de la bibliothèque.
      Seul un devis validé garde son branding gelé, pour l'exactitude historique. */
   if(d.status!=='valide')current.branding={...library.branding};
@@ -10521,7 +10535,7 @@ function handleRealtime(payload){
         else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
           const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
           if(row.id===currentDevisId&&row.data&&row.data.snapshot){
-            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;current.lang=row.data.snapshot.lang==='en'?'en':'fr';
+            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;current.lang=I18N.normLang(row.data.snapshot.lang);
             fillFields();buildPrest();buildExclu();render();
           }
         }
@@ -10871,17 +10885,17 @@ if(typeof document!=='undefined'&&document.getElementById){init();}
 (function(){
   const LS='mn_ui_lang',ATTRS=['placeholder','title','aria-label'];
   let lang='fr';
-  try{lang=localStorage.getItem(LS)==='en'?'en':'fr';}catch(e){}
+  try{lang=I18N.normLang(localStorage.getItem(LS));}catch(e){}
   const tmap=new WeakMap(),amap=new WeakMap();
   const ignore=n=>{const el=n.nodeType===1?n:n.parentElement;return !el||!!el.closest('#devis,script,style,textarea,[data-notr]');};
   function cut(t){const m=/^(\s*)([\s\S]*?)(\s*)$/.exec(t);return [m[1],m[2],m[3]];}
   function trText(n){
     if(ignore(n))return;
     const rec=tmap.get(n);
-    if(lang==='en'){
+    if(lang!=='fr'){
       const src=(rec&&n.data===rec.en)?rec.fr:n.data;
       const [a,core,z]=cut(src);
-      const en=core?I18N.uiTr(core):null;
+      const en=core?I18N.uiTr(core,lang):null;
       if(en==null){tmap.delete(n);if(rec&&n.data===rec.en)n.data=src;return;}
       const out=a+en+z;
       tmap.set(n,{fr:src,en:out});
@@ -10897,9 +10911,9 @@ if(typeof document!=='undefined'&&document.getElementById){init();}
     ATTRS.forEach(at=>{
       if(!el.hasAttribute(at))return;
       const cur=el.getAttribute(at),r=rec[at];
-      if(lang==='en'){
+      if(lang!=='fr'){
         const src=(r&&cur===r.en)?r.fr:cur;
-        const en=I18N.uiTr(src);
+        const en=I18N.uiTr(src,lang);
         if(en==null){delete rec[at];if(r&&cur===r.en)el.setAttribute(at,src);return;}
         rec[at]={fr:src,en};
         if(cur!==en)el.setAttribute(at,en);
@@ -10925,25 +10939,29 @@ if(typeof document!=='undefined'&&document.getElementById){init();}
   }
   function trTitle(n){ /* le titre de l'onglet est hors <body> et construit : motif dédié */
     const src=(n.__fr&&n.data===n.__en)?n.__fr:n.data;
-    if(lang==='en'){
+    if(lang!=='fr'){
       const m=/^Générateur de devis — (.*)$/.exec(src);
-      if(m){n.__fr=src;n.__en='Quote generator — '+m[1];if(n.data!==n.__en)n.data=n.__en;}
+      const tt=m?I18N.titreOnglet(lang,m[1]):null;
+      if(tt){n.__fr=src;n.__en=tt;if(n.data!==n.__en)n.data=n.__en;}
     }else if(n.__fr&&n.data===n.__en){n.data=n.__fr;n.__fr=n.__en=null;}
   }
   function majBouton(){
-    const b=document.getElementById('ui-lang-btn');if(b)b.textContent=lang==='en'?'🌐 FR':'🌐 EN';
+    /* Le bouton propose la langue SUIVANTE du cycle fr -> en -> he -> fr. */
+    const b=document.getElementById('ui-lang-btn');if(b)b.textContent='🌐 '+({fr:'EN',en:'עב',he:'FR'})[lang];
+    if(lang==='he'&&typeof ensureHebrewFont==='function')ensureHebrewFont();
     document.documentElement.lang=lang;
+    document.documentElement.dir=I18N.langDir(lang); /* l'hébreu retourne toute la mise en page */
   }
   function tout(){walk(document.body);titre();majBouton();}
   window.uiLang=()=>lang;
   window.setUiLang=function(v){
-    lang=v==='en'?'en':'fr';
+    lang=I18N.normLang(v);
     try{localStorage.setItem(LS,lang);}catch(e){}
     tout();
     const s=document.getElementById('set-ui-lang');if(s)s.value=lang;
-    if(typeof toast==='function')toast(lang==='en'?'Interface language: English':'Langue de l’interface : français');
+    if(typeof toast==='function')toast(({en:'Interface language: English',he:'שפת הממשק: עברית'})[lang]||'Langue de l’interface : français');
   };
-  window.toggleUiLang=()=>setUiLang(lang==='en'?'fr':'en');
+  window.toggleUiLang=()=>setUiLang(({fr:'en',en:'he',he:'fr'})[lang]);
   /* Aide à l'extension : les textes français encore affichés (peut contenir tes propres données). */
   window.__trManquants=function(){
     const out=new Set(),tw=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;
