@@ -28,6 +28,12 @@ Trois suites :
   à `UI_EN`, ajouter sa ligne dans `UI_HE`), `<html dir="rtl">`, mise en page retournée, retour
   au français sans reste, devis en hébreu (pages, fenêtre PDF, e-mail), indépendance des deux
   langues, aucun débordement sur téléphone. Port 8899 : `node tests/hebreu.test.mjs`.
+- `tests/traduction-complete.test.mjs` — **aucun texte français en dur sans traduction** : lit
+  `assets/crm.js` et `index.html` (analyse syntaxique, sans navigateur ni serveur), relève chaque
+  message, confirmation, erreur, état vide et libellé, et échoue en les listant s'il manque une
+  ligne dans `UI_EN` (`i18n.js`). Un texte qui ne s'affiche jamais (classe CSS, étiquette de
+  console) se déclare avec sa raison dans `tests/i18n-hors-ecran.json`. Lancer :
+  `node tests/traduction-complete.test.mjs` (`--lister` donne les manquants prêts à ranger).
 - `tests/onglet-persistant.test.mjs` — l'onglet du CRM **survit au rechargement** (F5),
   via une route dans l'URL (`#/devis`, `#/clients`…) : Tableau de bord au tout premier
   chargement, même onglet après un rechargement, lien direct vers un onglet. Fichier à

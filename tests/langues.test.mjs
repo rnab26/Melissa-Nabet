@@ -120,6 +120,69 @@ const manquants = await page.evaluate(() => {
 check('Chaque prestation, catégorie, exclusion et clause standard a sa traduction', manquants.length === 0, manquants.join(' || '));
 check('Un texte écrit à la main reste tel quel dans un devis anglais', await page.evaluate(() => I18N.dvTr({ lang: 'en' }, 'Mon texte perso') === 'Mon texte perso'));
 
+/* Messages d'action en anglais — les trois cas signalés le 16 oct. 2026 (« Signature enregistrée »,
+   « Estimation supprimée », « Catégories enregistrées » restaient en français), jouées par les vraies
+   fonctions de l'application. Ce que l'utilisateur écrit (nom de l'estimation) reste intact. */
+await page.evaluate(() => setUiLang('en'));
+const gestes = await page.evaluate(async () => {
+  const att = (ms = 250) => new Promise(r => setTimeout(r, ms));
+  const toastTxt = () => document.getElementById('toast').textContent;
+  const modalTxt = () => document.getElementById('modal').innerText.replace(/\s+/g, ' ').trim();
+  const out = {};
+  /* signature : tracer un trait, valider */
+  openClientSignaturePad(); await att();
+  const cv = document.getElementById('sig-canvas'); const c = cv.getContext('2d');
+  c.beginPath(); c.moveTo(20, 20); c.lineTo(200, 90); c.stroke();
+  saveSignaturePad(); await att();
+  out.signature = toastTxt();
+  /* effacer la signature : confirmation puis message */
+  clearSignature(); await att();
+  out.confirmSignature = modalTxt();
+  document.getElementById('confirm-yes').click(); await att();
+  out.signatureEffacee = toastTxt();
+  /* estimation : suppression d'une estimation au nom saisi à la main */
+  chantierList = [{ id: 'e1', title: 'Villa Lévy — étage', updatedAt: 1, cats: [] }];
+  openChantierListPanel(); await att();
+  out.listeEstimations = modalTxt();
+  deleteChantierRecord('e1'); await att();
+  out.confirmEstimation = modalTxt();
+  document.getElementById('confirm-yes').click(); await att();
+  out.estimationSupprimee = toastTxt();
+  /* catégories : enregistrer */
+  openChantierCatsPanel(); await att();
+  await chCatLibSave(); await att();
+  out.categories = toastTxt();
+  return out;
+});
+check('Interface en anglais : « Signature enregistrée » -> Signature saved', gestes.signature === 'Signature saved', gestes.signature);
+check('Interface en anglais : confirmation d’effacement de la signature traduite', /Clear the client's signature\?/.test(gestes.confirmSignature) && /Confirm/.test(gestes.confirmSignature) && /Cancel/.test(gestes.confirmSignature), gestes.confirmSignature);
+check('Interface en anglais : « Signature effacée » -> Signature cleared', gestes.signatureEffacee === 'Signature cleared', gestes.signatureEffacee);
+check('Interface en anglais : confirmation de suppression d’une estimation traduite', /Delete this estimate\?/.test(gestes.confirmEstimation), gestes.confirmEstimation);
+check('Interface en anglais : « Estimation supprimée » -> Estimate deleted', gestes.estimationSupprimee === 'Estimate deleted', gestes.estimationSupprimee);
+check('Interface en anglais : « Catégories enregistrées » -> Categories saved', gestes.categories === 'Categories saved', gestes.categories);
+check('Ce que l’utilisateur a écrit (nom d’une estimation) reste intact en anglais', /Villa Lévy — étage/.test(gestes.listeEstimations), gestes.listeEstimations);
+await page.evaluate(() => closeModal());
+
+/* aucun texte français ne reste à l'écran sur les écrans principaux (en anglais), hors données de l'utilisateur */
+const restes = await page.evaluate(async () => {
+  const att = (ms = 200) => new Promise(r => setTimeout(r, ms));
+  const tout = new Set();
+  const ecrans = [
+    () => showView('dashboard'), () => { showView('devis'); showTab('editor'); }, () => { showView('devis'); showTab('list'); },
+    () => showView('clients'), () => showView('realisations'), () => showView('boutique'),
+    () => openSettingsPanel(), () => { closeModal(); openLibraryPanel(); }, () => { closeModal(); openCgvPanel(); },
+    () => { closeModal(); openBackupPanel(); }, () => { closeModal(); openSyncPanel(); }, () => { closeModal(); openRecherche(); },
+    () => { closeModal(); openClientStatusesPanel(); }, () => { closeModal(); openTaskModal(); }, () => { closeModal(); openTaskCategoriesPanel(); },
+    () => { closeModal(); openChantierCatsPanel(); }, () => { closeModal(); openSitePanel(); }, () => { closeModal(); openIaSettingsPanel(); },
+    () => { closeModal(); openIaModelsPanel(); }, () => { closeModal(); openTxtUsagePanel(); }, () => { closeModal(); openShootingMemo(); },
+  ];
+  for (const f of ecrans) { try { f(); } catch (e) {} await att(); __trManquants().forEach(t => tout.add(t)); }
+  closeModal();
+  /* marque de l'entreprise et numéro de version : identiques dans toutes les langues */
+  return [...tout].filter(t => !/^(MELISSA NABET|Aa|v14 · .*|fal\.ai\/models)$/.test(t));
+});
+check('Interface en anglais : aucun texte français ne reste sur les écrans principaux', restes.length === 0, restes.slice(0, 15).join(' || '));
+
 /* mémorisation de l'interface après rechargement, puis retour au français */
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(1200);
