@@ -592,6 +592,14 @@
   {
    "texte": "FR",
    "raison": "code de langue affiché tel quel sur le bouton 🌐 (EN / FR), identique dans toutes les langues"
+  },
+  {
+   "texte": "plus-cockpit",
+   "raison": "identifiant d'élément"
+  },
+  {
+   "texte": "Mélissa",
+   "raison": "nom transmis au module Cockpit (data-utilisateur), jamais affiché dans le CRM"
   }
  ]
 }

@@ -156,6 +156,7 @@ const UI_HE={
   'Typographie du devis':'גופנים של ההצעה','Raccourcis':'קיצורים','Couleurs de l\'application':'צבעי האפליקציה',
   'Bibliothèque & Hors prestation':'ספרייה ופריטים שאינם כלולים','Conditions générales':'תנאים כלליים','Catégories de chantier':'קטגוריות פרויקט',
   'Photos & retouche IA':'תמונות ועריכה בבינה מלאכותית','Rédaction IA — consommation':'כתיבה בבינה מלאכותית — צריכה','↺ Tout réinitialiser':'↺ איפוס הכול',
+  'Cockpit indisponible pour le moment':'הקוקפיט אינו זמין כרגע','Cockpit':'Cockpit',
   'Réglages enregistrés':'ההגדרות נשמרו',
   /* tableau de bord */
   'Mes tâches':'המשימות שלי','+ Nouvelle tâche':'+ משימה חדשה','🔍 Filtrer':'🔍 סינון','↑ Ordre':'↑ סדר','⚙ Catégories':'⚙ קטגוריות','Assistant · à faire':'עוזר · לביצוע',

@@ -2747,12 +2747,14 @@ function menuPlusMobile(){
       <button class="mini" id="plus-reglages">⚙ Réglages</button>
       <button class="mini" id="plus-sauvegarde">💾 Sauvegarde</button>
       <button class="mini" id="plus-sync">🔄 Synchronisation</button>
+      ${cockpitPret&&loggedIn?'<button class="mini" id="plus-cockpit" data-notr>Cockpit</button>':''}
     </div>`);
   syncViewSwitches();
   const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
   go('plus-reglages',openSettingsPanel);
   go('plus-sauvegarde',openBackupPanel);
   go('plus-sync',openSyncPanel);
+  go('plus-cockpit',()=>{const b=$('cockpit-btn');if(b)b.click();});
 }
 function devisMenuMobile(){
   openModal(`<button class="modal-x" onclick="closeModal()">×</button>
@@ -10330,7 +10332,7 @@ function initSupabase(){
     document.getElementById('login-overlay').style.display='flex';
     setSyncStatus('sync');
     sb.auth.getSession().then(({data})=>{if(data&&data.session){onLogin(data.session);}});
-    sb.auth.onAuthStateChange((_e,session)=>{if(session){onLogin(session);}else if(!offlineMode){loggedIn=false;document.getElementById('login-overlay').style.display='flex';setSyncStatus('sync');}});
+    sb.auth.onAuthStateChange((_e,session)=>{if(session){onLogin(session);}else if(!offlineMode){loggedIn=false;{const cb=$('cockpit-btn');if(cb)cb.hidden=true;}document.getElementById('login-overlay').style.display='flex';setSyncStatus('sync');}});
   }catch(e){console.error(e);setSyncStatus('local');}
 }
 function doLogin(){
@@ -10345,12 +10347,31 @@ function doLogin(){
    de données réelle — cf. incident du 20/08/2026). Fonction gardée uniquement pour les tests
    automatisés en développement (appelée directement via la console, jamais depuis un bouton). */
 function loginOffline(){offlineMode=true;document.getElementById('login-overlay').style.display='none';setSyncStatus('local');toast('Mode hors ligne — données de cet appareil');}
+/* Bouton « Cockpit » (suivi du travail de Claude) : réservé au compte connecté, qui est l'admin du CRM
+   (réponse de Raphaël, 16 oct. 2026 : « moi seul, compte admin »). Le module n'est chargé qu'APRÈS la
+   connexion : un visiteur non connecté ne reçoit rien, pas même le bouton. Il s'ouvre depuis #cockpit-btn
+   (barre du haut) et, sur téléphone où cette barre est repliée, depuis « Plus › Cockpit ». Si le module ne
+   charge pas (réseau), le bouton reste caché et on le dit une fois. */
+let cockpitPret=false,cockpitEssai=false;
+function chargerCockpit(){
+  const b=$('cockpit-btn');if(!b)return;if(cockpitPret){b.hidden=false;return;}if(cockpitEssai)return;cockpitEssai=true;
+  const s=document.createElement('script');
+  s.src='https://rnab26.github.io/Cockpit-General/embed/cockpit-embed.js';
+  s.setAttribute('data-cle','a5d73e4acc474ad1b7e889d54d27518a3ac8addf6bb1460dbc49724e9deb7457');
+  s.setAttribute('data-utilisateur','Mélissa');
+  s.setAttribute('data-mode','bouton');
+  s.setAttribute('data-declencheur','#cockpit-btn');
+  s.onload=()=>{cockpitPret=true;b.hidden=false;};
+  s.onerror=()=>{cockpitEssai=false;toast('Cockpit indisponible pour le moment');};
+  document.body.appendChild(s);
+}
 function onLogin(session){
   if(!session||!session.user)return;
   sbUser=session.user;ownerId=sbUser.id;
   if(loggedIn)return;loggedIn=true;
   document.getElementById('login-overlay').style.display='none';offlineMode=false;
   setSyncStatus('sync');
+  chargerCockpit();
   loadAll().then(subscribeRealtime);
 }
 let _loadAllRetryT=null,_loadAllRetryDelay=5000;
