@@ -1261,8 +1261,7 @@
     .ed-panel{flex:1 1 auto;max-height:none;}
   }
 
-/* ============ HÉBREU : SENS DE LECTURE INVERSÉ (droite à gauche) ============
-   Le navigateur retourne déjà l'ordre des éléments (flex, grille, texte) dès que <html dir="rtl">
+/* ============ HÉBREU : SENS DE LECTURE INVERSÉ (droite à gauche) =====   Le navigateur retourne déjà l'ordre des éléments (flex, grille, texte) dès que <html dir="rtl">
    (langue d'interface « עברית »). Ce bloc ne traite que ce qui est écrit en dur avec un côté
    (left / right, bordure gauche, marge gauche…) et qui doit passer de l'autre côté. Tout est
    sous html[dir=rtl] : en français et en anglais, rien ne change. Les poignées de recadrage et les
@@ -1312,3 +1311,5 @@ html[dir=rtl] .rz-ph-num,html[dir=rtl] .rz-ph-badge{left:auto;right:6px;}
 .devis-page[dir=rtl] .dv-tva-note{text-align:left;}
 .devis-page[dir=rtl] *{letter-spacing:normal!important;text-transform:none;}
 .devis-page[dir=rtl] .dv-item .it-meta{font-style:normal;}
+=======
+  .rz-trad{margin:14px 0 4px;padding:10px 12px;border:1px dashed var(--panel-edge);border-radius:4px;}
