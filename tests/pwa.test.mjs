@@ -59,8 +59,8 @@ catch (e) { check('manifest.webmanifest est un JSON valide', false, e.message); 
 check('Manifeste : un nom, et un nom court de 12 caractères au plus (libellé sous l’icône)',
   typeof manifeste.name === 'string' && manifeste.name.length > 0 && typeof manifeste.short_name === 'string' && manifeste.short_name.length > 0 && manifeste.short_name.length <= 12,
   manifeste.name + ' / ' + manifeste.short_name + ' (' + (manifeste.short_name || '').length + ' car.)');
-check('Manifeste : un identifiant (id) qui ne dépend pas de l’adresse du site',
-  typeof manifeste.id === 'string' && manifeste.id.length > 0 && !/^[a-z]+:|^\//i.test(manifeste.id), manifeste.id);
+check('Manifeste : id = "/Melissa-Nabet/" (chemin du CRM en ligne = ce que Chrome recommande ; 16 oct. 2026 : « melissa-nabet-crm » tombait sur /melissa-nabet-crm, HORS du CRM, et l\'icône créée sur Android ne s\'ouvrait pas)',
+  manifeste.id === '/Melissa-Nabet/', manifeste.id);
 check('Manifeste : start_url et scope sont RELATIFS ("./") — le CRM vit sous /Melissa-Nabet/ en ligne',
   manifeste.start_url === './' && manifeste.scope === './', manifeste.start_url + ' / ' + manifeste.scope);
 check('Manifeste : display « standalone » (fenêtre à part, sans barre d’adresse), langue fr',
@@ -247,8 +247,8 @@ try {
       mf.display + ' ' + hexDe(mf.themeColor) + ' ' + hexDe(mf.backgroundColor));
     check('Chromium voit les trois icônes, à des adresses qui existent', Array.isArray(mf.icons) && mf.icons.length === 3, JSON.stringify((mf.icons || []).map((i) => i.url.replace(racine.url, ''))));
     const idA = await cdpA.send('Page.getAppId').catch(() => ({}));
-    check('Identité de l’application : indépendante de l’adresse, distincte des autres sites de ce domaine',
-      mf.id === racine.origine + '/' + manifeste.id && idA.appId === mf.id, mf.id);
+    check('Identité de l’application : le chemin du CRM en ligne, distincte des autres sites de ce domaine (cockpit…)',
+      mf.id === racine.origine + '/Melissa-Nabet/' && idA.appId === mf.id, mf.id);
 
     // Icônes : lues par le navigateur, pixel par pixel.
     const fond = rgbDe(manifeste.background_color);
@@ -469,6 +469,9 @@ try {
     const mfB = mB.manifest || {};
     check('Sous /Melissa-Nabet/ : démarrage et périmètre résolus sur /Melissa-Nabet/, manifeste sans avertissement',
       mfB.startUrl === sousChemin.url && mfB.scope === sousChemin.url && mB.errors.length === 0, mfB.startUrl + ' / ' + mfB.scope);
+    const idB = await cdpB.send('Page.getAppId').catch(() => ({}));
+    check('Sous /Melissa-Nabet/ : l’identité de l’application est /Melissa-Nabet/ (= scope = start_url = id recommandé par Chrome)',
+      mfB.id === sousChemin.url && idB.appId === sousChemin.url && idB.recommendedId === '/Melissa-Nabet/' && mfB.id.startsWith(mfB.scope), mfB.id + ' / recommandé ' + idB.recommendedId);
     const icoB = await B.page.evaluate(async (urls) => Promise.all(urls.map(async (u) => (await fetch(u)).status)), (mfB.icons || []).map((i) => i.url));
     check('Sous /Melissa-Nabet/ : les trois icônes et l’icône iPhone se chargent (aucun chemin absolu caché)',
       icoB.length === 3 && icoB.every((s) => s === 200) && await B.page.evaluate(async () => (await fetch(document.querySelector('link[rel="apple-touch-icon"]').href)).status) === 200, JSON.stringify(icoB));
