@@ -43,6 +43,9 @@ Trois suites :
   public : il doit expliquer, avec les chiffres réels, pourquoi le site n'affiche aucune
   section (rien de publié / aucune catégorie / une seule catégorie) et le confirmer quand
   elles existent. Port 8899 : `node tests/site-sections.test.mjs`.
+- `tests/realisations-langues.test.mjs` — les **traductions d'une réalisation** (nom, lieu, mission, texte, légende de photo)
+  saisies dans la fiche du CRM et publiées dans le manifeste ; le site, lui, est éprouvé par `tests/site.test.mjs`. Port 8899 :
+  `node tests/realisations-langues.test.mjs`.
 - `tests/site-langues.test.mjs` — les **langues et le journal** du site, réglés depuis le CRM
   (⚙ Le site public). Suit un texte écrit dans le panneau jusqu'au manifeste, et vérifie
   surtout qu'un champ **non traduit ne part pas vide** en ligne. Serveur sur le port 8899,

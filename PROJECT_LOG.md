@@ -1424,8 +1424,10 @@ Chrome et ajoute `in-incognito` : le test et les mesures utilisent un profil non
   l'icône), `display: standalone`, `lang: fr`, `start_url` et `scope` `"./"` (RELATIFS : en ligne le CRM vit sous `/Melissa-Nabet/`,
   en local à la racine), `theme_color` `#3d3934` (la barre du haut du CRM, qui est aussi sa barre du bas), `background_color`
   `#e9e4db` (le fond de page tel que `applySiteTheme()` l'applique — Chromium l'a mesuré — et non le `#e8e2d7` écrit dans le
-  `:root`, remplacé au chargement). `id` `melissa-nabet-crm` : il se résout sur l'ORIGINE (spec W3C) ; un `id` `"./"` serait devenu la
-  racine de `rnab26.github.io`, que partagent le cockpit et les autres sites, et les aurait confondus.
+  `:root`, remplacé au chargement). `id` `/Melissa-Nabet/` (corrigé le 16 oct. 2026 : l'`id` se résout sur l'ORIGINE (spec W3C), donc `melissa-nabet-crm` tombait sur
+  `rnab26.github.io/melissa-nabet-crm`, HORS du CRM ; Chrome (`Page.getAppId`) recommandait `/Melissa-Nabet/`. Sur le téléphone de
+  Raphaël l'icône créée disait « Impossible d'ouvrir l'application » ; cause probable, non prouvée sur un vrai Android — le test
+  desktop passait déjà. Un `id` `"./"` serait devenu la racine du domaine, partagée avec le cockpit : à éviter).
 - `icons/` : `icon-192.png` et `icon-512.png` (purpose `any`), `icon-maskable-512.png` (Android découpe l'icône en rond, goutte…),
   `apple-touch-icon.png` (180, iPhone). Opaques, fond `#e9e4db`, monogramme MN noir. Source : le logo par défaut déjà embarqué
   dans `index.html` (`DEFAULT_LOGO_DATAURI`, 620 px) ; `favicon.png` (256 px) aurait été flou à 512. Pour la maskable, tout le dessin
@@ -1503,3 +1505,21 @@ un cache à soi ; ce n'est pas fait.
   du périmètre de ce chantier).
 - [ ] La couleur de la barre du système reste celle de la palette par défaut (`#3d3934`) si Melissa choisit une autre palette
   (« Couleurs de l'application ») : `theme-color` n'est pas suivi dynamiquement.
+
+## Site public en anglais et en hébreu — projets traduits (16 oct. 2026, chantier 997a3735)
+
+Constat de Raphaël : le bouton « עב » était en ligne mais titres, à propos et projets restaient en français.
+Cause (vérifiée sur le manifeste en ligne) : (1) le site ne lisait AUCUNE traduction pour les réalisations
+(titre, lieu, mission, texte, légendes), alors que le CRM n'avait nulle part où les saisir ; (2) les mots
+courants (catégories, « Rénovation complète », villes) n'avaient aucune traduction ; (3) libellés
+d'accessibilité, titre de l'onglet et description restaient en français.
+
+- [x] Site (`site-vitrine/index.html`) : `textePro()` lit `i18n[langue]` d'une réalisation, `legende()` celui d'une photo ;
+      dictionnaire `VALEURS` (en/he) pour catégories, missions, villes, sous-titre d'origine ; libellés d'accessibilité,
+      titre/description/`og:locale` suivent la langue. Priorité : traduction de Melissa > dictionnaire > français.
+- [x] CRM : fiche réalisation → bloc « traductions pour le site public » (nom, lieu, mission, texte), légende d'une photo
+      par langue ; partent dans le manifeste (`i18n`), seulement si remplis ; une traduction ajoutée = « à republier ».
+- [x] Tests : `tests/site.test.mjs` (202 OK), `tests/realisations-langues.test.mjs` (nouveau, 14 OK), suites voisines vertes.
+- [ ] **Les textes de Melissa (sous-titre, à propos, 3 projets en ligne) n'ont toujours pas de traduction saisie** : c'est du
+      contenu à elle, jamais traduit automatiquement sous son nom. Question posée à Raphaël dans le cockpit.
+- [ ] Interface du CRM en hébreu : chantier 5b2089ef (autre agent), non touché ici.
