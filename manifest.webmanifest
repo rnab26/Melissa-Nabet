@@ -2,7 +2,7 @@
   "name": "CRM Melissa Nabet",
   "short_name": "CRM Melissa",
   "description": "Clients, devis, chantiers et réalisations de Melissa Nabet.",
-  "id": "melissa-nabet-crm",
+  "id": "/Melissa-Nabet/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
