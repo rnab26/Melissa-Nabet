@@ -178,6 +178,7 @@ const UI_HE={
   'Application':'אפליקציה',
   'Installe le CRM sur cet appareil : il s’ouvre dans sa propre fenêtre, avec son icône, comme une application. Comme dans le navigateur, il faut internet pour s’en servir.':'התקנת ה-CRM במכשיר הזה: הוא נפתח בחלון משלו, עם אייקון משלו, כמו אפליקציה. כמו בדפדפן, נדרש חיבור לאינטרנט כדי להשתמש בו.',
   'Installer l’application':'התקנת האפליקציה','Installation…':'מתקין…',
+  'Si l’icône ne s’ouvre pas : supprime-la de l’écran d’accueil, efface les données du site dans Chrome, puis réinstalle.':'אם הסמל לא נפתח: הסר אותו ממסך הבית, מחק את נתוני האתר ב-Chrome ואז התקן מחדש.',
   'Application installée ✓':'האפליקציה הותקנה ✓',
   'Tu utilises déjà le CRM en mode application.':'אתה כבר משתמש ב-CRM כאפליקציה.',
   'Ouvre-la depuis son icône « CRM Melissa », sur ton écran d’accueil ou dans tes applications.':'פתח אותה מהאייקון „CRM Melissa” במסך הבית או בין האפליקציות שלך.',

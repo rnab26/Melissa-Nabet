@@ -10808,6 +10808,9 @@ function blocInstallationHtmlBrut(){
   const mn=window.mnInstall||{};
   const env=lireEnvInstallation();
   const etat=etatInstallation(env);
+  /* Piège connu (16 oct. 2026) : une ancienne installation cassée peut empêcher la nouvelle de s'ouvrir.
+     L'aide est montrée là où l'on installe ou réinstalle, jamais sur iPhone (autre procédure) ni sur un navigateur sans installation. */
+  const aide=(etat==='invite'||etat==='menu'||(etat==='installee'&&!env.application))?`<p class="inst-aide">Si l’icône ne s’ouvre pas : supprime-la de l’écran d’accueil, efface les données du site dans Chrome, puis réinstalle.</p>`:'';
   const note=(mn.msg&&etat!=='installee')?`<p class="inst-msg${mn.msg.erreur?' err':''}" role="status">${esc(mn.msg.texte)}</p>`:'';
   let corps;
   if(etat==='installee'){
@@ -10830,7 +10833,7 @@ function blocInstallationHtmlBrut(){
   }
   return `<div id="inst-bloc" data-etat="${etat}">
     <div class="ed-eyebrow">Application</div>
-    <div class="inst-box">${corps}${note}</div>
+    <div class="inst-box">${corps}${note}${aide}</div>
   </div>`;
 }
 /* Le bloc se redessine tout seul quand l'invite arrive, quand l'installation se termine ou quand le CRM

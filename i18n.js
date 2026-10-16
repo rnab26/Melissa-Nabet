@@ -233,6 +233,7 @@ const UI_EN={
   'Application':'Application',
   'Installe le CRM sur cet appareil : il s’ouvre dans sa propre fenêtre, avec son icône, comme une application. Comme dans le navigateur, il faut internet pour s’en servir.':'Install the CRM on this device: it opens in its own window, with its own icon, like an app. As in the browser, you need internet to use it.',
   'Installer l’application':'Install the app','Installation…':'Installing…',
+  'Si l’icône ne s’ouvre pas : supprime-la de l’écran d’accueil, efface les données du site dans Chrome, puis réinstalle.':'If the icon does not open: remove it from your home screen, clear the site data in Chrome, then install again.',
   'Application installée ✓':'App installed ✓',
   'Tu utilises déjà le CRM en mode application.':'You are already using the CRM as an app.',
   'Ouvre-la depuis son icône « CRM Melissa », sur ton écran d’accueil ou dans tes applications.':'Open it from its “CRM Melissa” icon, on your home screen or in your apps.',
