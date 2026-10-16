@@ -211,6 +211,7 @@ const UI_EN={
   'Typographie du devis':'Quote typography','Raccourcis':'Shortcuts','Couleurs de l\'application':'App colours',
   'Bibliothèque & Hors prestation':'Library & Not included','Conditions générales':'General terms and conditions','Catégories de chantier':'Site categories',
   'Photos & retouche IA':'Photos & AI retouching','Rédaction IA — consommation':'AI writing — usage','↺ Tout réinitialiser':'↺ Reset everything',
+  'Cockpit indisponible pour le moment':'Cockpit unavailable right now','Cockpit':'Cockpit',
   'Réglages enregistrés':'Settings saved',
   /* tableau de bord */
   'Mes tâches':'My tasks','+ Nouvelle tâche':'+ New task','🔍 Filtrer':'🔍 Filter','↑ Ordre':'↑ Order','⚙ Catégories':'⚙ Categories','Assistant · à faire':'Assistant · to do',
