@@ -611,6 +611,7 @@
 </main>
 
 <footer id="footer">Melissa Nabet — Architecture d’intérieur</footer>
+<p id="auto-note" hidden style="text-align:center;font-size:11px;color:var(--stone-light);margin:-26px 0 30px;padding:0 22px;" dir="auto"></p>
 
 <!-- Un bouton pour écrire, présent partout. Il n'apparaît que si un numéro est publié :
      un bouton de contact sans destinataire est pire que pas de bouton. -->
@@ -672,7 +673,7 @@ var MOTS = {
         titreSite:'Architecture d’intérieur',
         seoDesc:'Réalisations d’architecture d’intérieur : chantiers livrés, photographiés et présentés projet par projet.',
         ogAlt:'Réalisation d’architecture d’intérieur', ogLocale:'fr_FR' },
-  en: { realisations:'Works', personnelles:'Personal work', apropos:'About', journal:'Journal', whatsappCourt:'Message',
+  en: { autoNote:'Some texts are translated automatically.', realisations:'Works', personnelles:'Personal work', apropos:'About', journal:'Journal', whatsappCourt:'Message',
         retour:'← All works', suivant:'Next project', tout:'All',
         photos:'photographs', agrandir:'Enlarge photograph', photo:'photograph',
         boutique:'For sale', surDemande:'Price on request', ecrireWa:'Message on WhatsApp',
@@ -690,7 +691,7 @@ var MOTS = {
         titreSite:'Interior architecture',
         seoDesc:'Interior architecture projects: completed sites, photographed and presented project by project.',
         ogAlt:'Interior architecture project', ogLocale:'en_US' },
-  he: { realisations:'עבודות', personnelles:'עבודות אישיות', apropos:'אודות', journal:'יומן', whatsappCourt:'כתבו',
+  he: { autoNote:'חלק מהטקסטים מתורגמים אוטומטית.', realisations:'עבודות', personnelles:'עבודות אישיות', apropos:'אודות', journal:'יומן', whatsappCourt:'כתבו',
         retour:'→ כל העבודות', suivant:'הפרויקט הבא', tout:'הכול',
         photos:'תמונות', agrandir:'הגדלת התמונה', photo:'תמונה',
         boutique:'למכירה', surDemande:'מחיר לפי בקשה', ecrireWa:'שלחו הודעה בוואטסאפ',
@@ -712,7 +713,7 @@ var MOTS = {
 /* Légende d'une photo : sa traduction si Melissa l'a écrite, sinon la légende d'origine. */
 function legende(ph) {
   var tr = ((ph.i18n || {})[langue]) || {};
-  return (tr.caption || '').trim() || (ph.caption || '').trim();
+  return (tr.caption || '').trim() || auto((ph.caption || '').trim());
 }
 /* Les libellés d'accessibilité et l'en-tête de la page (titre de l'onglet, description,
    aperçu de partage) suivent la langue, comme le reste. Les robots qui ne lisent pas le
@@ -770,13 +771,16 @@ function texteSite(cle, src) {
   var s = src || infosSite || {};
   var tr = (s.i18n || {})[langue] || {};
   var base = (s[cle] || '').trim();
-  /* Le sous-titre d'origine du site (« Architecture d'intérieur ») a sa traduction en dur ;
-     un sous-titre écrit par Melissa, lui, n'est jamais traduit à sa place. */
-  return (tr[cle] || '').trim() || (cle === 'subtitle' ? valeur(base) : base);
+  /* Le sous-titre d'origine du site (« Architecture d'intérieur ») a sa traduction en dur.
+     Le message WhatsApp de départ part au nom de Melissa : il n'est jamais traduit seul. */
+  var t = (tr[cle] || '').trim();
+  if (t) return t;
+  if (cle === 'subtitle' && valeur(base) !== base) return valeur(base);
+  return cle === 'waTexte' ? base : auto(base);
 }
 function texteEntree(j, cle) {
   var tr = ((j.i18n || {})[langue]) || {};
-  return (tr[cle] || '').trim() || (j[cle] || '').trim();
+  return (tr[cle] || '').trim() || auto((j[cle] || '').trim());
 }
 /* ---- Mots courants de la vitrine, traduits une fois pour toutes ----------------------
    Les catégories, les types de mission et les villes d'une réalisation se saisissent dans
@@ -837,13 +841,102 @@ function valeur(v) {
 /* Un champ d'une réalisation : la traduction de Melissa, sinon le dictionnaire (pour les
    mots courants seulement), sinon le français. Le titre et le texte de présentation,
    eux, ne passent JAMAIS par le dictionnaire : ils n'ont de sens qu'écrits par elle. */
+/* ---- Traduction automatique en direct (gratuite, sans clé) -----------------------------
+   Décision de Raphaël (19 oct. 2026) : les textes de Melissa que personne n'a traduits dans
+   le CRM s'affichent quand même dans la langue du visiteur, sans aucune action de sa part.
+   Service : MyMemory (api.mymemory.translated.net), public, sans clé ni compte — la page
+   n'a donc toujours aucun secret. Règles :
+   - une traduction écrite par Melissa dans le CRM GAGNE toujours (elle est lue avant) ;
+   - le nom d'un projet n'est jamais traduit (nom propre) ;
+   - le résultat est gardé dans le navigateur du visiteur (`mn-auto`) : un texte n'est
+     demandé qu'une fois, et l'affichage suivant est immédiat ;
+   - en attendant la réponse, ou si le service est en panne, c'est le français d'origine
+     qui s'affiche — jamais un trou ni une erreur ;
+   - une note discrète dit au visiteur que ces textes sont traduits automatiquement. */
+var AUTO = { cache: null, enCours: {}, echec: {}, utilise: false, minuteur: 0 };
+var AUTO_MAX = 450;   /* limite de MyMemory : 500 octets par demande */
+function autoCle(l, t) {
+  var h = 5381;
+  for (var i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+  return l + ':' + t.length + ':' + h;
+}
+function autoLire() {
+  if (AUTO.cache) return AUTO.cache;
+  AUTO.cache = {};
+  try { AUTO.cache = JSON.parse(localStorage.getItem('mn-auto') || '{}') || {}; } catch (e) {}
+  return AUTO.cache;
+}
+function autoGarder() {
+  try {
+    var c = autoLire(), ks = Object.keys(c);
+    if (ks.length > 300) { ks.slice(0, ks.length - 300).forEach(function (k) { delete c[k]; }); }
+    localStorage.setItem('mn-auto', JSON.stringify(c));
+  } catch (e) {}
+}
+function autoMorceaux(t) {
+  var out = [];
+  t.split('\n').forEach(function (ligne, i) {
+    var cur = '';
+    (ligne.match(/[^.!?…]+[.!?…]*\s*/g) || [ligne]).forEach(function (ph) {
+      if (cur && (cur + ph).length > AUTO_MAX) { out.push({ l: i, t: cur }); cur = ''; }
+      cur += ph;
+      while (cur.length > AUTO_MAX) { out.push({ l: i, t: cur.slice(0, AUTO_MAX) }); cur = cur.slice(AUTO_MAX); }
+    });
+    if (cur) out.push({ l: i, t: cur });
+  });
+  return out;
+}
+function autoDemande(morceau, l) {
+  if (!morceau.t.trim()) return Promise.resolve(morceau.t);
+  var u = 'https://api.mymemory.translated.net/get?q=' + encodeURIComponent(morceau.t) + '&langpair=fr|' + l;
+  return fetch(u).then(function (r) { if (!r.ok) throw new Error('mymemory ' + r.status); return r.json(); })
+    .then(function (j) {
+      var t = j && j.responseData && j.responseData.translatedText;
+      if (Number(j && j.responseStatus) !== 200 || typeof t !== 'string' || !t.trim() ||
+          /MYMEMORY WARNING|QUERY LENGTH LIMIT|INVALID/i.test(t)) throw new Error('mymemory refus');
+      return t.trim();
+    });
+}
+function autoRedessiner() {
+  clearTimeout(AUTO.minuteur);
+  AUTO.minuteur = setTimeout(function () { if (infosSite) toutRedessiner(); }, 250);
+}
+/* Le texte dans la langue courante : la traduction gardée s'il y en a une, sinon le
+   français — et la demande part en arrière-plan, l'écran se redessine à l'arrivée. */
+function auto(t) {
+  var l = langue;
+  if (!t || l === 'fr' || !MOTS[l]) return t;
+  var k = autoCle(l, t), c = autoLire();
+  if (c[k]) { AUTO.utilise = true; return c[k]; }
+  if (!AUTO.enCours[k] && !AUTO.echec[k]) {
+    AUTO.enCours[k] = true;
+    var ms = autoMorceaux(t);
+    Promise.all(ms.map(function (m) { return autoDemande(m, l); })).then(function (rs) {
+      var lignes = [];
+      ms.forEach(function (m, i) { lignes[m.l] = (lignes[m.l] || '') + rs[i]; });
+      autoLire()[k] = lignes.join('\n');
+      autoGarder();
+    }).catch(function () { AUTO.echec[k] = true; })
+      .then(function () { delete AUTO.enCours[k]; if (!AUTO.echec[k] && l === langue) autoRedessiner(); });
+  }
+  return t;
+}
+function majNoteAuto() {
+  var n = el('auto-note');
+  if (!n) return;
+  n.textContent = mot('autoNote') || '';
+  n.hidden = !(AUTO.utilise && langue !== 'fr');
+}
+
 var CHAMPS_COURANTS = { lieu: 1, mission: 1, categorie: 1 };
 function textePro(p, cle) {
   var tr = ((p.i18n || {})[langue]) || {};
   var t = (tr[cle] || '').trim();
   if (t) return t;
   var base = (p[cle] || '').trim();
-  return CHAMPS_COURANTS[cle] ? valeur(base) : base;
+  if (CHAMPS_COURANTS[cle]) return valeur(base);
+  /* Le NOM d'un projet est un nom propre : jamais traduit. Sa description, si. */
+  return cle === 'title' ? base : auto(base);
 }
 function languesDuSite() {
   var l = (infosSite && infosSite.langues) || [];
@@ -906,6 +999,7 @@ function toutRedessiner() {
   renderWhatsApp();
   bdDemarrer();
   if (current) openProject(projects.indexOf(current));
+  majNoteAuto();
 }
 
 /* ---- À la vente ---------------------------------------------------------------------
@@ -914,7 +1008,7 @@ function toutRedessiner() {
 var produits = [], filtreProd = '';
 function texteProduit(p, cle) {
   var tr = ((p.i18n || {})[langue]) || {};
-  return (tr[cle] || '').trim() || (p[cle] || '').trim();
+  return (tr[cle] || '').trim() || auto((p[cle] || '').trim());
 }
 function renderBoutique() {
   var sec = el('boutique');

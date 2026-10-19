@@ -36,6 +36,10 @@ for (let i = 0; i < 3; i++) {
 await gen.close();
 
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+/* Le service de traduction automatique est COUPÉ pour toutes les vérifications ci-dessous :
+   elles éprouvent le repli sur le français quand rien n'est traduit. La traduction
+   automatique a sa propre section, tout en bas, avec un faux service. */
+await page.route('**/api.mymemory.translated.net/**', r => r.abort());
 const errs = [];
 page.on('pageerror', e => errs.push(e.message));
 page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
@@ -43,7 +47,7 @@ page.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
 // d'accès réseau sortant, ou un proxy dont le certificat n'est pas approuvé par le
 // navigateur de test) et le manifeste volontairement absent de la page "vide" produit
 // une erreur de chargement : rien de tout ça n'est un bug du site.
-const envNoise = e => /fonts\.googleapis|fonts\.gstatic|ERR_CONNECTION_RESET|ERR_CERT|404|ERR_NAME_NOT_RESOLVED|favicon/i.test(e);
+const envNoise = e => /fonts\.googleapis|fonts\.gstatic|ERR_CONNECTION_RESET|ERR_CERT|404|ERR_NAME_NOT_RESOLVED|favicon|ERR_FAILED|status of 500/i.test(e);
 await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
 await page.waitForTimeout(500);
 
@@ -1554,6 +1558,74 @@ check('Bandeau : un manifeste publié avant ce réglage l’affiche quand même,
 
 await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
 await page.waitForTimeout(900);
+
+// --- TRADUCTION AUTOMATIQUE EN DIRECT (décision de Raphaël, 19 oct. 2026)
+/* Faux service MyMemory : il préfixe « [en] » / « [he] » et compte les demandes. */
+let demandes = []; let panne = false;
+await page.unroute('**/api.mymemory.translated.net/**');
+await page.route('**/api.mymemory.translated.net/**', r => {
+  const u = new URL(r.request().url());
+  const q = u.searchParams.get('q'), lp = u.searchParams.get('langpair');
+  demandes.push({ q, lp });
+  if (panne) return r.fulfill({ status: 500, body: 'x' });
+  r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ responseData: { translatedText: '[' + lp.split('|')[1] + '] ' + q }, responseStatus: 200 }) });
+});
+await page.goto('http://127.0.0.1:8902/index.html', { waitUntil: 'networkidle' });
+await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+await page.reload({ waitUntil: 'networkidle' });
+await page.locator('#langs button', { hasText: 'EN' }).click();
+await page.waitForTimeout(1200);
+const auto1 = await page.evaluate(() => ({
+  apropos: document.getElementById('apropos-txt').textContent,
+  note: document.getElementById('auto-note').hidden ? '' : document.getElementById('auto-note').textContent,
+  sous: document.getElementById('site-tagline').textContent,
+  noms: [...document.querySelectorAll('#projects .project-name')].map(n => n.textContent),
+  carteTxt: [...document.querySelectorAll('.apropos-carte-texte')].map(n => n.textContent),
+  carteTitres: [...document.querySelectorAll('.apropos-carte-titre')].map(n => n.textContent),
+}));
+check('Auto : le texte de présentation sans traduction s’affiche traduit en anglais',
+  /^\[en\] Texte de présentation/.test(auto1.apropos), auto1.apropos.slice(0, 40));
+check('Auto : une traduction écrite par Melissa gagne (sous-titre, titre de carte)',
+  auto1.sous === 'Interior architecture' && auto1.carteTitres.indexOf('Full renovation') >= 0 &&
+  !demandes.some(d => d.q === 'Architecture d’intérieur' || d.q === 'Rénovation complète'), auto1.sous + ' | ' + auto1.carteTitres.join(','));
+check('Auto : la note « traduit automatiquement » est affichée',
+  /translated automatically/.test(auto1.note), auto1.note);
+check('Auto : les noms de projets ne sont jamais envoyés au traducteur',
+  auto1.noms.length > 0 && !demandes.some(d => auto1.noms.indexOf(d.q) >= 0), auto1.noms.join(' | '));
+check('Auto : le texte envoyé est chunké sous 450 caractères et part en fr vers la langue choisie',
+  demandes.length > 0 && demandes.every(d => d.q.length <= 450 && /^fr\|en$/.test(d.lp)), demandes.length + ' demande(s)');
+await page.locator('#langs button', { hasText: 'עב' }).click();
+await page.waitForTimeout(1200);
+const autoHe = await page.evaluate(() => ({
+  apropos: document.getElementById('apropos-txt').textContent,
+  note: document.getElementById('auto-note').textContent,
+  dir: document.documentElement.dir,
+}));
+check('Auto : en hébreu, la demande part vers « he » et la note est en hébreu',
+  /^\[he\] /.test(autoHe.apropos) && /אוטומטית/.test(autoHe.note) && autoHe.dir === 'rtl', autoHe.apropos.slice(0, 30) + ' | ' + autoHe.note);
+// Mise en cache : au rechargement, rien n'est redemandé.
+demandes = [];
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(800);
+const autoCache = await page.evaluate(() => document.getElementById('apropos-txt').textContent);
+check('Auto : la traduction est gardée, aucune nouvelle demande au rechargement',
+  /^\[he\] /.test(autoCache) && demandes.length === 0, demandes.length + ' demande(s)');
+// Texte long (plus de 450 caractères) : découpé, recollé dans l'ordre.
+const long = await page.evaluate(() => autoMorceaux(('Phrase numéro un est assez longue pour compter. '.repeat(30)).trim()).map(m => m.t.length));
+check('Auto : un texte long est découpé en morceaux de 450 caractères au plus', long.length > 1 && long.every(n => n <= 450), long.join(','));
+// Service en panne : le français reste, aucune erreur, aucune note.
+panne = true;
+await page.evaluate(() => { localStorage.clear(); });
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(1200);
+const autoPanne = await page.evaluate(() => ({
+  apropos: document.getElementById('apropos-txt').textContent,
+  note: document.getElementById('auto-note').hidden,
+}));
+check('Auto : service en panne, le français d’origine reste affiché et la note est cachée',
+  /^Texte de présentation/.test(autoPanne.apropos) && autoPanne.note, autoPanne.apropos.slice(0, 30));
+panne = false;
 
 const realErrs = errs.filter(e => !envNoise(e));
 check('Aucune erreur JavaScript du site', realErrs.length === 0, realErrs.slice(0, 3).join(' | '));
