@@ -49,10 +49,11 @@ check('Réglages : la langue d’interface propose Français, English et עבר�
 check('Éditeur : la langue du devis propose aussi עברית',
   await page.evaluate(() => [...document.getElementById('f-lang').options].map(o => o.value).join('|')) === 'fr|en|he');
 
-/* --- 2. Le bouton de la barre fait le tour fr -> en -> he -> fr --- */
+/* --- 2. Menu déroulant de la barre : montre la langue active, choisir change la langue --- */
 const cycle = [];
-for (let i = 0; i < 3; i++) { await page.evaluate(() => toggleUiLang()); cycle.push(await page.evaluate(() => uiLang())); }
-check('Bouton 🌐 : fr → en → he → fr', cycle.join('>') === 'en>he>fr', cycle.join('>'));
+for (const v of ['en', 'he', 'fr']) { await page.selectOption('#ui-lang-select', v); cycle.push(await page.evaluate(() => uiLang() + ':' + document.getElementById('ui-lang-select').value)); }
+check('Menu 🌐 : choisir en / he / fr change la langue et affiche la langue active', cycle.join('>') === 'en:en>he:he>fr:fr', cycle.join('>'));
+check('Menu 🌐 : trois choix, chacun dans sa langue', await page.evaluate(() => [...document.getElementById('ui-lang-select').options].map(o => o.textContent.replace('🌐 ', '')).join('|')) === 'Français|English|עברית');
 
 /* --- 3. Interface en hébreu --- */
 await page.evaluate(() => { showView('devis'); showTab('editor'); });
@@ -72,14 +73,14 @@ const posHe = await page.evaluate(() => ({ ed: document.querySelector('.editor')
 check('Mise en page retournée : l’éditeur passe à droite de l’aperçu (il était à gauche)',
   posFr.ed < posFr.dv && posHe.ed > posHe.dv, JSON.stringify({ posFr, posHe }));
 check('Barre du haut : le nom est à droite, les boutons à gauche',
-  await page.evaluate(() => document.querySelector('.toolbar .brand').getBoundingClientRect().left > document.getElementById('ui-lang-btn').getBoundingClientRect().left));
+  await page.evaluate(() => document.querySelector('.toolbar .brand').getBoundingClientRect().left > document.getElementById('ui-lang-select').getBoundingClientRect().left));
 check('Le texte d’un champ de formulaire s’aligne à droite',
   await page.evaluate(() => getComputedStyle(document.getElementById('f-raison')).direction === 'rtl'));
 check('Le devis français reste de gauche à droite dans une interface hébraïque (indépendance)',
   await page.evaluate(() => document.getElementById('devis').dir === 'ltr' && !document.querySelector('#devis .devis-page[dir=rtl]')) && /Destiné à/.test(await devisTexte()));
 check('Espacement des lettres supprimé sur l’hébreu (illisible sinon)',
   await page.evaluate(() => [...document.querySelectorAll('.sec-t,.stitle,h2,h3,.lbl')].filter(e => /[֐-׿]/.test(e.textContent)).every(e => getComputedStyle(e).letterSpacing === 'normal')));
-check('Hébreu : la barre de l’appareil propose la langue suivante (FR)', await page.evaluate(() => document.getElementById('ui-lang-btn').textContent.trim()) === '🌐 FR');
+check('Hébreu : le menu de la barre affiche la langue active (עברית)', await page.evaluate(() => document.getElementById('ui-lang-select').value) === 'he');
 check('Hébreu : le titre de l’onglet du navigateur est traduit', /^מחולל הצעות מחיר — /.test(await page.title()), await page.title());
 
 /* contenu créé après coup */

@@ -190,10 +190,10 @@ check('La langue de l’interface survit au rechargement', (await navTexte())[0]
 await page.evaluate(() => setUiLang('fr'));
 const fr = await page.evaluate(() => ({
   nav: [...document.querySelectorAll('.viewnav .vnav')].map(b => b.textContent.trim().replace(/\s*▾/, '')),
-  btn: document.getElementById('ui-lang-btn').textContent,
+  btn: document.getElementById('ui-lang-select').value,
   lang: document.documentElement.lang,
 }));
-check('Retour au français : tout est restitué à l’identique', fr.nav.join('|') === 'Tableau de bord|Devis|Clients|Réalisations|Boutique' && fr.btn === '🌐 EN' && fr.lang === 'fr', JSON.stringify(fr));
+check('Retour au français : tout est restitué à l’identique', fr.nav.join('|') === 'Tableau de bord|Devis|Clients|Réalisations|Boutique' && fr.btn === 'fr' && fr.lang === 'fr', JSON.stringify(fr));
 
 /* --- téléphone --- */
 const tel = await browser.newPage({ viewport: { width: 390, height: 780 } });

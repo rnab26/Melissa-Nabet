@@ -2744,12 +2744,14 @@ function menuPlusMobile(){
         <button type="button" class="vs-mobile" onclick="applySplitView(false);closeModal();">📱 Mobile</button>
         <button type="button" class="vs-bureau" onclick="applySplitView(true);closeModal();">🖥 Bureau</button>
       </div>
+      <select class="mini ui-lang-select" data-notr aria-label="Langue de l’interface / Interface language" onchange="setUiLang(this.value);closeModal();"><option value="fr">🌐 Français</option><option value="en">🌐 English</option><option value="he">🌐 עברית</option></select>
       <button class="mini" id="plus-reglages">⚙ Réglages</button>
       <button class="mini" id="plus-sauvegarde">💾 Sauvegarde</button>
       <button class="mini" id="plus-sync">🔄 Synchronisation</button>
       ${cockpitPret&&loggedIn?'<button class="mini" id="plus-cockpit" data-notr>Cockpit</button>':''}
     </div>`);
   syncViewSwitches();
+  if(typeof uiLang==='function')document.querySelectorAll('.ui-lang-select').forEach(b=>{b.value=uiLang();});
   const go=(id,fn)=>{const b=document.getElementById(id);if(b)b.addEventListener('click',()=>{closeModal();fn();});};
   go('plus-reglages',openSettingsPanel);
   go('plus-sauvegarde',openBackupPanel);
@@ -10970,8 +10972,8 @@ if(typeof document!=='undefined'&&document.getElementById){init();}
     }else if(n.__fr&&n.data===n.__en){n.data=n.__fr;n.__fr=n.__en=null;}
   }
   function majBouton(){
-    /* Le bouton propose la langue SUIVANTE du cycle fr -> en -> he -> fr. */
-    const b=document.getElementById('ui-lang-btn');if(b)b.textContent='🌐 '+({fr:'EN',en:'עב',he:'FR'})[lang];
+        /* Menu déroulant : il affiche la langue ACTIVE (plus un bouton qui annonçait la suivante). */
+    document.querySelectorAll('.ui-lang-select').forEach(b=>{if(b.value!==lang)b.value=lang;});
     if(lang==='he'&&typeof ensureHebrewFont==='function')ensureHebrewFont();
     document.documentElement.lang=lang;
     document.documentElement.dir=I18N.langDir(lang); /* l'hébreu retourne toute la mise en page */
@@ -10985,7 +10987,6 @@ if(typeof document!=='undefined'&&document.getElementById){init();}
     const s=document.getElementById('set-ui-lang');if(s)s.value=lang;
     if(typeof toast==='function')toast(({en:'Interface language: English',he:'שפת הממשק: עברית'})[lang]||'Langue de l’interface : français');
   };
-  window.toggleUiLang=()=>setUiLang(({fr:'en',en:'he',he:'fr'})[lang]);
   /* Aide à l'extension : les textes français encore affichés (peut contenir tes propres données). */
   window.__trManquants=function(){
     const out=new Set(),tw=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;
