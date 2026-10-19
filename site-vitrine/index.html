@@ -646,8 +646,9 @@ var projects = [], current = null, lbIndex = 0, filtre = '';
    - les mots d'APPAREIL (navigation, états, boutons) sont traduits ici, une fois pour
      toutes : ce ne sont pas les mots de Melissa ;
    - ses TEXTES à elle (sous-titre, à propos, journal, noms de projets) viennent du CRM,
-     langue par langue. Quand une traduction manque, c'est le français d'origine qui
-     s'affiche — jamais une traduction automatique publiée sous son nom.
+     langue par langue. Quand une traduction manque, le site la demande en direct à un
+     service gratuit (voir « Traduction automatique en direct » plus bas) et le dit au
+     visiteur ; si le service ne répond pas, c'est le français d'origine qui s'affiche.
    Le sélecteur n'apparaît que si le manifeste annonce plus d'une langue. */
 var LANGUES = [
   { code: 'fr', label: 'FR', dir: 'ltr' },

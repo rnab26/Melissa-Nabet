@@ -1520,9 +1520,14 @@ d'accessibilité, titre de l'onglet et description restaient en français.
 - [x] CRM : fiche réalisation → bloc « traductions pour le site public » (nom, lieu, mission, texte), légende d'une photo
       par langue ; partent dans le manifeste (`i18n`), seulement si remplis ; une traduction ajoutée = « à republier ».
 - [x] Tests : `tests/site.test.mjs` (202 OK), `tests/realisations-langues.test.mjs` (nouveau, 14 OK), suites voisines vertes.
-- [ ] **Les textes de Melissa (sous-titre, à propos, 3 projets en ligne) n'ont toujours pas de traduction saisie** : c'est du
-      contenu à elle, jamais traduit automatiquement sous son nom. Question posée à Raphaël dans le cockpit.
-- [ ] Interface du CRM en hébreu : chantier 5b2089ef (autre agent), non touché ici.
+- [x] **Traduction automatique en direct (19 oct. 2026)** : Raphaël (« le meilleur traducteur en live, gratuit, je ne veux faire aucune action »)
+      a écarté la saisie à la main. `site-vitrine/index.html` : `auto()` demande les textes de Melissa sans traduction (à propos,
+      sous-titre, description des projets, légendes, journal, cartes, boutique) à MyMemory (`api.mymemory.translated.net`, sans clé ni compte,
+      vérifié par un vrai appel fr→he et fr→en le 19 oct.), par morceaux de 450 caractères, gardés dans le navigateur (`mn-auto`, un texte n'est
+      demandé qu'une fois). Une traduction saisie dans le CRM gagne toujours ; le NOM d'un projet et le message WhatsApp de départ ne sont jamais
+      traduits ; service en panne = français d'origine ; une note « traduit automatiquement » s'affiche en bas. Limite : qualité d'un traducteur
+      automatique gratuit, ~5000 caractères/jour par visiteur (limite propre à chaque visiteur). Tests : `tests/site.test.mjs` (211 OK, faux service).
+- [x] Interface du CRM en hébreu : faite par le chantier 5b2089ef (`i18n-he.js`, déjà sur main).
 
 ## Traduction anglaise : tous les textes en dur (16 oct. 2026, chantier 41aa747b)
 
