@@ -232,6 +232,11 @@
   .navbas button.active::after{content:'';position:absolute;bottom:0;width:22px;height:2px;background:var(--oxblood);border-radius:2px;}
   .navbas button{position:relative;}
   .toolbar-actions{display:flex;gap:10px;flex-wrap:wrap;}
+  .ui-lang-select{appearance:auto;color-scheme:dark;}
+  .toolbar .ui-lang-select{width:auto;min-width:0;flex:0 0 auto;align-self:center;}
+  .ui-lang-select option{background:var(--ink);color:var(--paper);}
+  .ph-menu .ui-lang-select{color-scheme:light;}
+  .ph-menu .ui-lang-select option{background:#fff;color:#000;}
   #toolbar-search{padding:8px 12px;}
   /* Recherche globale : une seule liste, groupée par nature, du plus probable au moins. */
   .rch-input{width:100%;font-size:16px;padding:11px 12px;}

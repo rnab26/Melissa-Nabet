@@ -76,7 +76,7 @@ window.addEventListener('load',function(){
     <button type="button" class="vs-bureau" onclick="applySplitView(true)">🖥 Bureau</button>
   </div>
   <div class="toolbar-actions">
-    <button class="btn" id="ui-lang-btn" data-notr title="Langue de l’interface / Interface language" onclick="toggleUiLang()">🌐 EN</button>
+    <select class="btn ui-lang-select" id="ui-lang-select" data-notr title="Langue de l’interface / Interface language" aria-label="Langue de l’interface / Interface language" onchange="setUiLang(this.value)"><option value="fr">🌐 Français</option><option value="en">🌐 English</option><option value="he">🌐 עברית</option></select>
     <button class="btn" id="cockpit-btn" data-notr hidden>Cockpit</button>
     <button class="btn" onclick="openSettingsPanel()">⚙ Réglages</button>
     <button class="btn" onclick="openBackupPanel()">Sauvegarde</button>
