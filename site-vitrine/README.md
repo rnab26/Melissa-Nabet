@@ -30,3 +30,10 @@ dossier `docs/` (son journal interne).
 `site-vitrine/` est par ailleurs exclu du déploiement GitHub Pages du CRM (étape
 `rm -rf site-vitrine` dans `.github/workflows/pages.yml` à la racine) pour ne pas être
 servi sur le domaine du CRM.
+
+## Traduction automatique en direct
+
+Les textes de Melissa sans traduction saisie dans le CRM sont traduits en direct par le service
+public MyMemory (sans clé : la page reste sans aucun secret), gardés dans le navigateur du visiteur,
+et signalés par une note. Une traduction saisie dans le CRM passe toujours avant. Le nom d'un projet
+n'est jamais traduit. Service en panne : le français s'affiche.
