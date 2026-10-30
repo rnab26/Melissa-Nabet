@@ -34,6 +34,9 @@ Trois suites :
   Projet » (menu, titre de la page). Bureau (menu déroulant Devis) et téléphone (menu
   Devis en modale), plus la vérification qu'un ancien lien `#/chantier` ouvre toujours
   l'écran. Port 8899 : `node tests/estimation-sous-devis.test.mjs`.
+- `tests/clients-liste.test.mjs` — la liste des **clients** survit à une fiche mal typée (date
+  numérique, nom absent, entrée nulle dans devis/tâches) : plus de tableau vidé jusqu'à
+  l'en-tête, et le tri/recherche ne plante pas. Port 8899 : `node tests/clients-liste.test.mjs`.
 - `tests/site-sections.test.mjs` — le bloc **« Sections du site »** du panneau ⚙ Le site
   public : il doit expliquer, avec les chiffres réels, pourquoi le site n'affiche aucune
   section (rien de publié / aucune catégorie / une seule catégorie) et le confirmer quand
