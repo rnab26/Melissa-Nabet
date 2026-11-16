@@ -1228,6 +1228,8 @@ const UI_EN={
   'Langues du site':'Site languages',
   'Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.':'French cannot be removed: it is what is shown when a translation is missing. Untick a language and it disappears from the site.',
   'Sous-titre, sous le nom{27}':'Subtitle, under the name{27}',
+  'Phrase d’accueil (facultatif) — affichée en haut de la page, sous le sous-titre{32}':'Welcome line (optional) — shown at the top of the page, under the subtitle{32}',
+  'ex. Concevoir des lieux qui travaillent pour ceux qui les habitent.':'e.g. Designing spaces that work for the people who live in them.',
   'À propos (facultatif) — affiché en bas de la page{32}':'About (optional) — shown at the bottom of the page{32}',
   'Cartes de présentation{36}':'Presentation cards{36}',
   'Vos services ou prestations, en cartes — un titre et une courte description chacune. L’ordre ci-dessous est':'Your services, as cards — a title and a short description each. The order below is',

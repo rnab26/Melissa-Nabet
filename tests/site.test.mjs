@@ -346,6 +346,18 @@ const contactVide = await page.evaluate(() => {
   return cache;
 });
 check('Contact : rien de rempli, aucune section vide en bas de page', contactVide === true);
+const accroche = await page.evaluate(() => {
+  const a = document.getElementById('site-accroche');
+  const avant = a.hidden;
+  infosSite = Object.assign({}, infosSite, { accroche: 'Phrase d’accueil du banc.' });
+  toutRedessiner();
+  const rempli = { cache: a.hidden, texte: a.textContent };
+  infosSite = Object.assign({}, infosSite, { accroche: '' });
+  toutRedessiner();
+  return { avant, rempli, apres: a.hidden };
+});
+check('Accueil : la phrase d’accueil du CRM s’affiche, et se masque quand elle est vide',
+  accroche.rempli.cache === false && /banc/.test(accroche.rempli.texte) && accroche.apres === true, JSON.stringify(accroche));
 
 // Aucun secret dans la page servie
 const html = await page.content();

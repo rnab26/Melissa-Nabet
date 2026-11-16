@@ -1175,6 +1175,8 @@ const UI_HE={
   "Langues du site":"שפות האתר",
   "Le français ne peut pas être retiré : c’est ce qui s’affiche quand une traduction manque. Décochez une langue et elle disparaît du site.":"אי אפשר להסיר את הצרפתית: היא מה שמוצג כשחסר תרגום. בטלו סימון של שפה והיא תיעלם מהאתר.",
   "Sous-titre, sous le nom{27}":"כותרת משנה, מתחת לשם{27}",
+  "Phrase d’accueil (facultatif) — affichée en haut de la page, sous le sous-titre{32}":"משפט פתיחה (אופציונלי) — מוצג בראש הדף, מתחת לכותרת המשנה{32}",
+  "ex. Concevoir des lieux qui travaillent pour ceux qui les habitent.":"לדוגמה: לעצב מרחבים שעובדים בשביל מי שחי בהם.",
   "À propos (facultatif) — affiché en bas de la page{32}":"אודות (אופציונלי) — מוצג בתחתית הדף{32}",
   "Cartes de présentation{36}":"כרטיסי הצגה{36}",
   "Vos services ou prestations, en cartes — un titre et une courte description chacune. L’ordre ci-dessous est":"השירותים או העבודות שלכם, בכרטיסים — כותרת ותיאור קצר לכל אחד. הסדר שלהלן הוא",

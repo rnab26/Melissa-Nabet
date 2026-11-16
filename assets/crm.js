@@ -8892,7 +8892,7 @@ const SITE_THEMES=[
 /* SES quatre sections, mot pour mot. Ce ne sont plus des « suggestions » dans un champ
    libre : c'est LA liste, elle se choisit dans un menu, et elle se modifie ici. */
 const SITE_CATS_DEFAUT=['Commercial','Habitation','Bureaux','Réalisation sur mesure'];
-const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,
+const SITE_DEFAULTS={sousTitre:'Architecture d’intérieur',apropos:'',email:'',tel:'',instagram:'',theme:'atelier',mouvement:'discret',diaporama:'actif',diaporamaSec:7,diaporamaPar:2,categories:null,ordre:null,accroche:'',
   menuRealisations:'',menuPersonnelles:'',menuBoutique:'',menuJournal:'',menuApropos:'',
   whatsapp:'actif',waTexte:'',cartesPar:2,cartesAlign:'gauche',cartesGras:false};
 /* Les entrées du menu du site. Vides, ce sont les mots par défaut de la page (traduits) ;
@@ -8954,7 +8954,7 @@ function cartesGras(){
 const SITE_LANGUES=[{code:'fr',nom:'Français',dir:'ltr'},{code:'en',nom:'English',dir:'ltr'},{code:'he',nom:'עברית',dir:'rtl'}];
 /* Les champs qui changent d'une langue à l'autre. Le reste (e-mail, téléphone, Instagram,
    dates) est commun : le traduire n'aurait aucun sens. */
-const SITE_TRADUISIBLES=['sousTitre','apropos','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'];
+const SITE_TRADUISIBLES=['sousTitre','accroche','apropos','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'];
 function siteLanguesActives(){
   const st=siteSettings();
   const l=Array.isArray(st.langues)?SITE_LANGUES.map(x=>x.code).filter(c=>st.langues.indexOf(c)>=0):['fr'];
@@ -9061,7 +9061,7 @@ function siteInfos(){
   /* Le bouton WhatsApp : il a toujours un état, ce n'est pas une coordonnée qu'on pourrait
      laisser vide. Le NUMÉRO, lui, vient de `tel` — sans numéro, le site n'affiche rien. */
   o.whatsapp=(st.whatsapp==='aucun')?'aucun':'actif';
-  ['apropos','email','tel','instagram','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'].forEach(k=>{
+  ['accroche','apropos','email','tel','instagram','menuRealisations','menuPersonnelles','menuBoutique','menuJournal','menuApropos','waTexte'].forEach(k=>{
     const v=(st[k]||'').trim();
     if(v)o[k]=v;
   });
@@ -9311,6 +9311,9 @@ function openSitePanel(){
     <label class="fld" style="margin-top:14px"><span class="lbl">Sous-titre, sous le nom${suff}</span>
       <input type="text" id="site-sub" maxlength="60"${rtl} value="${esc(siteTexte('sousTitre',LE))}" placeholder="${LE==='fr'?'ex. Architecture d’intérieur':esc(st.sousTitre||'—')}"></label>
     ${repli(siteTexte('sousTitre',LE),st.sousTitre)}
+    <label class="fld"><span class="lbl">Phrase d’accueil (facultatif) — affichée en haut de la page, sous le sous-titre${suff}</span>
+      <textarea id="site-accroche" rows="2" maxlength="200"${rtl} placeholder="ex. Concevoir des lieux qui travaillent pour ceux qui les habitent.">${esc(siteTexte('accroche',LE))}</textarea></label>
+    ${repli(siteTexte('accroche',LE),st.accroche)}
     <label class="fld"><span class="lbl">À propos (facultatif) — affiché en bas de la page${suff}</span>
       <textarea id="site-apropos" rows="4" maxlength="700"${rtl} placeholder="Qui vous êtes, comment vous travaillez. Deux ou trois phrases suffisent.">${esc(siteTexte('apropos',LE))}</textarea></label>
     ${repli(siteTexte('apropos',LE),st.apropos)}
@@ -9354,7 +9357,7 @@ function openSitePanel(){
       <button class="mini" onclick="closeModal()">Fermer</button>
       <button class="btn btn-primary" id="site-push">Mettre à jour le site</button>
     </div>`);
-  const champs=Object.assign({sousTitre:'site-sub',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta',waTexte:'site-wa-txt'},
+  const champs=Object.assign({sousTitre:'site-sub',accroche:'site-accroche',apropos:'site-apropos',email:'site-email',tel:'site-tel',instagram:'site-insta',waTexte:'site-wa-txt'},
     Object.fromEntries(SITE_MENU.map(m=>[m.cle,m.id])));
   Object.entries(champs).forEach(([k,id])=>{
     const el=document.getElementById(id);
