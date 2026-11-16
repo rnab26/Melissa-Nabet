@@ -178,5 +178,20 @@ writeFileSync(join(DIR, 'galerie/v/manifest.json'), JSON.stringify({
     photos: [{ full: 'v/r1/p0.jpg', thumb: 'v/r1/t0.jpg', w: 1600, h: 1067, cover: true }] }],
 }, null, 1));
 
+/* AIGUILLAGE : le manifeste désigne un autre site (modèle « Site complet » du CRM). Le test
+   intercepte cette adresse ; `j` porte en plus une adresse piégée, qui ne doit pas être suivie. */
+for (const [owner, page, vers] of [['a', 'aiguillage.html', 'https://studio.example/'],
+                                   ['j', 'aiguillage-piege.html', 'javascript:alert(1)']]) {
+  mkdirSync(join(DIR, 'galerie/' + owner), { recursive: true });
+  writeFileSync(join(DIR, page), local.replace("var OWNER = 'u';", "var OWNER = '" + owner + "';"));
+  writeFileSync(join(DIR, 'galerie/' + owner + '/manifest.json'), JSON.stringify({
+    version: 1, updatedAt: new Date().toISOString(),
+    site: { title: 'Melissa Nabet', subtitle: 'Architecture d’intérieur', theme: 'complet', redirection: vers },
+    realisations: [{ id: 'r2', title: 'Duplex Ben-Yehuda S.12 é', date: '2025',
+      publishedAt: new Date().toISOString(),
+      photos: [{ full: 'u/r1/p1.jpg', thumb: 'u/r1/t1.jpg', w: 1600, h: 1067, cover: true }] }],
+  }, null, 1));
+}
+
 console.log('Banc d’essai du site construit dans ' + DIR);
 console.log('Servez-le : python3 -m http.server 8902 -d ' + DIR);

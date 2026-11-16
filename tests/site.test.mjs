@@ -1627,6 +1627,31 @@ check('Auto : service en panne, le français d’origine reste affiché et la no
   /^Texte de présentation/.test(autoPanne.apropos) && autoPanne.note, autoPanne.apropos.slice(0, 30));
 panne = false;
 
+// --- AIGUILLAGE : modèle « Site complet » choisi dans le CRM. L'adresse habituelle envoie le
+//     visiteur sur l'autre site, dans sa langue, sur le projet qu'il venait voir.
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await ctx.route('https://studio.example/**', r => r.fulfill({ contentType: 'text/html', body: '<p>autre site</p>' }));
+  const pa = await ctx.newPage();
+  await pa.goto('http://127.0.0.1:8902/aiguillage.html');
+  await pa.waitForURL(/studio\.example/, { timeout: 15000 }).catch(() => {});
+  check('Aiguillage : l’adresse habituelle envoie vers le site complet, en français par défaut',
+    pa.url() === 'https://studio.example/fr', pa.url());
+  // Une adresse qui n'est pas https:// ne se suit pas : la page reste le site, projets affichés.
+  await pa.goto('http://127.0.0.1:8902/aiguillage-piege.html', { waitUntil: 'networkidle' });
+  await pa.waitForTimeout(600);
+  const piege = await pa.evaluate(() => ({ url: location.href, cartes: document.querySelectorAll('#projects .project:not(.squelette)').length }));
+  check('Aiguillage : une adresse piégée (javascript:) n’est pas suivie, le site s’affiche',
+    /aiguillage-piege\.html$/.test(piege.url) && piege.cartes === 1, JSON.stringify(piege));
+  // Langue retenue + lien direct vers un projet : même langue, même projet de l'autre côté.
+  await pa.evaluate(() => localStorage.setItem('mn-langue', 'en'));
+  await pa.goto('http://127.0.0.1:8902/aiguillage.html#p-r2');
+  await pa.waitForURL(/studio\.example/, { timeout: 15000 }).catch(() => {});
+  check('Aiguillage : la langue et le projet ouvert suivent le visiteur',
+    pa.url() === 'https://studio.example/en/projects/duplex-ben-yehuda-s-12-e', pa.url());
+  await ctx.close();
+}
+
 const realErrs = errs.filter(e => !envNoise(e));
 check('Aucune erreur JavaScript du site', realErrs.length === 0, realErrs.slice(0, 3).join(' | '));
 
