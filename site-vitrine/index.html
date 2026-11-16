@@ -2108,10 +2108,34 @@ function lireManifeste() {
           function (e) { clearTimeout(minuteur); throw e; });
 }
 
+/* AIGUILLAGE — le CRM peut choisir comme modèle un autre site, hébergé à part, qui lit ce
+   même manifeste (Réglages → Le site public → « Site complet »). Le manifeste en porte alors
+   l'adresse : le visiteur y part dans sa langue, sur le projet qu'il venait voir. Un autre
+   choix dans le CRM retire l'adresse, et cette page redevient le site. Seul `https://` est
+   suivi : le manifeste est public, une adresse `javascript:` y serait du code exécuté. */
+function versAutreVersion(m) {
+  var dest = m.site && m.site.redirection;
+  if (typeof dest !== 'string' || !/^https:\/\/[a-z0-9.-]+(\/|$)/i.test(dest)) return false;
+  var chemin = '/' + langue;
+  var id = location.hash.replace(/^#p-/, '');
+  if (id && id !== location.hash) {
+    var p = (m.realisations || []).filter(function (x) { return x.id === id; })[0];
+    /* shortcut: l'adresse d'un projet là-bas est son nom en minuscules sans accents, tirets
+       à la place du reste — relevé sur les trois projets en ligne le 16 nov. 2026. Si ce
+       site change de règle, le lien d'un projet tombera sur sa page « introuvable ». */
+    var slug = p ? String(p.title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') : '';
+    chemin += '/projects' + (slug ? '/' + slug : '');
+  }
+  location.replace(dest.replace(/\/+$/, '') + chemin);
+  return true;
+}
+
 function charger() {
   lireManifeste()
   .then(function (r) { if (!r.ok) throw new Error('manifest ' + r.status); return r.json(); })
   .then(function (m) {
+    if (versAutreVersion(m)) return;
     if (m.site) {
       appliquerTheme(m.site.theme, m.site.mouvement);
       infosSite = m.site;

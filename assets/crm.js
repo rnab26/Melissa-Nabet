@@ -8861,7 +8861,7 @@ async function syncRealisationFicheEnLigne(r){
    une adresse e-mail ou un numéro sur une page publique, c'est une décision, pas un
    réglage technique. Les coordonnées du devis ne sont donc jamais recopiées toutes
    seules — il y a un bouton pour le faire en un geste, et c'est le geste qui vaut accord. */
-/* Les quatre directions visuelles du site public. Ce tableau ne sert QU'À CHOISIR : la
+/* Les modèles du site public. Ce tableau ne sert QU'À CHOISIR : la
    mise en forme vit dans `site-vitrine/index.html`, qui applique le thème par son
    identifiant. Ajouter une direction ici sans l'écrire là-bas donnerait un site qui
    retombe sur le thème par défaut — sans rien casser, mais sans rien changer non plus. */
@@ -8878,6 +8878,13 @@ const SITE_THEMES=[
   {id:'nuit',nom:'Nuit',ref:'D’après Vincent Van Duysen',
    note:'Fond très sombre, photo plein cadre. Spectaculaire, mais une photo moyenne s’y voit tout de suite.',
    fond:'#0f0f0f',encre:'#d8d5d0'},
+  /* Un modèle qui n'est PAS un habillage de `site-vitrine/` : un autre site, hébergé à part,
+     qui lit le même manifeste. Choisi, l'adresse habituelle y envoie les visiteurs (voir
+     `versAutreVersion` dans le site) ; un autre choix les ramène. Son code n'est dans aucun
+     dépôt du projet : on ne fait qu'y aiguiller. */
+  {id:'complet',nom:'Site complet',ref:'Un autre site, avec ses pages À propos et Contact',
+   note:'Vos projets et vos photos y arrivent du CRM. Ses autres textes et les réglages plus bas ne s’y appliquent pas. Les visiteurs de l’adresse habituelle y sont envoyés tant que ce modèle est en ligne.',
+   fond:'#f4f1ec',encre:'#1c1a17',adresse:'https://melissa-nabet-website.vercel.app'},
 ];
 /* `atelier` par défaut : c'est l'habillage que le site portait avant qu'on puisse choisir.
    Un manifeste publié avant cette version n'a pas de thème — il ne doit pas changer d'allure
@@ -9043,7 +9050,8 @@ function siteInfos(){
   const o={title:(b.companyName||'Melissa Nabet').trim(),subtitle:(st.sousTitre||'').trim()};
   /* Un thème inconnu du catalogue ne part pas : il ferait retomber le site sur son défaut
      sans que rien ne l'explique. */
-  if(SITE_THEMES.some(t=>t.id===st.theme))o.theme=st.theme;
+  const modele=SITE_THEMES.find(t=>t.id===st.theme);
+  if(modele){o.theme=modele.id;if(modele.adresse)o.redirection=modele.adresse;}
   if(st.mouvement==='aucun'||st.mouvement==='discret')o.mouvement=st.mouvement;
   /* Le bandeau d'accueil : son état et sa durée. Toujours envoyés — ce ne sont pas des
      coordonnées qu'on pourrait vouloir laisser vides, ils ont toujours une valeur. */

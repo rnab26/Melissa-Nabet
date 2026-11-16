@@ -1561,3 +1561,36 @@ n'y étaient pas, et le moteur laisse en français ce qu'il ne connaît pas, don
   d'écrans de `langues.test.mjs` complète. Les écrans profonds jamais ouverts par ce parcours (éditeur photo, fenêtres de série IA)
   ne sont couverts que par le contrôle statique.
 - Nombres d'argent à virgule décimale (`0,13 $`) et dates numériques gardent le format français.
+
+## Site public — le « Site complet » (version Vercel) devient un modèle (16 nov. 2026, chantier bc1f991c)
+
+**Demande de Raphaël** : utiliser https://melissa-nabet-website.vercel.app/fr comme site publié,
+choisi comme un modèle parmi les autres, et pouvoir repasser à une autre version facilement,
+sans « deux sites supplémentaires ».
+
+**Ce qui a été vérifié sur le site Vercel** (16 nov.) : Next.js rendu à chaque visite
+(`cache-control: no-store`), il lit le **même manifeste** du bucket `galerie` (mêmes projets,
+mêmes identifiants de photos, mêmes textes de projet). Ses textes fixes (« Approche »,
+« Méthode », page À propos) sont dans son propre code. Signature « Dan Studio »
+(dan-studio-agency.vercel.app). **Son code n'est dans aucun dépôt accessible** (recherche sur
+tous les dépôts de rnab26) et la session n'a aucun accès Vercel : on ne peut pas le modifier.
+
+**Choix fait** (Raphaël n'a pas voulu trancher par question) : un **aiguillage**, pas une recopie.
+- CRM : 5e entrée de `SITE_THEMES`, `complet` (« Site complet »), avec `adresse`. Choisie puis
+  « Mettre à jour le site », `siteInfos()` écrit `site.theme='complet'` et
+  `site.redirection=<adresse>` dans le manifeste. Tout autre modèle retire `redirection`.
+- Site (`site-vitrine/index.html`, `versAutreVersion`) : manifeste lu, `redirection` en `https://`
+  → `location.replace` vers `<adresse>/<langue>` ou `<adresse>/<langue>/projects/<slug>` si un
+  projet était ouvert (`#p-<id>`). Le slug (nom sans accents, tirets) est relevé sur les trois
+  projets en ligne, pas documenté : commentaire `shortcut:`.
+- Tests : `realisations.test.mjs` (l'adresse part, et seulement pour ce modèle), `site.test.mjs`
+  + banc `aiguillage.html` / `aiguillage-piege.html` (redirection, langue + projet suivis,
+  `javascript:` ignoré).
+
+- [x] Modèle choisissable dans ⚙ Le site public, traduit en anglais et en hébreu.
+- [ ] **Raphaël / Mélissa** : choisir « Site complet » puis « Mettre à jour le site » (écriture
+      dans les vraies données : c'est leur geste).
+- [ ] L'adresse affichée devient celle de Vercel. Une adresse unique quel que soit le modèle
+      demande le nom de domaine (chantier « Nom de domaine propre ») + un relais.
+- [ ] Ne plus dépendre de Vercel : recopier ce design comme vrai thème de `site-vitrine/`
+      (plusieurs jours ; à décider).
