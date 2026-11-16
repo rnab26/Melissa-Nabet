@@ -3528,10 +3528,10 @@ check('Allure : un thème inconnu du catalogue ne part pas',
   siteAllure.faux === undefined, String(siteAllure.faux));
 check('Allure : les quatre directions et le site complet sont au catalogue',
   siteAllure.catalogue.join(',') === 'index,epure,atelier,nuit,complet', siteAllure.catalogue.join(','));
-// Le « Site complet » est un autre site : le manifeste doit en porter l'adresse, sinon la page
+// Le « Dan vercel » est un autre site : le manifeste doit en porter l'adresse, sinon la page
 // habituelle n'a nulle part où envoyer les visiteurs. Et aucun autre modèle ne doit en porter :
 // revenir à un habillage, c'est retirer l'aiguillage.
-check('Site complet : son adresse part dans le manifeste, et lui seul en porte une',
+check('Dan vercel : son adresse part dans le manifeste, et lui seul en porte une',
   siteAllure.complet === 'complet' && siteAllure.completVers === 'https://melissa-nabet-website.vercel.app'
   && siteAllure.sansAiguillage === 0, JSON.stringify(siteAllure));
 

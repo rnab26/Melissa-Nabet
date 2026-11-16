@@ -1627,7 +1627,7 @@ check('Auto : service en panne, le français d’origine reste affiché et la no
   /^Texte de présentation/.test(autoPanne.apropos) && autoPanne.note, autoPanne.apropos.slice(0, 30));
 panne = false;
 
-// --- AIGUILLAGE : modèle « Site complet » choisi dans le CRM. L'adresse habituelle envoie le
+// --- AIGUILLAGE : modèle « Dan vercel » choisi dans le CRM. L'adresse habituelle envoie le
 //     visiteur sur l'autre site, dans sa langue, sur le projet qu'il venait voir.
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
