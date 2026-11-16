@@ -1608,3 +1608,14 @@ Raphaël : « les textes ne s'affichent pas ». Relevé sur le site Vercel le 16
       modèle de `site-vitrine/` et ajouter au CRM les blocs qu'il montre (accroche, approche,
       méthode, histoire de l'architecte). Chantier ouvert dans le cockpit, en attente de l'accord
       de Raphaël (plusieurs jours, ou le code source Vercel s'il l'a).
+
+**16 nov., renfort (chantier 869792cb) — ce que le CRM envoie, pour tous les modèles.**
+Constat : le manifeste public du 16 nov. n'a ni `apropos`, ni `cartes` (champs vides dans le CRM) ; le site « Dan vercel »
+affiche donc ses textes écrits en dur. Réponse de Raphaël à la question du fil : « J'ai accès au site Vercel » (la session, non).
+- [x] Nouveau champ CRM « Phrase d'accueil » (`site.accroche`, traduisible fr/en/he, 200 car.) : publié dans le manifeste,
+      affiché sous le sous-titre par `site-vitrine/` (tous les thèmes). Test : `tests/site.test.mjs` (215 OK).
+- Contrat du manifeste pour un site tiers (lu dans `manifest.site`) : `accroche`, `apropos` (histoire / qui est l'architecte),
+  `cartes[]` (`titre`, `texte`, `i18n`) pour « Approche » et « Méthode », `journal[]`, `email`, `tel`, `instagram`,
+  `i18n.<langue>`. Projets : `realisations[].texte` (commentaire du projet).
+- [ ] **Raphaël** : remplir « À propos », « Phrase d'accueil » et les cartes dans ⚙ Le site public, puis « Mettre à jour le site ».
+- [ ] **Raphaël** : le site Vercel doit lire ces clés (sa source est chez lui, pas dans nos dépôts) : fournir le code ou l'ajouter au dépôt.
