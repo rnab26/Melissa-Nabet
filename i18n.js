@@ -1153,7 +1153,7 @@ const UI_EN={
   'Fond crème chaud, titres en garamond, une grande image à la fois. Rythme lent.':'Warm cream background, Garamond titles, one large image at a time. Slow rhythm.',
   'D’après Vincent Van Duysen':'After Vincent Van Duysen',
   'Fond très sombre, photo plein cadre. Spectaculaire, mais une photo moyenne s’y voit tout de suite.':'Very dark background, full-frame photo. Spectacular, but an average photo shows up right away.',
-  'Site complet':'Full site',
+  'Dan vercel':'Dan vercel',
   'Un autre site, avec ses pages À propos et Contact':'Another site, with its own About and Contact pages',
   'Vos projets et vos photos y arrivent du CRM. Ses autres textes et les réglages plus bas ne s’y appliquent pas. Les visiteurs de l’adresse habituelle y sont envoyés tant que ce modèle est en ligne.':'Your projects and photos come from the CRM. Its other texts and the settings below do not apply to it. Visitors to the usual address are sent there as long as this model is online.',
   'Réalisation sur mesure':'Custom project',

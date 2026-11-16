@@ -178,7 +178,7 @@ writeFileSync(join(DIR, 'galerie/v/manifest.json'), JSON.stringify({
     photos: [{ full: 'v/r1/p0.jpg', thumb: 'v/r1/t0.jpg', w: 1600, h: 1067, cover: true }] }],
 }, null, 1));
 
-/* AIGUILLAGE : le manifeste désigne un autre site (modèle « Site complet » du CRM). Le test
+/* AIGUILLAGE : le manifeste désigne un autre site (modèle « Dan vercel » du CRM). Le test
    intercepte cette adresse ; `j` porte en plus une adresse piégée, qui ne doit pas être suivie. */
 for (const [owner, page, vers] of [['a', 'aiguillage.html', 'https://studio.example/'],
                                    ['j', 'aiguillage-piege.html', 'javascript:alert(1)']]) {

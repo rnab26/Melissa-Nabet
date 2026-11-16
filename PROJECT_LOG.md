@@ -1594,3 +1594,17 @@ tous les dépôts de rnab26) et la session n'a aucun accès Vercel : on ne peut 
       demande le nom de domaine (chantier « Nom de domaine propre ») + un relais.
 - [ ] Ne plus dépendre de Vercel : recopier ce design comme vrai thème de `site-vitrine/`
       (plusieurs jours ; à décider).
+
+**16 nov., suite** : modèle renommé « Dan vercel » à la demande de Raphaël (identifiant interne
+inchangé, `complet`, pour ne pas perdre un choix déjà fait dans le CRM).
+Raphaël : « les textes ne s'affichent pas ». Relevé sur le site Vercel le 16 nov. :
+- affichés depuis le CRM : nom, lieu, année, surface, mission, type, description du projet,
+  photos, e-mail, WhatsApp, Instagram ;
+- vides parce que vides dans le CRM : descriptions de « Boutique MyLittleDessert » et
+  « Allenby 54 », texte « À propos » (le champ n'existe pas dans le manifeste ni dans `library.site`) ;
+- écrits dans le code Vercel, que le CRM ne peut pas alimenter : phrase d'accueil, « Approche »,
+  « Méthode » (4 étapes), page À propos (« Concevoir des lieux qui travaillent… »), intro Contact.
+- [ ] Faire coller le contenu du CRM avec tous les modèles : refaire « Dan vercel » comme vrai
+      modèle de `site-vitrine/` et ajouter au CRM les blocs qu'il montre (accroche, approche,
+      méthode, histoire de l'architecte). Chantier ouvert dans le cockpit, en attente de l'accord
+      de Raphaël (plusieurs jours, ou le code source Vercel s'il l'a).

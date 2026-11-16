@@ -8882,7 +8882,7 @@ const SITE_THEMES=[
      qui lit le même manifeste. Choisi, l'adresse habituelle y envoie les visiteurs (voir
      `versAutreVersion` dans le site) ; un autre choix les ramène. Son code n'est dans aucun
      dépôt du projet : on ne fait qu'y aiguiller. */
-  {id:'complet',nom:'Site complet',ref:'Un autre site, avec ses pages À propos et Contact',
+  {id:'complet',nom:'Dan vercel',ref:'Un autre site, avec ses pages À propos et Contact',
    note:'Vos projets et vos photos y arrivent du CRM. Ses autres textes et les réglages plus bas ne s’y appliquent pas. Les visiteurs de l’adresse habituelle y sont envoyés tant que ce modèle est en ligne.',
    fond:'#f4f1ec',encre:'#1c1a17',adresse:'https://melissa-nabet-website.vercel.app'},
 ];
