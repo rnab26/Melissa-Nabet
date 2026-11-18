@@ -1,0 +1,199 @@
+<!doctype html>
+<html
+  lang="fr"
+  data-resolution="portrait"
+  data-composition-variables='[
+    {"id":"title","type":"string","label":"Titre","default":"Allenby 54"},
+    {"id":"city","type":"string","label":"Ville","default":"Tel Aviv"},
+    {"id":"kind","type":"string","label":"Type de lieu","default":"Studio de yoga"},
+    {"id":"reno","type":"string","label":"Mission","default":"Rénovation complète"},
+    {"id":"area","type":"string","label":"Surface","default":"110 m²"},
+    {"id":"name","type":"string","label":"Nom","default":"Melissa Nabet"},
+    {"id":"metier","type":"string","label":"Métier","default":"Architecture d’intérieur"},
+    {"id":"handle","type":"string","label":"Compte Instagram","default":"@melissa_interiordesign"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      /* Palette tirée du projet : nuit des photos, travertin de la carte de Melissa, encre du logo. */
+      :root {
+        --ground: #0d0c0b;
+        --travertin: #ece5da;
+        --ink: #141210;
+        --light: #fbf8f3;
+        --font-display: "Playfair Display", serif;
+        --font-label: "Inter", sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: var(--ground); }
+      #root { position: relative; width: 100%; height: 100%; }
+      #shots { position: absolute; left: 0; top: 0; width: 1080px; height: 1920px; z-index: 1; }
+      #shade {
+        position: absolute; inset: 0; z-index: 2;
+        background: linear-gradient(180deg, rgba(13,12,11,0.62) 0%, rgba(13,12,11,0.18) 30%, rgba(13,12,11,0) 45%);
+      }
+      .card { position: absolute; left: 96px; top: 400px; width: 760px; z-index: 3; color: var(--light); }
+      .card > * { display: block; }
+      .display { font-family: var(--font-display); font-weight: 700; font-size: 150px; line-height: 1; letter-spacing: -0.01em; text-shadow: 0 2px 30px rgba(0,0,0,0.35); }
+      .label { font-family: var(--font-label); font-weight: 700; font-size: 34px; letter-spacing: 0.22em; text-transform: uppercase; text-shadow: 0 1px 14px rgba(0,0,0,0.45); }
+      #t-city { margin-top: 28px; }
+      #endcard {
+        position: absolute; inset: 0; z-index: 5; background: var(--travertin); color: var(--ink);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; padding-bottom: 300px;
+      }
+      #end-logo { width: 360px; height: auto; }
+      #end-name { font-family: var(--font-display); font-weight: 700; font-size: 96px; margin-top: 64px; }
+      #end-metier { font-family: var(--font-label); font-weight: 400; font-size: 32px; letter-spacing: 0.24em; text-transform: uppercase; margin-top: 18px; }
+      #end-rule { width: 120px; height: 2px; background: var(--ink); margin-top: 56px; }
+      #end-handle { font-family: var(--font-label); font-weight: 700; font-size: 42px; margin-top: 56px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="21.5" data-width="1080" data-height="1920">
+      <canvas id="shots" class="clip" data-start="0" data-duration="17.9" data-track-index="0" width="1080" height="1920"></canvas>
+      <div id="shade" class="clip" data-start="0" data-duration="11.6" data-track-index="1" data-layout-ignore></div>
+
+      <div id="c-title" class="card clip" data-start="0" data-duration="3.2" data-track-index="2">
+        <span id="t-title" class="display" data-var-text="title">Allenby 54</span>
+        <span id="t-city" class="label" data-var-text="city">Tel Aviv</span>
+      </div>
+      <div id="c-kind" class="card clip" data-start="3.3" data-duration="2.4" data-track-index="2">
+        <span id="t-kind" class="label" data-var-text="kind">Studio de yoga</span>
+      </div>
+      <div id="c-reno" class="card clip" data-start="5.9" data-duration="2.9" data-track-index="2">
+        <span id="t-reno" class="label" data-var-text="reno">Rénovation complète</span>
+      </div>
+      <div id="c-area" class="card clip" data-start="9.0" data-duration="2.5" data-track-index="2">
+        <span id="t-area" class="display" data-var-text="area">110 m²</span>
+      </div>
+
+      <div id="endcard" class="clip" data-start="17.4" data-duration="4.1" data-track-index="3">
+        <img id="end-logo" src="assets/logo-mn.svg" alt="Logo MN" />
+        <span id="end-name" data-var-text="name">Melissa Nabet</span>
+        <span id="end-metier" data-var-text="metier">Architecture d’intérieur</span>
+        <span id="end-rule"></span>
+        <span id="end-handle" data-var-text="handle">@melissa_interiordesign</span>
+      </div>
+    </div>
+
+    <script>
+      /* Plans : photo, profondeur, début, durée, cadrage (centre x/y de 0 à 1 depuis le haut-gauche,
+         zoom) au début et à la fin, relief latéral et effet d'avancée. Fondus de 0,5 s entre plans. */
+      const SHOTS = [
+        { id: "01", s: 0.0,  d: 3.4, from: [0.42, 0.55, 1.00], to: [0.56, 0.58, 1.10], par: [0.030, 0.0], dolly: 0.10 },
+        { id: "07", s: 2.9,  d: 3.0, from: [0.52, 0.56, 1.00], to: [0.56, 0.46, 1.14], par: [0.020, 0.0], dolly: 0.12 },
+        { id: "05", s: 5.4,  d: 3.6, from: [0.50, 0.55, 1.00], to: [0.50, 0.53, 1.22], par: [0.010, 0.0], dolly: 0.22 },
+        { id: "03", s: 8.5,  d: 3.1, from: [0.32, 0.55, 1.04], to: [0.66, 0.55, 1.08], par: [0.035, 0.0], dolly: 0.06 },
+        { id: "06", s: 11.1, d: 2.8, from: [0.50, 0.58, 1.00], to: [0.46, 0.55, 1.12], par: [0.020, 0.0], dolly: 0.12 },
+        { id: "09", s: 13.4, d: 2.5, from: [0.55, 0.52, 1.06], to: [0.58, 0.48, 1.22], par: [0.025, 0.0], dolly: 0.16 },
+        { id: "11", s: 15.4, d: 2.5, from: [0.45, 0.62, 1.00], to: [0.45, 0.60, 1.14], par: [0.020, 0.0], dolly: 0.14 },
+      ];
+      const FADE = 0.5;
+      const W = 1080, H = 1920;
+
+      const canvas = document.getElementById("shots");
+      const gl = canvas.getContext("webgl", { preserveDrawingBuffer: true, premultipliedAlpha: false, antialias: false });
+
+      const VS = `attribute vec2 a; varying vec2 v; void main(){ v = a * 0.5 + 0.5; gl_Position = vec4(a, 0.0, 1.0); }`;
+      const FS = `precision highp float;
+        varying vec2 v;
+        uniform sampler2D uImg, uDep;
+        uniform float uImgAspect, uZoom, uDolly, uAlpha;
+        uniform vec2 uCenter, uPar;
+        void main(){
+          float ca = ${W / H};
+          vec2 frac = ca < uImgAspect ? vec2(ca / uImgAspect, 1.0) : vec2(1.0, uImgAspect / ca);
+          vec2 base = uCenter + (v - 0.5) * frac / uZoom;
+          vec2 uv = base;
+          for (int i = 0; i < 5; i++) {
+            float d = texture2D(uDep, uv).r - 0.5;       // blanc = proche
+            uv = base - uPar * d - (base - uCenter) * uDolly * d;
+          }
+          gl_FragColor = vec4(texture2D(uImg, clamp(uv, 0.0, 1.0)).rgb, uAlpha);
+        }`;
+      function shader(type, src) {
+        const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+        return sh;
+      }
+      const prog = gl.createProgram();
+      gl.attachShader(prog, shader(gl.VERTEX_SHADER, VS));
+      gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FS));
+      gl.linkProgram(prog); gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const aLoc = gl.getAttribLocation(prog, "a");
+      gl.enableVertexAttribArray(aLoc); gl.vertexAttribPointer(aLoc, 2, gl.FLOAT, false, 0, 0);
+      const U = {};
+      for (const n of ["uImg", "uDep", "uImgAspect", "uZoom", "uDolly", "uAlpha", "uCenter", "uPar"]) U[n] = gl.getUniformLocation(prog, n);
+      gl.uniform1i(U.uImg, 0); gl.uniform1i(U.uDep, 1);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+      function texture(img) {
+        const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+        for (const [k, val] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, val);
+        return t;
+      }
+      function load(src) {
+        return new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ko(new Error("image introuvable : " + src)); i.src = src; });
+      }
+
+      const ease = (x) => 0.6 * x + 0.4 * (x * x * (3 - 2 * x)); // presque linéaire : la caméra ne s'arrête pas pendant les fondus
+      const lerp = (a, b, k) => a + (b - a) * k;
+
+      function renderAt(T) {
+        gl.viewport(0, 0, W, H); gl.clearColor(0.05, 0.047, 0.043, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+        for (const sh of SHOTS) {
+          if (!sh.img || T < sh.s || T >= sh.s + sh.d) continue;
+          const t = T - sh.s, k = ease(Math.min(1, t / sh.d));
+          const fadeIn = sh.s === 0 ? 1 : Math.min(1, t / FADE);
+          const [cx, cy, z] = [0, 1, 2].map((i) => lerp(sh.from[i], sh.to[i], k));
+          const asp = sh.img.width / sh.img.height;
+          const ca = W / H, frac = ca < asp ? [ca / asp, 1] : [1, asp / ca];
+          const hx = frac[0] / z / 2, hy = frac[1] / z / 2; // garde la fenêtre dans la photo
+          gl.uniform2f(U.uCenter, Math.min(1 - hx, Math.max(hx, cx)), 1 - Math.min(1 - hy, Math.max(hy, cy)));
+          gl.uniform1f(U.uZoom, z);
+          gl.uniform1f(U.uImgAspect, asp);
+          gl.uniform2f(U.uPar, sh.par[0] * (k - 0.5) * 2, sh.par[1] * (k - 0.5) * 2);
+          gl.uniform1f(U.uDolly, sh.dolly * k);
+          gl.uniform1f(U.uAlpha, fadeIn);
+          gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, sh.tImg);
+          gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, sh.tDep);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+      }
+
+      window.__hf = window.__hf || {};
+      window.__hf.buildReady = window.__hf.buildReady || {};
+      window.__hf.buildReady["shots"] = Promise.all(
+        SHOTS.map(async (sh) => {
+          const [img, dep] = await Promise.all([load(`assets/photos/${sh.id}.jpg`), load(`assets/depth/${sh.id}.png`)]);
+          Object.assign(sh, { img, tImg: texture(img), tDep: texture(dep) });
+        }),
+      ).then(() => renderAt(0));
+      window.addEventListener("hf-seek", (e) => renderAt(e.detail.time));
+
+      const tl = gsap.timeline({ paused: true });
+      const rise = (sel, at, dur = 0.7) =>
+        tl.fromTo(sel, { opacity: 0, y: 36 }, { opacity: 1, y: 0, duration: dur, ease: "power3.out" }, at);
+      const out = (sel, at) => tl.to(sel, { opacity: 0, y: -18, duration: 0.35, ease: "power2.in" }, at);
+      // Frame 0 = la vignette : le titre est déjà là.
+      tl.fromTo("#t-title", { opacity: 1, y: 0 }, { opacity: 1, y: 0, duration: 0.01 }, 0);
+      rise("#t-city", 0.25); out("#t-title", 2.8); out("#t-city", 2.85);
+      rise("#t-kind", 3.35); out("#t-kind", 5.3);
+      rise("#t-reno", 5.95); out("#t-reno", 8.4);
+      rise("#t-area", 9.05, 0.8); out("#t-area", 11.1);
+      tl.fromTo("#shade", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 11.1);
+      tl.fromTo("#endcard", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power1.inOut" }, 17.4);
+      tl.fromTo("#end-logo", { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1, duration: 1.0, ease: "power2.out" }, 17.7);
+      rise("#end-name", 18.2); rise("#end-metier", 18.45); rise("#end-rule", 18.6, 0.5); rise("#end-handle", 18.8);
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
