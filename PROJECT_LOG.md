@@ -1619,3 +1619,9 @@ affiche donc ses textes écrits en dur. Réponse de Raphaël à la question du f
   `i18n.<langue>`. Projets : `realisations[].texte` (commentaire du projet).
 - [ ] **Raphaël** : remplir « À propos », « Phrase d'accueil » et les cartes dans ⚙ Le site public, puis « Mettre à jour le site ».
 - [ ] **Raphaël** : le site Vercel doit lire ces clés (sa source est chez lui, pas dans nos dépôts) : fournir le code ou l'ajouter au dépôt.
+
+**18 nov.** : le site Vercel a été fait par **Dan, le frère de Raphaël**, sur son propre compte.
+Raphaël n'a ni compte Vercel ni le code (le rattachement d'un dépôt deviné a été refusé par la
+plateforme, 16 nov.). Fiche pour Dan, versionnée : `docs/brief-site-dan.md` — le fichier à lire,
+chaque champ du manifeste et où l'afficher, et comment donner l'accès à rnab26 s'il préfère que
+Claude le fasse. Repli si Dan ne peut pas : refaire ce modèle dans `site-vitrine/`.
