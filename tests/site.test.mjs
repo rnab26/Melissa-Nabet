@@ -222,6 +222,56 @@ check('Plein écran : un glissement vertical ne change rien', balayage.apresVert
 await page.keyboard.press('Escape'); await page.waitForTimeout(300);
 check('Échap ferme le plein écran', await page.locator('#lightbox.open').count() === 0);
 
+// --- Corrections « Apple Design » (18 nov. 2026) : le site répond au doigt et à l'appui.
+const surProjet = await page.evaluate(() => {
+  const b = document.querySelector('#menu button[data-menu="apropos"]');
+  return b ? b.getAttribute('aria-current') : 'pas de menu À propos';
+});
+check('Menu : sur la page d’un projet, « À propos » n’est pas souligné', surProjet !== 'true', surProjet);
+const fluide = await page.evaluate(async () => {
+  const attendre = (ms) => new Promise(r => setTimeout(r, ms));
+  document.querySelectorAll('.shot')[0].click();
+  await attendre(450);
+  const lb = document.getElementById('lightbox'), wa = document.getElementById('wa');
+  const T = (x, y) => [new Touch({ identifier: 7, target: lb, clientX: x, clientY: y })];
+  const waPendant = wa.hidden ? 'caché' : getComputedStyle(wa).visibility;
+  // glissement suivi : la piste suit le doigt, puis la photo suivante arrive
+  lb.dispatchEvent(new TouchEvent('touchstart', { touches: T(800, 400), bubbles: true }));
+  for (let i = 1; i <= 8; i++) { lb.dispatchEvent(new TouchEvent('touchmove', { touches: T(800 - i * 45, 402), bubbles: true })); await attendre(16); }
+  const suit = document.getElementById('lb-piste').style.transform;
+  lb.dispatchEvent(new TouchEvent('touchend', { changedTouches: T(440, 402), bubbles: true }));
+  await attendre(450);
+  const rang = document.getElementById('lb-rang').textContent;
+  // tirer vers le bas : le fond s'éclaircit, puis le plein écran se ferme
+  lb.dispatchEvent(new TouchEvent('touchstart', { touches: T(600, 300), bubbles: true }));
+  for (let i = 1; i <= 10; i++) { lb.dispatchEvent(new TouchEvent('touchmove', { touches: T(602, 300 + i * 20), bubbles: true })); await attendre(16); }
+  const fond = Number(document.getElementById('lb-fond').style.opacity);
+  lb.dispatchEvent(new TouchEvent('touchend', { changedTouches: T(602, 500), bubbles: true }));
+  await attendre(450);
+  return { waPendant, suit, rang, fond, ferme: !lb.classList.contains('open'), projet: document.body.classList.contains('viewing'),
+           waApres: wa.hidden ? 'caché' : getComputedStyle(wa).visibility };
+});
+check('Plein écran : la photo suit le doigt pendant le glissement', fluide.suit === 'translateX(-360px)', fluide.suit);
+check('Plein écran : lâcher après un glissement suivi passe à la photo suivante', fluide.rang === '2 / 3', fluide.rang);
+check('Plein écran : tirer vers le bas éclaircit le fond', fluide.fond > 0 && fluide.fond < 1, String(fluide.fond));
+check('Plein écran : tirer vers le bas le ferme, le projet reste ouvert', fluide.ferme && fluide.projet, JSON.stringify(fluide));
+check('Plein écran : le bouton WhatsApp s’efface, puis revient', (fluide.waPendant === 'hidden' || fluide.waPendant === 'caché') && fluide.waApres !== 'hidden', fluide.waPendant + ' → ' + fluide.waApres);
+{
+  await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(400);
+  const bk = await page.locator('#back').boundingBox();
+  await page.mouse.move(bk.x + 10, bk.y + bk.height / 2); await page.mouse.down();
+  const enfonce = await page.evaluate(() => getComputedStyle(document.getElementById('back')).scale);
+  await page.mouse.move(2, 2); await page.mouse.up();
+  check('Appui : un bouton s’enfonce dès qu’on appuie', enfonce === '0.94', enfonce);
+}
+const texteSuit = await page.evaluate(() => {
+  document.documentElement.style.fontSize = '20px';
+  const t = parseFloat(getComputedStyle(document.body).fontSize);
+  document.documentElement.style.fontSize = '';
+  return t;
+});
+check('Texte : il grossit avec la taille de texte choisie dans le navigateur', texteSuit > 15, texteSuit + ' px');
+
 // --- Clavier : le plein écran prend le focus et le rend
 const clavierPlein = await page.evaluate(async () => {
   const shot = document.querySelectorAll('.shot')[0];
