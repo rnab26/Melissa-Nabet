@@ -178,6 +178,13 @@
   .dragging-row{box-shadow:0 6px 16px rgba(0,0,0,.18);border-radius:4px;}
   .cgv-body{display:block;width:calc(100% - 22px);margin:0 11px 11px;min-height:60px;font-size:12.5px;padding:7px 9px;border:1px solid var(--panel-edge);border-radius:3px;font-family:'Inter';resize:vertical;}
   .lib-item input{font-size:12.5px;padding:6px 8px;}
+  .lib-item{flex-wrap:wrap;}
+  .lib-item-desc{flex:1 0 100%;padding:2px 0 4px 26px;}
+  .lib-item-desc textarea{display:block;width:100%;min-height:64px;font-size:12.5px;padding:7px 9px;border:1px solid var(--panel-edge);border-radius:3px;font-family:'Inter';resize:vertical;}
+  .lib-item-opts{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--stone);}
+  .lib-item-opts label{display:flex;gap:6px;align-items:center;}
+  .it-descbtns{flex:0 0 auto;display:flex;flex-direction:column;gap:4px;align-self:stretch;}
+  .it-descbtns .ai-btn{flex:1;}
   .lib-item-move{width:auto;flex:0 0 auto;font-size:11px;padding:5px 6px;color:var(--stone);}
   .empty{text-align:center;color:var(--stone);font-size:13px;padding:18px;font-style:italic;}
   /* bottom via calc() + env() : sur iPhone à encoche/barre de gestes, un élément flottant

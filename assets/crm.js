@@ -405,7 +405,7 @@ function seedComposerFromLibrary(){
   current.services=[];current.open={};
   library.sections.forEach((sec,i)=>{
     current.open[sec.name]=false;
-    sec.items.forEach(it=>current.services.push({id:uid(),cat:sec.name,on:!!it.defaultOn,title:it.title,desc:it.desc||'',mode:it.mode||'none',price:it.price||0,qty:it.qty||1,pu:it.pu||0,custom:false}));
+    sec.items.forEach(it=>current.services.push({id:uid(),libId:it.id,cat:sec.name,on:!!it.defaultOn,title:it.title,desc:it.desc||'',mode:it.mode||'none',price:it.price||0,qty:it.qty||1,pu:it.pu||0,custom:false}));
   });
   current.exclus=(library.exclus||DEFAULT_EXCLUS).map(t=>({id:uid(),on:true,title:t,custom:false}));
   current.cgv=(library.cgv||DEFAULT_CGV).map(c=>({...c}));
@@ -594,12 +594,13 @@ function buildPrest(){
     const body=acc.querySelector('.acc-body');
     items.forEach(sv=>{
       const row=document.createElement('div');row.className='it'+(sv.on?' on':'');
-      row.innerHTML=`<div class="it-head"><input type="checkbox" ${sv.on?'checked':''}><input class="it-title" type="text" value="${esc(sv.title)}" placeholder="Intitulé">${sv.custom?'<button class="it-rm" title="Supprimer">×</button>':''}</div><div class="it-sub"><div class="it-descrow"><textarea class="it-desc" placeholder="Texte qui embellit et raconte…">${esc(sv.desc)}</textarea><button class="ai-btn" title="Embellir avec l'IA">✨</button></div><label class="it-opt-toggle" title="Affiche deux cases « Oui / Non » sur le devis, pour que le client coche s'il accepte cette option."><input type="checkbox" class="it-opt-cb" ${sv.optionClient?'checked':''}> Option à valider par le client</label><div class="it-price">${priceInputs(sv)}</div></div>`;
+      row.innerHTML=`<div class="it-head"><input type="checkbox" ${sv.on?'checked':''}><input class="it-title" type="text" value="${esc(sv.title)}" placeholder="Intitulé">${sv.custom?'<button class="it-rm" title="Supprimer">×</button>':''}</div><div class="it-sub"><div class="it-descrow"><textarea class="it-desc" placeholder="Texte qui embellit et raconte…">${esc(sv.desc)}</textarea><div class="it-descbtns"><button class="ai-btn" title="Embellir avec l'IA">✨</button><button class="ai-btn pin-btn" title="Enregistrer ce texte comme description fixe de cette prestation (réutilisé dans les nouveaux devis)">📌</button></div></div><label class="it-opt-toggle" title="Affiche deux cases « Oui / Non » sur le devis, pour que le client coche s'il accepte cette option."><input type="checkbox" class="it-opt-cb" ${sv.optionClient?'checked':''}> Option à valider par le client</label><div class="it-price">${priceInputs(sv)}</div></div>`;
       const cb=row.querySelector('.it-head input[type=checkbox]');
       cb.addEventListener('change',()=>{sv.on=cb.checked;row.classList.toggle('on',sv.on);const c=sectionCount(name);const b=acc.querySelector('.acc-count');b.textContent=c;b.classList.toggle('zero',!c);render();});
       row.querySelector('.it-title').addEventListener('input',e=>{sv.title=e.target.value;renderDebounced();});
       row.querySelector('.it-desc').addEventListener('input',e=>{sv.desc=e.target.value;renderDebounced();});
       row.querySelector('.ai-btn').addEventListener('click',e=>embellish(sv,e.target,row.querySelector('.it-desc')));
+      row.querySelector('.pin-btn').addEventListener('click',()=>libPinDesc(sv));
       row.querySelector('.it-opt-cb').addEventListener('change',e=>{sv.optionClient=e.target.checked;render();});
       const rm=row.querySelector('.it-rm');if(rm)rm.addEventListener('click',()=>{current.services=current.services.filter(x=>x.id!==sv.id);buildPrest();render();});
       const pr=row.querySelector('.it-price');
@@ -1706,7 +1707,12 @@ function openLibraryPanel(){
       <span class="drag-handle item-drag-handle" title="Glisser pour réordonner">⠿</span>
       <input type="text" value="${esc(it.title)}" oninput="libEdit(${si},${ii},'title',this.value)">
       <select class="lib-item-move" title="Déplacer ce service vers une autre section" onchange="libMoveItem(${si},${ii},this.value)">${moveOptions}</select>
-      <button class="mini danger" onclick="libDelItem(${si},${ii})">×</button></div>`).join('');
+      <button class="mini danger" onclick="libDelItem(${si},${ii})">×</button>
+      <div class="lib-item-desc">
+        <textarea rows="3" placeholder="Description fixe (reprise telle quelle dans chaque nouveau devis)" oninput="libEdit(${si},${ii},'desc',this.value)">${esc(it.desc||'')}</textarea>
+        <div class="lib-item-opts">
+          <label><input type="checkbox" ${it.defaultOn?'checked':''} onchange="libEdit(${si},${ii},'defaultOn',this.checked)"> Coché d'office dans les nouveaux devis</label>
+          <button class="mini" onclick="libApplyDesc(${si},${ii})">↻ Mettre à jour les devis en cours</button></div></div></div>`).join('');
     return `<div class="lib-sec" data-idx="${si}"><div class="lib-sec-h">
       <span class="drag-handle sec-drag-handle" title="Glisser pour réordonner">⠿</span>
       <input type="text" value="${esc(sec.name)}" oninput="libEdit(${si},null,'name',this.value)">
@@ -1852,6 +1858,50 @@ function propagateSectionRename(oldName,newName){
   if(touchedCurrent){buildPrest();render();}
 }
 function libAddItem(si){library.sections[si].items.push({id:uid(),title:'Nouvelle prestation',desc:'',mode:'none',price:0,qty:1,pu:0,defaultOn:false});openLibraryPanel();saveLibraryDebounced();}
+/* Une ligne de devis retrouve sa prestation par libId ; les devis d'avant ce lien (sans libId)
+   par section + intitulé. */
+function libMatch(it,secName,sv){return sv.libId?sv.libId===it.id:(sv.cat===secName&&sv.title===it.title);}
+/* « Devis en cours » = le devis ouvert + les brouillons enregistrés. Un devis VALIDÉ ne bouge
+   jamais (il est figé volontairement, voir propagateSectionRename). */
+function libDescTargets(it,secName){
+  const cur=devisList.find(d=>d.id===currentDevisId);
+  const lignes=[];
+  if(!cur||cur.status!=='valide')lignes.push(...(current.services||[]));
+  devisList.filter(d=>d.status!=='valide'&&d.snapshot).forEach(d=>lignes.push(...(d.snapshot.services||[])));
+  return lignes.filter(sv=>libMatch(it,secName,sv)&&(sv.desc||'')!==(it.desc||''));
+}
+async function libApplyDesc(si,ii){
+  const sec=library.sections[si],it=sec&&sec.items[ii];if(!it)return;
+  try{await saveLibrary();}catch(e){toast('Enregistrement impossible : '+e.message);return;}
+  const cibles=libDescTargets(it,sec.name);
+  if(!cibles.length){toast('Aucun devis en cours à mettre à jour : tout est déjà identique');return;}
+  askConfirm('Remplacer la description de « '+it.title+' » dans '+cibles.length+' ligne'+(cibles.length>1?'s':'')+' de devis en cours (devis ouvert et brouillons) ?\nLes devis validés ne changent pas. Un texte modifié à la main dans ces lignes sera remplacé.',async()=>{
+    try{
+      cibles.forEach(sv=>{sv.desc=it.desc||'';sv.libId=it.id;});
+      await store.set(K_DEVIS,devisList);
+      buildPrest();render();openLibraryPanel();
+      toast('Description mise à jour dans '+cibles.length+' ligne'+(cibles.length>1?'s':''));
+    }catch(e){toast('Mise à jour impossible : '+e.message);}
+  });
+}
+/* Depuis le composeur : ce qui est écrit dans la ligne devient la description fixe de la
+   prestation (une ligne ajoutée à la main entre dans la bibliothèque, dans sa section). */
+async function libPinDesc(sv){
+  try{
+    if(!(sv.title||'').trim()){toast('Donnez d\'abord un intitulé à cette ligne');return;}
+    let sec=null,it=null;
+    library.sections.forEach(S=>S.items.forEach(x=>{if(!it&&libMatch(x,S.name,sv)){sec=S;it=x;}}));
+    if(!it){
+      sec=library.sections.find(S=>S.name===sv.cat);
+      if(!sec){toast('Section « '+sv.cat+' » introuvable dans la bibliothèque');return;}
+      it={id:uid(),title:sv.title,desc:'',mode:sv.mode||'none',price:sv.price||0,qty:sv.qty||1,pu:sv.pu||0,defaultOn:false};
+      sec.items.push(it);
+    }
+    it.desc=sv.desc||'';sv.libId=it.id;
+    await saveLibrary();
+    toast('Description enregistrée dans la bibliothèque');
+  }catch(e){toast('Enregistrement impossible : '+e.message);}
+}
 function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
 function libMoveItem(si,ii,targetSiStr){
   const targetSi=parseInt(targetSiStr,10);
