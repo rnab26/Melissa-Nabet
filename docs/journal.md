@@ -4016,3 +4016,19 @@ Chantier « Traduction hébreu et sens de lecture inversé » (cockpit, repris d
 - Les textes écrits en dur que le dictionnaire anglais ne couvre pas encore (écrans longs, états vides, certains en-têtes) restent en français en hébreu aussi. Règle : chaque ligne ajoutée à `UI_EN` doit recevoir sa ligne dans `UI_HE` (le test l’impose).
 - Les conditions générales en hébreu sont une traduction courante, à faire relire par un juriste avant usage contractuel. Vérification visuelle faite en Chromium ; pas sur un vrai iPhone / Android.
 - Le logo « MELISSA NABET » et les adresses e-mail restent en lettres latines (voulu).
+
+## 20 novembre 2026 — « Hors prestation » : garder une ligne pour les prochains devis
+
+**Constat (vérifié en base)** : rien n'a été perdu. Le devis « Salle de box » (n°0079, validé) a 17 lignes
+« hors prestation » : 3 viennent de la bibliothèque, 14 ont été tapées à la main dans CE devis seulement
+(`custom: true`). La bibliothèque (`library.exclus`) n'en a jamais eu que 3 (= `DEFAULT_EXCLUS`), et un nouveau
+devis part de la bibliothèque : d'où les 3 lignes du brouillon « Morgane » (n°0081).
+
+**Livré** : un 📌 sur chaque ligne ajoutée à la main (`libPinExclu`, `assets/crm.js`) la range dans la
+bibliothèque, sans doublon ; message visible en cas de succès ou de texte vide. Traductions anglais et hébreu.
+Test permanent : `tests/hors-prestation-pin.test.mjs` (11 vérifications, écran 390 px).
+
+**Ouvert** : recopier les 13 lignes manquantes de « Salle de box » dans la bibliothèque et dans le brouillon
+« Morgane » = écriture dans les données réelles, en attente du « oui » de Raphaël, et APRÈS la correction de la
+synchro (sinon sa tablette renverrait l'ancienne bibliothèque par-dessus). Un brouillon existant ne reprend pas
+tout seul les nouvelles lignes de la bibliothèque.

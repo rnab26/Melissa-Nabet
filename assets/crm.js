@@ -628,10 +628,11 @@ function buildExclu(){
   const body=acc.querySelector('.acc-body');
   current.exclus.forEach(ex=>{
     const row=document.createElement('div');row.className='it'+(ex.on?' on':'');
-    row.innerHTML=`<div class="it-head"><input type="checkbox" ${ex.on?'checked':''}><input class="it-title" type="text" value="${esc(ex.title)}" placeholder="Élément non compris">${ex.custom?'<button class="it-rm">×</button>':''}</div>`;
+    row.innerHTML=`<div class="it-head"><input type="checkbox" ${ex.on?'checked':''}><input class="it-title" type="text" value="${esc(ex.title)}" placeholder="Élément non compris">${ex.custom?'<button class="it-rm it-pin" title="Garder cette ligne pour les prochains devis">📌</button><button class="it-rm">×</button>':''}</div>`;
     row.querySelector('input[type=checkbox]').addEventListener('change',e=>{ex.on=e.target.checked;row.classList.toggle('on',ex.on);const c=current.exclus.filter(x=>x.on).length;const b=acc.querySelector('.acc-count');b.textContent=c;b.classList.toggle('zero',!c);render();});
     row.querySelector('.it-title').addEventListener('input',e=>{ex.title=e.target.value;renderDebounced();});
-    const rm=row.querySelector('.it-rm');if(rm)rm.addEventListener('click',()=>{current.exclus=current.exclus.filter(x=>x.id!==ex.id);buildExclu();render();});
+    const pin=row.querySelector('.it-pin');if(pin)pin.addEventListener('click',()=>libPinExclu(ex));
+    const rm=row.querySelector('.it-rm:not(.it-pin)');if(rm)rm.addEventListener('click',()=>{current.exclus=current.exclus.filter(x=>x.id!==ex.id);buildExclu();render();});
     body.appendChild(row);
   });
   const add=document.createElement('button');add.className='add-btn';add.textContent='+ Ajouter un élément';
@@ -1900,6 +1901,19 @@ async function libPinDesc(sv){
     it.desc=sv.desc||'';sv.libId=it.id;
     await saveLibrary();
     toast('Description enregistrée dans la bibliothèque');
+  }catch(e){toast('Enregistrement impossible : '+e.message);}
+}
+/* Une ligne « hors prestation » tapée dans un devis n'existait que dans CE devis : les
+   nouveaux devis partent de library.exclus. Le 📌 l'y ajoute (sans doublon). */
+async function libPinExclu(ex){
+  try{
+    const t=(ex.title||'').trim();
+    if(!t){toast('Écrivez d\'abord le texte de cette ligne');return;}
+    if(!library.exclus)library.exclus=DEFAULT_EXCLUS.slice();
+    if(!library.exclus.includes(t))library.exclus.push(t);
+    ex.custom=false;buildExclu();
+    await saveLibrary();
+    toast('Ligne gardée pour les prochains devis');
   }catch(e){toast('Enregistrement impossible : '+e.message);}
 }
 function libDelItem(si,ii){library.sections[si].items.splice(ii,1);openLibraryPanel();saveLibraryDebounced();}
