@@ -138,14 +138,15 @@ check('Devis en hébreu : les deux blocs d’en-tête sont inversés (infos du d
 check('Devis en hébreu : le total est aligné à gauche (côté « fin » en hébreu)',
   await page.evaluate(() => getComputedStyle(document.querySelector('#devis .dv-totals .tr .v')).textAlign === 'left'));
 
-/* fenêtre PDF / impression */
-const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 8000 }).catch(() => null), page.evaluate(() => openDevisWindow())]);
-if (popup) {
-  await popup.waitForLoadState('domcontentloaded');
-  const pw = await popup.evaluate(() => ({ dir: document.documentElement.dir, lang: document.documentElement.lang, titre: document.title, pages: document.querySelectorAll('.devis-page[dir=rtl]').length }));
-  check('Fenêtre PDF du devis hébreu : dir="rtl", lang="he", titre « הצעת מחיר »', pw.dir === 'rtl' && pw.lang === 'he' && /^הצעת מחיר/.test(pw.titre) && pw.pages >= 1, JSON.stringify(pw));
-  await popup.close();
-} else check('Fenêtre PDF du devis hébreu : ouverte', false, 'aucune fenêtre');
+/* impression / PDF : dans la page (plus de fenêtre à part depuis le 19 nov. 2026) */
+const pw = await page.evaluate(() => {
+  const avant = window.print; window.print = () => {};
+  exportDevis();
+  const r = { dir: document.querySelector('#zone-impression .devis').dir, titre: document.title, pages: document.querySelectorAll('#zone-impression .devis-page[dir=rtl]').length };
+  window.dispatchEvent(new Event('afterprint')); document.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+  window.print = avant; return r;
+});
+check('Impression du devis hébreu : dir="rtl", titre « הצעת מחיר »', pw.dir === 'rtl' && /^הצעת מחיר/.test(pw.titre) && pw.pages >= 1, JSON.stringify(pw));
 
 /* messages envoyés au client */
 const mails = await page.evaluate(() => {

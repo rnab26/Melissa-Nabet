@@ -604,6 +604,14 @@
   {
    "texte": "Mélissa",
    "raison": "nom transmis au module Cockpit (data-utilisateur), jamais affiché dans le CRM"
+  },
+  {
+   "texte": "#devis",
+   "raison": "sélecteur CSS (toucher sur la page de l'aperçu)"
+  },
+  {
+   "texte": "Allègement des textures",
+   "raison": "étiquette de console (console.error)"
   }
  ]
 }
