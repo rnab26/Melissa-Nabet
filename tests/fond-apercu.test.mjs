@@ -10,6 +10,8 @@
 
    Se lance seul (sert les fichiers du dépôt lui-même, aucun serveur à démarrer) :
      node tests/fond-apercu.test.mjs
+   Contre le site en ligne :
+     APP_URL=https://rnab26.github.io/Melissa-Nabet/index.html node tests/fond-apercu.test.mjs
 */
 import { chromium } from 'playwright';
 import { readFileSync, existsSync } from 'fs';
@@ -28,12 +30,12 @@ async function ouvrir(width, height) {
   const page = await browser.newPage({ viewport: { width, height } });
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
-  await page.route(BASE + '**', r => {
+  if (!process.env.APP_URL) await page.route(BASE + '**', r => {
     const f = join(ROOT, decodeURIComponent(new URL(r.request().url()).pathname));
     if (!existsSync(f)) return r.fulfill({ status: 404, body: '' });
     r.fulfill({ status: 200, contentType: TYPES[extname(f)] || 'application/octet-stream', body: readFileSync(f) });
   });
-  await page.goto(BASE + 'index.html', { waitUntil: 'domcontentloaded' });
+  await page.goto(process.env.APP_URL || BASE + 'index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof newDevis === 'function' && typeof library === 'object');
   await page.evaluate(() => {
     document.querySelectorAll('#login-overlay').forEach(e => e.style.display = 'none');
@@ -182,7 +184,6 @@ const texturePng = () => {
   check('Composeur défilé tout en bas, puis « Aperçu » : on arrive en haut du devis', avant > 1000 && a.scrollY === 0 && a.top < 120, `avant ${avant}, après ${a.scrollY}, haut du devis à ${Math.round(a.top)} px`);
   check('L\'aperçu est la page A4 du PDF (210 mm de large, marges de 16 mm)', Math.abs(a.largeurA4 - 793.7) < 2 && Math.abs(a.marge - 60.47) < 1, `${a.largeurA4} px, marge ${a.marge}`);
   check('La page entière tient dans l\'écran', a.zoom < 1 && a.left >= 0 && a.right <= 390, `zoom ${a.zoom}, ${Math.round(a.left)}–${Math.round(a.right)} px`);
-  await page.screenshot({ path: '/tmp/apercu-telephone.png' });
   await page.click('#devis .dv-title, #devis .devis-page', { position: { x: 100, y: 100 } }); await page.waitForTimeout(200);
   const reel = await page.evaluate(() => { const pw = document.querySelector('.preview-wrap'); pw.scrollLeft = 0; const r = document.getElementById('devis').getBoundingClientRect(); return { zoom: getComputedStyle(pw).getPropertyValue('--dv-zoom').trim(), defile: pw.scrollWidth > pw.clientWidth, gauche: r.left }; });
   check('Un toucher sur la page : taille réelle, on peut la faire défiler, bord gauche visible', reel.zoom === '1.0000' && reel.defile && reel.gauche >= 0, JSON.stringify(reel));
