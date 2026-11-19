@@ -866,7 +866,7 @@ function openImageCropper(file,onSave,opts){
     img.onload=()=>{
       const nw=img.naturalWidth,nh=img.naturalHeight;
       const baseScale=Math.max(VPW/nw,VPH/nh);
-      _cropState={img,nw,nh,baseScale,scale:1,offX:0,offY:0,onSave,VPW,VPH};
+      _cropState={img,nw,nh,baseScale,scale:1,offX:0,offY:0,onSave,VPW,VPH,jpeg:!!(opts&&opts.jpeg)};
       openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>${esc(title)}</h3>
         <p class="msub">Glissez pour déplacer, utilisez le curseur pour zoomer, puis validez.</p>
         <div id="crop-viewport" style="width:${VPW}px;height:${VPH}px;overflow:hidden;position:relative;margin:0 auto 14px;border-radius:8px;border:1px solid var(--panel-edge);background:#00000010;touch-action:none;cursor:grab;">
@@ -926,8 +926,10 @@ function applyImageCrop(){
   const mult=3;
   const OUTW=Math.round(VPW*mult),OUTH=Math.round(VPH*mult);
   const cv=document.createElement('canvas');cv.width=OUTW;cv.height=OUTH;
-  cv.getContext('2d').drawImage(st.img,srcX,srcY,srcW,srcH,0,0,OUTW,OUTH);
-  const dataUri=cv.toDataURL('image/png');
+  const ctx=cv.getContext('2d');
+  if(st.jpeg){ctx.fillStyle='#fff';ctx.fillRect(0,0,OUTW,OUTH);}
+  ctx.drawImage(st.img,srcX,srcY,srcW,srcH,0,0,OUTW,OUTH);
+  const dataUri=st.jpeg?cv.toDataURL('image/jpeg',TEXTURE_JPEG_QUALITE):cv.toDataURL('image/png');
   const onSave=st.onSave;
   _cropState=null;
   closeModal();
@@ -989,13 +991,50 @@ function pickToolbarBrandImage(){
   }));
 }
 function clearToolbarBrandImage(){library.branding.toolbarBrandImage=null;library.branding.toolbarBrandType='text';applyBrandingLive();openSettingsPanel();}
+/* Une texture de fond (marbre, bois, papier) est une photo : elle se garde en JPEG. En PNG
+   elle pesait 1,6 Mo, recopiée dans les réglages, la bibliothèque de fonds et chaque devis :
+   6,5 Mo à renvoyer au serveur à chaque réglage. La base abandonne une écriture au bout de
+   8 s (« canceling statement due to statement timeout ») : le nouveau fond « s'annulait ». */
+const TEXTURE_JPEG_QUALITE=0.82;
+const _texturesJpeg=new Map();
+function textureEnJpeg(uri){
+  if(typeof uri!=='string'||!uri.startsWith('data:image/png'))return Promise.resolve(uri);
+  if(!_texturesJpeg.has(uri))_texturesJpeg.set(uri,new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const cv=document.createElement('canvas');cv.width=img.naturalWidth;cv.height=img.naturalHeight;
+      const ctx=cv.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(img,0,0);
+      const j=cv.toDataURL('image/jpeg',TEXTURE_JPEG_QUALITE);
+      res(j.length<uri.length?j:uri);
+    };
+    img.onerror=()=>res(uri);
+    img.src=uri;
+  }));
+  return _texturesJpeg.get(uri);
+}
+/* Les textures déjà enregistrées en PNG passent en JPEG, une fois, après le chargement du
+   cloud : réglages, bibliothèque de fonds, devis (brouillons et validés — le rendu ne change
+   pas, la texture est vue à travers le voile papier). Une valeur modifiée entre-temps n'est
+   pas écrasée. Logo et signature restent en PNG : ils ont besoin de la transparence. */
+async function allegerTextures(){
+  const conv=async(o,k)=>{const v=o&&o[k];if(!v)return false;const n=await textureEnJpeg(v);if(n===v||o[k]!==v)return false;o[k]=n;return true;};
+  const KS=['devisBgImage','devisBgImageBase'];
+  let lib=false,dv=false;
+  for(const k of KS)lib=(await conv(library.branding,k))||lib;
+  for(const x of (Array.isArray(library.bgLibrary)?library.bgLibrary:[]))lib=(await conv(x,'dataUri'))||lib;
+  for(const d of devisList){const b=d&&d.snapshot&&d.snapshot.branding;for(const k of KS)dv=(await conv(b,k))||dv;}
+  let cur=false;for(const k of KS)cur=(await conv(current.branding,k))||cur;
+  if(lib)saveLibrary();
+  if(dv)store.set(K_DEVIS,devisList);
+  if(cur||lib)render();
+}
 function pickDevisBgImage(){
   pickImageFile(file=>openImageCropper(file,dataUri=>{
     library.branding.devisBgImageBase=dataUri;
     library.branding.devisBgFlipX=false;
     library.branding.devisBgFlipY=false;
     renderDevisBgFromBase();
-  },{vpW:220,vpH:311,title:'Cadrer la texture de fond'}));
+  },{vpW:220,vpH:311,title:'Cadrer la texture de fond',jpeg:true}));
 }
 /* Cuit le flip horizontal/vertical dans l'image (au lieu d'un transform CSS sur le fond),
    pour que l'aperçu, l'impression et l'export PDF montrent toujours exactement la même chose. */
@@ -1011,10 +1050,11 @@ function renderDevisBgFromBase(){
     else{
       const cv=document.createElement('canvas');cv.width=w;cv.height=h;
       const ctx=cv.getContext('2d');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);
       ctx.translate(flipX?w:0,flipY?h:0);
       ctx.scale(flipX?-1:1,flipY?-1:1);
       ctx.drawImage(img,0,0,w,h);
-      library.branding.devisBgImage=cv.toDataURL('image/png');
+      library.branding.devisBgImage=cv.toDataURL('image/jpeg',TEXTURE_JPEG_QUALITE);
     }
     applyBrandingLive();openSettingsPanel();
   };
@@ -1031,7 +1071,7 @@ function pickBgToLibrary(){
     store.set(K_LIB,library);
     openSettingsPanel();
     toast('Fond ajouté à la bibliothèque');
-  },{vpW:220,vpH:311,title:'Cadrer la texture de fond'}));
+  },{vpW:220,vpH:311,title:'Cadrer la texture de fond',jpeg:true}));
 }
 function saveDevisBgToLibrary(){
   ensureBgLibrary();
@@ -1318,47 +1358,34 @@ async function settingsSave(){
 }
 
 /* ============ EXPORT PDF ============ */
-function openDevisWindowHTML(devisHTML,num,companyName,docType,lang){
-  const styles=Array.from(document.querySelectorAll('style,link[rel=stylesheet]')).map(n=>n.tagName==='LINK'?`<link rel="stylesheet" href="${n.href}">`:n.outerHTML).join('');
+/* Impression DANS la page : plus de fenêtre à part. Depuis que le CRM s'installe comme une
+   application, une fenêtre ouverte par window.open n'est pas fiable (vide, ou bloquée comme
+   pop-up) — l'aperçu ne s'affichait plus. L'aperçu d'impression du téléphone ou de
+   l'ordinateur montre les vraies pages du PDF, avec « Enregistrer au format PDF ».
+   Seule la zone d'impression est imprimée (le reste de l'appli est masqué, voir crm.css), et
+   ses styles de devis sont limités à elle : un devis validé (autres couleurs, autre fond)
+   imprimé depuis une fiche client ne déteint pas sur le devis ouvert dans le composeur. */
+function imprimerDevisHTML(devisHTML,num,companyName,docType,lang){
   const dl={lang:lang};
   const docLabel=docType==='facture'?dvLabel(dl,'facture'):dvLabel(dl,'devis');
-  const doc=`<!DOCTYPE html><html lang="${dvLang(dl)}" dir="${I18N.langDir(dvLang(dl))}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${docLabel} ${esc(num||'')} — ${esc(companyName||'Melissa Nabet')}</title>${styles}
-    <style>body{background:#e8e2d7;margin:0;padding:64px 0 20px;} .devis{box-shadow:0 8px 30px rgba(60,50,35,.18);margin:0 auto;transform:none!important;}
-    .exportbar{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;gap:8px;justify-content:center;padding:10px;background:rgba(35,32,28,.96);}
-    .exportbar button{font-family:'Inter',sans-serif;font-size:13px;font-weight:500;border:none;background:#9a8574;color:#fff;padding:11px 16px;border-radius:4px;cursor:pointer;}
-    .exportbar button.alt{background:#3d3934;}
-    .exportbar button:disabled{opacity:.6;cursor:wait;}
-    @media print{
-      .exportbar{display:none!important;}
-      @page{size:A4;margin:0;}
-      html,body{background:#f4efe6;padding:0;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-      .devis{box-shadow:none;width:auto;margin:0;background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
-      .devis-page{page-break-after:always;box-sizing:border-box;min-height:297mm;padding:16mm 16mm;background:#f4efe6;position:relative;-webkit-box-decoration-break:clone;box-decoration-break:clone;}
-      .devis-page:last-child{page-break-after:avoid;}
-      .devis-page.cond{page-break-before:always;}
-      .devis-page + .devis-page{border-top:none;}
-      .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
-      *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
-    }</style></head>
-    <body>
-      <div class="exportbar">
-        <button onclick="window.print()">⬇ Télécharger le PDF</button>
-        <button class="alt" onclick="window.print()">Imprimer</button>
-      </div>
-      ${devisHTML}
-    </body></html>`;
-  const w=window.open('','_blank');
-  if(w){w.document.open();w.document.write(doc);w.document.close();return true;}
-  return false;
+  let zone=$('zone-impression');
+  if(!zone){zone=document.createElement('div');zone.id='zone-impression';document.body.appendChild(zone);}
+  /* La texture du devis ouvert (règle .devis-page non limitée) ne doit pas passer sur un devis
+     imprimé qui n'en a pas : remise à zéro, puis les styles propres au devis imprimé. */
+  zone.innerHTML='<style>#zone-impression .devis-page{background-image:none}</style>'+devisHTML.replace(/\.devis(-page)?\{/g,m=>'#zone-impression '+m);
+  const titreAvant=document.title;
+  document.title=docLabel+' '+(num||'')+' — '+(companyName||'Melissa Nabet');
+  document.body.classList.add('impression-zone');
+  /* Nettoyage au premier geste APRÈS l'impression, pas dans afterprint même : certains
+     téléphones préparent les pages après cet évènement, une zone déjà vidée donnerait une
+     page blanche. */
+  const nettoyer=()=>{document.removeEventListener('pointerdown',nettoyer,true);document.body.classList.remove('impression-zone');zone.innerHTML='';document.title=titreAvant;};
+  window.addEventListener('afterprint',()=>document.addEventListener('pointerdown',nettoyer,true),{once:true});
+  window.print();
 }
-function openDevisWindow(){
+function exportDevis(){
   render();
-  return openDevisWindowHTML($('devis').outerHTML,current.num,current.branding&&current.branding.companyName,current.docType,current.lang);
-}
-async function exportDevis(){
-  if(openDevisWindow()){toast('Aperçu ouvert — bouton « Imprimer / Enregistrer en PDF »');return;}
-  /* Repli si les pop-ups sont bloqués : impression directe (mêmes marges @page). */
-  render();window.print();
+  imprimerDevisHTML(`<div class="devis" dir="${$('devis').dir}">${$('devis').innerHTML}</div>`,current.num,current.branding&&current.branding.companyName,current.docType,current.lang);
 }
 function devisMessageTexte(canal){
   /* Le message part avec le devis : il est dans la langue du DEVIS, pas celle de l'interface. */
@@ -1671,8 +1698,8 @@ function createDevisForClient(cid){
 function viewDevisSnapshot(id){
   const d=devisList.find(x=>x.id===id);if(!d)return;
   const snap=d.status!=='valide'?{...d.snapshot,branding:{...library.branding}}:d.snapshot;
-  const html=`<div class="devis">${buildDevisHTML(snap)}</div>`;
-  if(!openDevisWindowHTML(html,snap.num||d.num,snap.branding&&snap.branding.companyName,snap.docType,snap.lang)){toast('Autorisez les pop-ups pour voir le devis');}
+  const html=`<div class="devis" dir="${I18N.langDir(dvLang(snap))}">${buildDevisHTML(snap)}</div>`;
+  imprimerDevisHTML(html,snap.num||d.num,snap.branding&&snap.branding.companyName,snap.docType,snap.lang);
 }
 function newDevis(){currentDevisId=null;seedComposerFromLibrary();
   ensureBranding();
@@ -3747,11 +3774,43 @@ async function importClientsCSV(file){
 }
 
 /* ============ TABS ============ */
+/* Passer à l'aperçu après avoir composé laissait la page défilée tout en bas : on tombait sur
+   la fin des conditions générales, ou sur du vide, et l'aperçu « ne s'affichait plus ». Il
+   s'ouvre maintenant en haut du devis, et « Composer » ramène là où on en était. */
+let _scrollComposeur=0;
 function showTab(w){
+  const etaitApercu=document.body.classList.contains('show-preview');
+  if(w==='preview'&&!etaitApercu)_scrollComposeur=window.scrollY;
   document.body.classList.toggle('show-preview',w==='preview');
   document.body.classList.toggle('show-editor',w==='editor');
   const fab=$('devis-tab-fab');if(fab)fab.textContent=w==='preview'?'✏️ Composer':'👁 Aperçu';
+  if(w==='preview'&&!etaitApercu){
+    const pw=document.querySelector('.preview-wrap');if(pw)pw.scrollTop=0;
+    window.scrollTo(0,0);ajusterApercuA4();
+  }else if(w==='editor'&&etaitApercu)window.scrollTo(0,_scrollComposeur);
 }
+/* L'aperçu est la page A4 du PDF : 210 mm de large, marges de l'impression, réduite pour tenir
+   dans la colonne — mêmes retours à la ligne que le PDF. Le zoom à deux doigts est bloqué par
+   la balise viewport : un toucher sur la page bascule entre « page entière » et taille réelle. */
+const A4_LARGEUR_PX=210*96/25.4;
+function ajusterApercuA4(){
+  const pw=document.querySelector('.preview-wrap');if(!pw||!pw.clientWidth)return;
+  const cs=getComputedStyle(pw);
+  const dispo=pw.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+  const z=pw.classList.contains('a4-reel')?1:Math.min(1,dispo/A4_LARGEUR_PX);
+  pw.style.setProperty('--dv-zoom',z.toFixed(4));
+  pw.classList.toggle('a4-reduit',z<1||pw.classList.contains('a4-reel'));
+}
+(function(){
+  const pw=document.querySelector('.preview-wrap');if(!pw)return;
+  if(window.ResizeObserver)new ResizeObserver(ajusterApercuA4).observe(pw);
+  else window.addEventListener('resize',ajusterApercuA4);
+  pw.addEventListener('click',e=>{
+    if(!e.target.closest('#devis')||!pw.classList.contains('a4-reduit'))return;
+    pw.classList.toggle('a4-reel');ajusterApercuA4();
+  });
+  ajusterApercuA4();
+})();
 function toggleDevisTab(){showTab(document.body.classList.contains('show-preview')?'editor':'preview');}
 function toggleDevisMenu(e){if(e)e.stopPropagation();const m=$('vn-devis-menu');if(m)m.classList.toggle('open');}
 function closeDevisMenu(){const m=$('vn-devis-menu');if(m)m.classList.remove('open');}
@@ -10364,7 +10423,7 @@ function setSyncStatus(s){
     bar.classList.remove('show');
   }
 }
-function retrySync(){if(!sb||!sbUser)return;loadAll();cloudPush();}
+function retrySync(){if(!sb||!sbUser)return;cloudPush().then(loadAll);}
 function isEditingClients(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#clients-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 function isEditingChantier(){const a=document.activeElement;return !!(a&&a.closest&&a.closest('#chantier-view')&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'));}
 /* Trouvé lors d'un audit demandé par Raphaël (relecture complète du code, pas un bug
@@ -10438,6 +10497,13 @@ function onLogin(session){
   loadAll().then(subscribeRealtime);
 }
 let _loadAllRetryT=null,_loadAllRetryDelay=5000;
+/* Une modification locale pas encore confirmée par le serveur (envoi raté ou en cours) ne se
+   fait plus remplacer par la copie du serveur au rechargement : le bouton « Réessayer », le
+   retour dans l'appli et la reprise automatique appellent loadAll(), qui remettait l'ancien
+   fond — le réglage semblait « annulé ». La copie locale reste et repart au prochain envoi.
+   `ref` vide = rien encore lu du serveur cette session : la copie locale peut être périmée,
+   le serveur fait foi. */
+function enAttente(local,ref){return !!ref&&JSON.stringify(local)!==ref;}
 async function loadAll(){
   if(!sb||!sbUser)return;setSyncStatus('sync');
   try{
@@ -10453,13 +10519,13 @@ async function loadAll(){
          rien n'était, exactement le symptôme signalé. */
       if(r.kind==='devis'&&_pendingDeletedDevisIds.has(r.id))return;
       cloudIds.add(r.id);
-      if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
-      else if(r.kind==='devis'){if(!r.data||typeof r.data!=='object')return;const i=devisList.findIndex(x=>x.id===r.id);if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
-      else if(r.kind==='library'){if(r.data&&r.data.sections){library=r.data;remoteLibJson=JSON.stringify(library);}}
-      else if(r.kind==='tasks'){if(Array.isArray(r.data)){tasks=objets(r.data);remoteTasksJson=JSON.stringify(tasks);}}
+      if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0&&enAttente(clients[i],remoteClients[r.id]))return;if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
+      else if(r.kind==='devis'){if(!r.data||typeof r.data!=='object')return;const i=devisList.findIndex(x=>x.id===r.id);if(i>=0&&enAttente(devisList[i],remoteDevis[r.id]))return;if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
+      else if(r.kind==='library'){if(r.data&&r.data.sections&&!enAttente(library,remoteLibJson)){library=r.data;remoteLibJson=JSON.stringify(library);}}
+      else if(r.kind==='tasks'){if(Array.isArray(r.data)&&!enAttente(tasks,remoteTasksJson)){tasks=objets(r.data);remoteTasksJson=JSON.stringify(tasks);}}
       else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=JSON.stringify(realisations);}}
-      else if(r.kind==='produits'){if(Array.isArray(r.data)){produits=r.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
-      else if(r.kind==='chantier'){if(Array.isArray(r.data)){chantierList=r.data;remoteChantierJson=JSON.stringify(chantierList);}}
+      else if(r.kind==='produits'){if(Array.isArray(r.data)&&!enAttente(produits,remoteProdJson)){produits=r.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
+      else if(r.kind==='chantier'){if(Array.isArray(r.data)&&!enAttente(chantierList,remoteChantierJson)){chantierList=r.data;remoteChantierJson=JSON.stringify(chantierList);}}
     });
     clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
     devisList=objets(devisList).filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));tasks=objets(tasks);
@@ -10478,6 +10544,7 @@ async function loadAll(){
     /* Les demandes en vol vivent dans `library` : c'est ici, une fois la bibliothèque
        vraiment chargée, qu'on sait s'il y a quelque chose à récupérer. */
     iaRepriseAuto();
+    allegerTextures().catch(e=>console.error('Allègement des textures',e));
   }catch(e){
     lastSyncError=(e&&(e.message||e.code))||'lecture impossible';setSyncStatus('err');
     /* Contrairement à cloudPush() (qui retente déjà après 20s), un échec ici n'avait AUCUNE
@@ -10601,7 +10668,7 @@ function handleRealtime(payload){
     }else{
       const row=payload.new;
       if(row&&row.id){
-        if(row.kind==='client'&&row.id===activeEditingClientId()){
+        if(row.kind==='client'&&(row.id===activeEditingClientId()||enAttente(clients.find(x=>x.id===row.id),remoteClients[row.id]))){
           /* Fiche en cours de saisie : on ignore cette mise à jour distante (écho probable de
              notre propre écriture, ou modif concurrente) plutôt que d'écraser une frappe en
              cours. remoteClients[row.id] n'est PAS mis à jour : le prochain cloudPush() renverra
@@ -10615,7 +10682,7 @@ function handleRealtime(payload){
            saisie : si CE devis est ouvert ET qu'on est en train d'y taper, on ignore l'écho
            (remoteDevis pas mis à jour, le prochain cloudPush renverra notre version) ; sinon
            on recharge `current` depuis la donnée distante et on repeint l'écran tout de suite. */
-        else if(row.kind==='devis'&&row.id===currentDevisId&&isEditingDevisComposer()){}
+        else if(row.kind==='devis'&&((row.id===currentDevisId&&isEditingDevisComposer())||enAttente(devisList.find(x=>x.id===row.id),remoteDevis[row.id]))){}
         else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
           const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
           if(row.id===currentDevisId&&row.data&&row.data.snapshot){
@@ -10623,7 +10690,8 @@ function handleRealtime(payload){
             fillFields();buildPrest();buildExclu();render();
           }
         }
-        else if(row.kind==='library'&&isEditingLibrary()){}
+        /* Même règle que loadAll() : une modification pas encore envoyée n'est jamais remplacée. */
+        else if(row.kind==='library'&&(isEditingLibrary()||enAttente(library,remoteLibJson))){}
         else if(row.kind==='library'){
           if(row.data&&row.data.sections){
             library=row.data;remoteLibJson=JSON.stringify(library);
@@ -10643,7 +10711,7 @@ function handleRealtime(payload){
            boutique/chantier) ET aucun repeint du tableau de bord — une tâche modifiée sur un
            autre appareil mettait bien à jour `tasks` en coulisse mais l'écran restait figé
            jusqu'à un changement de vue ou un rechargement. */
-        else if(row.kind==='tasks'&&isEditingTasks()){}
+        else if(row.kind==='tasks'&&(isEditingTasks()||enAttente(tasks,remoteTasksJson))){}
         else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=objets(row.data);remoteTasksJson=JSON.stringify(tasks);}}
         else if(row.kind==='realisations'&&isEditingRealisations()){
           /* Saisie ou retouche en cours : on ignore la mise à jour distante et on ne marque
@@ -10652,12 +10720,12 @@ function handleRealtime(payload){
         else if(row.kind==='realisations'){if(Array.isArray(row.data)){mergeRealisations(row.data);remoteRealJson=JSON.stringify(realisations);}}
         /* Même protection que pour les réalisations : une saisie en cours ne se fait pas
            écraser par un écho distant, et le prochain push renverra la version locale. */
-        else if(row.kind==='produits'&&isEditingBoutique()){}
+        else if(row.kind==='produits'&&(isEditingBoutique()||enAttente(produits,remoteProdJson))){}
         else if(row.kind==='produits'){if(Array.isArray(row.data)){produits=row.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
         /* Même protection : une estimation en cours de saisie ne se fait pas écraser par un
            écho distant, remoteChantierJson n'est pas mis à jour, le prochain cloudPush
            renverra la version locale. */
-        else if(row.kind==='chantier'&&isEditingChantier()){}
+        else if(row.kind==='chantier'&&(isEditingChantier()||enAttente(chantierList,remoteChantierJson))){}
         else if(row.kind==='chantier'){if(Array.isArray(row.data)){chantierList=row.data;remoteChantierJson=JSON.stringify(chantierList);}}
       }
     }
@@ -10671,7 +10739,17 @@ function handleRealtime(payload){
   try{if(!isEditingTasks())renderTaskList();}catch(e){}
   setSyncStatus('ok');
 }
+/* Un seul envoi à la fois : sur un réseau lent, deux envois du même contenu se croisaient et
+   le plus ancien pouvait arriver en dernier — le serveur gardait alors l'ancienne version. Un
+   changement fait pendant un envoi repart juste après. */
+let _pushEnCours=null,_pushARefaire=false;
 async function cloudPush(){
+  if(_pushEnCours){_pushARefaire=true;return _pushEnCours;}
+  _pushEnCours=cloudPushUneFois();
+  try{await _pushEnCours;}finally{_pushEnCours=null;}
+  if(_pushARefaire){_pushARefaire=false;return cloudPush();}
+}
+async function cloudPushUneFois(){
   /* Ne JAMAIS pousser vers le serveur avant qu'un premier loadAll() ait réussi cette
      session (cloudReady). Sans cette garde : remoteDevis/remoteClients démarrent vides,
      donc CHAQUE ligne locale (potentiellement une copie périmée restée en cache depuis
