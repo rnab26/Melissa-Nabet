@@ -4081,6 +4081,6 @@ tout seul les nouvelles lignes de la bibliothèque.
 retouchée de la ligne 3 (« … saus si option differente validé »), qui modifie une ligne déjà en bibliothèque.
 Vérifié : sa tablette a renvoyé la bibliothèque à 23:49:42, avec toujours 16 lignes, donc l'écho temps réel est
 bien arrivé. **Brouillons n°0080 et n°0081 : écriture refusée par le garde-fou de la plateforme** (« Destructive
-or Unwanted Actions »). En attente de son accord écrit en session (question posée dans le cockpit, chantier
-`e1731414`). Le même jour, sa tablette a chargé le correctif de synchro : bibliothèque 6,5 Mo → 0,7 Mo,
+or Unwanted Actions »). Accord donné en session à 23:54 UTC : lignes ajoutées aux 2 brouillons, cochées comme dans un
+nouveau devis, sans doublon (16 lignes chacun, vérifié en base). Le même jour, sa tablette a chargé le correctif de synchro : bibliothèque 6,5 Mo → 0,7 Mo,
 devis n°0079 3,5 Mo → 0,43 Mo (vérifié en base).
