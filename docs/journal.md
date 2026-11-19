@@ -4016,3 +4016,46 @@ Chantier « Traduction hébreu et sens de lecture inversé » (cockpit, repris d
 - Les textes écrits en dur que le dictionnaire anglais ne couvre pas encore (écrans longs, états vides, certains en-têtes) restent en français en hébreu aussi. Règle : chaque ligne ajoutée à `UI_EN` doit recevoir sa ligne dans `UI_HE` (le test l’impose).
 - Les conditions générales en hébreu sont une traduction courante, à faire relire par un juriste avant usage contractuel. Vérification visuelle faite en Chromium ; pas sur un vrai iPhone / Android.
 - Le logo « MELISSA NABET » et les adresses e-mail restent en lettres latines (voulu).
+
+## 19 novembre 2026 — Le fond des devis « s'annulait », et l'aperçu fidèle au PDF
+
+Raphaël : « quand je change de fond pour les devis et que j'enregistre, ça fonctionne quelques secondes
+et après ça me dit que c'est annulé » ; « l'aperçu ne s'affiche plus, j'aimerais le vrai aperçu comme le
+PDF ». Chantier cockpit `34db3c75`. PR #25, fusionnée.
+
+**Cause, vérifiée en production** (pas supposée)
+- Ligne `library` de `app_data` : **6,5 Mo**. Chaque texture de fond était un PNG de 1,6 Mo, recopié
+  dans `branding.devisBgImage`, `branding.devisBgImageBase` et `bgLibrary` ; les devis en gardaient deux
+  copies de plus (un devis validé : 3,5 Mo).
+- Rôle `authenticated` : `statement_timeout=8s`. Journaux Supabase du 19/11, 23h06–23h12 UTC : upserts
+  `app_data` en HTTP 500, code 57014 « canceling statement due to statement timeout », plusieurs en même temps.
+- Puis « Réessayer » (`retrySync`) lançait `loadAll()` avant `cloudPush()` : la copie du serveur
+  remplaçait la bibliothèque locale, l'ancien fond revenait. Même chose au retour dans l'appli.
+
+**Fait**
+- Textures en **JPEG** (`TEXTURE_JPEG_QUALITE` = 0,82) : recadrage (`openImageCropper(..., {jpeg:true})`,
+  seulement pour les textures) et inversion. `allegerTextures()` convertit une fois, après `loadAll()`,
+  les PNG déjà enregistrés (réglages, bibliothèque de fonds, devis, devis ouvert). Logo et signature
+  restent en PNG (transparence). Mesure sur la vraie texture : 1,56 Mo → ~0,14 Mo.
+- `enAttente(local, ref)` : une modification pas encore confirmée par le serveur n'est plus remplacée
+  par `loadAll()` ni par un écho temps réel (bibliothèque, clients, devis, tâches, boutique, estimation).
+  `ref` vide (rien lu du serveur cette session) : le serveur fait foi, comme avant.
+- `cloudPush()` : un seul envoi à la fois (`cloudPushUneFois`) ; un changement fait pendant l'envoi
+  repart juste après. `retrySync()` envoie, puis relit.
+- Aperçu : s'ouvre **en haut** du devis (on arrivait en bas après avoir composé), « Composer » ramène où
+  on en était. C'est la **page A4** (210 mm, marges de 16 mm comme à l'impression), réduite par `zoom`
+  (`--dv-zoom`, `ajusterApercuA4`) : mêmes retours à la ligne que le PDF. Un toucher : taille réelle.
+- « Imprimer PDF » et « Voir » (fiche client) : `imprimerDevisHTML()` imprime **dans la page**
+  (`#zone-impression`) au lieu d'ouvrir une fenêtre, peu fiable dans l'application installée. Les styles
+  du devis imprimé sont limités à la zone (un devis validé ne déteint pas sur le brouillon ouvert).
+  Page blanche en trop (padding de la barre du bas) retirée : 2 pages pour un devis + conditions.
+
+**Vérifié** : `tests/fond-apercu.test.mjs` (37, se lance seul, sans serveur) rejoue le cas signalé ;
+non-régression 0 échec (realisations 616, pwa 87, hébreu 50, langues 35, traduction-complete 7, …).
+`boutique` : 1 échec « Les photos des produits se chargent », identique sur `main` avant ce changement.
+
+**Inconnu** : le rendu de l'impression sur le vrai téléphone de Raphaël (Chromium testé seulement).
+Un devis très long se coupe sur plusieurs feuilles à l'impression ; l'aperçu le montre d'un seul tenant.
+
+**Ne pas casser** : une image photo dans les données synchronisées = JPEG, jamais PNG ; pas de
+`window.open` pour imprimer ; `.preview-wrap .devis` garde 210 mm (le zoom fait la réduction).
