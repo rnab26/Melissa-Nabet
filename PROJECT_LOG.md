@@ -1625,3 +1625,11 @@ Raphaël n'a ni compte Vercel ni le code (le rattachement d'un dépôt deviné a
 plateforme, 16 nov.). Fiche pour Dan, versionnée : `docs/brief-site-dan.md` — le fichier à lire,
 chaque champ du manifeste et où l'afficher, et comment donner l'accès à rnab26 s'il préfère que
 Claude le fasse. Repli si Dan ne peut pas : refaire ce modèle dans `site-vitrine/`.
+
+## Être recommandé par les IA — piste howseen.ai (novembre 2026, pour plus tard)
+
+**État** : piste seulement, rien implémenté, aucune inscription. Demande de Raphaël (19 nov. 2026) : https://howseen.ai/fr/ — objectif : que les IA (ChatGPT, Gemini…) nous recommandent quand quelqu'un cherche à acheter un produit ou service lié à notre activité. Chantier cockpit a5316341.
+
+**Notes / À faire**
+- [ ] Étudier le service (offre, prix : tout service payant exige l'accord de Raphaël) et le comparer à un travail maison (site vitrine clair, données structurées, `llms.txt`).
+- [ ] Décision de Raphaël avant toute inscription ou dépense.
