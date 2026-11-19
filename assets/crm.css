@@ -600,6 +600,16 @@
   .devis{width:100%;max-width:1100px;min-height:297mm;align-self:flex-start;background:var(--paper);box-shadow:0 12px 44px rgba(60,50,35,.22);color:var(--ink);position:relative;background-image:radial-gradient(140% 120% at 50% 0%, rgba(255,255,255,.5), rgba(0,0,0,0) 55%),linear-gradient(180deg,#f4efe6 0%,#e9e3d8 100%);}
   .devis-page{padding:20mm 18mm;position:relative;overflow:hidden;min-height:297mm;}
   .devis-page + .devis-page{border-top:1px dashed #ded5c4;}
+  /* Aperçu = la page A4 du PDF : 210 mm de large et marges de l'impression (16 mm), réduite par
+     --dv-zoom (ajusterApercuA4) pour tenir dans la colonne. Marges automatiques plutôt que
+     justify-content:center : en taille réelle, une page plus large que l'écran déborderait des
+     deux côtés et son bord gauche deviendrait inatteignable. */
+  .preview-wrap{justify-content:flex-start;}
+  .preview-wrap .devis{width:210mm;max-width:none;flex:0 0 auto;margin-left:auto;margin-right:auto;zoom:var(--dv-zoom,1);}
+  .preview-wrap .devis-page{padding:16mm;}
+  .preview-wrap.a4-reduit .devis{cursor:zoom-in;}
+  .preview-wrap.a4-reel .devis{cursor:zoom-out;}
+  #zone-impression{display:none;}
   .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
   .wm span{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:340px;font-weight:500;color:var(--oxblood);opacity:.055;letter-spacing:-.04em;}
   .dv-inner{position:relative;z-index:1;}
@@ -658,7 +668,7 @@
     #split-toggle{display:inline-flex;}
     .stage{flex-direction:column;}
     .editor{width:100%;max-width:none;min-width:0;border-right:none;min-height:auto;}
-    .preview-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    .preview-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-left:10px;padding-right:10px;}
     body.show-preview .editor{display:none;}
     body.show-editor .preview-wrap{display:none;}
     /* iOS/Safari zoome automatiquement sur un champ dont la police est < 16px, ce qui décale la
@@ -745,8 +755,13 @@
     @page{size:A4;margin:0;}
     html,body{background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
     .toolbar,.editor,.tabs,.overlay,.toast,#login-overlay{display:none !important;}
+    /* « Imprimer PDF » et « Voir » (fiche client) : seule la zone d'impression part à l'impression. */
+    body.impression-zone>*:not(#zone-impression){display:none !important;}
+    body.impression-zone #zone-impression{display:block;}
+    /* La marge du bas réservée à la barre de navigation du téléphone ajoutait une page blanche. */
+    body.impression-zone{padding:0 !important;margin:0 !important;}
     .preview-wrap{padding:0;margin:0;background:#f4efe6;display:block;}
-    .devis{width:auto;min-height:0;box-shadow:none;transform:none !important;margin:0;background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
+    .devis{width:auto;min-height:0;box-shadow:none;transform:none !important;zoom:1 !important;margin:0;background:#f4efe6;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
     .devis-page{page-break-after:always;box-sizing:border-box;min-height:297mm;padding:16mm 16mm;background:#f4efe6;position:relative;-webkit-box-decoration-break:clone;box-decoration-break:clone;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}
     .devis-page:last-child{page-break-after:avoid;}
     .devis-page.cond{page-break-before:always;}
