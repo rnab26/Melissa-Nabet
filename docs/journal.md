@@ -4059,3 +4059,19 @@ Un devis très long se coupe sur plusieurs feuilles à l'impression ; l'aperçu 
 
 **Ne pas casser** : une image photo dans les données synchronisées = JPEG, jamais PNG ; pas de
 `window.open` pour imprimer ; `.preview-wrap .devis` garde 210 mm (le zoom fait la réduction).
+
+## 20 novembre 2026 — « Hors prestation » : garder une ligne pour les prochains devis
+
+**Constat (vérifié en base)** : rien n'a été perdu. Le devis « Salle de box » (n°0079, validé) a 17 lignes
+« hors prestation » : 3 viennent de la bibliothèque, 14 ont été tapées à la main dans CE devis seulement
+(`custom: true`). La bibliothèque (`library.exclus`) n'en a jamais eu que 3 (= `DEFAULT_EXCLUS`), et un nouveau
+devis part de la bibliothèque : d'où les 3 lignes du brouillon « Morgane » (n°0081).
+
+**Livré** : un 📌 sur chaque ligne ajoutée à la main (`libPinExclu`, `assets/crm.js`) la range dans la
+bibliothèque, sans doublon ; message visible en cas de succès ou de texte vide. Traductions anglais et hébreu.
+Test permanent : `tests/hors-prestation-pin.test.mjs` (11 vérifications, écran 390 px).
+
+**Ouvert** : recopier les 13 lignes manquantes de « Salle de box » dans la bibliothèque et dans le brouillon
+« Morgane » = écriture dans les données réelles, en attente du « oui » de Raphaël, et APRÈS la correction de la
+synchro (sinon sa tablette renverrait l'ancienne bibliothèque par-dessus). Un brouillon existant ne reprend pas
+tout seul les nouvelles lignes de la bibliothèque.
