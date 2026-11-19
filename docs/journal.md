@@ -4075,3 +4075,12 @@ Test permanent : `tests/hors-prestation-pin.test.mjs` (11 vérifications, écran
 « Morgane » = écriture dans les données réelles, en attente du « oui » de Raphaël, et APRÈS la correction de la
 synchro (sinon sa tablette renverrait l'ancienne bibliothèque par-dessus). Un brouillon existant ne reprend pas
 tout seul les nouvelles lignes de la bibliothèque.
+
+**Suite, 19/11 23:49 UTC (demande de Raphaël)** : les 13 lignes tapées à la main dans « Salle de box »
+(n°0079) sont ajoutées à `library.exclus` par SQL : 16 lignes en tout, sans doublon. Ce n'est pas la variante
+retouchée de la ligne 3 (« … saus si option differente validé »), qui modifie une ligne déjà en bibliothèque.
+Vérifié : sa tablette a renvoyé la bibliothèque à 23:49:42, avec toujours 16 lignes, donc l'écho temps réel est
+bien arrivé. **Brouillons n°0080 et n°0081 : écriture refusée par le garde-fou de la plateforme** (« Destructive
+or Unwanted Actions »). En attente de son accord écrit en session (question posée dans le cockpit, chantier
+`e1731414`). Le même jour, sa tablette a chargé le correctif de synchro : bibliothèque 6,5 Mo → 0,7 Mo,
+devis n°0079 3,5 Mo → 0,43 Mo (vérifié en base).
