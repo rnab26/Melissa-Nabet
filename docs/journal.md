@@ -4119,7 +4119,7 @@ suite. Défaut ancien (présent sur `ad710a1`). **Corrigé** (PR #30) : `jsonSta
 Avec la PR #29 (le devis ouvert suit la version du cloud quand elle est plus récente). Test permanent :
 `tests/brouillon-ouvert-cloud.test.mjs` (8 vérifications).
 **Ne pas casser** : toute nouvelle comparaison de synchro passe par `jsonStable`, jamais par `JSON.stringify`.
-Morgane remis à 16 lignes à 07:17 UTC, stable ensuite.
+Morgane remis à 16 lignes à 07:17 UTC ; réécrasé à 07:23 par une page du téléphone restée ouverte sur l'ancien code (avant son rechargement), remis à 07:27. Toujours à 16 lignes à 08:41 (dernière modif. à 08:11, faite depuis un appareil, lignes conservées).
 **Connu** : `tests/realisations.test.mjs` a 2 échecs intermittents (barre de progression de l'import), y compris
 sur le code d'avant ces correctifs.
 
