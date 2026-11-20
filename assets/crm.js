@@ -77,6 +77,15 @@ function buildDevisHTMLInner(S){
     const pr=hexToRgb(pal.paper);
     const tint=`rgba(${pr.r},${pr.g},${pr.b},${(1-opacityFrac).toFixed(3)})`;
     bgPageCss=`.devis-page{background-image:linear-gradient(${tint},${tint}),url("${fondImg}");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}`;
+    /* Sur une texture, le texte courant (gris clair, fin) se perdait dans les veines. Couleur de
+       l'encre + halo couleur papier derrière les lettres : plus lisible SANS épaissir la police,
+       qui reste plus fine que les intitulés en gras (demande de Raphaël, 20 nov.). */
+    if(B.devisBgTextBoost!==false){
+      const halo=a=>`rgba(${pr.r},${pr.g},${pr.b},${a})`;
+      bgPageCss+=`.devis-page .dv-intro,.devis-page .it-d,.devis-page .it-meta,.devis-page .dv-excl li,.devis-page .tl-row,.devis-page .dv-cond p,.devis-page .dv-cond li{color:var(--ink);text-shadow:0 0 1px ${halo(1)},0 0 4px ${halo(.9)};}`
+        +`.devis-page .dv-intro,.devis-page .it-d,.devis-page .dv-excl ul,.devis-page .dv-timeline,.devis-page .dv-cond p,.devis-page .dv-cond ul{background:${halo(.62)};box-shadow:0 0 12px 10px ${halo(.62)};border-radius:6px;}`
+        +`.devis-page .dv-title,.devis-page .dv-group-h,.devis-page .tl-h,.devis-page .it-t{text-shadow:0 0 2px ${halo(1)},0 0 6px ${halo(.9)},0 0 12px ${halo(.7)};}`;
+    }
   }
   const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};}${bgPageCss}</style>`;
   const detail=S.pricingMode==='detail';
@@ -313,6 +322,7 @@ const DEFAULT_BRANDING={
   devisBgFlipX:false,
   devisBgFlipY:false,
   devisBgOpacity:25,
+  devisBgTextBoost:true,
   defaultCurrency:'₪',
   defaultTva:18,
   numPrefix:'',
@@ -1352,6 +1362,7 @@ function openSettingsPanel(){
             ${b.devisBgImage?`<label class="fld" style="margin-bottom:0;"><span class="lbl">Intensité</span><input type="range" min="5" max="70" value="${b.devisBgOpacity!=null?b.devisBgOpacity:25}" oninput="setDevisBgOpacity(this.value)"></label>`:''}
           </div>
         </div>
+        <label class="toggle-line"><input type="checkbox" ${b.devisBgTextBoost!==false?'checked':''} onchange="settingsToggle('devisBgTextBoost',this.checked)"> Texte plus lisible sur un fond (sans le mettre en gras)</label>
         <p class="brand-media-hint">S'adapte automatiquement à chaque page A4, quelle que soit la longueur du devis.</p>
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--panel-edge);">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
