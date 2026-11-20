@@ -70,11 +70,13 @@ function buildDevisHTMLInner(S){
      séparée a déjà provoqué une page blanche en trop). Le flip est cuit dans l'image elle-même
      (voir renderDevisBgFromBase) au lieu d'un transform CSS, pour la même raison. */
   let bgPageCss='';
-  if(B.devisBgImage){
+  /* S.fond : fond choisi pour CE devis (image), 'aucun' (sans fond) ou rien (fond des réglages). */
+  const fondImg=S.fond==='aucun'?null:(S.fond||B.devisBgImage);
+  if(fondImg){
     const opacityFrac=(B.devisBgOpacity!=null?B.devisBgOpacity:25)/100;
     const pr=hexToRgb(pal.paper);
     const tint=`rgba(${pr.r},${pr.g},${pr.b},${(1-opacityFrac).toFixed(3)})`;
-    bgPageCss=`.devis-page{background-image:linear-gradient(${tint},${tint}),url("${B.devisBgImage}");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}`;
+    bgPageCss=`.devis-page{background-image:linear-gradient(${tint},${tint}),url("${fondImg}");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}`;
   }
   const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};}${bgPageCss}</style>`;
   const detail=S.pricingMode==='detail';
@@ -399,7 +401,7 @@ const current={
   tl:'',
   services:[],exclus:[],cgv:[],branding:{},clientSignature:null,docType:'devis',open:{},
   sigOverride:false,sigName:'',
-  lang:'fr',
+  lang:'fr',fond:null,
 };
 function seedComposerFromLibrary(){
   current.services=[];current.open={};
@@ -412,12 +414,13 @@ function seedComposerFromLibrary(){
   ensureBranding();
   current.branding={...library.branding};
   current.lang=I18N.normLang(library.branding.defaultDevisLang);
+  current.fond=null;
 }
 
 /* ============ DOM: helpers ============ */
 const $=id=>document.getElementById(id);
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
-function render(){$('devis').dir=I18N.langDir(dvLang(current));$('devis').innerHTML=buildDevisHTML(current);saveDraftDebounced();updateSigStatus();updateDocTypeUI();}
+function render(){$('devis').dir=I18N.langDir(dvLang(current));$('devis').innerHTML=buildDevisHTML(current);saveDraftDebounced();updateSigStatus();updateDocTypeUI();renderFondDevis();}
 function updateSigStatus(){
   const el=$('sig-status');if(!el)return;
   el.textContent=current.clientSignature?'✓ Signature enregistrée':'Pas encore signé';
@@ -1023,11 +1026,59 @@ async function allegerTextures(){
   let lib=false,dv=false;
   for(const k of KS)lib=(await conv(library.branding,k))||lib;
   for(const x of (Array.isArray(library.bgLibrary)?library.bgLibrary:[]))lib=(await conv(x,'dataUri'))||lib;
-  for(const d of devisList){const b=d&&d.snapshot&&d.snapshot.branding;for(const k of KS)dv=(await conv(b,k))||dv;}
-  let cur=false;for(const k of KS)cur=(await conv(current.branding,k))||cur;
+  for(const d of devisList){const b=d&&d.snapshot&&d.snapshot.branding;for(const k of KS)dv=(await conv(b,k))||dv;dv=(await conv(d&&d.snapshot,'fond'))||dv;}
+  let cur=(await conv(current,'fond'));for(const k of KS)cur=(await conv(current.branding,k))||cur;
   if(lib)saveLibrary();
   if(dv)store.set(K_DEVIS,devisList);
   if(cur||lib)render();
+}
+/* ---- Fond de CE devis ----
+   Sans choix, un brouillon suit le fond des réglages (et un devis validé garde le sien). Un fond
+   choisi ici ne vaut que pour ce devis : il est enregistré avec lui, les prochains devis gardent
+   celui des réglages. L'intensité reste celle des réglages. */
+let _fondVu=null;
+function renderFondDevis(){
+  const box=$('fond-devis');if(!box)return;
+  const reglages=current.branding&&current.branding.devisBgImage;
+  if(_fondVu&&_fondVu[0]===current.fond&&_fondVu[1]===reglages)return; /* render() tourne à chaque frappe */
+  _fondVu=[current.fond,reglages];
+  const img=current.fond==='aucun'?null:(current.fond||reglages);
+  const etat=current.fond==='aucun'?'Sans fond':current.fond?'Fond choisi pour ce devis':'Fond des réglages';
+  box.innerHTML=`<div style="display:flex;gap:12px;align-items:center;">
+      <span class="logo-thumb" style="width:52px;height:74px;flex:0 0 auto;">${img?`<img src="${img}" alt="" style="width:100%;height:100%;object-fit:cover;">`:'<span class="logo-thumb-empty">Aucune<br>texture</span>'}</span>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+        <span style="font-size:13px;">${etat}</span>
+        <button class="mini" type="button" onclick="openFondDevisPicker()">Changer le fond de ce devis…</button>
+        ${current.fond?'<button class="mini" type="button" onclick="setFondDevis(null)">↺ Revenir au fond des réglages</button>':''}
+      </div></div>`;
+}
+function setFondDevis(f){
+  current.fond=f||null;closeModal();render();
+  toast(f?'Fond appliqué à ce devis':'Fond des réglages appliqué');
+}
+function openFondDevisPicker(){
+  ensureBgLibrary();
+  const reglages=current.branding&&current.branding.devisBgImage;
+  const tuile=(choisi,clic,contenu,titre)=>`<button type="button" class="fond-tuile${choisi?' choisi':''}" onclick="${clic}" title="${esc(titre)}">${contenu}<span>${esc(titre)}</span></button>`;
+  const vignette=src=>src?`<img src="${src}" alt="">`:'<span class="logo-thumb-empty">Aucune<br>texture</span>';
+  openModal(`<button class="modal-x" onclick="closeModal()">×</button><h3>Fond de ce devis</h3>
+    <p class="msub">Seulement pour ce devis : les prochains devis gardent le fond des réglages.</p>
+    <div class="fond-grille">
+      ${tuile(!current.fond,'setFondDevis(null)',vignette(reglages),'Fond des réglages')}
+      ${library.bgLibrary.map((x,i)=>tuile(current.fond===x.dataUri,`setFondDevisBiblio('${x.id}')`,vignette(x.dataUri),`Fond ${i+1}`)).join('')}
+      ${tuile(current.fond==='aucun',"setFondDevis('aucun')",'<span class="logo-thumb-empty">—</span>','Sans fond')}
+    </div>
+    <button class="btn btn-onlight" type="button" style="margin-top:14px" onclick="importerFondDevis()">+ Importer une image…</button>`);
+}
+function setFondDevisBiblio(id){ensureBgLibrary();const x=library.bgLibrary.find(e=>e.id===id);if(x)setFondDevis(x.dataUri);}
+/* Une image importée ici est aussi rangée dans la bibliothèque de fonds, pour la reprendre plus tard. */
+function importerFondDevis(){
+  pickImageFile(file=>openImageCropper(file,dataUri=>{
+    ensureBgLibrary();
+    if(!library.bgLibrary.some(x=>x.dataUri===dataUri))library.bgLibrary.push({id:uid(),dataUri,addedAt:Date.now()});
+    saveLibrary();
+    setFondDevis(dataUri);
+  },{vpW:220,vpH:311,title:'Cadrer la texture de fond',jpeg:true}));
 }
 function pickDevisBgImage(){
   pickImageFile(file=>openImageCropper(file,dataUri=>{
@@ -1630,6 +1681,7 @@ function loadDevis(id){
   /* Un brouillon n'est pas figé : il doit suivre les derniers réglages de la bibliothèque.
      Seul un devis validé garde son branding gelé, pour l'exactitude historique. */
   if(d.status!=='valide')current.branding={...library.branding};
+  current.fond=d.snapshot.fond||null; /* sinon le fond du devis ouvert avant passerait sur celui-ci */
   currentDevisId=id;pendingClientId=d.clientId||null;closeModal();fillFields();buildPrest();buildExclu();render();toast('Devis chargé');
 }
 async function duplicateDevis(id){
@@ -10700,7 +10752,7 @@ function handleRealtime(payload){
         else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
           const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
           if(row.id===currentDevisId&&row.data&&row.data.snapshot){
-            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;current.lang=I18N.normLang(row.data.snapshot.lang);
+            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;current.lang=I18N.normLang(row.data.snapshot.lang);current.fond=row.data.snapshot.fond||null;
             fillFields();buildPrest();buildExclu();render();
           }
         }
