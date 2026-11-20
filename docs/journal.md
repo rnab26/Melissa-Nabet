@@ -4122,3 +4122,20 @@ Avec la PR #29 (le devis ouvert suit la version du cloud quand elle est plus ré
 Morgane remis à 16 lignes à 07:17 UTC, stable ensuite.
 **Connu** : `tests/realisations.test.mjs` a 2 échecs intermittents (barre de progression de l'import), y compris
 sur le code d'avant ces correctifs.
+
+## 20 novembre 2026 — Devis sur un fond : texte lisible, et impression PDF sans blancs
+
+**Lisibilité** (PR #31, #32) : quand un devis a un fond, `buildDevisHTMLInner` ajoute un voile couleur papier
+PAR BLOC (en-tête, groupes, hors prestation, totaux, signatures, pied, paragraphes des conditions) et un halo
+derrière les lettres, sans changer le poids des polices (400 / 700). Réglage `devisBgTextBoost` (Réglages,
+activé par défaut). Test : `tests/lisibilite-fond.test.mjs`. **Ne pas casser** : un voile par bloc, jamais
+imbriqué (ils s'additionnent).
+
+**Impression PDF** (PR #33) : la dernière page d'un bloc s'arrêtait où s'arrêtait le texte (le min-height de
+297 mm vaut pour le bloc entier), le bas de feuille restait uni. Le `.devis` imprimé reprend le fond une fois par
+page A4 (`@media print{.devis{…}}`, préfixé `#zone-impression` ; sans fond : `background-image:none`, pour que
+le fond du composeur ne déteigne pas). Marges resserrées à l'impression seulement autour des totaux,
+signatures, pied et rubriques. Test : `tests/impression-pdf.test.mjs`.
+**Ouvert** : sur la page 4 du PDF de Morgane, le haut (morceau de `.devis-page`, avec les voiles) est délavé
+et le bas (fond du `.devis`) plus foncé : deux teintes visibles. Cause non prouvée. Chantier cockpit
+9260284f laissé « à vérifier » avec ce défaut noté dans son fil : à corriger avant de le certifier.
