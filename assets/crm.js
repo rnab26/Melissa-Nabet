@@ -10569,6 +10569,15 @@ let _loadAllRetryT=null,_loadAllRetryDelay=5000;
    fond — le réglage semblait « annulé ». La copie locale reste et repart au prochain envoi.
    `ref` vide = rien encore lu du serveur cette session : la copie locale peut être périmée,
    le serveur fait foi. */
+/* Recharge le devis ouvert dans le composeur depuis sa version enregistrée (temps réel ou
+   chargement). Un brouillon suit la bibliothèque (branding), comme à l'ouverture d'un devis. */
+function rechargerComposeur(d,sansRendu){
+  const openBackup=current.open;Object.assign(current,JSON.parse(JSON.stringify(d.snapshot)));current.open=openBackup;
+  current.lang=I18N.normLang(d.snapshot.lang);current.fond=d.snapshot.fond||null;
+  if(d.status!=='valide')current.branding={...library.branding};
+  store.set(K_DRAFT,{...JSON.parse(JSON.stringify(current)),_draftDevisId:currentDevisId});
+  fillFields();buildPrest();buildExclu();if(!sansRendu)render();
+}
 function enAttente(local,ref){return !!ref&&JSON.stringify(local)!==ref;}
 async function loadAll(){
   if(!sb||!sbUser)return;setSyncStatus('sync');
@@ -10577,6 +10586,8 @@ async function loadAll(){
     if(error)throw error;
     applyingRemote=true;
     const prevC=new Set(Object.keys(remoteClients)),prevD=new Set(Object.keys(remoteDevis));
+    const ouvertAvant=currentDevisId?devisList.find(x=>x.id===currentDevisId):null;
+    const ouvertAvantAt=ouvertAvant?(+ouvertAvant.updatedAt||0):0;
     const cloudIds=new Set();
     (data||[]).forEach(r=>{
       /* Une suppression locale pas encore confirmée côté serveur (cloudPush en vol ou pas
@@ -10598,6 +10609,14 @@ async function loadAll(){
     Object.keys(remoteClients).forEach(id=>{if(!cloudIds.has(id))delete remoteClients[id];});
     Object.keys(remoteDevis).forEach(id=>{if(!cloudIds.has(id))delete remoteDevis[id];});
     store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);store.set(K_CHANTIER,chantierList);
+    /* Le composeur est restauré depuis l'autosave local (K_DRAFT) au démarrage. Si le MÊME
+       devis a été modifié depuis ailleurs (autre appareil, correction en base), devisList
+       reçoit la version du cloud mais `current` gardait l'ancienne, que l'autosave (600 ms
+       après render) renvoyait aussitôt par-dessus : brouillon « Morgane » écrasé deux fois
+       le 20 nov. La version du cloud gagne si elle est plus récente que la dernière
+       modification locale ; une modif locale pas encore envoyée garde la main (même date). */
+    const ouvertCloud=currentDevisId?devisList.find(x=>x.id===currentDevisId):null;
+    if(ouvertCloud&&ouvertCloud.snapshot&&(+ouvertCloud.updatedAt||0)>ouvertAvantAt&&!isEditingDevisComposer())rechargerComposeur(ouvertCloud,true);
     applyingRemote=false;cloudReady=true;
     /* APRÈS la lecture du cloud : les fiches restées « Nouveau client » alors que leur
        contact est rempli reprennent leur contact comme nom. Avant, on réparerait une copie
@@ -10751,10 +10770,7 @@ function handleRealtime(payload){
         else if(row.kind==='devis'&&((row.id===currentDevisId&&isEditingDevisComposer())||enAttente(devisList.find(x=>x.id===row.id),remoteDevis[row.id]))){}
         else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
           const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
-          if(row.id===currentDevisId&&row.data&&row.data.snapshot){
-            const openBackup=current.open;Object.assign(current,row.data.snapshot);current.open=openBackup;current.lang=I18N.normLang(row.data.snapshot.lang);current.fond=row.data.snapshot.fond||null;
-            fillFields();buildPrest();buildExclu();render();
-          }
+          if(row.id===currentDevisId&&row.data&&row.data.snapshot)rechargerComposeur(row.data);
         }
         /* Même règle que loadAll() : une modification pas encore envoyée n'est jamais remplacée. */
         else if(row.kind==='library'&&(isEditingLibrary()||enAttente(library,remoteLibJson))){}
