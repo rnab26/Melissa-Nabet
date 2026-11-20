@@ -69,14 +69,19 @@ function buildDevisHTMLInner(S){
      absolute superposé) : plus fiable pour la pagination à l'impression/export PDF (une couche
      séparée a déjà provoqué une page blanche en trop). Le flip est cuit dans l'image elle-même
      (voir renderDevisBgFromBase) au lieu d'un transform CSS, pour la même raison. */
-  let bgPageCss='';
+  let bgPageCss='@media print{.devis{background-image:none !important;}}';
   /* S.fond : fond choisi pour CE devis (image), 'aucun' (sans fond) ou rien (fond des réglages). */
   const fondImg=S.fond==='aucun'?null:(S.fond||B.devisBgImage);
   if(fondImg){
     const opacityFrac=(B.devisBgOpacity!=null?B.devisBgOpacity:25)/100;
     const pr=hexToRgb(pal.paper);
     const tint=`rgba(${pr.r},${pr.g},${pr.b},${(1-opacityFrac).toFixed(3)})`;
-    bgPageCss=`.devis-page{background-image:linear-gradient(${tint},${tint}),url("${fondImg}");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}`;
+    bgPageCss=`.devis-page{background-image:linear-gradient(${tint},${tint}),url("${fondImg}");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}`
+      /* À l'impression, la dernière page d'un bloc s'arrête où s'arrête le texte : le reste de la
+         feuille restait blanc, sans le fond (« zones de blanc », 20 nov.). Le bloc .devis, qui couvre
+         toutes les feuilles, reprend la même image une fois par page A4 (le sélecteur est préfixé
+         #zone-impression pour le devis imprimé : celui du composeur ne déteint pas). */
+      +`@media print{.devis{background-image:linear-gradient(${tint},${tint}),url("${fondImg}") !important;background-size:210mm 297mm,210mm 297mm !important;background-repeat:repeat-y !important;background-position:top left !important;}}`;
     /* Sur une texture, le texte courant (gris clair, fin) se perdait dans les veines. Couleur de
        l'encre + halo couleur papier derrière les lettres : plus lisible SANS épaissir la police,
        qui reste plus fine que les intitulés en gras (demande de Raphaël, 20 nov.). */

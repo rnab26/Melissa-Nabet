@@ -772,6 +772,15 @@
     .devis-page.cond{page-break-before:always;}
     .devis-page + .devis-page{border-top:none;}
     .dv-head,.dv-brand,.dv-bsd,.dv-sign,.dv-pricesign,.tl-row{page-break-inside:avoid;break-inside:avoid;}
+    /* Le bloc totaux + signatures ne se coupe pas : avec ses grandes marges d'écran, il partait
+       seul sur une page presque vide alors que la précédente avait de la place (20 nov.).
+       À l'impression seulement, on resserre ce qui l'entoure. */
+    .dv-totals{margin-top:5mm;padding-top:3mm;}
+    .dv-sign{margin-top:6mm;padding-top:2mm;}
+    .dv-license{margin-top:2mm;}
+    .dv-foot{margin-top:3mm;padding-top:2mm;}
+    .dv-group{margin-bottom:5mm;}
+    .dv-excl{margin:4mm 0;}
     *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;color-adjust:exact !important;}
   }
   /* Bureau, vue Devis uniquement : éditeur et aperçu défilent chacun dans leur propre colonne
