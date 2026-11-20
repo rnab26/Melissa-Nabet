@@ -82,9 +82,15 @@ function buildDevisHTMLInner(S){
        qui reste plus fine que les intitulés en gras (demande de Raphaël, 20 nov.). */
     if(B.devisBgTextBoost!==false){
       const halo=a=>`rgba(${pr.r},${pr.g},${pr.b},${a})`;
-      bgPageCss+=`.devis-page .dv-intro,.devis-page .it-d,.devis-page .it-meta,.devis-page .dv-excl li,.devis-page .tl-row,.devis-page .dv-cond p,.devis-page .dv-cond li{color:var(--ink);text-shadow:0 0 1px ${halo(1)},0 0 4px ${halo(.9)};}`
-        +`.devis-page .dv-intro,.devis-page .it-d,.devis-page .dv-excl ul,.devis-page .dv-timeline,.devis-page .dv-cond p,.devis-page .dv-cond ul{background:${halo(.62)};box-shadow:0 0 12px 10px ${halo(.62)};border-radius:6px;}`
-        +`.devis-page .dv-title,.devis-page .dv-group-h,.devis-page .tl-h,.devis-page .it-t{text-shadow:0 0 2px ${halo(1)},0 0 6px ${halo(.9)},0 0 12px ${halo(.7)};}`;
+      /* Voile par BLOC (en-tête, groupe de prestations, totaux, signatures…) et non par ligne :
+         des voiles imbriqués s'additionneraient. Raphaël, 20 nov. : « partout où il y a du texte ». */
+      const voile=['.dv-bsd','.dv-head .col','.dv-title','.dv-intro','.dv-group','.dv-excl','.dv-totals','.dv-tva-note','.dv-timeline','.dv-sign','.dv-license','.dv-foot','.dv-cond h2','.dv-cond p','.dv-cond ul'];
+      const sel=l=>l.map(x=>'.devis-page '+x).join(',');
+      bgPageCss+=`.devis-page .dv-inner{text-shadow:0 0 1px ${halo(1)},0 0 4px ${halo(.9)};}`
+        +`${sel(['.dv-intro','.it-d','.it-meta','.dv-excl li','.tl-row','.dv-cond p','.dv-cond li','.dv-head .col','.dv-sign .s','.dv-bsd'])}{color:var(--ink);}`
+        +`${sel(['.dv-totals .tr .k','.dv-tva-note','.dv-license','.dv-foot'])}{color:var(--stone-deep);}`
+        +`${sel(voile)}{background:${halo(.62)};box-shadow:0 0 12px 10px ${halo(.62)};border-radius:6px;}`
+        +`${sel(['.dv-title','.dv-group-h','.tl-h','.it-t','.dv-cond h2'])}{text-shadow:0 0 2px ${halo(1)},0 0 6px ${halo(.9)},0 0 12px ${halo(.7)};}`;
     }
   }
   const paletteStyle=`<style>.devis{--paper:${pal.paper};--ink:${pal.ink};--oxblood:${pal.oxblood};--stone:${pal.stone};--stone-deep:${pal.stoneDeep};--stone-light:${pal.stoneLight};--hair:${pal.hair};--devis-heading-font:${fonts.heading};--devis-body-font:${fonts.body};}${bgPageCss}</style>`;
