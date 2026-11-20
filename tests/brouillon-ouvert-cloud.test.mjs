@@ -73,6 +73,27 @@ const d = await page.evaluate(() => {
 });
 check('Temps réel : le devis ouvert se met à jour à l\'écran', d.n === 1 && d.ecran === 'Venue du temps réel', JSON.stringify(d));
 
+// 5. Écho du serveur avec les clés dans l'ordre de Postgres (jsonb) : le devis ouvert ne doit pas
+//    être réécrit en boucle (constaté le 20 nov. : la tablette le renvoyait toutes les 1,5 s).
+const boucle = await page.evaluate(async () => {
+  const jb = v => Array.isArray(v) ? v.map(jb) : (v && typeof v === 'object') ? Object.fromEntries(Object.keys(v).sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)).map(k => [k, jb(v[k])])) : v;
+  seedComposerFromLibrary(); current.raison = 'Morgane'; currentDevisId = 'm';
+  devisList = [{ id: 'm', num: current.num, title: 'Morgane', clientId: null, status: 'brouillon', updatedAt: 1000, snapshot: JSON.parse(JSON.stringify(current)) }];
+  const serveur = { m: jb(JSON.parse(JSON.stringify(devisList[0]))) }; let envois = 0;
+  sb = { from: () => ({
+    select: async () => ({ data: [{ id: 'm', kind: 'devis', data: JSON.parse(JSON.stringify(serveur.m)) }], error: null }),
+    upsert: async rows => { rows.forEach(x => { if (x.kind === 'devis') { envois++; serveur.m = jb(JSON.parse(JSON.stringify(x.data))); } });
+      const echo = JSON.parse(JSON.stringify(rows)).map(x => ({ ...x, data: jb(x.data) }));
+      setTimeout(() => echo.forEach(x => handleRealtime({ eventType: 'UPDATE', new: { id: x.id, kind: x.kind, data: x.data } })), 150); return { error: null }; },
+    delete: () => ({ in: async () => ({ error: null }) }) }), storage: { from: () => ({}) } };
+  Object.keys(remoteDevis).forEach(k => delete remoteDevis[k]);
+  await loadAll();
+  current.exclus.push({ id: 'x', on: true, title: 'Une vraie modif', custom: true }); render();
+  await new Promise(r => setTimeout(r, 7000));
+  return envois;
+});
+check('Écho dans l\'ordre de Postgres : pas de réécriture en boucle', boucle <= 2, boucle + ' envoi(s) du devis en 7 s');
+
 check('Aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
 await browser.close();
 console.log(`\n${ok.length} OK, ${ko.length} échec(s)`);
