@@ -612,6 +612,14 @@
   {
    "texte": "Allègement des textures",
    "raison": "étiquette de console (console.error)"
+  },
+  {
+   "texte": "fond-devis",
+   "raison": "identifiant HTML"
+  },
+  {
+   "texte": "setFondDevis('aucun')",
+   "raison": "code JavaScript (attribut onclick)"
   }
  ]
 }

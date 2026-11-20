@@ -610,6 +610,11 @@
   .preview-wrap.a4-reduit .devis{cursor:zoom-in;}
   .preview-wrap.a4-reel .devis{cursor:zoom-out;}
   #zone-impression{display:none;}
+  /* Sélecteur « Fond de ce devis » : vignettes au format de la page (A4), deux à quatre par ligne. */
+  .fond-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:10px;}
+  .fond-tuile{display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px;border:1px solid var(--panel-edge);border-radius:6px;background:transparent;cursor:pointer;font:inherit;font-size:11.5px;color:inherit;}
+  .fond-tuile img,.fond-tuile .logo-thumb-empty{width:100%;aspect-ratio:210/297;object-fit:cover;border-radius:3px;display:flex;align-items:center;justify-content:center;}
+  .fond-tuile.choisi{border:2px solid var(--oxblood);padding:5px;}
   .wm{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0;}
   .wm span{font-family:var(--devis-heading-font,'Cormorant Garamond',serif);font-size:340px;font-weight:500;color:var(--oxblood);opacity:.055;letter-spacing:-.04em;}
   .dv-inner{position:relative;z-index:1;}
