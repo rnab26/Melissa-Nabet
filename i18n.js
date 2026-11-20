@@ -392,6 +392,7 @@ const UI_EN={
   'Garder cette ligne pour les prochains devis':'Keep this line for future quotes',
   'Écrivez d\'abord le texte de cette ligne':'Write the text of this line first',
   'Ligne gardée pour les prochains devis':'Line kept for future quotes',
+  'Texte plus lisible sur un fond (sans le mettre en gras)':'Easier-to-read text on a background (without making it bold)',
   'Fond de ce devis':'Background for this quote',
   'Sans fond':'No background',
   'Fond choisi pour ce devis':'Background chosen for this quote',

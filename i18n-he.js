@@ -337,6 +337,7 @@ const UI_HE={
   "Garder cette ligne pour les prochains devis":"לשמור את השורה הזו להצעות המחיר הבאות",
   "Écrivez d'abord le texte de cette ligne":"כתבו קודם את הטקסט של השורה",
   "Ligne gardée pour les prochains devis":"השורה נשמרה להצעות המחיר הבאות",
+  "Texte plus lisible sur un fond (sans le mettre en gras)":"טקסט קריא יותר על רקע (בלי להדגיש אותו)",
   "Fond de ce devis":"רקע להצעת מחיר זו",
   "Sans fond":"ללא רקע",
   "Fond choisi pour ce devis":"רקע שנבחר להצעת מחיר זו",
