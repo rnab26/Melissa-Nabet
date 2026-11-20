@@ -1587,7 +1587,7 @@ async function upsertDevis(status, clientIdOverride){
      (bibliothèque forcément différente entre-temps) le faisait apparaître "modifié à
      l'instant" alors que rien n'avait été touché — exactement ce que Raphaël a signalé. */
   const dirtyPart=s=>({...s,branding:undefined});
-  const contentChanged=!existing||JSON.stringify({title:existing.title,clientId:existing.clientId,status:existing.status,snapshot:dirtyPart(existing.snapshot)})!==JSON.stringify({title,clientId,status:finalStatus,snapshot:dirtyPart(snapshot)});
+  const contentChanged=!existing||jsonStable({title:existing.title,clientId:existing.clientId,status:existing.status,snapshot:dirtyPart(existing.snapshot)})!==jsonStable({title,clientId,status:finalStatus,snapshot:dirtyPart(snapshot)});
   const rec={
     id,num:current.num,
     title,
@@ -10578,7 +10578,13 @@ function rechargerComposeur(d,sansRendu){
   store.set(K_DRAFT,{...JSON.parse(JSON.stringify(current)),_draftDevisId:currentDevisId});
   fillFields();buildPrest();buildExclu();if(!sansRendu)render();
 }
-function enAttente(local,ref){return !!ref&&JSON.stringify(local)!==ref;}
+/* Postgres (jsonb) range les clés à sa façon : l'écho d'un enregistrement revient avec un autre
+   ordre que celui de l'appareil. Comparé avec JSON.stringify, tout écho passait pour « modifié »,
+   l'autosave le renvoyait avec une nouvelle date, et le devis ouvert était réécrit toutes les
+   1,5 s en écrasant les autres appareils (constaté le 20 nov. sur la tablette). Toute
+   comparaison de synchro passe par cette forme, indépendante de l'ordre des clés. */
+function jsonStable(v){return JSON.stringify(v,(k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.keys(x).sort().reduce((o,kk)=>(o[kk]=x[kk],o),{}):x);}
+function enAttente(local,ref){return !!ref&&jsonStable(local)!==ref;}
 async function loadAll(){
   if(!sb||!sbUser)return;setSyncStatus('sync');
   try{
@@ -10596,13 +10602,13 @@ async function loadAll(){
          rien n'était, exactement le symptôme signalé. */
       if(r.kind==='devis'&&_pendingDeletedDevisIds.has(r.id))return;
       cloudIds.add(r.id);
-      if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0&&enAttente(clients[i],remoteClients[r.id]))return;if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=JSON.stringify(nc);}
-      else if(r.kind==='devis'){if(!r.data||typeof r.data!=='object')return;const i=devisList.findIndex(x=>x.id===r.id);if(i>=0&&enAttente(devisList[i],remoteDevis[r.id]))return;if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=JSON.stringify(r.data);}
-      else if(r.kind==='library'){if(r.data&&r.data.sections&&!enAttente(library,remoteLibJson)){library=r.data;remoteLibJson=JSON.stringify(library);}}
-      else if(r.kind==='tasks'){if(Array.isArray(r.data)&&!enAttente(tasks,remoteTasksJson)){tasks=objets(r.data);remoteTasksJson=JSON.stringify(tasks);}}
-      else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=JSON.stringify(realisations);}}
-      else if(r.kind==='produits'){if(Array.isArray(r.data)&&!enAttente(produits,remoteProdJson)){produits=r.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
-      else if(r.kind==='chantier'){if(Array.isArray(r.data)&&!enAttente(chantierList,remoteChantierJson)){chantierList=r.data;remoteChantierJson=JSON.stringify(chantierList);}}
+      if(r.kind==='client'){const nc=normalizeClient(r.data);const i=clients.findIndex(x=>x.id===r.id);if(i>=0&&enAttente(clients[i],remoteClients[r.id]))return;if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[r.id]=jsonStable(nc);}
+      else if(r.kind==='devis'){if(!r.data||typeof r.data!=='object')return;const i=devisList.findIndex(x=>x.id===r.id);if(i>=0&&enAttente(devisList[i],remoteDevis[r.id]))return;if(i>=0)devisList[i]=r.data;else devisList.push(r.data);remoteDevis[r.id]=jsonStable(r.data);}
+      else if(r.kind==='library'){if(r.data&&r.data.sections&&!enAttente(library,remoteLibJson)){library=r.data;remoteLibJson=jsonStable(library);}}
+      else if(r.kind==='tasks'){if(Array.isArray(r.data)&&!enAttente(tasks,remoteTasksJson)){tasks=objets(r.data);remoteTasksJson=jsonStable(tasks);}}
+      else if(r.kind==='realisations'){if(Array.isArray(r.data)){mergeRealisations(r.data);remoteRealJson=jsonStable(realisations);}}
+      else if(r.kind==='produits'){if(Array.isArray(r.data)&&!enAttente(produits,remoteProdJson)){produits=r.data.map(normalizeProduit);remoteProdJson=jsonStable(produits);}}
+      else if(r.kind==='chantier'){if(Array.isArray(r.data)&&!enAttente(chantierList,remoteChantierJson)){chantierList=r.data;remoteChantierJson=jsonStable(chantierList);}}
     });
     clients=clients.filter(c=>!(prevC.has(c.id)&&!cloudIds.has(c.id)));
     devisList=objets(devisList).filter(d=>!(prevD.has(d.id)&&!cloudIds.has(d.id)));tasks=objets(tasks);
@@ -10759,7 +10765,7 @@ function handleRealtime(payload){
              cours. remoteClients[row.id] n'est PAS mis à jour : le prochain cloudPush() renverra
              donc notre version locale (plus récente), qui redeviendra la référence pour tout le
              monde — rien n'est perdu. */
-        }else if(row.kind==='client'){const nc=normalizeClient(row.data);const i=clients.findIndex(x=>x.id===row.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[row.id]=JSON.stringify(nc);}
+        }else if(row.kind==='client'){const nc=normalizeClient(row.data);const i=clients.findIndex(x=>x.id===row.id);if(i>=0)Object.assign(clients[i],nc);else clients.push(nc);remoteClients[row.id]=jsonStable(nc);}
         /* Le devis affiché dans le composeur ne se rafraîchissait JAMAIS sur un écho distant
            (seul devisList était mis à jour en coulisse) : travailler le même devis sur deux
            appareils donnait l'impression que rien n'était « vraiment en direct » — il fallait
@@ -10769,14 +10775,14 @@ function handleRealtime(payload){
            on recharge `current` depuis la donnée distante et on repeint l'écran tout de suite. */
         else if(row.kind==='devis'&&((row.id===currentDevisId&&isEditingDevisComposer())||enAttente(devisList.find(x=>x.id===row.id),remoteDevis[row.id]))){}
         else if(row.kind==='devis'&&row.data&&typeof row.data==='object'){
-          const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=JSON.stringify(row.data);
+          const i=devisList.findIndex(x=>x.id===row.id);if(i>=0)devisList[i]=row.data;else devisList.push(row.data);remoteDevis[row.id]=jsonStable(row.data);
           if(row.id===currentDevisId&&row.data&&row.data.snapshot)rechargerComposeur(row.data);
         }
         /* Même règle que loadAll() : une modification pas encore envoyée n'est jamais remplacée. */
         else if(row.kind==='library'&&(isEditingLibrary()||enAttente(library,remoteLibJson))){}
         else if(row.kind==='library'){
           if(row.data&&row.data.sections){
-            library=row.data;remoteLibJson=JSON.stringify(library);
+            library=row.data;remoteLibJson=jsonStable(library);
             /* Un réglage changé (ex. signature, logo) sur un AUTRE appareil pendant que
                celui-ci a déjà un devis ouvert n'apparaissait qu'après avoir quitté/rouvert
                le devis, ou rechargé la page — même trou que pour le devis lui-même, réglé le
@@ -10794,21 +10800,21 @@ function handleRealtime(payload){
            autre appareil mettait bien à jour `tasks` en coulisse mais l'écran restait figé
            jusqu'à un changement de vue ou un rechargement. */
         else if(row.kind==='tasks'&&(isEditingTasks()||enAttente(tasks,remoteTasksJson))){}
-        else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=objets(row.data);remoteTasksJson=JSON.stringify(tasks);}}
+        else if(row.kind==='tasks'){if(Array.isArray(row.data)){tasks=objets(row.data);remoteTasksJson=jsonStable(tasks);}}
         else if(row.kind==='realisations'&&isEditingRealisations()){
           /* Saisie ou retouche en cours : on ignore la mise à jour distante et on ne marque
              PAS `remoteRealJson`, pour que le prochain cloudPush renvoie notre version. */
         }
-        else if(row.kind==='realisations'){if(Array.isArray(row.data)){mergeRealisations(row.data);remoteRealJson=JSON.stringify(realisations);}}
+        else if(row.kind==='realisations'){if(Array.isArray(row.data)){mergeRealisations(row.data);remoteRealJson=jsonStable(realisations);}}
         /* Même protection que pour les réalisations : une saisie en cours ne se fait pas
            écraser par un écho distant, et le prochain push renverra la version locale. */
         else if(row.kind==='produits'&&(isEditingBoutique()||enAttente(produits,remoteProdJson))){}
-        else if(row.kind==='produits'){if(Array.isArray(row.data)){produits=row.data.map(normalizeProduit);remoteProdJson=JSON.stringify(produits);}}
+        else if(row.kind==='produits'){if(Array.isArray(row.data)){produits=row.data.map(normalizeProduit);remoteProdJson=jsonStable(produits);}}
         /* Même protection : une estimation en cours de saisie ne se fait pas écraser par un
            écho distant, remoteChantierJson n'est pas mis à jour, le prochain cloudPush
            renverra la version locale. */
         else if(row.kind==='chantier'&&(isEditingChantier()||enAttente(chantierList,remoteChantierJson))){}
-        else if(row.kind==='chantier'){if(Array.isArray(row.data)){chantierList=row.data;remoteChantierJson=JSON.stringify(chantierList);}}
+        else if(row.kind==='chantier'){if(Array.isArray(row.data)){chantierList=row.data;remoteChantierJson=jsonStable(chantierList);}}
       }
     }
     store.set(K_CLIENTS,clients);store.set(K_DEVIS,devisList);store.set(K_LIB,library);store.set(K_TASKS,tasks);store.set(K_REAL,realisations);store.set(K_PROD,produits);store.set(K_CHANTIER,chantierList);
@@ -10849,13 +10855,13 @@ async function cloudPushUneFois(){
      plus jamais en synchro (silencieusement perdue au prochain rechargement/loadAll). */
   const pendingC={},pendingD={};let pendingLib=null,pendingTasks=null,pendingReal=null,pendingProd=null,pendingChantier=null;
   const pendingDelC=[],pendingDelD=[];
-  clients.forEach(c=>{seenC.add(c.id);const j=JSON.stringify(c);if(remoteClients[c.id]!==j){pendingC[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
-  devisList.forEach(d=>{seenD.add(d.id);const j=JSON.stringify(d);if(remoteDevis[d.id]!==j){pendingD[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
-  const lj=JSON.stringify(library);if(lj!==remoteLibJson){pendingLib=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
-  const tj=JSON.stringify(tasks);if(tj!==remoteTasksJson){pendingTasks=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
-  const rj=JSON.stringify(realisations);if(rj!==remoteRealJson){pendingReal=rj;rows.push({id:'realisations',owner:ownerId,kind:'realisations',data:realisations,updated_at:new Date().toISOString()});}
-  const pj=JSON.stringify(produits);if(pj!==remoteProdJson){pendingProd=pj;rows.push({id:'produits',owner:ownerId,kind:'produits',data:produits,updated_at:new Date().toISOString()});}
-  const chj=JSON.stringify(chantierList);if(chj!==remoteChantierJson){pendingChantier=chj;rows.push({id:'chantier',owner:ownerId,kind:'chantier',data:chantierList,updated_at:new Date().toISOString()});}
+  clients.forEach(c=>{seenC.add(c.id);const j=jsonStable(c);if(remoteClients[c.id]!==j){pendingC[c.id]=j;rows.push({id:c.id,owner:ownerId,kind:'client',data:c,updated_at:new Date().toISOString()});}});
+  devisList.forEach(d=>{seenD.add(d.id);const j=jsonStable(d);if(remoteDevis[d.id]!==j){pendingD[d.id]=j;rows.push({id:d.id,owner:ownerId,kind:'devis',data:d,updated_at:new Date().toISOString()});}});
+  const lj=jsonStable(library);if(lj!==remoteLibJson){pendingLib=lj;rows.push({id:'library',owner:ownerId,kind:'library',data:library,updated_at:new Date().toISOString()});}
+  const tj=jsonStable(tasks);if(tj!==remoteTasksJson){pendingTasks=tj;rows.push({id:'tasks',owner:ownerId,kind:'tasks',data:tasks,updated_at:new Date().toISOString()});}
+  const rj=jsonStable(realisations);if(rj!==remoteRealJson){pendingReal=rj;rows.push({id:'realisations',owner:ownerId,kind:'realisations',data:realisations,updated_at:new Date().toISOString()});}
+  const pj=jsonStable(produits);if(pj!==remoteProdJson){pendingProd=pj;rows.push({id:'produits',owner:ownerId,kind:'produits',data:produits,updated_at:new Date().toISOString()});}
+  const chj=jsonStable(chantierList);if(chj!==remoteChantierJson){pendingChantier=chj;rows.push({id:'chantier',owner:ownerId,kind:'chantier',data:chantierList,updated_at:new Date().toISOString()});}
   Object.keys(remoteClients).forEach(id=>{if(!seenC.has(id))pendingDelC.push(id);});
   Object.keys(remoteDevis).forEach(id=>{if(!seenD.has(id))pendingDelD.push(id);});
   delIds.push(...pendingDelC,...pendingDelD);
