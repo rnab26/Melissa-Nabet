@@ -4071,10 +4071,12 @@ devis part de la bibliothèque : d'où les 3 lignes du brouillon « Morgane » (
 bibliothèque, sans doublon ; message visible en cas de succès ou de texte vide. Traductions anglais et hébreu.
 Test permanent : `tests/hors-prestation-pin.test.mjs` (11 vérifications, écran 390 px).
 
-**Ouvert** : recopier les 13 lignes manquantes de « Salle de box » dans la bibliothèque et dans le brouillon
-« Morgane » = écriture dans les données réelles, en attente du « oui » de Raphaël, et APRÈS la correction de la
-synchro (sinon sa tablette renverrait l'ancienne bibliothèque par-dessus). Un brouillon existant ne reprend pas
-tout seul les nouvelles lignes de la bibliothèque.
+**Fait (19-20 nov., données réelles, avec l'accord de Raphaël)** : les 13 lignes de « Salle de box » sont dans la
+bibliothèque (16 lignes, chantier cockpit e1731414) et dans les brouillons n°0080 et n°0081 (16 lignes chacun).
+**Piège constaté** : le 20 nov. à 06:32 UTC, un appareil qui avait encore l'ancien n°0081 (3 lignes, modification
+pas encore envoyée la veille) l'a renvoyé par-dessus l'ajout. Remis à 16 lignes à 06:35. Règle : après une écriture
+en base sur un devis, Raphaël doit recharger le CRM sur chaque appareil AVANT de toucher ce devis. Un brouillon
+existant ne reprend pas tout seul les nouvelles lignes de la bibliothèque.
 
 **Suite, 19/11 23:49 UTC (demande de Raphaël)** : les 13 lignes tapées à la main dans « Salle de box »
 (n°0079) sont ajoutées à `library.exclus` par SQL : 16 lignes en tout, sans doublon. Ce n'est pas la variante
