@@ -4084,3 +4084,24 @@ bien arrivé. **Brouillons n°0080 et n°0081 : écriture refusée par le garde-
 or Unwanted Actions »). Accord donné en session à 23:54 UTC : lignes ajoutées aux 2 brouillons, cochées comme dans un
 nouveau devis, sans doublon (16 lignes chacun, vérifié en base). Le même jour, sa tablette a chargé le correctif de synchro : bibliothèque 6,5 Mo → 0,7 Mo,
 devis n°0079 3,5 Mo → 0,43 Mo (vérifié en base).
+
+## 20 novembre 2026 — « Fond de ce devis » : un fond juste pour un devis
+
+Raphaël : « sur le brouillon, on puisse changer le fond […] de façon temporaire, genre juste pour cette fois ».
+Chantier cockpit `7a152e09`, PR #28.
+
+**Avant (vérifié dans le code)** : un brouillon reprend le fond des réglages à chaque ouverture (`loadDevis`), un
+devis validé garde le sien ; aucun moyen de changer le fond d'un seul devis. Un fond téléchargé sur internet passe
+sans bloquer la synchro depuis la PR #25 : le recadrage le réduit en JPEG 660×933 (~0,2 Mo).
+
+**Fait** : rubrique « Fond de ce devis » dans le composeur (`renderFondDevis`, `openFondDevisPicker`) : fond des
+réglages, fonds de la bibliothèque, « Sans fond », « + Importer une image… » (JPEG, rangée aussi dans
+`library.bgLibrary`), « ↺ Revenir au fond des réglages ». Le choix vit dans le devis : `current.fond` /
+`snapshot.fond` = image, `'aucun'` ou `null` (fond des réglages) ; lu par `buildDevisHTMLInner`. Remis à zéro par
+`seedComposerFromLibrary`, `loadDevis` et l'écho temps réel. L'intensité reste celle des réglages (voulu).
+Test : `tests/fond-par-devis.test.mjs` (18). Vérifié en ligne : 18/18 et `fond-apercu` 37/37 contre la prod.
+
+**Trouvé en route, en attente de Raphaël** : `newDevis()` décoche toutes les prestations après
+`seedComposerFromLibrary`, donc la case « Coché d'office dans les nouveaux devis » ne fait rien (7 prestations
+cochées ainsi dans sa bibliothèque). Corriger change chaque nouveau devis : question posée dans le cockpit, rien
+changé tant qu'il n'a pas répondu.
