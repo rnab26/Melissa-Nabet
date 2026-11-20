@@ -19,13 +19,17 @@ const etat = (fond, boost) => page.evaluate(({ fond, boost }) => {
   library.branding.devisBgImage = fond ? px : null; library.branding.devisBgTextBoost = boost;
   seedComposerFromLibrary(); current.fond = null; current.branding = { ...library.branding };
   const sv = current.services[0]; sv.on = true; sv.desc = 'Une description assez longue pour être lue sur le fond.';
+  current.pricingMode = 'global'; current.gAmount = 20000;   // pour que le bloc des totaux s'affiche
   render();
   const d = document.querySelector('#devis .it-d'), t = document.querySelector('#devis .it-t');
   const a = getComputedStyle(d), c = getComputedStyle(t);
-  return { poidsDesc: +a.fontWeight, poidsTitre: +c.fontWeight, voile: a.backgroundColor, halo: a.textShadow, couleur: a.color };
+  const fondDe = q => { const e = document.querySelector('#devis ' + q); return e ? getComputedStyle(e).backgroundColor : 'absent'; };
+  return { poidsDesc: +a.fontWeight, poidsTitre: +c.fontWeight, voile: fondDe('.dv-group'), halo: a.textShadow, couleur: a.color,
+           blocs: ['.dv-head .col', '.dv-group', '.dv-excl', '.dv-totals', '.dv-sign', '.dv-foot'].map(q => q + '=' + fondDe(q)) };
 }, { fond, boost });
 const avec = await etat(true, true);
-check('Avec un fond : un voile clair derrière la description', avec.voile !== 'rgba(0, 0, 0, 0)', avec.voile);
+check('Avec un fond : un voile clair derrière les prestations', avec.voile !== 'rgba(0, 0, 0, 0)', avec.voile);
+check('Avec un fond : un voile derrière TOUS les blocs de texte (en-tête, totaux, signatures, pied)', avec.blocs.every(b => !/rgba\(0, 0, 0, 0\)|absent/.test(b)), avec.blocs.join(' | '));
 check('Avec un fond : un halo derrière les lettres', avec.halo !== 'none', avec.halo.slice(0, 50));
 check('La description reste plus fine que les intitulés en gras', avec.poidsDesc < avec.poidsTitre, avec.poidsDesc + ' < ' + avec.poidsTitre);
 const coupe = await etat(true, false);
