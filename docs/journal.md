@@ -4107,3 +4107,18 @@ Test : `tests/fond-par-devis.test.mjs` (18). Vérifié en ligne : 18/18 et `fond
 `seedComposerFromLibrary`, donc la case « Coché d'office dans les nouveaux devis » ne fait rien (7 prestations
 cochées ainsi dans sa bibliothèque). Corriger change chaque nouveau devis : question posée dans le cockpit, rien
 changé tant qu'il n'a pas répondu.
+
+## 20 novembre 2026 — La vraie cause des écrasements : un devis ouvert réécrit en boucle
+
+**Constaté dans les journaux Supabase** (`/v1/projects/{ref}/analytics/endpoints/logs`, table `logs` ; la
+tablette se reconnaît à « Safari » sans « Mobile ») : un appareil qui avait le brouillon « Morgane » ouvert le
+réécrivait toutes les 1,5 à 3 s, sans que personne n'y touche, et effaçait tout ce qui venait d'ailleurs.
+**Cause, reproduite** : Postgres (jsonb) renvoie l'écho avec ses clés dans un autre ordre ; les comparaisons de
+synchro en `JSON.stringify` y voyaient une modification, l'autosave redonnait une date et renvoyait, et ainsi de
+suite. Défaut ancien (présent sur `ad710a1`). **Corrigé** (PR #30) : `jsonStable` partout dans la synchro.
+Avec la PR #29 (le devis ouvert suit la version du cloud quand elle est plus récente). Test permanent :
+`tests/brouillon-ouvert-cloud.test.mjs` (8 vérifications).
+**Ne pas casser** : toute nouvelle comparaison de synchro passe par `jsonStable`, jamais par `JSON.stringify`.
+Morgane remis à 16 lignes à 07:17 UTC, stable ensuite.
+**Connu** : `tests/realisations.test.mjs` a 2 échecs intermittents (barre de progression de l'import), y compris
+sur le code d'avant ces correctifs.
