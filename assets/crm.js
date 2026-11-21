@@ -3885,16 +3885,26 @@ function ajusterApercuA4(){
   const pw=document.querySelector('.preview-wrap');if(!pw||!pw.clientWidth)return;
   const cs=getComputedStyle(pw);
   const dispo=pw.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
-  const z=pw.classList.contains('a4-reel')?1:Math.min(1,dispo/A4_LARGEUR_PX);
+  /* En grand (plein écran) : la page prend toute la largeur, jusqu'à deux fois sa taille réelle. */
+  const plein=document.body.classList.contains('apercu-plein');
+  const z=plein?Math.min(2,dispo/A4_LARGEUR_PX):pw.classList.contains('a4-reel')?1:Math.min(1,dispo/A4_LARGEUR_PX);
   pw.style.setProperty('--dv-zoom',z.toFixed(4));
-  pw.classList.toggle('a4-reduit',z<1||pw.classList.contains('a4-reel'));
+  pw.classList.toggle('a4-reduit',!plein&&(z<1||pw.classList.contains('a4-reel')));
 }
+/* Sur tablette et ordinateur, l'aperçu est une colonne à côté du formulaire : la passer à 100 %
+   se voyait à peine (« ça ne fait rien », Raphaël, 21 nov.). Un toucher l'ouvre en grand, plein
+   écran, avec « Imprimer PDF » sous la main ; ✕ ou Échap referme. */
+function ouvrirApercuPlein(){const pw=document.querySelector('.preview-wrap');document.body.classList.add('apercu-plein');if(pw){pw.classList.remove('a4-reel');pw.scrollTop=0;}ajusterApercuA4();}
+function fermerApercuPlein(){document.body.classList.remove('apercu-plein');ajusterApercuA4();}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('apercu-plein'))fermerApercuPlein();});
 (function(){
   const pw=document.querySelector('.preview-wrap');if(!pw)return;
   if(window.ResizeObserver)new ResizeObserver(ajusterApercuA4).observe(pw);
   else window.addEventListener('resize',ajusterApercuA4);
   pw.addEventListener('click',e=>{
-    if(!e.target.closest('#devis')||!pw.classList.contains('a4-reduit'))return;
+    if(!e.target.closest('#devis')||document.body.classList.contains('apercu-plein'))return;
+    if(pw.getBoundingClientRect().width<window.innerWidth*0.8){ouvrirApercuPlein();return;}  /* colonne à côté du formulaire */
+    if(!pw.classList.contains('a4-reduit'))return;
     pw.classList.toggle('a4-reel');ajusterApercuA4();
   });
   ajusterApercuA4();

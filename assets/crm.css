@@ -43,6 +43,19 @@
   @media (max-width:900px){
     body.devis-active #devis-tab-fab{display:block;}
   }
+  /* Aperçu en grand (tablette, ordinateur) et bouton « Imprimer PDF » dans l'aperçu (21 nov.). */
+  .apercu-barre{display:none;position:fixed;z-index:86;gap:8px;align-items:center;}
+  .apercu-barre .btn{min-height:44px;border-radius:30px;padding:10px 20px;box-shadow:0 6px 22px rgba(0,0,0,.32);}
+  .apercu-barre .apercu-fermer{min-width:44px;padding:10px 14px;background:var(--paper);color:var(--ink);}
+  body.apercu-plein{overflow:hidden;}
+  body.apercu-plein .preview-wrap{position:fixed !important;inset:0;z-index:85;width:auto !important;max-width:none !important;height:auto !important;min-height:0 !important;overflow:auto !important;display:flex !important;padding:72px 16px 40px !important;background:rgba(35,32,28,.92) !important;}
+  body.apercu-plein .preview-wrap .devis{cursor:default;}
+  body.apercu-plein .apercu-barre{display:flex;top:calc(14px + env(safe-area-inset-top,0px));right:16px;}
+  @media (max-width:900px){
+    /* Téléphone, onglet Aperçu : « Imprimer PDF » juste au-dessus de « Composer ». */
+    body.devis-active.show-preview:not(.apercu-plein) .apercu-barre{display:flex;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));}
+    body.show-preview:not(.apercu-plein) .apercu-fermer{display:none;}
+  }
   /* Téléphone tourné en mode paysage : sa largeur peut dépasser les 900px ci-dessus (un
      téléphone récent tourné peut faire plus large que ça) alors que c'est toujours un
      petit écran de poche, pas une tablette ni un bureau — sans ça le bouton disparaissait
@@ -289,6 +302,7 @@
     /* La barre du bas recouvre 56 px : tout ce qui vivait au ras du bas remonte. */
     body{padding-bottom:calc(56px + env(safe-area-inset-bottom,0px));}
     #devis-tab-fab{bottom:calc(70px + env(safe-area-inset-bottom,0px));}
+    body.devis-active.show-preview:not(.apercu-plein) .apercu-barre{bottom:calc(134px + env(safe-area-inset-bottom,0px));}
   }
   #clients-view{display:none;padding:26px 28px 120px;background:var(--travertine);min-height:100vh;}
   .cl-wrap{max-width:1040px;margin:0 auto;}
