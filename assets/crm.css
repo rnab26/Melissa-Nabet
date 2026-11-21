@@ -1357,3 +1357,67 @@ html[dir=rtl] .rz-ph-num,html[dir=rtl] .rz-ph-badge{left:auto;right:6px;}
 
 /* Le bouton Cockpit reste caché tant que le compte n'est pas connecté (attribut hidden). */
 #cockpit-btn[hidden]{display:none;}
+
+/* ============ Finitions « Apple Design » (21 nov. 2026, chantier 2e5e85c9) ============
+   Principes appliqués (skill apple-design), sans toucher à l'identité du CRM ni au devis imprimé :
+   réponse immédiate au toucher, zones de toucher de 44 px, mouvements courts et doux qui
+   respectent « réduire les animations », fenêtres en « feuille » sur téléphone. Tout est
+   regroupé ici pour pouvoir le retirer d'un bloc. */
+button,.btn,.mini,.vnav,.seg-btn,.acc-head,.navbas button{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+/* Retour visuel dès que le doigt touche (pas seulement au relâchement). */
+.btn,.mini,.seg-btn,.vnav,.view-switch button,.vnav-menu button,.acc-head,.navbas button,.rch-row{
+  transition:transform .12s ease-out,background-color .15s ease,border-color .15s ease,color .15s ease,filter .15s ease,opacity .15s ease;}
+.btn:active,.mini:active,.vnav:active,.view-switch button:active{transform:scale(.97);}
+.btn:active:not(.btn-primary){background:rgba(255,255,255,.14);}
+.btn-onlight:active{background:rgba(61,57,52,.12);color:var(--ink);}
+.btn-primary:active{filter:brightness(.82);}
+.mini:active{background:var(--panel-edge);}
+.seg-btn:active,.acc-head:active,.rch-row:active{background:rgba(61,57,52,.08);}
+.vnav-menu button:active{background:rgba(255,255,255,.16);color:var(--paper);}
+.navbas button:active{background:rgba(255,255,255,.1);}
+#devis-tab-fab{transition:transform .12s ease-out,filter .15s ease;}
+#devis-tab-fab:active{transform:translateX(-50%) scale(.96);filter:brightness(.9);}
+/* Barre du bas : matière translucide (le contenu défile dessous) et cible d'au moins 49 px. */
+.navbas{background:rgba(61,57,52,.9);}
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .navbas{background:rgba(61,57,52,.82);-webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);}
+}
+.navbas button{min-height:49px;font-size:10.5px;}
+.navbas button span{transition:transform .25s cubic-bezier(.32,.72,0,1);}
+/* Écrans tactiles (téléphone, tablette) : toute zone qui réagit au doigt fait au moins 44 px. */
+@media (pointer:coarse){
+  .btn,.mini,.vnav,.seg-btn,.acc-head,.view-switch button,.vnav-menu button{min-height:44px;}
+  .btn,.vnav,.mini{display:inline-flex;align-items:center;justify-content:center;}
+  .vnav-menu button{display:flex;align-items:center;}
+  select,input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]):not([type=color]){min-height:44px;}
+  .modal-x{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;margin:-12px -12px 0 0;}
+  html[dir=rtl] .modal-x{margin:-12px 0 0 -12px;}
+  .mini.rz-ph-menu,.mini.rz-ph-move,.mini.rz-ph-del{min-height:0;}
+}
+/* Fenêtres : entrée douce (courte, depuis le bas) et défilement qui ne « fuit » pas derrière. */
+.overlay{overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
+.overlay.open{animation:ap-fondu .18s ease-out;}
+.overlay.open .modal{animation:ap-feuille .28s cubic-bezier(.32,.72,0,1);}
+@keyframes ap-fondu{from{opacity:0}to{opacity:1}}
+@keyframes ap-feuille{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+.modal{line-height:1.45;}
+.modal h3{line-height:1.15;letter-spacing:-.01em;text-wrap:balance;}
+.modal .msub{text-wrap:pretty;}
+/* Téléphone : la fenêtre devient une « feuille » ancrée en bas, poignée en haut. */
+@media (max-width:600px){
+  .overlay{padding:28px 0 0;}
+  .modal{margin-top:auto;max-width:none;border-radius:16px 16px 0 0;padding:14px 18px calc(26px + env(safe-area-inset-bottom,0px));}
+  .modal::before{content:'';display:block;width:38px;height:4px;border-radius:2px;background:var(--stone-light);opacity:.7;margin:0 auto 12px;}
+  .overlay.open .modal{animation-name:ap-feuille-bas;animation-duration:.34s;}
+}
+@keyframes ap-feuille-bas{from{transform:translateY(100%)}to{transform:none}}
+/* Transparence réduite : matières pleines. Mouvement réduit : plus de glissement ni de ressort,
+   seules les variations de couleur/opacité (très courtes) restent. */
+@media (prefers-reduced-transparency:reduce){
+  .navbas{background:var(--ink);-webkit-backdrop-filter:none;backdrop-filter:none;}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important;}
+  .btn:active,.mini:active,.vnav:active,.view-switch button:active{transform:none;}
+  #devis-tab-fab:active{transform:translateX(-50%);}
+}
