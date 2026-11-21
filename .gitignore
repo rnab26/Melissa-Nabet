@@ -4,3 +4,5 @@
 node_modules/
 package.json
 package-lock.json
+# Copies de travail temporaires des agents Claude (isolation « worktree ») : jamais versionnées.
+.claude/worktrees/
