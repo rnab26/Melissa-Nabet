@@ -620,6 +620,26 @@
   {
    "texte": "setFondDevis('aucun')",
    "raison": "code JavaScript (attribut onclick)"
+  },
+  {
+   "texte": "@media print{.devis{background-image:none !important;}}",
+   "raison": "CSS, police ou image encodée"
+  },
+  {
+   "texte": ".devis-page{background-image:linear-gradient({1},{2}),url(\"{3}\");background-size:100% 100%,210mm 297mm;background-repeat:no-repeat,repeat-y;background-position:top center,top center;}@media print{.devis{background-image:linear-gradient({4},{5}),url(\"{6}\") !important;background-size:210mm 297mm,210mm 297mm !important;background-repeat:repeat-y !important;background-position:top left !important;}}",
+   "raison": "CSS, police ou image encodée"
+  },
+  {
+   "texte": ".devis-page {1}",
+   "raison": "CSS, police ou image encodée"
+  },
+  {
+   "texte": ".devis-page .dv-inner{text-shadow:0 0 1px {1},0 0 4px {2};}{3}{color:var(--ink);}{4}{color:var(--stone-deep);}{5}{background:{6};box-shadow:0 0 12px 10px {7};border-radius:6px;}{8}{text-shadow:0 0 2px {9},0 0 6px {10},0 0 12px {11};}",
+   "raison": "CSS, police ou image encodée"
+  },
+  {
+   "texte": "Escape",
+   "raison": "nom de touche clavier comparé dans le code, jamais affiché"
   }
  ]
 }

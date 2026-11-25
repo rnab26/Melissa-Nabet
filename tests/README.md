@@ -4,6 +4,10 @@ Trois suites :
 
 - `tests/realisations.test.mjs` — l'espace **Réalisations** dans le CRM (import, éditeur,
   rendu, synchronisation, sauvegarde, publication vers le site).
+- `tests/import-gros-lot.test.mjs` — l'**import d'un gros lot** de photos (100 photos de téléphone
+  d'un coup, envoi bloqué qui ne fige plus le lot, enregistrement photo par photo, reprise sans
+  doublon, écran gardé allumé, Boutique sur le même moteur). Port 8899 :
+  `node tests/import-gros-lot.test.mjs`.
 - `tests/pont-ia.test.mjs` — le **pont `photo-ia`**, côté serveur : la forme exacte de la
   requête envoyée au fournisseur (sur des schémas relevés sur l'API réelle de fal) et les URL
   de la **file d'attente** — un pont qui suivrait sans la filtrer une URL rendue par le

@@ -1633,3 +1633,28 @@ Claude le fasse. Repli si Dan ne peut pas : refaire ce modèle dans `site-vitrin
 **Notes / À faire**
 - [ ] Étudier le service (offre, prix : tout service payant exige l'accord de Raphaël) et le comparer à un travail maison (site vitrine clair, données structurées, `llms.txt`).
 - [ ] Décision de Raphaël avant toute inscription ou dépense.
+
+## Réalisations — import d'un gros lot de photos (25 nov. 2026)
+
+Signalé par Raphaël : « j'ai tenté d'envoyer 67 photos, il n'y en a que 5-6 qui ont été envoyées ».
+**Mesuré** dans le stockage réel (18 nov., réalisation « Appartement Netanya Remez ») : 7 photos
+pleine définition et 6 vignettes en 18 s, puis plus rien. L'import s'est arrêté ENTRE l'envoi d'une
+photo et celui de sa vignette, sans erreur. Aucun plafond de nombre dans le code : c'est le lot qui
+s'arrêtait (chaque photo attend la précédente, et un envoi sans réponse n'avait aucun délai).
+Reproduit en test : sur l'ancien code, un envoi qui ne répond pas fige le lot pour toujours.
+
+Corrigé (`assets/crm.js`, un seul moteur `importerLotPhotos` pour Réalisations ET Boutique) :
+- [x] envoi borné (`photoStore.delaiMs` 90 s) et retenté (`photoStore.essais` 3) ; au-delà, la photo
+      est refusée avec sa raison et le lot continue, sans fichier orphelin ;
+- [x] chaque photo entrée est enregistrée aussitôt (une page qui meurt garde ce qui est passé) ;
+- [x] relancer le même lot ne réimporte pas ce qui est déjà là (même nom + même poids, `size`
+      noté sur chaque photo depuis ce jour) : c'est la façon de reprendre un lot interrompu ;
+- [x] écran gardé allumé pendant l'envoi (Wake Lock, borné à 1,5 s, sans effet s'il n'existe pas) ;
+- [x] canvases rendus tout de suite après chaque photo (Safari ne les libère qu'au ramasse-miettes).
+
+Banc : `tests/import-gros-lot.test.mjs` (100 photos 4032 × 3024 en 10 s, envoi bloqué, reprise,
+écran, boutique). `realisations.test.mjs` : le relevé « progression pendant l'envoi » ralentit ses
+envois de 40 ms (3 petites photos finissaient avant le relevé à 60 ms).
+**Pas vérifié** : un vrai iPad (aucun WebKit ici). Reste ouvert : 1 fichier orphelin du 18 nov.
+(`rp_ido3t4x6o`, ~1 Mo) dans le stockage. `boutique.test.mjs` échoue déjà sur main (« Les photos
+des produits se chargent — 0 image(s) », côté site de test), sans lien avec ce correctif.

@@ -4534,11 +4534,30 @@ const photoStore={
     const keys=Object.keys(this.mem);
     while(keys.length>PHOTO_MEM_MAX)delete this.mem[keys.shift()];
   },
+  /* ENVOI BORNÉ ET RETENTÉ (25 nov. 2026). Un import de 67 photos s'est arrêté net à la
+     7e, entre l'envoi de la photo et celui de sa vignette, sans aucune erreur : un envoi
+     qui ne répond jamais bloquait tout le lot, puisque chaque photo attend la précédente.
+     Désormais un envoi a `delaiMs` pour aboutir, et `essais` tentatives (même clé, upsert :
+     rejouer ne crée pas de doublon) ; au-delà, la photo est refusée avec sa raison et le
+     lot continue. Réglables ici, et par les tests. */
+  delaiMs:90000,
+  essais:3,
   async save(key,blob){
     this._keep(key,blob);
     if(!(sb&&sbUser&&ownerId))throw new Error('hors ligne');
-    const {error}=await sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+key,blob,{contentType:'image/jpeg',upsert:true});
-    if(error)throw error;
+    let derniere=null;
+    for(let essai=1;essai<=this.essais;essai++){
+      try{
+        const envoi=sb.storage.from(DOC_BUCKET).upload(ownerId+'/'+key,blob,{contentType:'image/jpeg',upsert:true});
+        let minuteur;
+        const trop=new Promise((_,rej)=>{minuteur=setTimeout(()=>rej(new Error('réseau trop lent ou coupé')),this.delaiMs);});
+        const {error}=await Promise.race([envoi,trop]).finally(()=>clearTimeout(minuteur));
+        if(!error)return;
+        derniere=error;
+      }catch(e){derniere=e;}
+      if(essai<this.essais)await new Promise(r=>setTimeout(r,1000*essai));
+    }
+    throw derniere;
   },
   async get(key){
     if(this.mem[key])return this.mem[key];
@@ -4668,7 +4687,12 @@ async function decodePhotoFile(file){
   const thumb=drawScaled(src,REAL_THUMB);
   const [fb,tb]=await Promise.all([canvasToBlob(full,REAL_Q),canvasToBlob(thumb,REAL_THUMB_Q)]);
   if(src.close)src.close();
-  return {fb,tb,w:full.width,h:full.height};
+  const w=full.width,h=full.height;
+  /* Rendre la mémoire TOUT DE SUITE : Safari (iPad, iPhone) ne libère un canvas qu'au
+     passage du ramasse-miettes, et un lot de photos en accumule assez pour que l'onglet
+     soit fermé de force. Un canvas ramené à 0 × 0 rend sa mémoire immédiatement. */
+  full.width=full.height=0;thumb.width=thumb.height=0;
+  return {fb,tb,w,h};
 }
 /* Renvoie '' si la photo est entrée, sinon la raison du refus, en français. */
 async function importOnePhoto(r,file){
@@ -4688,36 +4712,72 @@ async function importOnePhoto(r,file){
       try{await photoStore.del(thumbKey(pid));}catch(err){}
       throw e;
     }
-    const nouvelle={id:pid,name:file.name||'photo',caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
+    const nouvelle={id:pid,name:file.name||'photo',size:file.size,caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
     photoLog(nouvelle,'import',file.name||'');
     r.photos.push(nouvelle);
     if(!r.cover)r.cover=pid;
     return '';
   }catch(e){console.error('import photo',e);return photoFileRaison(file,e);}
 }
-async function addPhotosToRealisation(r,files){
+/* Déjà dans cet objet ? Même nom ET même poids (le poids n'est connu que depuis le
+   25 nov. 2026 : avant, le nom seul). Sert à REPRENDRE un import interrompu : on
+   resélectionne tout le lot, ce qui est déjà entré n'est pas importé deux fois. */
+function photoDejaImportee(obj,file){
+  const nom=file.name||'';
+  if(!nom)return false;
+  return (obj.photos||[]).some(p=>p.name===nom&&(p.size==null||p.size===file.size));
+}
+/* Écran allumé pendant l'envoi : sur iPad, la mise en veille suspend la page et l'import
+   s'arrête. Sans support (ou refusé), on continue sans. */
+async function garderEcranAllume(){
+  /* Borné à 1,5 s : une demande qui ne répondrait pas ne doit jamais empêcher l'import de
+     démarrer (ce serait recréer le blocage qu'on vient de retirer). */
+  try{
+    if(navigator.wakeLock&&document.visibilityState==='visible')
+      return await Promise.race([navigator.wakeLock.request('screen'),new Promise(r=>setTimeout(()=>r(null),1500))]);
+  }catch(e){}
+  return null;
+}
+/* UN moteur d'import en lot, pour une réalisation comme pour un produit. Chaque photo
+   entrée est enregistrée AUSSITÔT : si la page meurt au milieu d'un lot de cent, ce qui
+   est passé reste, et relancer le même lot reprend là où il s'était arrêté. */
+async function importerLotPhotos(obj,files,rendre,sauver){
   const list=Array.from(files||[]);
   if(!list.length)return;
   if(!(sb&&sbUser&&ownerId)){
     _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'photo',why:'connexion requise : les photos sont enregistrées dans le cloud, pas sur l’appareil'}))};
-    renderRealisations();return;
+    rendre();return;
   }
-  const refus=[];let n=0;
+  const refus=[];let n=0,deja=0;
   _rzImportReport=null;
   _rzImport={total:list.length,done:0,name:(list[0].name||'')};
-  renderRealisations();
-  for(const file of list){
-    _rzImport.name=file.name||'photo';paintImportProgress();
-    const why=await importOnePhoto(r,file);
-    if(why)refus.push({name:file.name||'photo',why});else n++;
-    _rzImport.done++;paintImportProgress();
+  rendre();
+  const ecran=await garderEcranAllume();
+  try{
+    for(const file of list){
+      _rzImport.name=file.name||'photo';paintImportProgress();
+      if(photoDejaImportee(obj,file))deja++;
+      else{
+        const why=await importOnePhoto(obj,file);
+        if(why)refus.push({name:file.name||'photo',why});
+        else{n++;obj.updatedAt=Date.now();sauver();}
+      }
+      _rzImport.done++;paintImportProgress();
+    }
+  }finally{
+    if(ecran)try{await ecran.release();}catch(e){}
   }
   _rzImport=null;
-  _rzImportReport=refus.length?{n,refus}:null;
-  r.updatedAt=Date.now();
+  _rzImportReport=refus.length?{n,refus,deja}:null;
+  obj.updatedAt=Date.now();
   storageInvalidate();
-  saveRealisations();renderRealisations();
-  if(n)toast(n+' photo(s) ajoutée(s)');
+  sauver();rendre();
+  if(n&&deja)toast(n+' photo(s) ajoutée(s) · '+deja+' déjà présente(s), ignorée(s)');
+  else if(n)toast(n+' photo(s) ajoutée(s)');
+  else if(deja)toast(deja+' photo(s) déjà présente(s), rien à ajouter');
+}
+async function addPhotosToRealisation(r,files){
+  return importerLotPhotos(r,files,renderRealisations,saveRealisations);
 }
 /* Mise à jour en place : re-rendre toute la grille à chaque fichier relancerait le rendu
    WebGL de toutes les vignettes déjà présentes, ce qui ralentit l'import qu'on affiche. */
@@ -4798,15 +4858,16 @@ async function deleteVideo(r,v){
 function buildImportPanel(){
   if(_rzImport){
     const box=document.createElement('div');box.className='rz-import';box.id='rz-import';
-    box.innerHTML='<div class="rz-import-txt"></div><div class="rz-bar"><i style="width:0%"></i></div>';
+    box.innerHTML='<div class="rz-import-txt"></div><div class="rz-bar"><i style="width:0%"></i></div>'
+      +'<p class="rz-quota-sub">Laisse cette page ouverte jusqu’à la fin de l’envoi.</p>';
     setTimeout(paintImportProgress,0);
     return box;
   }
   if(_rzImportReport){
-    const {n,refus,type}=_rzImportReport;
+    const {n,refus,type,deja}=_rzImportReport;
     const box=document.createElement('div');box.className='ia-erreur';
     const t=document.createElement('p');
-    t.textContent=(n?n+' '+(type||'photo')+'(s) ajoutée(s), ':'')+refus.length+' fichier(s) refusé(s) :';
+    t.textContent=(n?n+' '+(type||'photo')+'(s) ajoutée(s), ':'')+(deja?deja+' déjà présente(s), ':'')+refus.length+' fichier(s) refusé(s) :';
     box.appendChild(t);
     const ul=document.createElement('ul');ul.className='rz-refus';
     refus.forEach(x=>{
@@ -6098,28 +6159,7 @@ function btPickPhotos(p){
 /* Même moteur d'import que les réalisations : `importOnePhoto` ne connaît que « un objet
    qui a des photos ». Le seul écart est ce qu'on sauvegarde et ce qu'on redessine. */
 async function addPhotosToProduit(p,files){
-  const list=Array.from(files||[]);
-  if(!list.length)return;
-  if(!(sb&&sbUser&&ownerId)){
-    _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'photo',why:'connexion requise : les photos sont enregistrées dans le cloud, pas sur l’appareil'}))};
-    renderBoutique();return;
-  }
-  const refus=[];let n=0;
-  _rzImportReport=null;
-  _rzImport={total:list.length,done:0,name:(list[0].name||'')};
-  renderBoutique();
-  for(const file of list){
-    _rzImport.name=file.name||'photo';paintImportProgress();
-    const why=await importOnePhoto(p,file);
-    if(why)refus.push({name:file.name||'photo',why});else n++;
-    _rzImport.done++;paintImportProgress();
-  }
-  _rzImport=null;
-  _rzImportReport=refus.length?{n,refus}:null;
-  p.updatedAt=Date.now();
-  storageInvalidate();
-  saveProduits();renderBoutique();
-  if(n)toast(n+' photo(s) ajoutée(s)');
+  return importerLotPhotos(p,files,renderBoutique,saveProduits);
 }
 
 function newProduit(){
