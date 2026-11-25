@@ -1984,12 +1984,18 @@ const gal = await page.evaluate(async () => {
   const files = [await window.__mkImg('salon.jpg', 1200, 900, '#9aa7b4'),
                  await window.__mkImg('cuisine.jpg', 1000, 750, '#b4a79a'),
                  await window.__mkImg('chambre.jpg', 900, 600, '#a7b49a')];
+  /* Envois ralentis de 40 ms : trois petites photos s'importaient parfois en moins de
+     60 ms (constaté le 25 nov. 2026, import terminé au moment du relevé), et le bandeau
+     avait déjà disparu. Le relevé doit tomber PENDANT l'envoi, quelle que soit la machine. */
+  const saveOrig = photoStore.save;
+  photoStore.save = async function (k, b) { await new Promise(res => setTimeout(res, 40)); return saveOrig.call(this, k, b); };
   const p = addPhotosToRealisation(r, files);   // volontairement pas attendu
   await new Promise(res => setTimeout(res, 60));
   const box = document.getElementById('rz-import');
   const vu = box ? box.querySelector('.rz-import-txt').textContent : '';
   const barre = box ? !!box.querySelector('.rz-bar i') : false;
   await p;
+  photoStore.save = saveOrig;
   return { rid: r.id, vu, barre, n: r.photos.length, noms: r.photos.map(x => x.name) };
 });
 check('Import : la progression s’affiche pendant l’envoi', /Import de 3 photo\(s\) — \d \/ 3 · /.test(gal.vu), gal.vu);
