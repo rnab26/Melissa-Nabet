@@ -4679,6 +4679,100 @@ function photoFileRaison(file,e){
     return 'format HEIC : le navigateur ne sait pas l’ouvrir. Sur iPhone : Réglages → Appareil photo → Formats → « Le plus compatible », ou exportez la photo en JPEG.';
   return 'fichier illisible'+(msg?' ('+msg+')':'');
 }
+/* ---- Doublons : l'empreinte d'une image (26 nov. 2026) ----
+   « Je ne sais plus lesquelles sont les mêmes » (Raphaël). Le nom du fichier ne suffit
+   pas : l'iPad en invente un nouveau à chaque export. On compare donc l'IMAGE : réduite à
+   9 × 8 pixels gris, chaque pixel dit s'il est plus clair que son voisin de droite (64 oui
+   ou non, « dHash »). Une même photo réduite, recompressée ou réexportée garde presque la
+   même empreinte ; deux prises de vue différentes, même de la même pièce, en diffèrent
+   nettement. Toujours calculée sur la VIGNETTE (440 px) : nouvelles et anciennes photos
+   passent par le même chemin, donc se comparent à l'identique. */
+/* DEUX contrôles, et il faut les deux pour parler de « même image » : l'empreinte
+   ci-dessus, et une miniature grise 16 × 16 dont on mesure la ressemblance (corrélation :
+   1 = identique, insensible à un réexport un peu plus clair). L'empreinte seule confondait
+   deux murs blancs différents (mesuré le 26 nov. 2026 sur des images de synthèse : 4 bits
+   d'écart) ; la corrélation les sépare. Mesures : même photo réexportée (plus petite, plus
+   compressée, plus claire) ≥ 0,997 ; deux murs blancs différents ≤ 0,987 ; un meuble
+   déplacé de 3 % 0,976. Seuil à 0,993. Ce contrôle ne refuse JAMAIS une photo : il la
+   PROPOSE comme doublon, c'est Raphaël qui décide. Seule une copie exacte du même fichier
+   est refusée d'office (`hashFichier`). */
+const DOUBLON_BITS_MAX=4;          /* bits de l'empreinte qui peuvent différer, sur 64 */
+const DOUBLON_RESSEMBLANCE_MIN=0.993;
+function empreintePhoto(src){
+  /* Deux étapes (64 px puis 9 × 8 et 16 × 16) : réduire d'un coup ne lit que quelques pixels. */
+  const a=document.createElement('canvas');a.width=64;a.height=64;
+  const xa=a.getContext('2d');xa.imageSmoothingEnabled=true;xa.imageSmoothingQuality='high';
+  xa.drawImage(src,0,0,64,64);
+  const lire=(w,h)=>{
+    const c=document.createElement('canvas');c.width=w;c.height=h;
+    const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';
+    x.drawImage(a,0,0,w,h);
+    const d=x.getImageData(0,0,w,h).data;
+    c.width=c.height=0;
+    const g=new Uint8Array(w*h);
+    for(let i=0;i<w*h;i++)g[i]=Math.round(d[i*4]*0.299+d[i*4+1]*0.587+d[i*4+2]*0.114);
+    return g;
+  };
+  const p=lire(9,8), m=lire(16,16);
+  a.width=a.height=0;
+  let hex='';
+  for(let y=0;y<8;y++){
+    let quartet=0;
+    for(let i=0;i<8;i++){
+      quartet=(quartet<<1)|(p[y*9+i]>p[y*9+i+1]?1:0);
+      if(i===3||i===7){hex+=quartet.toString(16);quartet=0;}
+    }
+  }
+  return hex+':'+btoa(String.fromCharCode.apply(null,m));
+}
+/* Même image ? Les deux contrôles doivent passer. */
+function memeImage(e1,e2){
+  if(!e1||!e2)return false;
+  const [h1,g1]=e1.split(':'),[h2,g2]=e2.split(':');
+  if(!g1||!g2||h1.length!==16||h2.length!==16)return false;
+  let bits=0;
+  for(let i=0;i<16;i++){let v=parseInt(h1[i],16)^parseInt(h2[i],16);while(v){bits+=v&1;v>>=1;}}
+  if(bits>DOUBLON_BITS_MAX)return false;
+  const a=atob(g1),b=atob(g2);
+  if(a.length!==b.length)return false;
+  let ma=0,mb=0;
+  for(let i=0;i<a.length;i++){ma+=a.charCodeAt(i);mb+=b.charCodeAt(i);}
+  ma/=a.length;mb/=b.length;
+  let num=0,da=0,db=0;
+  for(let i=0;i<a.length;i++){const x=a.charCodeAt(i)-ma,y=b.charCodeAt(i)-mb;num+=x*y;da+=x*x;db+=y*y;}
+  /* Deux images parfaitement unies : rien à corréler, on ne conclut pas. */
+  if(!da||!db)return false;
+  return num/Math.sqrt(da*db)>=DOUBLON_RESSEMBLANCE_MIN;
+}
+/* Copie EXACTE du même fichier : empreinte de ses octets (SHA-256). Aucun faux positif
+   possible ; sert à refuser d'office. Null si le navigateur ne sait pas la calculer. */
+async function hashFichier(file){
+  try{
+    if(!(crypto&&crypto.subtle))return null;
+    const h=new Uint8Array(await crypto.subtle.digest('SHA-256',await file.arrayBuffer()));
+    return Array.from(h,o=>o.toString(16).padStart(2,'0')).join('');
+  }catch(e){return null;}
+}
+/* La photo de `obj` dont l'image est la même, ou null. */
+function photoPareille(obj,empreinte,sauf){
+  if(!empreinte)return null;
+  return (obj.photos||[]).find(p=>p!==sauf&&memeImage(p.empreinte,empreinte))||null;
+}
+/* Les photos importées avant le 26 nov. 2026 n'ont pas d'empreinte : on la calcule une fois
+   depuis leur vignette d'origine, et on la garde. Renvoie le nombre d'empreintes ajoutées. */
+async function completerEmpreintes(obj){
+  let n=0;
+  for(const p of (obj.photos||[])){
+    if(p.empreinte)continue;
+    try{
+      const blob=await photoStore.get(thumbKey(p.id));
+      if(!blob)continue;
+      const img=await blobToImage(blob);
+      p.empreinte=empreintePhoto(img);n++;
+    }catch(e){/* vignette illisible : cette photo ne sera simplement pas comparée */}
+  }
+  return n;
+}
 /* Décodage + les deux rendus stockés (publication et vignette). Partagé par l'import et
    par le remplacement d'une photo : une seule chaîne, donc un seul comportement. */
 async function decodePhotoFile(file){
@@ -4688,17 +4782,22 @@ async function decodePhotoFile(file){
   const [fb,tb]=await Promise.all([canvasToBlob(full,REAL_Q),canvasToBlob(thumb,REAL_THUMB_Q)]);
   if(src.close)src.close();
   const w=full.width,h=full.height;
+  const empreinte=empreintePhoto(thumb);
   /* Rendre la mémoire TOUT DE SUITE : Safari (iPad, iPhone) ne libère un canvas qu'au
      passage du ramasse-miettes, et un lot de photos en accumule assez pour que l'onglet
      soit fermé de force. Un canvas ramené à 0 × 0 rend sa mémoire immédiatement. */
   full.width=full.height=0;thumb.width=thumb.height=0;
-  return {fb,tb,w,h};
+  return {fb,tb,w,h,empreinte};
 }
-/* Renvoie '' si la photo est entrée, sinon la raison du refus, en français. */
+/* Renvoie '' si la photo est entrée, {doublon: photo} si c'est une copie exacte d'un
+   fichier déjà là (rien n'est envoyé), sinon la raison du refus, en français. */
 async function importOnePhoto(r,file){
   const refus=photoFileRefus(file);
   if(refus)return refus;
   try{
+    const hash=await hashFichier(file);
+    const copie=hash&&(r.photos||[]).find(p=>p.hashFichier===hash);
+    if(copie)return {doublon:copie};
     const d=await decodePhotoFile(file);
     const pid=uid();
     try{
@@ -4712,7 +4811,7 @@ async function importOnePhoto(r,file){
       try{await photoStore.del(thumbKey(pid));}catch(err){}
       throw e;
     }
-    const nouvelle={id:pid,name:file.name||'photo',size:file.size,caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
+    const nouvelle={id:pid,name:file.name||'photo',size:file.size,hashFichier:hash||undefined,empreinte:d.empreinte,caption:'',w:d.w,h:d.h,edit:blankEdit(),createdAt:Date.now()};
     photoLog(nouvelle,'import',file.name||'');
     r.photos.push(nouvelle);
     if(!r.cover)r.cover=pid;
@@ -4724,8 +4823,8 @@ async function importOnePhoto(r,file){
    resélectionne tout le lot, ce qui est déjà entré n'est pas importé deux fois. */
 function photoDejaImportee(obj,file){
   const nom=file.name||'';
-  if(!nom)return false;
-  return (obj.photos||[]).some(p=>p.name===nom&&(p.size==null||p.size===file.size));
+  if(!nom)return null;
+  return (obj.photos||[]).find(p=>p.name===nom&&(p.size==null||p.size===file.size))||null;
 }
 /* Écran allumé pendant l'envoi : sur iPad, la mise en veille suspend la page et l'import
    s'arrête. Sans support (ou refusé), on continue sans. */
@@ -4741,26 +4840,38 @@ async function garderEcranAllume(){
 /* UN moteur d'import en lot, pour une réalisation comme pour un produit. Chaque photo
    entrée est enregistrée AUSSITÔT : si la page meurt au milieu d'un lot de cent, ce qui
    est passé reste, et relancer le même lot reprend là où il s'était arrêté. */
-async function importerLotPhotos(obj,files,rendre,sauver){
+async function importerLotPhotos(obj,files,rendre,sauver,voirDoublons){
   const list=Array.from(files||[]);
   if(!list.length)return;
   if(!(sb&&sbUser&&ownerId)){
     _rzImportReport={n:0,refus:list.map(f=>({name:f.name||'photo',why:'connexion requise : les photos sont enregistrées dans le cloud, pas sur l’appareil'}))};
     rendre();return;
   }
-  const refus=[];let n=0,deja=0;
+  const refus=[],doublons=[],ressemblantes=[];let n=0;
   _rzImportReport=null;
   _rzImport={total:list.length,done:0,name:(list[0].name||'')};
   rendre();
   const ecran=await garderEcranAllume();
   try{
+    /* Les anciennes photos reçoivent leur empreinte AVANT le lot : sinon une photo déjà là
+       depuis septembre ne serait pas reconnue. */
+    if(await completerEmpreintes(obj))sauver();
     for(const file of list){
       _rzImport.name=file.name||'photo';paintImportProgress();
-      if(photoDejaImportee(obj,file))deja++;
+      const meme=photoDejaImportee(obj,file);
+      if(meme)doublons.push({name:file.name||'photo',comme:meme.name||'photo'});
       else{
         const why=await importOnePhoto(obj,file);
-        if(why)refus.push({name:file.name||'photo',why});
-        else{n++;obj.updatedAt=Date.now();sauver();}
+        if(why&&why.doublon)doublons.push({name:file.name||'photo',comme:why.doublon.name||'photo'});
+        else if(why)refus.push({name:file.name||'photo',why});
+        else{
+          n++;obj.updatedAt=Date.now();sauver();
+          /* Entrée, mais elle RESSEMBLE à une photo déjà là : on ne décide pas à sa place,
+             on la signale (bouton « Voir les doublons » dans le bilan). */
+          const nouvelle=obj.photos[obj.photos.length-1];
+          const pareille=nouvelle&&photoPareille(obj,nouvelle.empreinte,nouvelle);
+          if(pareille)ressemblantes.push({name:file.name||'photo',comme:pareille.name||'photo'});
+        }
       }
       _rzImport.done++;paintImportProgress();
     }
@@ -4768,16 +4879,18 @@ async function importerLotPhotos(obj,files,rendre,sauver){
     if(ecran)try{await ecran.release();}catch(e){}
   }
   _rzImport=null;
-  _rzImportReport=refus.length?{n,refus,deja}:null;
+  /* Le bilan reste à l'écran dès qu'une photo n'est PAS entrée, en double ou refusée :
+     c'est la seule trace de ce qui a été écarté, et de pourquoi. */
+  _rzImportReport=(refus.length||doublons.length||ressemblantes.length)?{n,refus,doublons,ressemblantes,voirDoublons}:null;
   obj.updatedAt=Date.now();
   storageInvalidate();
   sauver();rendre();
-  if(n&&deja)toast(n+' photo(s) ajoutée(s) · '+deja+' déjà présente(s), ignorée(s)');
+  if(n&&doublons.length)toast(n+' photo(s) ajoutée(s) · '+doublons.length+' déjà présente(s), ignorée(s)');
   else if(n)toast(n+' photo(s) ajoutée(s)');
-  else if(deja)toast(deja+' photo(s) déjà présente(s), rien à ajouter');
+  else if(doublons.length)toast(doublons.length+' photo(s) déjà présente(s), rien à ajouter');
 }
 async function addPhotosToRealisation(r,files){
-  return importerLotPhotos(r,files,renderRealisations,saveRealisations);
+  return importerLotPhotos(r,files,renderRealisations,saveRealisations,()=>rzChercherDoublons(r));
 }
 /* Mise à jour en place : re-rendre toute la grille à chaque fichier relancerait le rendu
    WebGL de toutes les vignettes déjà présentes, ce qui ralentit l'import qu'on affiche. */
@@ -4864,20 +4977,33 @@ function buildImportPanel(){
     return box;
   }
   if(_rzImportReport){
-    const {n,refus,type,deja}=_rzImportReport;
+    const {n,refus,type}=_rzImportReport;
+    const doublons=_rzImportReport.doublons||[];
     const box=document.createElement('div');box.className='ia-erreur';
-    const t=document.createElement('p');
-    t.textContent=(n?n+' '+(type||'photo')+'(s) ajoutée(s), ':'')+(deja?deja+' déjà présente(s), ':'')+refus.length+' fichier(s) refusé(s) :';
-    box.appendChild(t);
-    const ul=document.createElement('ul');ul.className='rz-refus';
-    refus.forEach(x=>{
-      const li=document.createElement('li');
-      li.innerHTML='<b></b> — <span></span>';
-      li.querySelector('b').textContent=x.name;
-      li.querySelector('span').textContent=x.why;
-      ul.appendChild(li);
-    });
-    box.appendChild(ul);
+    const liste=(titre,lignes)=>{
+      const t=document.createElement('p');t.textContent=titre;box.appendChild(t);
+      const ul=document.createElement('ul');ul.className='rz-refus';
+      lignes.forEach(([nom,txt])=>{
+        const li=document.createElement('li');
+        li.innerHTML='<b></b> — <span></span>';
+        li.querySelector('b').textContent=nom;
+        li.querySelector('span').textContent=txt;
+        ul.appendChild(li);
+      });
+      box.appendChild(ul);
+    };
+    if(refus.length)liste((n?n+' '+(type||'photo')+'(s) ajoutée(s), ':'')+refus.length+' fichier(s) refusé(s) :',refus.map(x=>[x.name,x.why]));
+    if(doublons.length)liste((n&&!refus.length?n+' '+(type||'photo')+'(s) ajoutée(s), ':'')+doublons.length+' déjà présente(s), non importée(s) :',
+      doublons.map(x=>[x.name,'même fichier que « '+x.comme+' »']));
+    const ress=_rzImportReport.ressemblantes||[];
+    if(ress.length){
+      liste(ress.length+' photo(s) ajoutée(s) qui ressemblent à une photo déjà là :',ress.map(x=>[x.name,'ressemble à « '+x.comme+' »']));
+      if(_rzImportReport.voirDoublons){
+        const v=document.createElement('button');v.className='mini';v.type='button';v.textContent='Voir les doublons';
+        v.addEventListener('click',()=>{const f=_rzImportReport.voirDoublons;_rzImportReport=null;f();});
+        box.appendChild(v);
+      }
+    }
     const f=document.createElement('button');f.className='mini';f.type='button';f.textContent='Masquer ce message';
     f.addEventListener('click',()=>{_rzImportReport=null;renderRealisations();});
     box.appendChild(f);
@@ -4923,7 +5049,7 @@ async function replaceOnePhoto(r,p,file){
       _imgCache.delete(v.key);
     }
     p.versions=[];p.edits={orig:blankEdit()};p.active='orig';
-    p.w=d.w;p.h=d.h;
+    p.w=d.w;p.h=d.h;p.empreinte=d.empreinte;delete p.hashFichier;  /* l'ancien fichier n'est plus là */
     /* Les corrections visaient l'ancienne image (verticales, recadrage) : les garder sur
        une autre photo n'a aucun sens. */
     Object.assign(p.edit,blankEdit());
@@ -5272,6 +5398,7 @@ function renderRealisationDetail(host,r){
       <button class="btn btn-onlight" data-serie>✨ Retoucher plusieurs photos</button>
       <button class="btn btn-onlight" data-order>⇅ Réordonner</button>
       <button class="btn btn-onlight" data-select>☑ Sélectionner</button>
+      <button class="btn btn-onlight" data-doublons>⧉ Doublons</button>
       <button class="btn btn-onlight" data-export>⬇ Tout télécharger</button>
       <button class="btn btn-onlight" data-del>🗑 Supprimer</button>
     </div>
@@ -5282,6 +5409,7 @@ function renderRealisationDetail(host,r){
   bar.querySelector('[data-serie]').addEventListener('click',()=>openIaSerieDialog(r,_rzSel));
   bar.querySelector('[data-order]').addEventListener('click',()=>rzToggleOrderMode(!_rzOrderMode));
   bar.querySelector('[data-select]').addEventListener('click',()=>rzToggleSelectMode(true));
+  bar.querySelector('[data-doublons]').addEventListener('click',()=>rzChercherDoublons(r));
   bar.querySelector('[data-export]').addEventListener('click',()=>rzAskDownload(r,r.photos||[]));
   bar.querySelector('[data-del]').addEventListener('click',()=>delRealisation(r.id));
   head.appendChild(bar);
@@ -7027,6 +7155,23 @@ function rzSelectAll(r){
 }
 function rzSelectedPhotos(r){
   return (r.photos||[]).filter(p=>_rzSel.has(p.id));
+}
+/* « Doublons » : les copies en trop arrivent SÉLECTIONNÉES dans le mode sélection, qu'on
+   vérifie d'un coup d'œil avant « Supprimer » (avec sa confirmation habituelle). On garde
+   la couverture, sinon la plus ancienne : c'est celle qui a déjà ses légendes et réglages. */
+async function rzChercherDoublons(r){
+  toast('Recherche des photos en double…');
+  if(await completerEmpreintes(r))saveRealisations();
+  const ordre=(r.photos||[]).slice().sort((a,b)=>(b.id===r.cover)-(a.id===r.cover)||(a.createdAt||0)-(b.createdAt||0));
+  const gardees=[],copies=[];
+  for(const p of ordre){
+    const modele=p.empreinte&&gardees.find(g=>memeImage(g.empreinte,p.empreinte));
+    if(modele)copies.push(p);else if(p.empreinte)gardees.push(p);
+  }
+  if(!copies.length){toast('Aucune photo en double dans ce projet');return;}
+  _rzSel.clear();copies.forEach(p=>_rzSel.add(p.id));
+  _rzSelMode=true;_rzOrderMode=false;renderRealisations();
+  toast(copies.length+' photo(s) en double sélectionnée(s) : vérifiez, puis « Supprimer »');
 }
 
 /* Nom de fichier lisible et stable : slug du chantier + numéro d'ordre dans la galerie. */

@@ -640,6 +640,10 @@
   {
    "texte": "Escape",
    "raison": "nom de touche clavier comparé dans le code, jamais affiché"
+  },
+  {
+   "texte": "SHA-256",
+   "raison": "nom d'algorithme passé à crypto.subtle, jamais affiché"
   }
  ]
 }
