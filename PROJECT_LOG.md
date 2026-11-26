@@ -1658,3 +1658,25 @@ envois de 40 ms (3 petites photos finissaient avant le relevé à 60 ms).
 **Pas vérifié** : un vrai iPad (aucun WebKit ici). Reste ouvert : 1 fichier orphelin du 18 nov.
 (`rp_ido3t4x6o`, ~1 Mo) dans le stockage. `boutique.test.mjs` échoue déjà sur main (« Les photos
 des produits se chargent — 0 image(s) », côté site de test), sans lien avec ce correctif.
+
+## Réalisations — photos en double (26 nov. 2026)
+
+Demande de Raphaël : « je ne sais plus lesquelles sont les mêmes […] qu'ils me proposent de les
+supprimer directement ou qu'ils les acceptent pas, en vrai de vrai ».
+- [x] **Copie exacte refusée d'office** : empreinte des octets du fichier (SHA-256, `hashFichier`
+      noté sur chaque photo) + nom et poids identiques. Aucun faux positif possible.
+- [x] **Même image réexportée** (plus petite, plus compressée, plus claire) : elle ENTRE, mais le
+      bilan la signale (« ressemble à … ») avec « Voir les doublons ». Jamais refusée seule.
+- [x] **Bouton « ⧉ Doublons »** dans la fiche : présélectionne les copies (garde la couverture,
+      sinon la plus ancienne) dans le mode sélection ; on vérifie, puis « Supprimer » (confirmation).
+- Ressemblance = empreinte dHash (≤ 4 bits sur 64) ET corrélation d'une miniature grise 16 × 16
+  (≥ 0,993), calculées sur la vignette ; les anciennes photos reçoivent la leur à la première
+  comparaison. **Calibré sur des images de synthèse** (même photo réexportée ≥ 0,997, deux murs
+  blancs différents ≤ 0,987, meuble déplacé de 3 % 0,976) : l'empreinte seule confondait deux
+  murs blancs, d'où le second contrôle. La calibration sur ses vraies photos a été REFUSÉE par le
+  garde-fou de la plateforme (serveur local sur des photos privées) : non contournée.
+  100 scènes différentes du banc : aucune signalée à tort.
+- Compression : mesurée sur 12 vraies photos (qualité 92 % → 85 % : -22 % de poids, PSNR 40 dB ;
+  80 % : -44 %, 39 dB). Décision posée à Raphaël dans le cockpit (garder 92 % recommandé).
+- Banc : `tests/import-gros-lot.test.mjs` (22 OK). `realisations.test.mjs` : ses images de test
+  identiques sous deux noms (a/b, c/d, __mkImg) sont devenues de vraies images différentes.

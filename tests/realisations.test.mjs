@@ -132,6 +132,9 @@ await page.evaluate(async () => {
     x.globalCompositeOperation = 'multiply';
     x.fillStyle = 'rgb(190,150,105)'; x.fillRect(0, 0, W, H);
     x.globalCompositeOperation = 'source-over';
+    /* Depuis le refus des doublons (26 nov. 2026), deux fichiers identiques sous deux noms
+       sont une copie : chaque photo du banc doit être une VRAIE autre image. */
+    if (name !== 'a.jpg') { x.fillStyle = '#1d1a17'; x.fillRect(W * 0.6, H * 0.05, W * 0.35, H * 0.4); }
     const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.95));
     return new File([blob], name, { type: 'image/jpeg' });
   };
@@ -397,6 +400,8 @@ await page.evaluate(async () => {
     const cv = document.createElement('canvas'); cv.width = 900; cv.height = 600;
     const x = cv.getContext('2d'); x.fillStyle = '#c9bda8'; x.fillRect(0, 0, 900, 600);
     x.fillStyle = '#55606d'; x.fillRect(100, 80, 300, 440);
+    /* Une vraie autre image par nom (sinon : copie, refusée depuis le 26 nov. 2026). */
+    if (name === 'd.jpg') { x.fillStyle = '#20262c'; x.fillRect(520, 300, 330, 260); }
     const b = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
     return new File([b], name, { type: 'image/jpeg' });
   };
@@ -1972,6 +1977,10 @@ await page.evaluate(() => {
     const x = cv.getContext('2d');
     x.fillStyle = teinte || '#8899aa'; x.fillRect(0, 0, w, h);
     x.fillStyle = '#332211'; x.fillRect(w * 0.2, h * 0.2, w * 0.3, h * 0.5);
+    /* Un bloc placé selon le nom : chaque fichier du banc est une autre image (deux images
+       de même composition seraient signalées comme ressemblantes depuis le 26 nov. 2026). */
+    const k = [...name].reduce((t, c) => (t * 31 + c.charCodeAt(0)) % 9973, 7);
+    x.fillStyle = '#f4efe6'; x.fillRect(w * (0.55 + (k % 4) * 0.08), h * (0.1 + (k % 5) * 0.12), w * 0.15, h * 0.3);
     const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.9));
     return new File([blob], name, { type: 'image/jpeg' });
   };
